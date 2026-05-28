@@ -366,12 +366,13 @@ export class ApontamentosService {
       return `${y}-${mo}-${da}`;
     }
 
-    // Formato: "D/M/YY", "DD/MM/YY", "DD/MM/YYYY" (SIGMA usa 2-digit year sem zero)
+    // Formato SIGMA: "M/D/YY" ou "MM/DD/YY" (americano — mês vem primeiro)
+    // ex: "11/3/24" = novembro 3, 2024 → "2024-11-03"
     const s = String(val).trim();
     const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
     if (br) {
-      const d = br[1].padStart(2, '0');
-      const m = br[2].padStart(2, '0');
+      const m = br[1].padStart(2, '0'); // MÊS (primeiro número)
+      const d = br[2].padStart(2, '0'); // DIA  (segundo número)
       let y   = parseInt(br[3]);
       if (y < 100) y += 2000; // "24" → 2024
       return `${y}-${m}-${d}`;

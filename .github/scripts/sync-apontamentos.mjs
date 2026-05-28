@@ -30,11 +30,11 @@ function calcHoras(hi, hf, inv) {
 function parseDateStr(str) {
   if (!str) return null;
   const s = String(str).trim();
-  // Formato SIGMA: "D/M/YY" ou "DD/MM/YY" ou "DD/MM/YYYY"
+  // Formato SIGMA: "M/D/YY" (americano — mês vem primeiro)
   const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
   if (br) {
-    const d = br[1].padStart(2, '0');
-    const m = br[2].padStart(2, '0');
+    const m = br[1].padStart(2, '0'); // MÊS
+    const d = br[2].padStart(2, '0'); // DIA
     let y   = parseInt(br[3]);
     if (y < 100) y += 2000;
     return `${y}-${m}-${d}`;
