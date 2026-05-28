@@ -1,0 +1,191 @@
+@if (canViewDashboard()) {
+<div class="space-y-8">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 no-print">
+    <h1 class="text-3xl font-bold text-gray-800">Dashboard Gerencial</h1>
+    <div class="flex items-center gap-3 flex-wrap">
+      <!-- Seletor de período -->
+      <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+        @for (period of periods; track period) {
+          <button
+            (click)="setPeriod(period)"
+            [class]="selectedPeriod() === period
+              ? 'px-3 py-1.5 rounded-md text-sm font-semibold bg-white text-blue-700 shadow-sm'
+              : 'px-3 py-1.5 rounded-md text-sm text-gray-600 hover:text-gray-900'"
+          >
+            {{ periodLabels[period] }}
+          </button>
+        }
+      </div>
+      <!-- Botão PDF -->
+      <button (click)="exportPDF()"
+        class="flex items-center gap-2 bg-slate-700 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-slate-800 transition">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+        Exportar PDF
+      </button>
+    </div>
+  </div>
+
+  <!-- Cabeçalho visível apenas no PDF -->
+  <div class="print-only print-header">
+    <h1 style="font-size: 1.5rem; font-weight: 700; margin: 0;">Relatório Gerencial de Solicitações</h1>
+    <p style="color: #475569; margin: 0.25rem 0 0;">Período: {{ periodLabels[selectedPeriod()] }} &nbsp;|&nbsp; Emitido em {{ printDate }}</p>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+    <div class="app-card p-6 flex items-center gap-4">
+       <div class="bg-blue-50 p-3 rounded-full">
+         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+       </div>
+      <div>
+        <p class="text-sm text-gray-500">Total de Solicitações</p>
+        <p class="text-2xl font-bold text-gray-800">{{ totalRequests() }}</p>
+      </div>
+    </div>
+    <div class="app-card p-6 flex items-center gap-4">
+      <div class="bg-blue-50 p-3 rounded-full">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+      </div>
+      <div>
+        <p class="text-sm text-gray-500">Pendente</p>
+        <p class="text-2xl font-bold text-gray-800">{{ pendingApproval() }}</p>
+      </div>
+    </div>
+    <div class="app-card p-6 flex items-center gap-4">
+      <div class="bg-blue-50 p-3 rounded-full">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10l2-2h8a1 1 0 001-1z" /></svg>
+      </div>
+      <div>
+        <p class="text-sm text-gray-500">Compras em Andamento</p>
+        <p class="text-2xl font-bold text-gray-800">{{ inProgress() }}</p>
+      </div>
+    </div>
+    <div class="app-card p-6 flex items-center gap-4">
+      <div class="bg-blue-50 p-3 rounded-full">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>
+      </div>
+      <div>
+        <p class="text-sm text-gray-500">Gasto no Período</p>
+        <p class="text-2xl font-bold text-gray-800">{{ totalSpentInPeriod() | currency:'BRL' }}</p>
+      </div>
+    </div>
+    <div class="app-card p-6 flex items-center gap-4">
+      <div class="bg-emerald-50 p-3 rounded-full">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" /></svg>
+      </div>
+      <div>
+        <p class="text-sm text-gray-500">Gasto Total</p>
+        <p class="text-2xl font-bold text-gray-800">{{ totalSpentValue() | currency:'BRL' }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tempo Médio por Status -->
+  @if (avgTimePerStatus().length > 0) {
+  <div>
+    <div class="mb-4">
+      <h2 class="text-xl font-bold text-gray-800">Tempo Médio por Status</h2>
+      <p class="text-sm text-gray-500 mt-1">Tempo médio que as solicitações permanecem em cada etapa do fluxo</p>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      @for (item of avgTimePerStatus(); track item.status) {
+        <div class="app-card p-6 flex items-center gap-4">
+          <div class="p-3 rounded-full" [style.background-color]="getStatusColor(item.status) + '1a'">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" [style.color]="getStatusColor(item.status)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          </div>
+          <div>
+            <p class="text-sm text-gray-500">{{ item.status }}</p>
+            <p class="text-2xl font-bold text-gray-800">{{ formatDuration(item.avgMs) }}</p>
+            <p class="text-xs text-gray-400">{{ item.count }} SC{{ item.count !== 1 ? 's' : '' }} · Máx: {{ formatDuration(item.maxMs) }}</p>
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+  }
+
+  <!-- Charts (tela) -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 no-print">
+    <div class="app-card p-6">
+      <h3 class="text-lg font-semibold text-gray-700 mb-4">Solicitações por Status</h3>
+      <div #statusChart></div>
+      <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+        @for (item of statusChartData(); track item.name) {
+          <div class="flex items-center justify-between text-sm">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="w-3 h-3 rounded-full shrink-0" [style.background-color]="item.color"></span>
+              <span class="text-gray-700 truncate" [title]="item.name">{{ item.name }}</span>
+            </div>
+            <span class="text-gray-600 font-medium">{{ item.value }} ({{ item.percent }}%)</span>
+          </div>
+        }
+      </div>
+    </div>
+    <div class="app-card p-6">
+      <h3 class="text-lg font-semibold text-gray-700 mb-4">Solicitações por Tipo</h3>
+      <div #typeChart></div>
+    </div>
+  </div>
+
+  <!-- Tabelas visíveis apenas no PDF (substituem os gráficos) -->
+  <div class="print-only">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+      <div>
+        <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;">Distribuição por Status</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+          <thead>
+            <tr style="background: #f1f5f9;">
+              <th style="padding: 0.4rem 0.6rem; text-align: left; border: 1px solid #e2e8f0;">Status</th>
+              <th style="padding: 0.4rem 0.6rem; text-align: right; border: 1px solid #e2e8f0;">Qtd</th>
+              <th style="padding: 0.4rem 0.6rem; text-align: right; border: 1px solid #e2e8f0;">%</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of statusChartData(); track item.name) {
+              <tr>
+                <td style="padding: 0.35rem 0.6rem; border: 1px solid #e2e8f0;">{{ item.name }}</td>
+                <td style="padding: 0.35rem 0.6rem; text-align: right; border: 1px solid #e2e8f0;">{{ item.value }}</td>
+                <td style="padding: 0.35rem 0.6rem; text-align: right; border: 1px solid #e2e8f0;">{{ item.percent }}%</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      @if (avgTimePerStatus().length > 0) {
+        <div>
+          <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;">Tempo Médio por Etapa</h3>
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+            <thead>
+              <tr style="background: #f1f5f9;">
+                <th style="padding: 0.4rem 0.6rem; text-align: left; border: 1px solid #e2e8f0;">Status</th>
+                <th style="padding: 0.4rem 0.6rem; text-align: right; border: 1px solid #e2e8f0;">Média</th>
+                <th style="padding: 0.4rem 0.6rem; text-align: right; border: 1px solid #e2e8f0;">Qtd SCs</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (item of avgTimePerStatus(); track item.status) {
+                <tr>
+                  <td style="padding: 0.35rem 0.6rem; border: 1px solid #e2e8f0;">{{ item.status }}</td>
+                  <td style="padding: 0.35rem 0.6rem; text-align: right; border: 1px solid #e2e8f0;">{{ formatDuration(item.avgMs) }}</td>
+                  <td style="padding: 0.35rem 0.6rem; text-align: right; border: 1px solid #e2e8f0;">{{ item.count }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+  </div>
+
+</div>
+} @else {
+  <div class="app-panel p-12 text-center max-w-lg mx-auto">
+    <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+    </svg>
+    <h2 class="mt-4 text-xl font-bold text-gray-800">Acesso Negado</h2>
+    <p class="text-gray-500 mt-2">Você não tem permissão para visualizar o Dashboard Gerencial. Fale com um administrador para solicitar acesso.</p>
+  </div>
+}

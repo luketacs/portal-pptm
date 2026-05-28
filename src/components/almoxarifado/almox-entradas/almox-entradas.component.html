@@ -1,0 +1,147 @@
+<div class="space-y-6">
+  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-800">Entradas por Período</h1>
+      <p class="text-sm text-gray-500 mt-0.5">Materiais que entraram no almoxarifado no período selecionado.</p>
+    </div>
+    <!-- Seletor de período -->
+    <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+      @for (p of periodos; track p) {
+        <button (click)="periodoSelecionado.set(p)"
+          [class]="periodoSelecionado() === p
+            ? 'px-3 py-1.5 rounded-md text-sm font-semibold bg-white text-blue-700 shadow-sm'
+            : 'px-3 py-1.5 rounded-md text-sm text-gray-600 hover:text-gray-900'">
+          {{ p }} dias
+        </button>
+      }
+    </div>
+  </div>
+
+  <!-- Dica de uso (primeira visita) -->
+  @if (showTip()) {
+    <div class="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div class="flex-1 text-sm text-blue-800">
+        <p class="font-semibold mb-1">Dica: use o seletor de período para ver diferentes janelas de tempo</p>
+        <ul class="space-y-0.5 text-blue-700">
+          <li>📅 Clique em <strong>7 / 15 / 30 / 60 dias</strong> para ajustar o período de consulta</li>
+          <li>📊 Os totais e a tabela atualizam automaticamente ao mudar o período</li>
+        </ul>
+      </div>
+      <button (click)="dismissTip()" class="text-blue-400 hover:text-blue-700 flex-shrink-0 p-1 rounded hover:bg-blue-100 transition" title="Fechar dica">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  }
+
+  <!-- Banner de última atualização -->
+  @if (ultimaAtualizacao() && !isLoading()) {
+    <div class="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-200 px-4 py-2.5 text-sm text-slate-600">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span>Dados atualizados em <strong>{{ formatDateTime(ultimaAtualizacao()!.importado_em) }}</strong> por {{ ultimaAtualizacao()!.importado_por_nome }} — {{ ultimaAtualizacao()!.total_registros }} registros</span>
+    </div>
+  }
+  @if (!ultimaAtualizacao() && !isLoading() && !errorMessage()) {
+    <div class="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-700">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+      </svg>
+      <span>Nenhuma importação registrada. Acesse <strong>Importar Dados</strong> para carregar os arquivos Excel.</span>
+    </div>
+  }
+
+  @if (isLoading()) {
+    <div class="flex justify-center py-16">
+      <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+    </div>
+  }
+
+  @if (errorMessage() && !isLoading()) {
+    <div class="rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">⚠️ {{ errorMessage() }}</div>
+  }
+
+  @if (!isLoading() && !errorMessage()) {
+    <!-- Cards de resumo -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="app-card p-4 text-center">
+        <p class="text-xs text-gray-500">Período</p>
+        <p class="text-sm font-semibold text-gray-700 mt-1">{{ dateRange().from }} a {{ dateRange().to }}</p>
+      </div>
+      <div class="app-card p-4 text-center">
+        <p class="text-xs text-gray-500">Lançamentos</p>
+        <p class="text-2xl font-bold text-gray-800">{{ resumo().total }}</p>
+      </div>
+      <div class="app-card p-4 text-center">
+        <p class="text-xs text-gray-500">Materiais distintos</p>
+        <p class="text-2xl font-bold text-blue-700">{{ resumo().distintos }}</p>
+      </div>
+      <div class="app-card p-4 text-center">
+        <p class="text-xs text-gray-500">Qtd. total entrada</p>
+        <p class="text-2xl font-bold text-gray-800">{{ resumo().qtdTotal | number:'1.2-2' }}</p>
+      </div>
+    </div>
+    <div class="app-card p-4 flex items-center justify-between">
+      <span class="text-sm text-gray-600 font-medium">Valor total das entradas no período</span>
+      <span class="text-2xl font-bold text-indigo-700">{{ resumo().valorTotal | currency:'BRL' }}</span>
+    </div>
+
+    <!-- Tabela -->
+    @if (entradasFiltradas().length > 0) {
+      <div class="overflow-x-auto rounded-xl border border-slate-200">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+          <thead class="bg-blue-900 text-white">
+            <tr>
+              <th class="px-3 py-3 text-left font-semibold">Nº</th>
+              <th class="px-3 py-3 text-center font-semibold">Data</th>
+              <th class="px-3 py-3 text-left font-semibold">Código</th>
+              <th class="px-3 py-3 text-left font-semibold">Descrição</th>
+              <th class="px-3 py-3 text-center font-semibold">UM</th>
+              <th class="px-3 py-3 text-center font-semibold">Grupo</th>
+              <th class="px-3 py-3 text-right font-semibold">Qtd. Entrada</th>
+              <th class="px-3 py-3 text-right font-semibold">Custo Médio</th>
+              <th class="px-3 py-3 text-right font-semibold">Valor Total</th>
+              <th class="px-3 py-3 text-left font-semibold">Referência</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-slate-100">
+            @for (m of entradasFiltradas(); track m.id; let idx = $index) {
+              <tr [class]="idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-blue-50/30 hover:bg-blue-50'">
+                <td class="px-3 py-2 text-gray-500">{{ idx + 1 }}</td>
+                <td class="px-3 py-2 text-center text-gray-600 whitespace-nowrap">{{ formatDate(m.data_operacao) }}</td>
+                <td class="px-3 py-2 font-mono text-xs">{{ m.produto_codigo }}</td>
+                <td class="px-3 py-2 text-gray-800 max-w-xs truncate" [title]="m.produto_desc ?? ''">{{ m.produto_desc }}</td>
+                <td class="px-3 py-2 text-center text-gray-600">{{ m.unidade }}</td>
+                <td class="px-3 py-2 text-center text-gray-600">{{ m.grupo }}</td>
+                <td class="px-3 py-2 text-right font-semibold">{{ m.qtd_entrada | number:'1.2-2' }}</td>
+                <td class="px-3 py-2 text-right text-gray-600">{{ m.custo_medio | currency:'BRL' }}</td>
+                <td class="px-3 py-2 text-right font-semibold text-indigo-700">{{ valorEntrada(m) | currency:'BRL' }}</td>
+                <td class="px-3 py-2 text-gray-500 text-xs font-mono">{{ m.referencia }}</td>
+              </tr>
+            }
+            <!-- Total -->
+            <tr class="bg-yellow-50 font-bold border-t-2 border-yellow-200">
+              <td colspan="6" class="px-3 py-2 text-gray-700">TOTAL</td>
+              <td class="px-3 py-2 text-right">{{ resumo().qtdTotal | number:'1.2-2' }}</td>
+              <td class="px-3 py-2"></td>
+              <td class="px-3 py-2 text-right text-indigo-700">{{ resumo().valorTotal | currency:'BRL' }}</td>
+              <td class="px-3 py-2"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <div class="app-card p-10 text-center text-gray-400">
+        Nenhuma entrada nos últimos {{ periodoSelecionado() }} dias. Verifique se os dados foram importados.
+      </div>
+    }
+  }
+</div>

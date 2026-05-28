@@ -1,0 +1,199 @@
+<div class="app-panel p-6 md:p-8">
+
+  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-800">Meus Materiais</h1>
+      <p class="text-sm text-gray-500 mt-0.5">Materiais que você cadastrou e o status das solicitações relacionadas.</p>
+    </div>
+    <a routerLink="/materials/new"
+      class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition text-sm w-fit">
+      + Novo Material
+    </a>
+  </div>
+
+  @if (!isLoading() && rows().length > 0) {
+    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+      <div class="app-card p-4 text-center">
+        <p class="text-2xl font-bold text-gray-800">{{ summary.total }}</p>
+        <p class="text-xs text-gray-500 mt-0.5">Total</p>
+      </div>
+      <div class="app-card p-4 text-center">
+        <p class="text-2xl font-bold text-green-700">{{ summary.liberados }}</p>
+        <p class="text-xs text-gray-500 mt-0.5">Liberados</p>
+      </div>
+      <div class="app-card p-4 text-center">
+        <p class="text-2xl font-bold text-yellow-600">{{ summary.pendentes }}</p>
+        <p class="text-xs text-gray-500 mt-0.5">Pendentes</p>
+      </div>
+      <div class="app-card p-4 text-center">
+        <p class="text-2xl font-bold text-blue-700">{{ summary.comSolicitacao }}</p>
+        <p class="text-xs text-gray-500 mt-0.5">Com solicitação</p>
+      </div>
+      <div class="app-card p-4 text-center">
+        <p class="text-2xl font-bold text-slate-600">{{ summary.semSolicitacao }}</p>
+        <p class="text-xs text-gray-500 mt-0.5">Sem solicitação</p>
+      </div>
+    </div>
+  }
+
+  <div class="mb-5 flex flex-wrap gap-3">
+    <input type="text" placeholder="Buscar por código ou descrição..."
+      [ngModel]="searchTerm()" (ngModelChange)="searchTerm.set($event); onFilterChange()"
+      class="flex-1 min-w-52 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event); onFilterChange()"
+      class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <option value="all">Todos os status</option>
+      <option value="pendente">Pendente</option>
+      <option value="liberado">Liberado</option>
+    </select>
+    <select [ngModel]="requestFilter()" (ngModelChange)="requestFilter.set($event); onFilterChange()"
+      class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <option value="all">Todas as solicitações</option>
+      <option value="com">Com solicitação</option>
+      <option value="sem">Sem solicitação</option>
+      <option value="aberta">Solicitação em aberto</option>
+    </select>
+    <div class="flex items-center gap-2">
+      <label class="text-xs text-gray-500 whitespace-nowrap">Cadastrado de</label>
+      <input type="date" [ngModel]="dateFrom()" (ngModelChange)="dateFrom.set($event); onFilterChange()"
+        class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    </div>
+    <div class="flex items-center gap-2">
+      <label class="text-xs text-gray-500 whitespace-nowrap">até</label>
+      <input type="date" [ngModel]="dateTo()" (ngModelChange)="dateTo.set($event); onFilterChange()"
+        class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    </div>
+  </div>
+
+  @if (isLoading()) {
+    <div class="flex justify-center py-12">
+      <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+    </div>
+  }
+
+  @if (errorMessage() && !isLoading()) {
+    <div class="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700 mb-4">{{ errorMessage() }}</div>
+  }
+
+  @if (!isLoading() && !errorMessage() && filteredRows().length === 0) {
+    <div class="app-card p-10 text-center">
+      @if (rows().length === 0) {
+        <p class="text-gray-500 mb-4">Você ainda não cadastrou nenhum material.</p>
+        <a routerLink="/materials/new" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition text-sm">
+          Cadastrar primeiro material
+        </a>
+      } @else {
+        <p class="text-gray-500">Nenhum material encontrado com os filtros aplicados.</p>
+      }
+    </div>
+  }
+
+  @if (!isLoading() && !errorMessage() && paginatedRows().length > 0) {
+    <div class="overflow-x-auto rounded-xl border border-slate-200">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-3 py-3 text-left font-semibold text-gray-600" style="width:56px">Foto</th>
+            <th class="px-4 py-3 text-left font-semibold text-gray-600">Código</th>
+            <th class="px-4 py-3 text-left font-semibold text-gray-600">Descrição</th>
+            <th class="px-4 py-3 text-left font-semibold text-gray-600">Status Material</th>
+            <th class="px-4 py-3 text-left font-semibold text-gray-600">Solicitações de Compra</th>
+            <th class="px-4 py-3 text-left font-semibold text-gray-600">Última Solicitação</th>
+            <th class="px-4 py-3 text-left font-semibold text-gray-600">Ações</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 bg-white">
+          @for (row of paginatedRows(); track row.material.id) {
+            <tr class="hover:bg-slate-50">
+              <td class="px-3 py-2 text-center" style="width:56px">
+                @if (row.material.photo_url) {
+                  <div style="width:40px;height:40px;overflow:hidden;border-radius:6px;border:1px solid #e2e8f0;margin:0 auto">
+                    <img [src]="row.material.photo_url" alt="Foto" style="width:100%;height:100%;object-fit:cover;display:block" />
+                  </div>
+                } @else {
+                  <div style="width:40px;height:40px;border-radius:6px;border:1px dashed #cbd5e1;background:#f8fafc;display:flex;align-items:center;justify-content:center;margin:0 auto;font-size:1.1rem">
+                    🖼
+                  </div>
+                }
+              </td>
+              <td class="px-4 py-3">
+                <span class="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{{ row.material.codigo || '—' }}</span>
+              </td>
+              <td class="px-4 py-3" style="max-width:200px">
+                <p class="font-semibold text-gray-800 truncate" [title]="row.material.descricao_breve">{{ row.material.descricao_breve }}</p>
+                <p class="text-xs text-gray-500 truncate" [title]="row.material.descricao_detalhada">{{ row.material.descricao_detalhada }}</p>
+                @if (row.material.datasheet_url) {
+                  <a [href]="row.material.datasheet_url" target="_blank" class="text-xs text-blue-600 hover:underline">📄 Datasheet</a>
+                }
+              </td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                  [class]="getMaterialStatusClass(row.material.status)">
+                  {{ row.material.status === 'liberado' ? 'Liberado' : 'Pendente' }}
+                </span>
+              </td>
+              <td class="px-4 py-3" style="min-width:160px">
+                @if (!row.material.codigo) {
+                  <span class="text-xs text-amber-600 font-medium">⚠ Aguardando código/liberação</span>
+                } @else if (!row.hasAnyRequest) {
+                  <span class="text-xs text-gray-400">Nenhuma solicitação</span>
+                } @else {
+                  <div class="flex flex-col gap-0.5">
+                    <span class="text-xs font-medium text-gray-700">
+                      {{ row.requests.length }} solicitação{{ row.requests.length !== 1 ? 'ões' : '' }}
+                    </span>
+                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium w-fit"
+                      [class]="getStatusClass(row.latestRequest!.status)">
+                      {{ row.latestRequest!.status }}
+                    </span>
+                    @if (row.hasOpenRequest) {
+                      <span class="text-xs text-blue-600 font-medium">● Em andamento</span>
+                    }
+                  </div>
+                }
+              </td>
+              <td class="px-4 py-3">
+                @if (row.latestRequest) {
+                  <p class="text-xs font-medium text-gray-700">{{ row.latestRequest.requestDate | date:'dd/MM/yyyy' }}</p>
+                  <p class="text-xs text-gray-400">{{ row.latestRequest.requester.name }}</p>
+                  <a [routerLink]="['/requests', row.latestRequest.id]" class="text-xs text-blue-500 hover:underline">Ver solicitação</a>
+                } @else {
+                  <span class="text-gray-300 text-xs">—</span>
+                }
+              </td>
+              <td class="px-4 py-3">
+                <div class="flex flex-col gap-1.5">
+                  <a [routerLink]="['/materials', row.material.id]" class="text-xs text-blue-600 hover:underline font-semibold">Ver / Editar</a>
+                  @if (row.material.status === 'liberado' && row.material.codigo && !row.hasOpenRequest) {
+                    <a routerLink="/requests/new" class="text-xs text-green-600 hover:underline font-semibold">+ Nova solicitação</a>
+                  }
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (totalPages() > 1) {
+      <div class="flex items-center justify-between mt-4 text-sm text-gray-600">
+        <span>Mostrando {{ startItem() }}–{{ endItem() }} de {{ filteredRows().length }}</span>
+        <div class="flex gap-1">
+          <button (click)="goToPage(currentPage() - 1)" [disabled]="currentPage() === 1"
+            class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 disabled:opacity-40">&#8249;</button>
+          @for (p of visiblePages(); track p) {
+            <button (click)="goToPage(p)"
+              [class]="p === currentPage() ? 'px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold' : 'px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100'">
+              {{ p }}
+            </button>
+          }
+          <button (click)="goToPage(currentPage() + 1)" [disabled]="currentPage() === totalPages()"
+            class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 disabled:opacity-40">&#8250;</button>
+        </div>
+      </div>
+    }
+  }
+
+</div>

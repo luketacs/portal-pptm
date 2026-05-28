@@ -1,0 +1,139 @@
+/* src/index.css - estilos globais e Tailwind */
+
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-slate-900: #0f172a;
+  --color-slate-700: #334155;
+  --color-slate-500: #64748b;
+  --color-slate-200: #e2e8f0;
+  --color-slate-100: #f1f5f9;
+  --color-slate-50: #f8fafc;
+  --surface: #ffffff;
+  --surface-muted: #f8fafc;
+  --surface-alt: #eef2f7;
+  --border: #e2e8f0;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08), 0 10px 24px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.16);
+  --radius-md: 14px;
+  --radius-lg: 18px;
+}
+
+/* Base */
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: "Manrope", "Segoe UI", Arial, sans-serif;
+  background: linear-gradient(180deg, var(--color-slate-50) 0%, var(--surface-alt) 100%);
+  color: var(--color-slate-900);
+}
+
+/* Pequeno reset para formulários */
+input, button, textarea, select { font: inherit; }
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  background: linear-gradient(180deg, var(--color-slate-50) 0%, var(--surface-alt) 100%);
+}
+
+.app-main {
+  background: transparent;
+}
+
+.app-header {
+  background: rgba(248, 250, 252, 0.8);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+}
+
+.app-sidebar {
+  width: 260px;
+  background: var(--surface);
+  color: var(--color-slate-900);
+  border-right: 1px solid var(--border);
+  box-shadow: 8px 0 20px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.app-panel {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.app-card {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.app-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* ── Elementos visíveis apenas na impressão ─────────────────────── */
+.print-only {
+  display: none;
+}
+
+/* ── Print / PDF export ─────────────────────────────────────────── */
+@media print {
+  app-sidebar,
+  app-header,
+  .no-print {
+    display: none !important;
+  }
+
+  body, html {
+    background: white !important;
+    margin: 0;
+    padding: 0;
+  }
+
+  .main-content, main {
+    margin-left: 0 !important;
+    padding: 1.5rem !important;
+    width: 100% !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-header {
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid #1e40af;
+    padding-bottom: 0.75rem;
+  }
+
+  .app-card {
+    box-shadow: none !important;
+    border: 1px solid #e2e8f0 !important;
+    break-inside: avoid;
+  }
+
+  .app-card:hover {
+    transform: none !important;
+  }
+
+  table { break-inside: avoid; }
+  tr    { break-inside: avoid; }
+
+  a[href]::after { content: none !important; }
+}

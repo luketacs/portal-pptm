@@ -1,0 +1,13 @@
+dist
+dist-ssr
+*.local
+# Logs
+logs
+*.log
+npm-debug.log*
+
+.vercel
+
+.vercel
+.env*.local
+node_modules

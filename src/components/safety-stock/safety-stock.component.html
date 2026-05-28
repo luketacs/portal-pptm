@@ -1,0 +1,392 @@
+﻿<section class="stock-dashboard">
+  <header class="header-card app-panel">
+    <div class="title-section">
+      <h1>Gestão à vista do Estoque de Segurança</h1>
+      <p>
+        Painel gerencial com os principais indicadores de valor e concentração por área.
+      </p>
+    </div>
+    <div class="actions-section">
+      <button type="button" (click)="loadData()" [disabled]="isLoading()" class="refresh-button">
+        Atualizar
+      </button>
+      @if (isAdmin()) {
+        <button
+          type="button"
+          (click)="onBalancePrimaryAction()"
+          [disabled]="isLoading() || !hasData()"
+          class="balance-button"
+        >
+          @if (!isCheckingBalances()) {
+            Iniciar consulta API
+          } @else if (isBalancePaused()) {
+            Retomar consulta ({{ balanceProgress().done }}/{{ balanceProgress().total }})
+          } @else {
+            Pausar consulta ({{ balanceProgress().done }}/{{ balanceProgress().total }})
+          }
+        </button>
+        <button
+          type="button"
+          (click)="checkStockBalances(true)"
+          [disabled]="isLoading() || !hasData() || isCheckingBalances()"
+          class="force-balance-button"
+        >
+          Forçar consulta
+        </button>
+      } @else {
+        <span class="admin-lock-note">Consulta de saldo disponível apenas para administradores</span>
+      }
+      <button type="button" (click)="exportItemsToExcel()" [disabled]="isLoading() || !hasData()" class="export-button">
+        Exportar Excel
+      </button>
+    </div>
+  </header>
+
+  <section class="filters-card app-card">
+    <div class="filter-info">
+      <span class="filter-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 4h18l-7 8v6l-4 2v-8L3 4z" />
+        </svg>
+      </span>
+      <div>
+        <p class="filter-title">Filtros</p>
+        <p class="filter-subtitle">{{ filterContextLabel() }}</p>
+      </div>
+    </div>
+
+    <div class="filter-controls">
+      <input
+        type="text"
+        class="code-search-input"
+        placeholder="Buscar por código..."
+        aria-label="Buscar por código do material"
+        [value]="codeFilter()"
+        (input)="codeFilter.set($any($event.target).value)"
+      />
+      <select id="areaFilter" class="area-select" aria-label="Filtrar por área" (change)="onAreaChange($event)">
+        <option value="all">Todas as áreas</option>
+        @for (area of availableAreas(); track area) {
+          <option [value]="area">{{ area }}</option>
+        }
+      </select>
+      <button
+        type="button"
+        class="clear-filter-button"
+        [disabled]="selectedArea() === 'all' && !codeFilter()"
+        (click)="clearFilters()"
+      >
+        Limpar
+      </button>
+    </div>
+  </section>
+
+  @if (balanceWarningMessage()) {
+    <section class="alert alert-warning">
+      <strong>Atenção</strong>
+      <p>{{ balanceWarningMessage() }}</p>
+    </section>
+  }
+
+  @if (isLoading()) {
+    <section class="loading-container app-card">
+      <div class="spinner-large"></div>
+      <p>Carregando dados do estoque de segurança...</p>
+    </section>
+  }
+
+  @if (!isLoading() && errorMessage()) {
+    <section class="alert alert-error">
+      <strong>Falha no carregamento</strong>
+      <p>{{ errorMessage() }}</p>
+    </section>
+  }
+
+  @if (!isLoading() && !errorMessage()) {
+    <div class="kpi-grid">
+      <article class="kpi-card app-card">
+        <div class="kpi-head">
+          <p class="kpi-label">Valor Total</p>
+          <span class="kpi-icon icon-currency" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 1v22M17 5H9a4 4 0 000 8h6a4 4 0 010 8H6" />
+            </svg>
+          </span>
+        </div>
+        <p class="kpi-value">{{ filteredSummary().totalValue | currency:'BRL':'symbol':'1.2-2':'pt-BR' }}</p>
+      </article>
+      <article class="kpi-card app-card">
+        <div class="kpi-head">
+          <p class="kpi-label">Itens Cadastrados</p>
+          <span class="kpi-icon icon-items" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M20 7L12 3 4 7m16 0v10l-8 4m8-14l-8 4m0 10L4 17V7m8 4v10" />
+            </svg>
+          </span>
+        </div>
+        <p class="kpi-value">{{ filteredSummary().totalItems }}</p>
+      </article>
+      <article class="kpi-card app-card">
+        <div class="kpi-head">
+          <p class="kpi-label">Áreas Monitoradas</p>
+          <span class="kpi-icon icon-areas" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 7l9-4 9 4-9 4-9-4zM3 17l9 4 9-4M3 12l9 4 9-4" />
+            </svg>
+          </span>
+        </div>
+        <p class="kpi-value">{{ filteredSummary().totalAreas }}</p>
+      </article>
+      <article class="kpi-card app-card">
+        <div class="kpi-head">
+          <p class="kpi-label">Qtd. Total Est. Seg.</p>
+          <span class="kpi-icon icon-qty" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4h16v4H4zM4 10h16v4H4zM4 16h16v4H4z" />
+            </svg>
+          </span>
+        </div>
+        <p class="kpi-value">{{ filteredSummary().totalSafetyStockQty | number:'1.0-2':'pt-BR' }}</p>
+      </article>
+    </div>
+
+    <section class="stock-alert-kpi-grid">
+      <article class="stock-alert-kpi-card app-card">
+        <p class="stock-alert-label">Itens sem saldo</p>
+        <p class="stock-alert-value danger">{{ outOfStockCount() }}</p>
+      </article>
+      <article class="stock-alert-kpi-card app-card">
+        <p class="stock-alert-label">Itens abaixo do mínimo</p>
+        <p class="stock-alert-value warning">{{ belowTargetCount() }}</p>
+      </article>
+      <article class="stock-alert-kpi-card app-card">
+        <p class="stock-alert-label">Itens cobertos</p>
+        <p class="stock-alert-value success">{{ coveredCount() }}</p>
+      </article>
+      <article class="stock-alert-kpi-card app-card">
+        <p class="stock-alert-label">Déficit total (qtde)</p>
+        <p class="stock-alert-value">{{ totalDeficitQty() | number:'1.0-2':'pt-BR' }}</p>
+      </article>
+    </section>
+
+    @if (!hasData()) {
+      <section class="empty-state app-card">
+        <h2>Nenhum dado retornado</h2>
+        <p>
+          A tela carregou, mas sem registros visíveis. Isso normalmente indica permissão (RLS) ou origem sem linhas.
+        </p>
+        @if (diagnostics().length > 0) {
+          <div class="diagnostics">
+            <h3>Diagnóstico técnico</h3>
+            <ul>
+              @for (diag of diagnostics(); track diag) {
+                <li>{{ diag }}</li>
+              }
+            </ul>
+          </div>
+        }
+      </section>
+    } @else {
+      <section class="highlight-grid">
+        <article class="highlight-card app-card">
+          <p class="highlight-label">Área com maior valor</p>
+          @if (topArea(); as leaderArea) {
+            <p class="highlight-main">{{ leaderArea.area }}</p>
+            <p class="highlight-value">
+              {{ leaderArea.totalValue | currency:'BRL':'symbol':'1.2-2':'pt-BR' }}
+            </p>
+          } @else {
+            <p class="highlight-main">-</p>
+            <p class="highlight-value">
+              {{ 0 | currency:'BRL':'symbol':'1.2-2':'pt-BR' }}
+            </p>
+          }
+        </article>
+        <article class="highlight-card app-card">
+          <p class="highlight-label">Ticket médio por item</p>
+          <p class="highlight-main">
+            {{ averageItemValue() | currency:'BRL':'symbol':'1.2-2':'pt-BR' }}
+          </p>
+          <p class="highlight-value">Baseado no total de {{ filteredSummary().totalItems }} itens</p>
+        </article>
+        <article class="highlight-card app-card">
+          <p class="highlight-label">Concentração Top 5 áreas</p>
+          <p class="highlight-main">{{ top5Concentration() | number:'1.1-1':'pt-BR' }}%</p>
+          <p class="highlight-value">Participação sobre o valor total do estoque</p>
+        </article>
+      </section>
+
+      <div class="analytics-grid">
+        <section class="app-card ranking-card">
+          <div class="panel-header">
+            <h2>Ranking de Áreas por Valor</h2>
+            <p>Top 5 de concentração financeira do estoque de segurança</p>
+          </div>
+
+          <div class="ranking-list">
+            @for (area of topAreas(); track area.area) {
+              <div class="ranking-row">
+                <div class="ranking-info">
+                  <strong>{{ area.area }}</strong>
+                  <span>{{ area.itemCount }} itens</span>
+                </div>
+                <div class="ranking-bar-track">
+                  <div class="ranking-bar-fill" [style.width.%]="getAreaBarWidth(area.totalValue)"></div>
+                </div>
+                <div class="ranking-value">
+                  {{ area.totalValue | currency:'BRL':'symbol':'1.2-2':'pt-BR' }}
+                </div>
+              </div>
+            }
+          </div>
+        </section>
+
+        <section class="app-card summary-table-card">
+          <div class="panel-header">
+            <h2>Resumo por Área</h2>
+            <p>Visão consolidada de itens, quantidade e valor</p>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Área</th>
+                  <th>Itens</th>
+                  <th>Qtd. Est. Seg.</th>
+                  <th>Valor Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of filteredAreaSummaries(); track row.area) {
+                  <tr>
+                    <td>{{ row.area }}</td>
+                    <td>{{ row.itemCount }}</td>
+                    <td>{{ row.totalSafetyStockQty | number:'1.0-2':'pt-BR' }}</td>
+                    <td>{{ row.totalValue | currency:'BRL':'symbol':'1.2-2':'pt-BR' }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="4" class="empty-cell">Nenhuma área encontrada.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <section class="app-card balance-alert-card">
+        <div class="critical-list-banner">
+          <div class="critical-list-copy">
+            <h2>{{ isFilteringByCode() ? 'Resultado da pesquisa por código' : 'Materiais sem saldo ou abaixo do estoque de segurança' }}</h2>
+            @if (lastBalanceCheckAt(); as updatedAt) {
+              <p>
+                Última atualização em {{ updatedAt | date:'dd/MM/yyyy HH:mm':'':'pt-BR' }}
+                @if (lastBalanceUpdatedBy()) {
+                  por {{ lastBalanceUpdatedBy() }}
+                }.
+                Considerando apenas a localização 4922.
+              </p>
+            } @else {
+              <p>
+                Aguardando a primeira atualização de saldo publicada. A lista considera apenas a localização 4922.
+              </p>
+            }
+          </div>
+
+          <div class="critical-list-summary">
+            <article>
+              <strong>{{ outOfStockCount() }}</strong>
+              <span>Sem saldo</span>
+            </article>
+            <article>
+              <strong>{{ belowTargetCount() }}</strong>
+              <span>Abaixo do mínimo</span>
+            </article>
+          </div>
+        </div>
+
+        @if (!hasBalanceData()) {
+          <section class="balance-empty">
+            <h2>Monitoramento de saldo ainda não iniciado</h2>
+            <p>
+              Clique em <strong>Iniciar consulta API</strong> para validar o saldo de cada item do estoque de segurança
+              e identificar materiais sem cobertura.
+            </p>
+          </section>
+        } @else if (displayBalanceRows().length === 0) {
+          <p class="balance-note success-note">
+            @if (isFilteringByCode()) {
+              Nenhum material encontrado com o código informado.
+            } @else {
+              Todos os itens consultados estão com saldo adequado.
+            }
+          </p>
+        } @else {
+          <div class="table-container critical-table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Descrição</th>
+                  <th>Área</th>
+                  <th>Est. Seg.</th>
+                  <th>Saldo Atual (4922)</th>
+                  <th>Déficit</th>
+                  <th>Status</th>
+                  @if (isAdmin()) {
+                    <th>Ações</th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of displayBalanceRows(); track row.code + '-' + row.area) {
+                  <tr>
+                    <td>{{ row.code }}</td>
+                    <td>
+                      <div>{{ row.description }}</div>
+                      @if (row.balanceError) {
+                        <small class="row-error">{{ row.balanceError }}</small>
+                      }
+                    </td>
+                    <td>{{ row.area }}</td>
+                    <td>{{ row.safetyStockQty | number:'1.0-2':'pt-BR' }}</td>
+                    <td>
+                      @if (row.currentStock !== null) {
+                        {{ row.currentStock | number:'1.0-2':'pt-BR' }}
+                      } @else {
+                        -
+                      }
+                    </td>
+                    <td>{{ row.deficitQty | number:'1.0-2':'pt-BR' }}</td>
+                    <td>
+                      <span [class]="balanceStatusClass(row.balanceStatus)">
+                        {{ balanceStatusLabel(row.balanceStatus) }}
+                      </span>
+                    </td>
+                    @if (isAdmin()) {
+                      <td>
+                        <button
+                          type="button"
+                          class="row-action-button"
+                          (click)="refreshSingleItemBalance(row.code)"
+                          [disabled]="isLoading() || isCheckingBalances() || isCodeUpdateInProgress(row.code)"
+                        >
+                          @if (isCodeUpdateInProgress(row.code)) {
+                            Atualizando...
+                          } @else {
+                            Atualizar saldo
+                          }
+                        </button>
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </section>
+    }
+  }
+</section>

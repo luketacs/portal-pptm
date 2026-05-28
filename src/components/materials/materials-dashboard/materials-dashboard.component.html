@@ -1,0 +1,237 @@
+<div class="space-y-8">
+  <div class="flex items-center justify-between">
+    <h1 class="text-3xl font-bold text-gray-800">Dashboard de Materiais</h1>
+    <a routerLink="/materials" class="text-sm text-blue-600 hover:underline font-semibold">Ver lista completa →</a>
+  </div>
+
+  @if (isLoading()) {
+    <div class="flex justify-center py-16">
+      <svg class="animate-spin h-10 w-10 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+    </div>
+  }
+
+  @if (!isLoading()) {
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div class="app-card p-5 flex items-center gap-3">
+        <div class="bg-blue-50 p-2.5 rounded-full flex-shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+        </div>
+        <div>
+          <p class="text-xs text-gray-500">Total</p>
+          <p class="text-2xl font-bold text-gray-800">{{ total() }}</p>
+        </div>
+      </div>
+
+      <div class="app-card p-5 flex items-center gap-3">
+        <div class="bg-green-50 p-2.5 rounded-full flex-shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <div>
+          <p class="text-xs text-gray-500">Liberados</p>
+          <p class="text-2xl font-bold text-green-700">{{ liberados() }}</p>
+        </div>
+      </div>
+
+      <div class="app-card p-5 flex items-center gap-3">
+        <div class="bg-yellow-50 p-2.5 rounded-full flex-shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <div>
+          <p class="text-xs text-gray-500">Pendentes</p>
+          <p class="text-2xl font-bold text-yellow-600">{{ pendentes() }}</p>
+        </div>
+      </div>
+
+      <div class="app-card p-5 flex items-center gap-3">
+        <div class="bg-indigo-50 p-2.5 rounded-full flex-shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+          </svg>
+        </div>
+        <div>
+          <p class="text-xs text-gray-500">Est. Segurança</p>
+          <p class="text-2xl font-bold text-indigo-700">{{ comEstoque() }}</p>
+        </div>
+      </div>
+
+      <div class="app-card p-5 flex items-center gap-3">
+        <div class="bg-rose-50 p-2.5 rounded-full flex-shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+        </div>
+        <div>
+          <p class="text-xs text-gray-500">Sem código</p>
+          <p class="text-2xl font-bold text-rose-600">{{ semCodigo() }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card: Tempo Médio de Liberação -->
+    @if (avgReleaseTime()) {
+      <div class="app-card p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+          <div>
+            <h3 class="text-lg font-semibold text-gray-800">Tempo Médio de Liberação</h3>
+            <p class="text-sm text-gray-500 mt-0.5">
+              Do cadastro até a aprovação — baseado em {{ avgReleaseTime()!.count }} material{{ avgReleaseTime()!.count !== 1 ? 'is' : '' }} liberado{{ avgReleaseTime()!.count !== 1 ? 's' : '' }}.
+            </p>
+          </div>
+          <div class="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl px-5 py-3 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <p class="text-xs text-teal-600 font-medium">Média</p>
+              <p class="text-2xl font-bold text-teal-700">{{ formatDuration(avgReleaseTime()!.avgMs) }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div class="rounded-lg bg-green-50 border border-green-100 p-4 text-center">
+            <p class="text-xs text-gray-500 mb-1">Mais rápido</p>
+            <p class="text-xl font-bold text-green-700">{{ formatDuration(avgReleaseTime()!.minMs) }}</p>
+          </div>
+          <div class="rounded-lg bg-orange-50 border border-orange-100 p-4 text-center">
+            <p class="text-xs text-gray-500 mb-1">Mais lento</p>
+            <p class="text-xl font-bold text-orange-600">{{ formatDuration(avgReleaseTime()!.maxMs) }}</p>
+          </div>
+        </div>
+        <p class="text-xs text-gray-400 mt-3">
+          * Calculado com base na diferença entre a data de cadastro e a data da última atualização do material.
+        </p>
+      </div>
+    }
+
+    <!-- Gráficos principais -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Status -->
+      <div class="app-card p-6">
+        <h3 class="text-lg font-semibold text-gray-700 mb-4">Status dos Materiais</h3>
+        <div #statusChart></div>
+        <div class="mt-3 flex gap-6 justify-center">
+          @for (item of statusChartData(); track item.name) {
+            <div class="flex items-center gap-2 text-sm">
+              <span class="w-3 h-3 rounded-full" [style.background-color]="item.color"></span>
+              <span class="text-gray-700">{{ item.name }}</span>
+              <span class="font-semibold text-gray-800">{{ item.value }} ({{ item.percent }}%)</span>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Por Unidade -->
+      <div class="app-card p-6">
+        <h3 class="text-lg font-semibold text-gray-700 mb-4">Distribuição por Unidade de Medida</h3>
+        <div #unitChart></div>
+      </div>
+    </div>
+
+    <!-- Cadastradores + Cross-reference -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Por cadastrador -->
+      <div class="app-card p-6 lg:col-span-2">
+        <h3 class="text-lg font-semibold text-gray-700 mb-4">Materiais por Cadastrador</h3>
+        <div #creatorChart></div>
+      </div>
+
+      <!-- Materiais com solicitação -->
+      <div class="app-card p-6">
+        <h3 class="text-lg font-semibold text-gray-700 mb-4">Relação com Solicitações</h3>
+        <p class="text-xs text-gray-400 mb-4">Apenas materiais com código cadastrado ({{ requestCrossRef().total }})</p>
+        <div class="space-y-4">
+          <div>
+            <div class="flex justify-between text-sm mb-1">
+              <span class="text-gray-600">Com solicitação</span>
+              <span class="font-bold text-blue-700">{{ requestCrossRef().com }}</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-2">
+              <div class="bg-blue-500 h-2 rounded-full transition-all"
+                [style.width]="requestCrossRef().total ? (requestCrossRef().com / requestCrossRef().total * 100) + '%' : '0%'">
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between text-sm mb-1">
+              <span class="text-gray-600">Sem solicitação</span>
+              <span class="font-bold text-slate-500">{{ requestCrossRef().sem }}</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-2">
+              <div class="bg-slate-400 h-2 rounded-full transition-all"
+                [style.width]="requestCrossRef().total ? (requestCrossRef().sem / requestCrossRef().total * 100) + '%' : '0%'">
+              </div>
+            </div>
+          </div>
+        </div>
+        @if (requestCrossRef().sem > 0) {
+          <div class="mt-5 rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-700">
+            <strong>{{ requestCrossRef().sem }}</strong> material{{ requestCrossRef().sem !== 1 ? 'is' : '' }} liberado{{ requestCrossRef().sem !== 1 ? 's' : '' }} sem solicitação de compra.
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- Materiais recentes -->
+    @if (recentMaterials().length > 0) {
+      <div class="app-card p-6">
+        <h3 class="text-lg font-semibold text-gray-700 mb-4">Cadastros Recentes</h3>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-slate-100 text-sm">
+            <thead class="bg-slate-50">
+              <tr>
+                <th class="px-4 py-2 text-left font-semibold text-gray-600">Foto</th>
+                <th class="px-4 py-2 text-left font-semibold text-gray-600">Código</th>
+                <th class="px-4 py-2 text-left font-semibold text-gray-600">Descrição</th>
+                <th class="px-4 py-2 text-left font-semibold text-gray-600">Status</th>
+                <th class="px-4 py-2 text-left font-semibold text-gray-600">Cadastrador</th>
+                <th class="px-4 py-2 text-left font-semibold text-gray-600">Data</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50 bg-white">
+              @for (m of recentMaterials(); track m.id) {
+                <tr class="hover:bg-slate-50">
+                  <td class="px-4 py-2" style="width:48px">
+                    @if (m.photo_url) {
+                      <div style="width:36px;height:36px;overflow:hidden;border-radius:5px;border:1px solid #e2e8f0">
+                        <img [src]="m.photo_url" alt="Foto" style="width:100%;height:100%;object-fit:cover" />
+                      </div>
+                    } @else {
+                      <div style="width:36px;height:36px;border-radius:5px;border:1px dashed #cbd5e1;background:#f8fafc;display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:0.95rem">🖼</div>
+                    }
+                  </td>
+                  <td class="px-4 py-2">
+                    <span class="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded">{{ m.codigo || '—' }}</span>
+                  </td>
+                  <td class="px-4 py-2 max-w-xs">
+                    <p class="font-medium text-gray-800 truncate">{{ m.descricao_breve }}</p>
+                  </td>
+                  <td class="px-4 py-2">
+                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+                      [class]="m.status === 'liberado' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'">
+                      {{ m.status === 'liberado' ? 'Liberado' : 'Pendente' }}
+                    </span>
+                  </td>
+                  <td class="px-4 py-2 text-gray-600 text-xs">{{ m.created_by_name }}</td>
+                  <td class="px-4 py-2 text-gray-400 text-xs">{{ formatDate(m.created_at) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="mt-3 text-right">
+          <a routerLink="/materials" class="text-sm text-blue-600 hover:underline">Ver todos os materiais →</a>
+        </div>
+      </div>
+    }
+  }
+</div>

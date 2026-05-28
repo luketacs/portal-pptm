@@ -1,0 +1,104 @@
+﻿<div class="app-panel history-container">
+  <!-- Tabs -->
+  <div class="tabs">
+    <button 
+      class="tab"
+      [class.active]="activeTab === 'history'"
+      (click)="activeTab = 'history'">
+      <span class="tab-icon"></span>
+      Histórico
+    </button>
+    <button 
+      class="tab"
+      [class.active]="activeTab === 'comments'"
+      (click)="activeTab = 'comments'">
+      <span class="tab-icon"></span>
+      Comentários ({{ historyService.comments().length }})
+    </button>
+  </div>
+
+  <!-- Loading -->
+  @if (historyService.isLoading()) {
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>Carregando...</p>
+    </div>
+  }
+
+  <!-- Timeline de Histórico -->
+  @if (activeTab === 'history' && !historyService.isLoading()) {
+    <div class="timeline">
+      @if (historyService.history().length === 0) {
+        <p class="empty-state">Nenhum histórico disponível</p>
+      }
+      
+      @for (entry of historyService.history(); track entry.id) {
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <div class="timeline-header">
+              <strong>{{ entry.user_name }}</strong>
+              <span class="timeline-action">{{ getActionLabel(entry.action) }}</span>
+            </div>
+            
+            @if (entry.field_changed === 'status') {
+              <div class="timeline-details">
+                @if (entry.old_value) {
+                  <span class="status-badge old">{{ getStatusLabel(entry.old_value) }}</span>
+                  <span class="arrow">-></span>
+                }
+                <span class="status-badge new">{{ getStatusLabel(entry.new_value!) }}</span>
+              </div>
+            }
+            
+            @if (entry.comment) {
+              <p class="timeline-comment">{{ entry.comment }}</p>
+            }
+            
+            <div class="timeline-date">{{ formatDate(entry.created_at) }}</div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Comentários -->
+  @if (activeTab === 'comments' && !historyService.isLoading()) {
+    <div class="comments-section">
+      <!-- Formulário de novo comentário -->
+      <div class="comment-form">
+        <textarea
+          [(ngModel)]="newComment"
+          placeholder="Adicionar comentário..."
+          rows="3"
+          class="comment-input"></textarea>
+        <button 
+          (click)="addComment()"
+          [disabled]="!newComment.trim()"
+          class="btn-primary">
+          Enviar
+        </button>
+      </div>
+
+      <!-- Lista de comentários -->
+      <div class="comments-list">
+        @if (historyService.comments().length === 0) {
+          <p class="empty-state">Nenhum comentário ainda. Seja o primeiro!</p>
+        }
+        
+        @for (comment of historyService.comments(); track comment.id) {
+          <div class="comment-item">
+            <div class="comment-header">
+              <strong>{{ comment.user_name }}</strong>
+              <span class="comment-date">{{ formatDate(comment.created_at) }}</span>
+            </div>
+            <p class="comment-text">{{ comment.comment }}</p>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>
+
+
+

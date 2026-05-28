@@ -1,0 +1,51 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Portal PPTM</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" sizes="48x48" href="favicon-48x48.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192x192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512x512.png">
+  <link rel="shortcut icon" type="image/png" href="favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="icon-192x192.png">
+  <style>
+    /* Using system font stack to avoid remote font loads */
+    body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+
+    /* Animation for the notification toast */
+    @keyframes fade-in-right {
+      from {
+        opacity: 0;
+        transform: translateX(100%);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+    .animate-fade-in-right {
+      animation: fade-in-right 0.5s ease-out forwards;
+    }
+
+    /* Animation for the success modal */
+    @keyframes fade-in-up {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    .animate-fade-in-up {
+      animation: fade-in-up 0.4s ease-out forwards;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-slate-800">
+  <app-root></app-root>
+</body>
+</html>

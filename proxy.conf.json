@@ -1,0 +1,22 @@
+{
+  "/api/material": {
+    "target": "https://utepecem.com/sigma/api",
+    "pathRewrite": {
+      "^/api/material/(.*)$": "/getProduto/$1/todas/xEQ2y0SZufH5L1wJ2K98MVqCtjU8Sq6Z"
+    },
+    "changeOrigin": true,
+    "secure": false,
+    "logLevel": "debug"
+  },
+  "/api": {
+    "target": "https://portalpptm.vercel.app",
+    "changeOrigin": true,
+    "secure": true,
+    "logLevel": "debug"
+  },
+  "/matriculas.json": {
+    "target": "https://portalpptm.vercel.app",
+    "changeOrigin": true,
+    "secure": true
+  }
+}

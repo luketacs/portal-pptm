@@ -1,0 +1,91 @@
+﻿<div class="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-4">
+  <div class="bg-white shadow-md rounded-lg p-8 md:p-12 w-full max-w-lg">
+    <div class="mb-8 text-center">
+      <div class="mb-3 flex justify-center">
+        <img src="/company-logo.png" alt="Logo da empresa" class="h-8 md:h-10 w-auto object-contain" />
+      </div>
+      <h1 class="text-lg md:text-xl font-semibold text-slate-800 leading-tight">
+        Portal PPTM
+      </h1>
+      <p class="mt-1 text-xs md:text-sm text-slate-500 leading-normal">
+        Plataforma Integrada de Operações
+      </p>
+    </div>
+    
+    <form (ngSubmit)="onLogin()" class="space-y-6">
+      <div>
+        <label for="email" class="block text-sm font-medium text-slate-700">E-mail <span class="text-red-500">*</span></label>
+        <div class="mt-1 relative rounded-md shadow-sm">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg class="h-5 w-5 text-slate-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" /><path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" /></svg>
+          </div>
+             <input type="email" id="email" [ngModel]="email()" (ngModelChange)="email.set($event)" name="email"
+                 class="block w-full pl-10 pr-3 py-3 border border-slate-300 rounded-md leading-5 bg-white placeholder-slate-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                 placeholder="seu.email@company.com" required>
+        </div>
+      </div>
+
+      <div>
+        <label for="password" class="block text-sm font-medium text-slate-700">Senha <span class="text-red-500">*</span></label>
+        <div class="mt-1 relative rounded-md shadow-sm">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg class="h-5 w-5 text-slate-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clip-rule="evenodd" /></svg>
+          </div>
+             <input type="password" id="password" [ngModel]="password()" (ngModelChange)="password.set($event)" name="password"
+                 class="block w-full pl-10 pr-3 py-3 border border-slate-300 rounded-md leading-5 bg-white placeholder-slate-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                 placeholder="********" required>
+        </div>
+      </div>
+
+      @if(error()) {
+        <div class="rounded-md bg-red-50 p-4 border border-red-200">
+          <div class="flex">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <div class="ml-3">
+              <p class="text-sm font-medium text-red-800">{{ error() }}</p>
+            </div>
+          </div>
+        </div>
+      }
+      
+      <div class="flex items-start">
+        <div class="flex items-center h-5">
+          <input id="consent" type="checkbox" [ngModel]="consentGiven()" (ngModelChange)="consentGiven.set($event)" name="consent"
+            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer">
+        </div>
+        <label for="consent" class="ml-2 block text-xs text-slate-600 leading-relaxed cursor-pointer">
+          Li e concordo com a
+          <a routerLink="/privacy-policy" class="text-blue-600 hover:text-blue-700 font-medium underline">Política de Privacidade</a>
+          e o tratamento dos meus dados pessoais conforme a LGPD.
+        </label>
+      </div>
+
+      <button type="submit" [disabled]="isLoggingIn() || !consentGiven()" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out shadow-lg flex items-center justify-center disabled:bg-blue-400 disabled:cursor-not-allowed">
+        @if(isLoggingIn()) {
+          <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span>Autenticando...</span>
+        } @else {
+          <span>Entrar no Sistema</span>
+        }
+      </button>
+
+      <div class="text-center pt-4 border-t border-slate-200">
+        <a routerLink="/forgot-password" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+          Esqueci minha senha
+        </a>
+      </div>
+
+      <!-- Primeiro acesso information intentionally removed to avoid exposing credentials in the UI -->
+
+    </form>
+  </div>
+</div>
+
+

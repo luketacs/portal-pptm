@@ -1,0 +1,178 @@
+<div class="app-panel p-6 md:p-8">
+  <div class="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-800">Auditoria</h1>
+      <p class="text-sm text-gray-500 mt-0.5">Registro de todas as ações do sistema — login, logoff, reset de senha, solicitações e mais.</p>
+    </div>
+    <span class="text-sm text-gray-500 font-medium">{{ total() }} evento(s)</span>
+  </div>
+
+  <!-- Filtros -->
+  <div class="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+    <h3 class="text-sm font-semibold text-gray-600 mb-3">Filtros</h3>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Usuário</label>
+        <select [(ngModel)]="selectedUserId" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">Todos</option>
+          @for (user of userService.users(); track user.id) {
+            <option [value]="user.id">{{ user.name }}</option>
+          }
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Categoria</label>
+        <select [(ngModel)]="selectedCategory" (ngModelChange)="onCategoryChange()" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">Todas</option>
+          @for (cat of categoryNames; track cat) {
+            <option [value]="cat">{{ cat }}</option>
+          }
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Tipo de evento</label>
+        <select [(ngModel)]="selectedEventType" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">Todos</option>
+          @for (opt of filteredEventOptions(); track opt.value) {
+            <option [value]="opt.value">{{ opt.label }}</option>
+          }
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Data inicial</label>
+        <input type="date" [(ngModel)]="dateFrom" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Data final</label>
+        <input type="date" [(ngModel)]="dateTo" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+    </div>
+
+    <div class="flex gap-2 mt-3">
+      <button (click)="applyFilters()" class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition">
+        Filtrar
+      </button>
+      <button (click)="clearFilters()" class="bg-slate-200 text-slate-700 text-sm font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 transition">
+        Limpar
+      </button>
+    </div>
+  </div>
+
+  @if (isLoading()) {
+    <div class="flex justify-center py-10">
+      <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+    </div>
+  }
+
+  @if (errorMessage()) {
+    <div class="rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800 mb-4">
+      <p class="font-semibold mb-1">Atenção</p>
+      <p>{{ errorMessage() }}</p>
+      <p class="mt-2 text-xs">Execute o arquivo <code class="bg-amber-100 px-1 rounded">supabase/migrations/002_audit_logs.sql</code> no Supabase SQL Editor para habilitar a auditoria.</p>
+    </div>
+  }
+
+  @if (!isLoading() && !errorMessage()) {
+    <!-- Tabela desktop -->
+    <div class="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-4 py-3 text-left font-semibold text-gray-600 whitespace-nowrap">Data/Hora</th>
+            <th class="px-4 py-3 text-left font-semibold text-gray-600">Usuário</th>
+            <th class="px-4 py-3 text-left font-semibold text-gray-600">Evento</th>
+            <th class="px-4 py-3 text-left font-semibold text-gray-600">Recurso</th>
+            <th class="px-4 py-3 text-left font-semibold text-gray-600">Descrição</th>
+            <th class="px-4 py-3 text-left font-semibold text-gray-600">Detalhes</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 bg-white">
+          @for (entry of entries(); track entry.id) {
+            <tr class="hover:bg-slate-50">
+              <td class="px-4 py-3 text-gray-500 text-xs whitespace-nowrap font-mono">{{ formatDate(entry.created_at) }}</td>
+              <td class="px-4 py-3 font-medium text-gray-800 whitespace-nowrap">{{ entry.user_name }}</td>
+              <td class="px-4 py-3 whitespace-nowrap">
+                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold" [class]="getEventClass(entry.event_type)">
+                  {{ getEventLabel(entry.event_type) }}
+                </span>
+              </td>
+              <td class="px-4 py-3">
+                @if (getResourceLink(entry); as link) {
+                  <a [routerLink]="link" class="text-blue-600 hover:underline font-mono text-xs">
+                    {{ getResourceLabel(entry) }}
+                  </a>
+                } @else if (getResourceLabel(entry); as label) {
+                  <span class="text-gray-500 text-xs font-mono">{{ label }}</span>
+                } @else {
+                  <span class="text-gray-300 text-xs">—</span>
+                }
+              </td>
+              <td class="px-4 py-3 text-gray-700 text-xs max-w-sm">{{ entry.description }}</td>
+              <td class="px-4 py-3 text-gray-400 text-xs max-w-xs truncate font-mono" [title]="formatMetadata(entry)">
+                {{ formatMetadata(entry) || '—' }}
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="6" class="px-4 py-10 text-center text-gray-400">Nenhum evento encontrado.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Cards mobile -->
+    <div class="md:hidden space-y-3">
+      @for (entry of entries(); track entry.id) {
+        <div class="rounded-xl border border-slate-200 bg-white p-4">
+          <div class="flex items-start justify-between gap-2 mb-2">
+            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold" [class]="getEventClass(entry.event_type)">
+              {{ getEventLabel(entry.event_type) }}
+            </span>
+            <span class="text-xs text-gray-400 font-mono whitespace-nowrap">{{ formatDate(entry.created_at) }}</span>
+          </div>
+          <p class="text-sm font-semibold text-gray-800">{{ entry.user_name }}</p>
+          <p class="text-sm text-gray-600 mt-1">{{ entry.description }}</p>
+          @if (getResourceLink(entry); as link) {
+            <a [routerLink]="link" class="mt-1 text-xs text-blue-600 hover:underline font-mono">{{ getResourceLabel(entry) }}</a>
+          }
+        </div>
+      } @empty {
+        <div class="text-center py-10 text-gray-400 text-sm">Nenhum evento encontrado.</div>
+      }
+    </div>
+
+    <!-- Paginação -->
+    @if (total() > pageSize) {
+      <div class="flex flex-col sm:flex-row items-center justify-between mt-4 gap-3 text-sm text-gray-600">
+        <span>Mostrando {{ startItem() }}–{{ endItem() }} de {{ total() }}</span>
+        <div class="flex gap-1">
+          <button (click)="goToPage(currentPage() - 1)" [disabled]="currentPage() === 1"
+            class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed">
+            &#8249;
+          </button>
+          @for (page of visiblePages(); track page) {
+            <button (click)="goToPage(page)"
+              [class]="page === currentPage()
+                ? 'px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold'
+                : 'px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100'">
+              {{ page }}
+            </button>
+          }
+          <button (click)="goToPage(currentPage() + 1)" [disabled]="currentPage() === totalPages()"
+            class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed">
+            &#8250;
+          </button>
+        </div>
+      </div>
+    }
+  }
+</div>

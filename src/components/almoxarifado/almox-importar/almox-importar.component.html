@@ -1,0 +1,171 @@
+<div class="max-w-3xl mx-auto space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-800">Importar Dados do Almoxarifado</h1>
+    <p class="text-sm text-gray-500 mt-1">
+      Faça upload dos arquivos Excel exportados do ERP. Cada importação <strong>substitui</strong> os dados anteriores do respectivo tipo.
+      O Relatório Ary (passo 3) só precisa ser importado quando houver SAs novas encerradas.
+    </p>
+  </div>
+
+  <!-- Passo 1: Movimentações -->
+  <div class="app-card p-6">
+    <div class="flex items-start gap-4">
+      <div class="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">1</div>
+      <div class="flex-1">
+        <h3 class="font-semibold text-gray-800 text-base">Movimentações do Almoxarifado</h3>
+        <p class="text-sm text-gray-500 mb-3">Arquivo: <code class="bg-slate-100 px-1 rounded">Movimentações - 2026.xlsx</code> — Sheet: "1-Movimentação dos produtos"</p>
+
+        @if (mov().done) {
+          <div class="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700 mb-3">
+            ✅ {{ mov().registros }} registros importados com sucesso.
+          </div>
+        }
+        @if (mov().error) {
+          <div class="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 mb-3">{{ mov().error }}</div>
+        }
+
+        <div class="flex items-center gap-3 flex-wrap">
+          <label class="cursor-pointer">
+            <input type="file" accept=".xlsx,.xls" class="hidden" (change)="onFileSelected('mov', $event)" />
+            <span class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+              Selecionar arquivo
+            </span>
+          </label>
+          @if (mov().name) {
+            <span class="text-sm text-gray-600 truncate max-w-xs">📄 {{ mov().name }}</span>
+          }
+          @if (mov().file && !mov().loading) {
+            <button (click)="importar('mov')" class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition">Importar</button>
+            <button (click)="cancelar('mov')" class="text-sm text-gray-500 hover:text-red-600 py-2 px-3 rounded-lg hover:bg-red-50 transition border border-slate-200">✕ Cancelar</button>
+          }
+          @if (mov().loading) {
+            <span class="text-sm text-blue-600 font-medium flex items-center gap-2">
+              <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+              Processando...
+            </span>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Passo 2: Solicitações -->
+  <div class="app-card p-6">
+    <div class="flex items-start gap-4">
+      <div class="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">2</div>
+      <div class="flex-1">
+        <h3 class="font-semibold text-gray-800 text-base">Solicitações de Autorização (SAs)</h3>
+        <p class="text-sm text-gray-500 mb-3">Arquivo: <code class="bg-slate-100 px-1 rounded">Solicitacoes.xlsx</code> — Sheet: "Listagem do Browse"</p>
+
+        @if (sas().done) {
+          <div class="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700 mb-3">
+            ✅ {{ sas().registros }} SAs importadas com sucesso.
+          </div>
+        }
+        @if (sas().error) {
+          <div class="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 mb-3">{{ sas().error }}</div>
+        }
+
+        <div class="flex items-center gap-3 flex-wrap">
+          <label class="cursor-pointer">
+            <input type="file" accept=".xlsx,.xls" class="hidden" (change)="onFileSelected('sas', $event)" />
+            <span class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+              Selecionar arquivo
+            </span>
+          </label>
+          @if (sas().name) {
+            <span class="text-sm text-gray-600 truncate max-w-xs">📄 {{ sas().name }}</span>
+          }
+          @if (sas().file && !sas().loading) {
+            <button (click)="importar('sas')" class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition">Importar</button>
+            <button (click)="cancelar('sas')" class="text-sm text-gray-500 hover:text-red-600 py-2 px-3 rounded-lg hover:bg-red-50 transition border border-slate-200">✕ Cancelar</button>
+          }
+          @if (sas().loading) {
+            <span class="text-sm text-blue-600 font-medium flex items-center gap-2">
+              <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+              Processando...
+            </span>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Passo 3: Status SAs (Relatório Ary) — opcional -->
+  <div class="app-card p-6">
+    <div class="flex items-start gap-4">
+      <div class="flex-shrink-0 w-8 h-8 rounded-full bg-slate-400 text-white flex items-center justify-center font-bold text-sm">3</div>
+      <div class="flex-1">
+        <div class="flex items-center gap-2 mb-1">
+          <h3 class="font-semibold text-gray-800 text-base">Status das SAs Encerradas</h3>
+          <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium">Opcional</span>
+        </div>
+        <p class="text-sm text-gray-500 mb-1">Arquivo: <code class="bg-slate-100 px-1 rounded">Relatorio Ary.xlsx</code></p>
+        <p class="text-xs text-amber-600 mb-3">⚠ Só importe quando houver novas SAs encerradas. Este relatório não precisa ser atualizado a cada importação.</p>
+
+        @if (ary().done) {
+          <div class="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700 mb-3">
+            ✅ {{ ary().registros }} SAs marcadas como encerradas.
+          </div>
+        }
+        @if (ary().error) {
+          <div class="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 mb-3">{{ ary().error }}</div>
+        }
+
+        <div class="flex items-center gap-3 flex-wrap">
+          <label class="cursor-pointer">
+            <input type="file" accept=".xlsx,.xls" class="hidden" (change)="onFileSelected('ary', $event)" />
+            <span class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+              Selecionar arquivo
+            </span>
+          </label>
+          @if (ary().name) {
+            <span class="text-sm text-gray-600 truncate max-w-xs">📄 {{ ary().name }}</span>
+          }
+          @if (ary().file && !ary().loading) {
+            <button (click)="importar('ary')" class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition">Aplicar</button>
+            <button (click)="cancelar('ary')" class="text-sm text-gray-500 hover:text-red-600 py-2 px-3 rounded-lg hover:bg-red-50 transition border border-slate-200">✕ Cancelar</button>
+          }
+          @if (ary().loading) {
+            <span class="text-sm text-blue-600 font-medium flex items-center gap-2">
+              <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+              Processando...
+            </span>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Histórico de importações -->
+  @if (ultimas().length > 0) {
+    <div class="app-card p-6">
+      <h3 class="font-semibold text-gray-700 mb-3">Histórico de Importações</h3>
+      <table class="min-w-full text-sm divide-y divide-slate-100">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-3 py-2 text-left font-semibold text-gray-600">Tipo</th>
+            <th class="px-3 py-2 text-left font-semibold text-gray-600">Arquivo</th>
+            <th class="px-3 py-2 text-right font-semibold text-gray-600">Registros</th>
+            <th class="px-3 py-2 text-left font-semibold text-gray-600">Quem</th>
+            <th class="px-3 py-2 text-left font-semibold text-gray-600">Quando</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-50 bg-white">
+          @for (imp of ultimas(); track imp.importado_em) {
+            <tr class="hover:bg-slate-50">
+              <td class="px-3 py-2"><span class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-medium">{{ tipoLabel(imp.tipo) }}</span></td>
+              <td class="px-3 py-2 text-gray-600 font-mono text-xs">{{ imp.nome_arquivo }}</td>
+              <td class="px-3 py-2 text-right font-semibold text-gray-800">{{ imp.total_registros }}</td>
+              <td class="px-3 py-2 text-gray-600">{{ imp.importado_por_nome }}</td>
+              <td class="px-3 py-2 text-gray-400 text-xs">{{ formatDate(imp.importado_em) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

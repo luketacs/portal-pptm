@@ -1,0 +1,53 @@
+<aside class="app-sidebar">
+  <div class="h-20 flex items-center justify-center px-4 border-b border-gray-200">
+    <img src="/company-logo.png" alt="Logo da empresa" class="h-8 w-auto max-w-[80%] object-contain object-center mx-auto" />
+  </div>
+
+  <nav class="sidebar-nav flex-1 px-4 py-4 space-y-2" role="navigation" aria-label="Menu principal">
+    @for (group of visibleNavGroups(); track group.id) {
+      <div class="nav-group">
+        <button
+          type="button"
+          class="nav-group-trigger"
+          [class.active]="isGroupActive(group)"
+          (click)="toggleGroup(group.id)"
+        >
+          <span [innerHTML]="group.icon | safeHtml" class="icon-slot"></span>
+          <span class="ml-3 grow text-left">{{ group.label }}</span>
+          <svg
+            class="chevron"
+            [class.expanded]="isGroupExpanded(group)"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path fill-rule="evenodd" d="M6.28 7.22a.75.75 0 011.06 0L10 9.94l2.66-2.72a.75.75 0 111.08 1.04l-3.2 3.27a.75.75 0 01-1.08 0l-3.2-3.27a.75.75 0 010-1.04z" clip-rule="evenodd" />
+          </svg>
+        </button>
+
+        @if (isGroupExpanded(group)) {
+          <div class="nav-submenu">
+            @for (link of group.links; track link.path) {
+              <a
+                [routerLink]="link.path"
+                routerLinkActive="active"
+                [routerLinkActiveOptions]="{exact: true}"
+                class="submenu-link"
+              >
+                <span class="submenu-dot"></span>
+                <span>{{ link.label }}</span>
+              </a>
+            }
+          </div>
+        }
+      </div>
+    }
+  </nav>
+
+  @if (currentUser(); as user) {
+    <div class="px-4 py-4 border-t border-gray-200">
+      <p class="font-semibold text-gray-800 text-sm truncate">{{ user.name }}</p>
+      <p class="text-xs text-gray-500 truncate">{{ user.email }}</p>
+    </div>
+  }
+</aside>

@@ -1,0 +1,205 @@
+﻿<div class="max-w-5xl mx-auto">
+  <form [formGroup]="requestForm" (ngSubmit)="onSubmit()">
+    <div class="app-panel p-6 md:p-8 space-y-10">
+      
+      <!-- Cabeçalho -->
+      <div class="text-center border-b border-gray-200 pb-6">
+        <h1 class="text-3xl font-bold text-gray-800" style="font-family: 'Manrope', 'Segoe UI', Arial, sans-serif;">Nova Solicitação de Compra</h1>
+        <p class="text-sm text-gray-500 mt-1">Preencha os detalhes abaixo. Campos com <span class="text-red-500 font-semibold">*</span> são obrigatórios. Disponível para Admin, Solicitante e Visualizador.</p>
+      </div>
+
+      <!-- Seção 1: Detalhes Gerais -->
+      <div class="space-y-6">
+        <div class="flex items-center gap-3">
+            <div class="flex-shrink-0 bg-blue-600 text-white rounded-full h-8 w-8 flex items-center justify-center font-bold text-lg">1</div>
+            <h2 class="text-xl font-bold text-gray-800">Detalhes Gerais da Solicitação</h2>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pl-11">
+          @if(currentUser()?.role === 'Admin') {
+            <div>
+              <label for="requester" class="block text-sm font-medium text-gray-700">Solicitante <span class="text-red-500">*</span></label>
+              <select id="requester" formControlName="requester" class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                <option [ngValue]="null">Selecione o solicitante</option>
+                @for (u of users(); track u.id) {
+                  <option [ngValue]="u">{{u.name}} ({{u.email}})</option>
+                }
+              </select>
+              @if(requestForm.get('requester')?.invalid && requestForm.get('requester')?.touched) { <p class="text-xs text-red-600 mt-1">Campo obrigatório.</p> }
+            </div>
+          }
+          <div>
+            <label for="workOrder" class="block text-sm font-medium text-gray-700">Ordem de Serviço <span class="text-red-500">*</span></label>
+            <input type="text" id="workOrder" formControlName="workOrder" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+            @if(requestForm.get('workOrder')?.invalid && requestForm.get('workOrder')?.touched) { <p class="text-xs text-red-600 mt-1">Campo obrigatório.</p> }
+          </div>
+          <div>
+            <label for="priority" class="block text-sm font-medium text-gray-700">Prioridade <span class="text-red-500">*</span></label>
+            <select id="priority" formControlName="priority" class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+              @for(p of priorities; track p) { <option [value]="p">{{p}}</option> }
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Seção 2: Itens da Solicitação -->
+      <div class="space-y-4" formArrayName="items">
+         <div class="flex items-center gap-3">
+            <div class="flex-shrink-0 bg-blue-600 text-white rounded-full h-8 w-8 flex items-center justify-center font-bold text-lg">2</div>
+            <h2 class="text-xl font-bold text-gray-800">Itens da Solicitação</h2>
+        </div>
+        <div class="space-y-6 pl-11">
+          @for (itemGroup of items().controls; track itemGroup; let i = $index) {
+            <div [formGroupName]="i" class="app-card bg-gray-50/50 overflow-hidden relative transition-all">
+              <div class="flex justify-between items-center p-4 bg-gray-100 border-b border-gray-200">
+                <h3 class="text-lg font-bold text-blue-800">Item {{ i + 1 }}</h3>
+                @if (items().length > 1) {
+                  <button type="button" (click)="removeItem(i)" class="text-red-500 hover:text-red-700 font-semibold p-1 rounded-full transition-colors" title="Remover Item" aria-label="Remover item">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
+                }
+              </div>
+              <div class="p-6 grid grid-cols-1 md:grid-cols-12 gap-6">
+                
+                <div class="md:col-span-12">
+                  <label [for]="'materialCode-' + i" class="block text-sm font-medium text-gray-700">Código do Material <span class="text-red-500">*</span></label>
+                  <div class="relative">
+                    <input type="text" [id]="'materialCode-' + i" formControlName="materialCode" placeholder="Digite o código para buscar" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    @if (itemStates()[i]?.isLoading) {
+                      <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                        <svg class="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                      </div>
+                    }
+                  </div>
+                   @if(itemGroup.get('materialCode')?.invalid && itemGroup.get('materialCode')?.touched) { <p class="text-xs text-red-600 mt-1">Obrigatório.</p> }
+                   @if(itemStates()[i]?.apiError) { <p class="text-xs text-red-600 mt-1">{{ itemStates()[i].apiError }}</p> }
+                   
+                   <!-- DEBUG: Show pendingRequestAlert state -->
+                   @if(itemStates()[i]) {
+                     <p class="text-xs text-gray-400 mt-1 hidden">DEBUG: pendingRequestAlert = {{ itemStates()[i].pendingRequestAlert | json }}</p>
+                   }
+                   
+                   <!-- Alerta de Estoque -->
+                   @if(itemStates()[i]?.stockAlert?.hasStock) {
+                     <div class="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                       <p class="text-sm font-semibold text-yellow-800">Alerta de Estoque</p>
+                       <p class="text-xs text-yellow-700 mt-1">
+                         Este material possui <strong>{{ itemStates()[i]?.stockAlert?.quantity }} unidade(s)</strong> em estoque na empresa <strong>PTPC</strong> (localização <strong>{{ itemStates()[i]?.stockAlert?.location }}</strong>). 
+                         Verifique se a compra é realmente necessária.
+                       </p>
+                     </div>
+                   }
+                   
+                   <!-- Alerta de Solicitação em Andamento -->
+                   @if(itemStates()[i]?.pendingRequestAlert?.exists) {
+                     <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                       <p class="text-sm font-semibold text-blue-800">Solicitação em Andamento</p>
+                       <p class="text-xs text-blue-700 mt-1">
+                         Já existe uma solicitação de compra para este material, criada por <strong>{{ itemStates()[i]?.pendingRequestAlert?.createdBy }}</strong> em <strong>{{ itemStates()[i]?.pendingRequestAlert?.createdAt }}</strong>. 
+                         Considere consolidar a demanda.
+                       </p>
+                     </div>
+                   }
+                </div>
+                
+                <div class="md:col-span-12">
+                  <label [for]="'description-' + i" class="block text-sm font-medium text-gray-700">Descrição Breve</label>
+                  <input type="text" [id]="'description-' + i" formControlName="description" class="mt-1 block w-full px-3 py-2 border bg-gray-100 border-gray-300 rounded-md shadow-sm">
+                </div>
+                
+                <div class="md:col-span-12">
+                  <label [for]="'descriptionDetailed-' + i" class="block text-sm font-medium text-gray-700">Descrição Detalhada</label>
+                  <textarea [id]="'descriptionDetailed-' + i" formControlName="descriptionDetailed" rows="3" class="mt-1 block w-full px-3 py-2 border bg-gray-100 border-gray-300 rounded-md shadow-sm"></textarea>
+                </div>
+
+                <div class="md:col-span-4">
+                  <label [for]="'quantity-' + i" class="block text-sm font-medium text-gray-700">Quantidade <span class="text-red-500">*</span></label>
+                  <input type="number" [id]="'quantity-' + i" formControlName="quantity" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                  @if(itemGroup.get('quantity')?.invalid && itemGroup.get('quantity')?.touched) { <p class="text-xs text-red-600 mt-1">Inválido.</p> }
+                </div>
+
+                <div class="md:col-span-4">
+                  <label [for]="'unit-' + i" class="block text-sm font-medium text-gray-700">Unidade</label>
+                  <input type="text" [id]="'unit-' + i" formControlName="unit" class="mt-1 block w-full px-3 py-2 border bg-gray-100 border-gray-300 rounded-md shadow-sm">
+                </div>
+                
+                <div class="md:col-span-4">
+                   <label class="block text-sm font-medium text-gray-700">Tipo de Material <span class="text-red-500">*</span></label>
+                   <div class="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+                      @for(type of ['Mecânica', 'Elétrica', 'SPCI', 'Refrigeração', 'Outros']; track type) {
+                        <div class="flex items-center">
+                          <input [id]="'type-' + type + '-' + i" type="radio" formControlName="materialType" [value]="type" class="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300">
+                          <label [for]="'type-' + type + '-' + i" class="ml-2 block text-sm text-gray-900">{{ type }}</label>
+                        </div>
+                      }
+                   </div>
+                </div>
+              </div>
+            </div>
+          }
+          <div class="flex justify-start">
+            <button type="button" (click)="addItem()" class="bg-blue-100 text-blue-700 font-bold py-2 px-4 rounded-lg hover:bg-blue-200 transition duration-150 ease-in-out flex items-center shadow-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+              Adicionar Outro Material
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Seção 3: Justificativa -->
+       <div class="space-y-6">
+         <div class="flex items-center gap-3">
+            <div class="flex-shrink-0 bg-blue-600 text-white rounded-full h-8 w-8 flex items-center justify-center font-bold text-lg">3</div>
+            <h2 class="text-xl font-bold text-gray-800">Justificativa</h2>
+        </div>
+        <div class="pl-11">
+          <label for="justification" class="block text-sm font-medium text-gray-700">Justificativa da Compra (para todos os itens) <span class="text-red-500">*</span></label>
+          <textarea id="justification" formControlName="justification" rows="4" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"></textarea>
+          @if(requestForm.get('justification')?.invalid && requestForm.get('justification')?.touched) { <p class="text-xs text-red-600 mt-1">Campo obrigatório.</p> }
+        </div>
+      </div>
+    </div>
+
+    <!-- Barra de Ações Flutuante -->
+    <div class="sticky bottom-0 bg-white/80 backdrop-blur-sm border-t border-gray-200 p-4 mt-8 flex justify-end items-center gap-4">
+      <a routerLink="/requests" class="bg-gray-100 text-gray-800 font-bold py-3 px-8 rounded-lg hover:bg-gray-200 transition duration-150 ease-in-out shadow-md">Cancelar</a>
+      <button type="submit" [disabled]="requestForm.invalid || isSubmitting()" class="bg-green-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition duration-150 ease-in-out shadow-lg flex items-center">
+        @if (!isSubmitting()) {
+          <span>Enviar Solicitação(ões)</span>
+        } @else {
+          <span>
+            <svg class="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            Enviando...
+          </span>
+        }
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Modal de Sucesso -->
+@if (showSuccessModal()) {
+  <div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 transition-opacity duration-300" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="bg-white rounded-lg shadow-xl p-6 md:p-8 w-full max-w-md m-4 text-center transform transition-all sm:my-8 animate-fade-in-up">
+      <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+        <svg class="h-6 w-6 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      </div>
+      <h3 class="text-lg leading-6 font-bold text-gray-900" id="modal-title">Sucesso!</h3>
+      <div class="mt-2">
+        <p class="text-sm text-gray-600">{{ successMessage() }}</p>
+      </div>
+      <div class="mt-8 flex flex-col sm:flex-row sm:justify-center sm:space-x-4 space-y-4 sm:space-y-0">
+        <button type="button" (click)="navigateToRequests()" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:w-auto sm:text-sm">
+          Ver Solicitações
+        </button>
+        <button type="button" (click)="createNewRequest()" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm">
+          Criar Nova Solicitação
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+
+

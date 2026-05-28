@@ -1,0 +1,29 @@
+name: Sync Apontamentos (SIGMA → Supabase)
+
+on:
+  schedule:
+    - cron: '0 * * * *'      # a cada hora (xx:00) — seguro para o plano gratuito do GitHub
+  workflow_dispatch:           # permite rodar manualmente pelo GitHub
+
+jobs:
+  sync:
+    name: Importar apontamentos do SIGMA
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Executar sync
+        run: node .github/scripts/sync-apontamentos.mjs
+        env:
+          PORTAL_URL:                 https://portalpptm.vercel.app
+          CRON_SECRET:                ${{ secrets.CRON_SECRET }}
+          SUPABASE_URL:               ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY:  ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

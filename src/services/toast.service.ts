@@ -1,0 +1,36 @@
+import { Injectable, signal } from '@angular/core';
+
+export type NotificationType = 'success' | 'error' | 'warning' | 'info';
+
+export interface Notification {
+  message: string;
+  type: NotificationType;
+}
+
+@Injectable({
+  providedIn: 'root',
+})
+export class NotificationService {
+  notification = signal<Notification | null>(null);
+
+  show(message: string, type: NotificationType = 'success', duration: number = 4000): void {
+    this.notification.set({ message, type });
+    setTimeout(() => this.notification.set(null), duration);
+  }
+
+  showSuccess(message: string, duration: number = 4000): void {
+    this.show(message, 'success', duration);
+  }
+
+  showError(message: string, duration: number = 5000): void {
+    this.show(message, 'error', duration);
+  }
+
+  showWarning(message: string, duration: number = 4000): void {
+    this.show(message, 'warning', duration);
+  }
+
+  showInfo(message: string, duration: number = 4000): void {
+    this.show(message, 'info', duration);
+  }
+}

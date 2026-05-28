@@ -1,0 +1,252 @@
+<div class="space-y-6">
+
+  <!-- Cabeçalho -->
+  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-800">Apontamentos</h1>
+      <p class="text-sm text-gray-500 mt-0.5">
+        Registros de manutenção do SIGMA — PTPC
+        @if (lastUpdated()) { &nbsp;·&nbsp; Atualizado em {{ lastUpdated()! | date:'dd/MM/yyyy HH:mm' }} }
+      </p>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+        @for (p of periodos; track p) {
+          <button (click)="setPeriodo(p)"
+            [class]="periodoAtivo() === p
+              ? 'px-3 py-1.5 rounded-md text-sm font-semibold bg-white text-blue-700 shadow-sm'
+              : 'px-3 py-1.5 rounded-md text-sm text-gray-600 hover:text-gray-900'">
+            {{ p }}d
+          </button>
+        }
+      </div>
+      <!-- Importar arquivo do SIGMA -->
+      <label class="cursor-pointer">
+        <input type="file" accept=".xlsx,.xls,.csv" class="hidden" (change)="onFileImport($event)" [disabled]="isImporting()" />
+        <span class="flex items-center gap-1.5 bg-slate-700 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-slate-800 transition"
+          [class.opacity-50]="isImporting()">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" [class.animate-spin]="isImporting()" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+          {{ isImporting() ? 'Importando...' : 'Importar arquivo' }}
+        </span>
+      </label>
+
+      <button (click)="atualizar()" [disabled]="isLoading()"
+        class="flex items-center gap-1.5 bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" [class.animate-spin]="isLoading()" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        {{ isLoading() ? 'Carregando...' : 'Atualizar' }}
+      </button>
+    </div>
+  </div>
+
+  <!-- Feedback importação -->
+  @if (importSuccess()) {
+    <div class="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700">{{ importSuccess() }}</div>
+  }
+  @if (importError()) {
+    <div class="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">⚠ {{ importError() }}</div>
+  }
+
+  <!-- Info: link para download + última importação -->
+  <div class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+    <span>
+      📥 Baixe o arquivo em
+      <a href="https://utepecem.com.br/sigma/export/?dados=apontamentos&empresa=PTPC" target="_blank"
+        class="underline font-semibold hover:text-blue-900">SIGMA Export</a>
+      e importe aqui usando o botão <strong>Importar arquivo</strong>.
+    </span>
+    @if (ultimaImportacao()) {
+      <span class="text-xs text-blue-500 whitespace-nowrap">
+        Última importação: {{ ultimaImportacao()!.importado_em | date:'dd/MM/yyyy HH:mm' }}
+        ({{ ultimaImportacao()!.total_registros }} registros)
+      </span>
+    }
+  </div>
+
+  @if (error() && !isLoading()) {
+    <div class="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700">⚠ {{ error() }}</div>
+  }
+
+  @if (isLoading()) {
+    <div class="flex justify-center py-16">
+      <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+    </div>
+  }
+
+  @if (!isLoading() && !error()) {
+    <!-- Diagnóstico: aparece quando há dados mas 0 na aba ativa -->
+    @if (diagnostico().totalSIGMA > 0 && diagnostico().totalEquipe === 0) {
+      <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 space-y-1.5">
+        <p class="font-semibold">⚠ {{ diagnostico().totalSIGMA }} registros carregados do SIGMA, mas nenhum corresponde à equipe selecionada.</p>
+        <p class="text-xs text-amber-700">Executantes no SIGMA: <strong class="font-mono">{{ diagnostico().amostraExecutantes }}</strong></p>
+        <p class="text-xs text-amber-700">Colaboradores cadastrados ({{ diagnostico().qtdMembros }}): <strong class="font-mono">{{ diagnostico().amostraMembros }}</strong></p>
+        <p class="text-xs text-amber-500">Compare os nomes acima — o campo Executante do SIGMA deve conter o nome ou matrícula do colaborador cadastrado.</p>
+      </div>
+    }
+    @if (diagnostico().totalSIGMA === 0 && !isLoading()) {
+      <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500 text-center">
+        Nenhum apontamento retornado pelo SIGMA para os últimos {{ periodoAtivo() }} dias.
+      </div>
+    }
+
+    <!-- Tabs de equipe -->
+    <div class="flex gap-0 border-b border-slate-200">
+      @for (eq of equipes; track eq) {
+        <button (click)="setEquipe(eq)"
+          [class]="equipeAtiva() === eq
+            ? 'px-5 py-3 text-sm font-bold border-b-2 -mb-px ' +
+              (eq === 'eletrica' ? 'text-blue-700 border-blue-600' :
+               eq === 'mecanica' ? 'text-orange-700 border-orange-500' : 'text-green-700 border-green-600')
+            : 'px-5 py-3 text-sm text-gray-500 hover:text-gray-800'">
+          {{ equipeLabel[eq] }}
+          <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full"
+            [class]="eq === 'eletrica' ? 'bg-blue-100 text-blue-700' :
+                     eq === 'mecanica' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'">
+            {{ countPorEquipe()[eq] }}
+          </span>
+        </button>
+      }
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="app-card p-5 text-center">
+        <p class="text-xs text-gray-500">Total de OS</p>
+        <p class="text-3xl font-bold text-gray-800 mt-1">{{ stats().totalOS }}</p>
+      </div>
+      <div class="app-card p-5 text-center">
+        <p class="text-xs text-gray-500">Horas trabalhadas</p>
+        <p class="text-3xl font-bold text-blue-700 mt-1">{{ stats().totalHoras }}h</p>
+      </div>
+      <div class="app-card p-5 text-center">
+        <p class="text-xs text-gray-500">Média por OS</p>
+        <p class="text-3xl font-bold text-gray-800 mt-1">{{ stats().mediaHorasPorOS }}h</p>
+      </div>
+      <div class="app-card p-5 text-center">
+        <p class="text-xs text-gray-500">Colaboradores</p>
+        <p class="text-3xl font-bold text-gray-800 mt-1">{{ membrosEquipe() }}</p>
+      </div>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="app-card p-6">
+        <h3 class="text-base font-semibold text-gray-700 mb-3">Distribuição por Status</h3>
+        <div #statusChart></div>
+        <div class="mt-3 flex flex-wrap gap-2 justify-center">
+          @for (item of stats().porStatus; track item.status) {
+            <span class="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full font-medium"
+              [class]="getStatusClass(item.status)">
+              {{ item.status }} ({{ item.count }})
+            </span>
+          }
+        </div>
+      </div>
+      <div class="app-card p-6">
+        <h3 class="text-base font-semibold text-gray-700 mb-3">Horas por Área (Top 8)</h3>
+        <div #areaChart></div>
+      </div>
+    </div>
+
+    <!-- Ranking de colaboradores -->
+    <div class="app-card p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div>
+          <h3 class="text-base font-semibold text-gray-700">
+            Ranking — {{ equipeLabel[equipeAtiva()] }}
+            <span class="text-sm font-normal text-gray-400 ml-2">(últimos {{ periodoAtivo() }} dias)</span>
+          </h3>
+          <p class="text-xs text-gray-400 mt-0.5">
+            Todos os {{ membrosEquipe() }} colaboradores cadastrados — incluindo os sem apontamentos no período
+          </p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <input type="text" placeholder="Filtrar colaborador..."
+            [value]="searchExecutante()"
+            (input)="searchExecutante.set($any($event.target).value)"
+            class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-44" />
+        </div>
+      </div>
+
+      <div class="overflow-x-auto rounded-xl border border-slate-200">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+          <thead class="bg-slate-50">
+            <tr>
+              <th class="px-3 py-3 text-center font-semibold text-gray-600 w-12">Pos.</th>
+              <th class="px-4 py-3 text-left font-semibold text-gray-600">Colaborador</th>
+              <th class="px-3 py-3 text-center font-semibold text-gray-600">Matrícula</th>
+              <th class="px-4 py-3 text-right font-semibold text-gray-600">Total OS</th>
+              <th class="px-4 py-3 text-right font-semibold text-gray-600">Horas totais</th>
+              <th class="px-4 py-3 text-right font-semibold text-gray-600">Média/OS</th>
+              <th class="px-4 py-3 text-left font-semibold text-gray-600" style="min-width:120px">Barras</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 bg-white">
+            @for (item of stats().ranking; track item.colaborador.matricula; let idx = $index) {
+              <tr [class]="item.temApontamentos ? 'hover:bg-slate-50' : 'bg-slate-50/50 hover:bg-slate-100/50'">
+                <td class="px-3 py-2.5 text-center font-bold text-sm"
+                  [class]="item.temApontamentos
+                    ? (idx === 0 ? 'text-yellow-500' : idx === 1 ? 'text-slate-400' : idx === 2 ? 'text-orange-400' : 'text-gray-400')
+                    : 'text-gray-300'">
+                  @if (item.temApontamentos) {
+                    {{ idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1 }}
+                  } @else {
+                    —
+                  }
+                </td>
+                <td class="px-4 py-2.5">
+                  <p [class]="item.temApontamentos ? 'font-semibold text-gray-800' : 'text-gray-400'">
+                    {{ item.colaborador.nome }}
+                  </p>
+                  @if (!item.temApontamentos) {
+                    <p class="text-xs text-gray-300">Sem apontamentos no período</p>
+                  }
+                </td>
+                <td class="px-3 py-2.5 text-center font-mono text-xs text-gray-500">{{ item.colaborador.matricula }}</td>
+                <td class="px-4 py-2.5 text-right"
+                  [class]="item.temApontamentos ? 'text-gray-700 font-medium' : 'text-gray-300'">
+                  {{ item.totalOS }}
+                </td>
+                <td class="px-4 py-2.5 text-right"
+                  [class]="item.temApontamentos ? 'font-bold text-blue-700' : 'text-gray-300'">
+                  {{ item.totalHoras }}h
+                </td>
+                <td class="px-4 py-2.5 text-right text-xs"
+                  [class]="item.temApontamentos ? 'text-gray-500' : 'text-gray-300'">
+                  {{ item.totalOS > 0 ? (item.totalHoras / item.totalOS | number:'1.1-1') + 'h' : '—' }}
+                </td>
+                <td class="px-4 py-2.5">
+                  @if (item.temApontamentos) {
+                    <div class="w-full bg-slate-100 rounded-full h-2">
+                      <div class="h-2 rounded-full transition-all"
+                        [class]="equipeAtiva() === 'eletrica' ? 'bg-blue-500' : equipeAtiva() === 'mecanica' ? 'bg-orange-400' : 'bg-green-500'"
+                        [style.width.%]="stats().ranking.length > 0 && stats().ranking[0].totalHoras > 0
+                          ? (item.totalHoras / stats().ranking[0].totalHoras) * 100 : 0">
+                      </div>
+                    </div>
+                  } @else {
+                    <div class="w-full bg-slate-100 rounded-full h-2"></div>
+                  }
+                </td>
+              </tr>
+            }
+            @empty {
+              <tr>
+                <td colspan="7" class="px-4 py-8 text-center text-gray-400">
+                  Nenhum colaborador encontrado.
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+
+</div>
