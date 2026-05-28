@@ -176,45 +176,88 @@ export class ApontamentosService {
     const XLSX = await import('xlsx');
 
     const buffer = await file.arrayBuffer();
-    const wb    = XLSX.read(buffer, { type: 'array', cellDates: true });  // datas como Date object
+    const wb    = XLSX.read(buffer, { type: 'array', cellDates: true });
     const ws    = wb.Sheets[wb.SheetNames[0]];
     const rows  = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][];
 
+    if (rows.length < 2) throw new Error('Arquivo vazio ou sem dados.');
+
+    // Detecta colunas pelo nome do cabeçalho (robusto a variações do SIGMA)
+    const headers = (rows[0] as unknown[]).map(h =>
+      String(h ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    );
+    const col = (nomes: string[]) => {
+      for (const n of nomes) {
+        const idx = headers.findIndex(h => h.includes(n));
+        if (idx >= 0) return idx;
+      }
+      return -1;
+    };
+
+    // Mapeamento dinâmico — tenta por nome, cai no índice fixo como fallback
     const COLS = {
-      id_sigma_os: 2, registrador: 3, executante: 4, solicitante: 5,
-      area_manutencao: 6, numero_pt: 7, status_operacao: 8, data: 9,
-      hora_inicial: 10, hora_final: 11, intervalo: 12, feedback: 13,
-      status_usuario: 14, equipe: 15, supervisor: 16,
-      operador_sala: 17, operador_campo: 18, empresa: 19, os_protheus: 20,
+      id_sigma_os:     col(['id sigma os', 'sigma os', 'os sigma'])      ?? 2,
+      registrador:     col(['registrador'])                               ?? 3,
+      executante:      col(['executante'])                                ?? 4,
+      solicitante:     col(['solicitante'])                               ?? 5,
+      area_manutencao: col(['area manutencao', 'area de manutencao'])     ?? 6,
+      numero_pt:       col(['numero pt', 'nr pt', 'pt'])                  ?? 7,
+      status_operacao: col(['status operacao', 'status da operacao'])     ?? 8,
+      data:            col(['data operacao', '^data$', 'data '])          ?? 9,
+      hora_inicial:    col(['hora inicial', 'hora ini'])                  ?? 10,
+      hora_final:      col(['hora final', 'hora fim'])                    ?? 11,
+      intervalo:       col(['intervalo', 'almoco', 'intervalo almoco'])   ?? 12,
+      feedback:        col(['feedback'])                                  ?? 13,
+      status_usuario:  col(['status usuario'])                            ?? 14,
+      equipe:          col(['equipe'])                                    ?? 15,
+      supervisor:      col(['supervisor'])                                ?? 16,
+      operador_sala:   col(['operador sala'])                             ?? 17,
+      operador_campo:  col(['operador campo'])                            ?? 18,
+      empresa:         col(['empresa'])                                   ?? 19,
+      os_protheus:     col(['os protheus', 'protheus'])                   ?? 20,
+    };
+
+    // Helper para extrair hora como "HH:MM" de qualquer formato
+    const extrairHora = (val: unknown): string => {
+      if (!val) return '';
+      if (val instanceof Date) {
+        const h = String(val.getHours()).padStart(2, '0');
+        const m = String(val.getMinutes()).padStart(2, '0');
+        return `${h}:${m}`;
+      }
+      const s = String(val).trim();
+      const match = s.match(/(\d{1,2}):(\d{2})/);
+      return match ? `${String(match[1]).padStart(2,'0')}:${match[2]}` : s;
     };
 
     const records = [];
     for (let i = 1; i < rows.length; i++) {
-      const v = rows[i] as string[];
+      const v = rows[i] as unknown[];
       if (!v[COLS.executante]) continue;
-      const hi = String(v[COLS.hora_inicial] || '');
-      const hf = String(v[COLS.hora_final]   || '');
-      const inv = String(v[COLS.intervalo]   || '');
+      const hi  = extrairHora(v[COLS.hora_inicial]);
+      const hf  = extrairHora(v[COLS.hora_final]);
+      const inv = extrairHora(v[COLS.intervalo]);
+      const dataVal = v[COLS.data];
       records.push({
-        id_sigma_os:     String(v[COLS.id_sigma_os]    || '').trim() || null,
-        registrador:     String(v[COLS.registrador]    || '').trim() || null,
-        executante:      String(v[COLS.executante]     || '').trim() || null,
-        solicitante:     String(v[COLS.solicitante]    || '').trim() || null,
-        area_manutencao: String(v[COLS.area_manutencao]|| '').trim() || null,
-        numero_pt:       String(v[COLS.numero_pt]      || '').trim() || null,
-        status_operacao: String(v[COLS.status_operacao]|| '').trim() || null,
-        data:            this.parseDateStr(String(v[COLS.data] || '')),
-        hora_inicial:    hi || null,
-        hora_final:      hf || null,
+        id_sigma_os:     String(v[COLS.id_sigma_os]     ?? '').trim() || null,
+        registrador:     String(v[COLS.registrador]     ?? '').trim() || null,
+        executante:      String(v[COLS.executante]      ?? '').trim() || null,
+        solicitante:     String(v[COLS.solicitante]     ?? '').trim() || null,
+        area_manutencao: String(v[COLS.area_manutencao] ?? '').trim() || null,
+        numero_pt:       String(v[COLS.numero_pt]       ?? '').trim() || null,
+        status_operacao: String(v[COLS.status_operacao] ?? '').trim() || null,
+        data:            this.parseDateStr(dataVal),
+        hora_inicial:    hi  || null,
+        hora_final:      hf  || null,
         intervalo:       inv || null,
-        feedback:        String(v[COLS.feedback]       || '').trim() || null,
-        status_usuario:  String(v[COLS.status_usuario] || '').trim() || null,
-        equipe:          String(v[COLS.equipe]         || '').trim() || null,
-        supervisor:      String(v[COLS.supervisor]     || '').trim() || null,
-        operador_sala:   String(v[COLS.operador_sala]  || '').trim() || null,
-        operador_campo:  String(v[COLS.operador_campo] || '').trim() || null,
-        empresa:         String(v[COLS.empresa]        || '').trim() || null,
-        os_protheus:     String(v[COLS.os_protheus]    || '').trim() || null,
+        feedback:        String(v[COLS.feedback]        ?? '').trim() || null,
+        status_usuario:  String(v[COLS.status_usuario]  ?? '').trim() || null,
+        equipe:          String(v[COLS.equipe]          ?? '').trim() || null,
+        supervisor:      String(v[COLS.supervisor]      ?? '').trim() || null,
+        operador_sala:   String(v[COLS.operador_sala]   ?? '').trim() || null,
+        operador_campo:  String(v[COLS.operador_campo]  ?? '').trim() || null,
+        empresa:         String(v[COLS.empresa]         ?? '').trim() || null,
+        os_protheus:     String(v[COLS.os_protheus]     ?? '').trim() || null,
         horas:           this.calcHoras(hi, hf, inv),
       });
     }
@@ -227,7 +270,16 @@ export class ApontamentosService {
     const dataLimite = inicio.toISOString().split('T')[0];
     const recordsFiltrados = records.filter(r => r.data && r.data >= dataLimite);
 
-    if (recordsFiltrados.length === 0) throw new Error(`Nenhum registro encontrado a partir de ${dataLimite}. Verifique as datas no arquivo.`);
+    if (recordsFiltrados.length === 0) {
+      const totalLidos = records.length;
+      const amostras = records.slice(0, 3).map(r => r.data ?? 'null').join(', ');
+      throw new Error(
+        `Nenhum registro a partir de ${dataLimite}. ` +
+        `Total lido: ${totalLidos}. ` +
+        `Primeiras datas: [${amostras || 'vazio'}]. ` +
+        `Verifique se a coluna "Data" está no formato correto.`
+      );
+    }
 
     const sb = this.supabaseService.client;
 
@@ -252,20 +304,29 @@ export class ApontamentosService {
   }
 
   private parseDateStr(val: unknown): string | null {
-    if (!val) return null;
+    if (!val && val !== 0) return null;
 
     // Date object (XLSX com cellDates: true)
     if (val instanceof Date) {
-      return isNaN(val.getTime()) ? null : val.toISOString().split('T')[0];
+      if (isNaN(val.getTime())) return null;
+      // Usa UTC para não perder o dia por fuso horário
+      const y = val.getUTCFullYear();
+      const m = String(val.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(val.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
     }
 
-    // Número serial do Excel (ex: 45345)
+    // Número serial do Excel (ex: 45345 = dias desde 1900-01-01)
     if (typeof val === 'number' && val > 1) {
       const d = new Date(Math.round((val - 25569) * 86400 * 1000));
-      return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+      if (isNaN(d.getTime())) return null;
+      const y = d.getUTCFullYear();
+      const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const da = String(d.getUTCDate()).padStart(2, '0');
+      return `${y}-${mo}-${da}`;
     }
 
-    // String "DD/MM/YYYY" ou "YYYY-MM-DD"
+    // String "DD/MM/YYYY" ou "YYYY-MM-DD" ou "DD/MM/YYYY HH:MM"
     const s = String(val).trim();
     const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
     if (br) return `${br[3]}-${br[2]}-${br[1]}`;
@@ -275,9 +336,14 @@ export class ApontamentosService {
 
   private calcHoras(hi: string, hf: string, inv: string): number {
     if (!hi || !hf) return 0;
-    const m = (h: string) => { const p = h.split(':'); return (parseInt(p[0])||0)*60+(parseInt(p[1])||0); };
-    let mins = m(hf) - m(hi);
-    if (inv) mins -= m(inv);
+    const toMin = (h: string) => {
+      const p = h.split(':');
+      return (parseInt(p[0]) || 0) * 60 + (parseInt(p[1]) || 0);
+    };
+    let mins = toMin(hf) - toMin(hi);
+    // Turno noturno: ex 20:00 → 02:00 = -1080 min → soma 24h → 360 min = 6h
+    if (mins < 0) mins += 24 * 60;
+    if (inv) mins -= toMin(inv);
     return Math.max(0, parseFloat((mins / 60).toFixed(2)));
   }
 
