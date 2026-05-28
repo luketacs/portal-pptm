@@ -176,7 +176,7 @@ export class ApontamentosService {
     const XLSX = await import('xlsx');
 
     const buffer = await file.arrayBuffer();
-    const wb    = XLSX.read(buffer, { type: 'array', cellDates: false });
+    const wb    = XLSX.read(buffer, { type: 'array', cellDates: true });  // datas como Date object
     const ws    = wb.Sheets[wb.SheetNames[0]];
     const rows  = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][];
 
@@ -219,13 +219,15 @@ export class ApontamentosService {
       });
     }
 
-    // Filtra apenas os últimos 90 dias
-    const limite90 = new Date();
-    limite90.setDate(limite90.getDate() - 90);
-    const dataLimite = limite90.toISOString().split('T')[0];
+    // Filtra: 1º dia do mês de 3 meses atrás até hoje (meses completos + mês atual)
+    const inicio = new Date();
+    inicio.setMonth(inicio.getMonth() - 3);
+    inicio.setDate(1);
+    inicio.setHours(0, 0, 0, 0);
+    const dataLimite = inicio.toISOString().split('T')[0];
     const recordsFiltrados = records.filter(r => r.data && r.data >= dataLimite);
 
-    if (recordsFiltrados.length === 0) throw new Error('Nenhum registro encontrado nos últimos 90 dias.');
+    if (recordsFiltrados.length === 0) throw new Error(`Nenhum registro encontrado a partir de ${dataLimite}. Verifique as datas no arquivo.`);
 
     const sb = this.supabaseService.client;
 
@@ -249,11 +251,25 @@ export class ApontamentosService {
     return { inseridos: inserted };
   }
 
-  private parseDateStr(str: string): string | null {
-    if (!str) return null;
-    const br = str.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  private parseDateStr(val: unknown): string | null {
+    if (!val) return null;
+
+    // Date object (XLSX com cellDates: true)
+    if (val instanceof Date) {
+      return isNaN(val.getTime()) ? null : val.toISOString().split('T')[0];
+    }
+
+    // Número serial do Excel (ex: 45345)
+    if (typeof val === 'number' && val > 1) {
+      const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+      return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+    }
+
+    // String "DD/MM/YYYY" ou "YYYY-MM-DD"
+    const s = String(val).trim();
+    const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
     if (br) return `${br[3]}-${br[2]}-${br[1]}`;
-    if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.substring(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
     return null;
   }
 

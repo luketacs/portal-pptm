@@ -115,13 +115,15 @@ async function main() {
     });
   }
 
-  // Filtra apenas os últimos 90 dias
-  const limite90 = new Date();
-  limite90.setDate(limite90.getDate() - 90);
-  const dataLimite = limite90.toISOString().split('T')[0];
+  // Filtra: 1º dia do mês de 3 meses atrás + meses completos + mês atual
+  const inicio = new Date();
+  inicio.setMonth(inicio.getMonth() - 3);
+  inicio.setDate(1);
+  inicio.setHours(0, 0, 0, 0);
+  const dataLimite = inicio.toISOString().split('T')[0];
   const recordsFiltrados = records.filter(r => r.data && r.data >= dataLimite);
 
-  console.log(`${records.length} parseados, ${recordsFiltrados.length} nos últimos 90 dias.`);
+  console.log(`${records.length} parseados, ${recordsFiltrados.length} desde ${dataLimite}.`);
 
   await sbFetch('DELETE', 'apontamentos?importado_em=gte.1900-01-01');
 
