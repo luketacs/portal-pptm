@@ -1,5 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { AuthService } from './auth.service';
+import { SupabaseService } from './supabase.service';
 
 export interface Apontamento {
   id: string;
@@ -60,7 +61,10 @@ export class ApontamentosService {
 
   private _colaboradores: Colaborador[] = [];
 
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private supabaseService: SupabaseService
+  ) {}
 
   // ── Matrícula / Colaboradores ────────────────────────────────────────────
 
@@ -163,26 +167,102 @@ export class ApontamentosService {
     }
   }
 
+  // Processa o Excel no browser e insere direto no Supabase (sem Vercel)
   async importarArquivo(file: File): Promise<{ inseridos: number }> {
-    const token = await this.authService.getValidAccessToken();
-    if (!token) throw new Error('Sessão expirada.');
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
 
-    const base64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = e => resolve((e.target?.result as string).split(',')[1]);
-      reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
-      reader.readAsDataURL(file);
+    // Carrega xlsx dinamicamente (só quando necessário)
+    const XLSX = await import('xlsx');
+
+    const buffer = await file.arrayBuffer();
+    const wb    = XLSX.read(buffer, { type: 'array', cellDates: false });
+    const ws    = wb.Sheets[wb.SheetNames[0]];
+    const rows  = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][];
+
+    const COLS = {
+      id_sigma_os: 2, registrador: 3, executante: 4, solicitante: 5,
+      area_manutencao: 6, numero_pt: 7, status_operacao: 8, data: 9,
+      hora_inicial: 10, hora_final: 11, intervalo: 12, feedback: 13,
+      status_usuario: 14, equipe: 15, supervisor: 16,
+      operador_sala: 17, operador_campo: 18, empresa: 19, os_protheus: 20,
+    };
+
+    const records = [];
+    for (let i = 1; i < rows.length; i++) {
+      const v = rows[i] as string[];
+      if (!v[COLS.executante]) continue;
+      const hi = String(v[COLS.hora_inicial] || '');
+      const hf = String(v[COLS.hora_final]   || '');
+      const inv = String(v[COLS.intervalo]   || '');
+      records.push({
+        id_sigma_os:     String(v[COLS.id_sigma_os]    || '').trim() || null,
+        registrador:     String(v[COLS.registrador]    || '').trim() || null,
+        executante:      String(v[COLS.executante]     || '').trim() || null,
+        solicitante:     String(v[COLS.solicitante]    || '').trim() || null,
+        area_manutencao: String(v[COLS.area_manutencao]|| '').trim() || null,
+        numero_pt:       String(v[COLS.numero_pt]      || '').trim() || null,
+        status_operacao: String(v[COLS.status_operacao]|| '').trim() || null,
+        data:            this.parseDateStr(String(v[COLS.data] || '')),
+        hora_inicial:    hi || null,
+        hora_final:      hf || null,
+        intervalo:       inv || null,
+        feedback:        String(v[COLS.feedback]       || '').trim() || null,
+        status_usuario:  String(v[COLS.status_usuario] || '').trim() || null,
+        equipe:          String(v[COLS.equipe]         || '').trim() || null,
+        supervisor:      String(v[COLS.supervisor]     || '').trim() || null,
+        operador_sala:   String(v[COLS.operador_sala]  || '').trim() || null,
+        operador_campo:  String(v[COLS.operador_campo] || '').trim() || null,
+        empresa:         String(v[COLS.empresa]        || '').trim() || null,
+        os_protheus:     String(v[COLS.os_protheus]    || '').trim() || null,
+        horas:           this.calcHoras(hi, hf, inv),
+      });
+    }
+
+    // Filtra apenas os últimos 90 dias
+    const limite90 = new Date();
+    limite90.setDate(limite90.getDate() - 90);
+    const dataLimite = limite90.toISOString().split('T')[0];
+    const recordsFiltrados = records.filter(r => r.data && r.data >= dataLimite);
+
+    if (recordsFiltrados.length === 0) throw new Error('Nenhum registro encontrado nos últimos 90 dias.');
+
+    const sb = this.supabaseService.client;
+
+    // Substitui todos os dados anteriores
+    await sb.from('apontamentos').delete().gte('importado_em', '1900-01-01');
+
+    const BATCH = 500;
+    let inserted = 0;
+    for (let i = 0; i < recordsFiltrados.length; i += BATCH) {
+      const { error } = await sb.from('apontamentos').insert(recordsFiltrados.slice(i, i + BATCH));
+      if (error) throw new Error(`Erro ao salvar: ${error.message}`);
+      inserted += Math.min(BATCH, recordsFiltrados.length - i);
+    }
+
+    await sb.from('apontamentos_importacoes').insert({
+      nome_arquivo:    file.name,
+      total_registros: inserted,
+      importado_por:   user.id,
     });
 
-    const resp = await fetch('/api/import-apontamentos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ fileData: base64, fileName: file.name }),
-    });
+    return { inseridos: inserted };
+  }
 
-    const result = await resp.json() as { success: boolean; inseridos?: number; error?: string };
-    if (!result.success) throw new Error(result.error || 'Erro ao importar.');
-    return { inseridos: result.inseridos ?? 0 };
+  private parseDateStr(str: string): string | null {
+    if (!str) return null;
+    const br = str.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+    if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.substring(0, 10);
+    return null;
+  }
+
+  private calcHoras(hi: string, hf: string, inv: string): number {
+    if (!hi || !hf) return 0;
+    const m = (h: string) => { const p = h.split(':'); return (parseInt(p[0])||0)*60+(parseInt(p[1])||0); };
+    let mins = m(hf) - m(hi);
+    if (inv) mins -= m(inv);
+    return Math.max(0, parseFloat((mins / 60).toFixed(2)));
   }
 
   /** Filtra apontamentos pela área da equipe — usa Matriculas como referência */
