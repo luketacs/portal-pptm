@@ -10,16 +10,13 @@
       </p>
     </div>
     <div class="flex items-center gap-2 flex-wrap">
-      <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
-        @for (p of periodos; track p) {
-          <button (click)="setPeriodo(p)"
-            [class]="periodoAtivo() === p
-              ? 'px-3 py-1.5 rounded-md text-sm font-semibold bg-white text-blue-700 shadow-sm'
-              : 'px-3 py-1.5 rounded-md text-sm text-gray-600 hover:text-gray-900'">
-            {{ p }}d
-          </button>
+      <!-- Filtro por mês -->
+      <select [ngModel]="mesSelecionado()" (ngModelChange)="mesSelecionado.set($event)"
+        class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+        @for (m of meses; track m.value) {
+          <option [value]="m.value">{{ m.label }}</option>
         }
-      </div>
+      </select>
       <!-- Importar arquivo do SIGMA -->
       <label class="cursor-pointer">
         <input type="file" accept=".xlsx,.xls,.csv" class="hidden" (change)="onFileImport($event)" [disabled]="isImporting()" />

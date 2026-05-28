@@ -126,9 +126,9 @@ async function main() {
   await sbFetch('DELETE', 'apontamentos?importado_em=gte.1900-01-01');
 
   let inserted = 0;
-  for (let i = 0; i < records.length; i += BATCH) {
-    await sbFetch('POST', 'apontamentos', records.slice(i, i + BATCH));
-    inserted += Math.min(BATCH, records.length - i);
+  for (let i = 0; i < recordsFiltrados.length; i += BATCH) {
+    await sbFetch('POST', 'apontamentos', recordsFiltrados.slice(i, i + BATCH));
+    inserted += Math.min(BATCH, recordsFiltrados.length - i);
   }
 
   await sbFetch('POST', 'apontamentos_importacoes', {

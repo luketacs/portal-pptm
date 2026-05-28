@@ -35,21 +35,39 @@ export class ApontamentosComponent implements OnInit, OnDestroy {
   private areaChartEl   = viewChild<ElementRef>('areaChart');
 
   equipeAtiva  = signal<EquipeTab>('eletrica');
-  periodoAtivo = signal<Periodo>(60);
+  periodoAtivo = signal<Periodo>(90);          // carrega sempre 90 dias (janela máxima)
+  mesSelecionado = signal('');                 // '' = sem filtro de mês, 'YYYY-MM' = mês específico
   readonly periodos: Periodo[] = [15, 30, 60, 90];
   readonly equipes: EquipeTab[] = ['eletrica', 'mecanica', 'operacao'];
   readonly equipeLabel = EQUIPE_LABEL;
+
+  // Gera os últimos 12 meses para o dropdown
+  readonly meses = (() => {
+    const result: { value: string; label: string }[] = [{ value: '', label: 'Todos os meses' }];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      result.push({ value, label: label.charAt(0).toUpperCase() + label.slice(1) });
+    }
+    return result;
+  })();
 
   searchExecutante = signal('');
   searchOS         = signal('');
 
   private _todos = signal<Apontamento[]>([]);
-  totalBruto = signal(0); // total vindo do SIGMA antes de qualquer filtro
-  amostraExecutantes = signal<string[]>([]); // primeiros executantes para debug
+  totalBruto = signal(0);
+  amostraExecutantes = signal<string[]>([]);
 
-  dadosDaEquipe = computed(() =>
-    this.service.filtrarPorEquipe(this._todos(), this.equipeAtiva())
-  );
+  dadosDaEquipe = computed(() => {
+    const equipe = this.service.filtrarPorEquipe(this._todos(), this.equipeAtiva());
+    const mes = this.mesSelecionado();
+    if (!mes) return equipe;
+    // Filtra pelo mês selecionado
+    return equipe.filter(a => a.data && a.data.startsWith(mes));
+  });
 
   dadosFiltrados = computed(() => {
     const dados = this.dadosDaEquipe();
