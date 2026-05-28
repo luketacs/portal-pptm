@@ -176,46 +176,82 @@ export class ApontamentosService {
     const XLSX = await import('xlsx');
 
     const buffer = await file.arrayBuffer();
-    const wb    = XLSX.read(buffer, { type: 'array', cellDates: true });
+    const wb    = XLSX.read(buffer, { type: 'array', cellDates: false });
     const ws    = wb.Sheets[wb.SheetNames[0]];
-    const rows  = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][];
+    // raw:false + dateNF força datas → "YYYY-MM-DD" e horas → "HH:MM" como strings
+    const rows  = XLSX.utils.sheet_to_json(ws, {
+      header: 1,
+      defval: '',
+      raw: false,
+      dateNF: 'yyyy-mm-dd',
+    }) as unknown[][];
 
     if (rows.length < 2) throw new Error('Arquivo vazio ou sem dados.');
 
-    // Detecta colunas pelo nome do cabeçalho (robusto a variações do SIGMA)
+    // ── Detecção de colunas ──────────────────────────────────────────────────
+    // 1. Pelo cabeçalho (linha 0)
     const headers = (rows[0] as unknown[]).map(h =>
       String(h ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
     );
-    const col = (nomes: string[]) => {
+    const colByHeader = (nomes: string[]) => {
       for (const n of nomes) {
-        const idx = headers.findIndex(h => h.includes(n));
+        const idx = headers.findIndex(h => h === n || h.includes(n));
         if (idx >= 0) return idx;
       }
       return -1;
     };
 
-    // Mapeamento dinâmico — tenta por nome, cai no índice fixo como fallback
-    const COLS = {
-      id_sigma_os:     col(['id sigma os', 'sigma os', 'os sigma'])      ?? 2,
-      registrador:     col(['registrador'])                               ?? 3,
-      executante:      col(['executante'])                                ?? 4,
-      solicitante:     col(['solicitante'])                               ?? 5,
-      area_manutencao: col(['area manutencao', 'area de manutencao'])     ?? 6,
-      numero_pt:       col(['numero pt', 'nr pt', 'pt'])                  ?? 7,
-      status_operacao: col(['status operacao', 'status da operacao'])     ?? 8,
-      data:            col(['data operacao', '^data$', 'data '])          ?? 9,
-      hora_inicial:    col(['hora inicial', 'hora ini'])                  ?? 10,
-      hora_final:      col(['hora final', 'hora fim'])                    ?? 11,
-      intervalo:       col(['intervalo', 'almoco', 'intervalo almoco'])   ?? 12,
-      feedback:        col(['feedback'])                                  ?? 13,
-      status_usuario:  col(['status usuario'])                            ?? 14,
-      equipe:          col(['equipe'])                                    ?? 15,
-      supervisor:      col(['supervisor'])                                ?? 16,
-      operador_sala:   col(['operador sala'])                             ?? 17,
-      operador_campo:  col(['operador campo'])                            ?? 18,
-      empresa:         col(['empresa'])                                   ?? 19,
-      os_protheus:     col(['os protheus', 'protheus'])                   ?? 20,
+    // 2. Pela forma do valor (varre as primeiras linhas de dados)
+    const primeiraLinhaComDados = (rows as unknown[][]).slice(1, 20)
+      .find(r => (r as unknown[]).some(v => v !== '' && v !== null && v !== undefined));
+
+    const colByValuePattern = (pattern: RegExp) => {
+      if (!primeiraLinhaComDados) return -1;
+      return (primeiraLinhaComDados as unknown[]).findIndex(v =>
+        pattern.test(String(v ?? '').trim())
+      );
     };
+
+    // Padrões de data e hora
+    const isDate = /^\d{2}\/\d{2}\/\d{4}$|^\d{4}-\d{2}-\d{2}/;
+    const isTime = /^\d{1,2}:\d{2}/;
+
+    const COLS = {
+      // Detecta pelo cabeçalho; fallback por valor; fallback por índice fixo
+      id_sigma_os:     colByHeader(['id sigma os', 'sigma os'])       !== -1 ? colByHeader(['id sigma os', 'sigma os'])       : 2,
+      registrador:     colByHeader(['registrador'])                   !== -1 ? colByHeader(['registrador'])                   : 3,
+      executante:      colByHeader(['executante'])                    !== -1 ? colByHeader(['executante'])                    : 4,
+      solicitante:     colByHeader(['solicitante'])                   !== -1 ? colByHeader(['solicitante'])                   : 5,
+      area_manutencao: colByHeader(['area manutencao'])               !== -1 ? colByHeader(['area manutencao'])               : 6,
+      numero_pt:       colByHeader(['numero pt', 'nr pt'])            !== -1 ? colByHeader(['numero pt', 'nr pt'])            : 7,
+      status_operacao: colByHeader(['status operacao'])               !== -1 ? colByHeader(['status operacao'])               : 8,
+      // "Data" — procura pelo cabeçalho exato, depois pelo padrão de valor
+      data: (() => {
+        const byH = headers.findIndex(h => h === 'data');
+        if (byH >= 0) return byH;
+        const byV = colByValuePattern(isDate);
+        return byV >= 0 ? byV : 9;
+      })(),
+      // Hora inicial — próxima coluna com padrão HH:MM após a coluna data
+      hora_inicial:    colByHeader(['hora inicial'])                  !== -1 ? colByHeader(['hora inicial'])                  : 10,
+      hora_final:      colByHeader(['hora final'])                    !== -1 ? colByHeader(['hora final'])                    : 11,
+      intervalo:       colByHeader(['intervalo', 'intervalo almoco']) !== -1 ? colByHeader(['intervalo', 'intervalo almoco']) : 12,
+      feedback:        colByHeader(['feedback'])                      !== -1 ? colByHeader(['feedback'])                      : 13,
+      status_usuario:  colByHeader(['status usuario'])                !== -1 ? colByHeader(['status usuario'])                : 14,
+      equipe:          colByHeader(['equipe'])                        !== -1 ? colByHeader(['equipe'])                        : 15,
+      supervisor:      colByHeader(['supervisor'])                    !== -1 ? colByHeader(['supervisor'])                    : 16,
+      operador_sala:   colByHeader(['operador sala'])                 !== -1 ? colByHeader(['operador sala'])                 : 17,
+      operador_campo:  colByHeader(['operador campo'])                !== -1 ? colByHeader(['operador campo'])                : 18,
+      empresa:         colByHeader(['empresa'])                       !== -1 ? colByHeader(['empresa'])                       : 19,
+      os_protheus:     colByHeader(['os protheus', 'protheus'])       !== -1 ? colByHeader(['os protheus', 'protheus'])       : 20,
+    };
+
+    // Log para diagnóstico (visível no console do browser)
+    console.log('[Apontamentos] Colunas detectadas:', COLS);
+    console.log('[Apontamentos] Cabeçalhos:', headers.slice(0, 22));
+    if (primeiraLinhaComDados) {
+      console.log('[Apontamentos] Primeira linha de dados:', (primeiraLinhaComDados as unknown[]).slice(0, 22));
+    }
 
     // Helper para extrair hora como "HH:MM" de qualquer formato
     const extrairHora = (val: unknown): string => {
@@ -271,13 +307,17 @@ export class ApontamentosService {
     const recordsFiltrados = records.filter(r => r.data && r.data >= dataLimite);
 
     if (recordsFiltrados.length === 0) {
-      const totalLidos = records.length;
       const amostras = records.slice(0, 3).map(r => r.data ?? 'null').join(', ');
+      const brutos   = (rows as unknown[][]).slice(1, 4)
+        .map(r => JSON.stringify((r as unknown[])[COLS.data])).join(', ');
+      const cabecalhos = headers.slice(0, 22).join(' | ');
       throw new Error(
         `Nenhum registro a partir de ${dataLimite}. ` +
-        `Total lido: ${totalLidos}. ` +
-        `Primeiras datas: [${amostras || 'vazio'}]. ` +
-        `Verifique se a coluna "Data" está no formato correto.`
+        `Lidos: ${records.length}. ` +
+        `Col data detectada: índice ${COLS.data}. ` +
+        `Datas parseadas: [${amostras}]. ` +
+        `Brutos: [${brutos}]. ` +
+        `Headers: ${cabecalhos}`
       );
     }
 
@@ -326,10 +366,16 @@ export class ApontamentosService {
       return `${y}-${mo}-${da}`;
     }
 
-    // String "DD/MM/YYYY" ou "YYYY-MM-DD" ou "DD/MM/YYYY HH:MM"
+    // Formato: "D/M/YY", "DD/MM/YY", "DD/MM/YYYY" (SIGMA usa 2-digit year sem zero)
     const s = String(val).trim();
-    const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-    if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+    const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (br) {
+      const d = br[1].padStart(2, '0');
+      const m = br[2].padStart(2, '0');
+      let y   = parseInt(br[3]);
+      if (y < 100) y += 2000; // "24" → 2024
+      return `${y}-${m}-${d}`;
+    }
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
     return null;
   }

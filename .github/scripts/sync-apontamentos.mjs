@@ -30,8 +30,15 @@ function calcHoras(hi, hf, inv) {
 function parseDateStr(str) {
   if (!str) return null;
   const s = String(str).trim();
-  const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-  if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+  // Formato SIGMA: "D/M/YY" ou "DD/MM/YY" ou "DD/MM/YYYY"
+  const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (br) {
+    const d = br[1].padStart(2, '0');
+    const m = br[2].padStart(2, '0');
+    let y   = parseInt(br[3]);
+    if (y < 100) y += 2000;
+    return `${y}-${m}-${d}`;
+  }
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
   return null;
 }
