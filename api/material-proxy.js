@@ -133,7 +133,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const url = `https://utepecem.com/sigma/api/getProduto?produto=${encodeURIComponent(code)}`;
+    const url = `https://utepecem.xyz/sigma/api/getProduto?produto=${encodeURIComponent(code)}`;
 
     const response = await fetchWithRateLimitBackoff(url, {
       method: 'GET',
