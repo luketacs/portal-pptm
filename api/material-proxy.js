@@ -98,6 +98,26 @@ async function fetchWithRateLimitBackoff(url, options) {
   throw new Error('Falha ao obter resposta da API externa.');
 }
 
+// Extrai todos os objetos JSON de uma string que pode ter múltiplos JSONs concatenados
+function extrairJsonObjects(text) {
+  const results = [];
+  let depth = 0;
+  let start = -1;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (text[i] === '}') {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        try { results.push(JSON.parse(text.substring(start, i + 1))); } catch {}
+        start = -1;
+      }
+    }
+  }
+  return results;
+}
+
 // Proxy serverless para contornar CORS da API externa
 export default async function handler(req, res) {
   // Verificação de origem
@@ -171,12 +191,27 @@ export default async function handler(req, res) {
     }
 
     const rawText = await response.text().catch(() => '');
+
+    // A API pode retornar múltiplos JSONs concatenados (ex: saldo + produto)
+    // Extrai todos os objetos JSON e usa o que tem success:true com dados do produto
+    const jsonObjects = extrairJsonObjects(rawText);
+    const validResult = jsonObjects.find(obj =>
+      obj.success === true && obj.data && (obj.data.id || obj.data.texto_breve)
+    );
+
+    if (validResult) {
+      return res.status(200).json(validResult);
+    }
+
+    // Fallback: tenta o parse normal
     const parsed = parseJsonLenient(rawText);
     if (!parsed.ok) {
+      console.error('[material-proxy] Resposta não-JSON:', rawText.substring(0, 300));
       return res.status(200).json({
         success: false,
         error: 'API externa retornou resposta invalida para JSON.',
         code: 'INVALID_JSON',
+        raw_response: rawText.substring(0, 300),
       });
     }
 
