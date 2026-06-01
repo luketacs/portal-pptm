@@ -169,7 +169,22 @@ export class ApontamentosComponent implements OnInit, OnDestroy {
     this.amostraExecutantes.set(exec);
   }
 
-  async atualizar(): Promise<void> { await this.carregar(); }
+  async atualizar(): Promise<void> {
+    if (this.isImporting() || this.isLoading()) return;
+    this.isImporting.set(true);
+    this.importError.set('');
+    this.importSuccess.set('');
+    try {
+      const { inseridos } = await this.service.autoImportar();
+      this.importSuccess.set(`${inseridos} apontamentos sincronizados com o SIGMA.`);
+      setTimeout(() => this.importSuccess.set(''), 5000);
+      await this.carregar();
+    } catch (err: unknown) {
+      this.importError.set(err instanceof Error ? err.message : 'Erro ao sincronizar com o SIGMA.');
+    } finally {
+      this.isImporting.set(false);
+    }
+  }
 
   async onFileImport(event: Event): Promise<void> {
     const file = (event.target as HTMLInputElement).files?.[0];
