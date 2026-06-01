@@ -27,18 +27,25 @@ export interface Apontamento {
   horas: number;
 }
 
+// Data de corte: a partir de 01/06/2026 todos passam a ter 6.5h/dia
+const CUTOFF_DISPONIBILIDADE = '2026-06-01';
+const DISP_PADRAO = 6.5;
+
 export interface Colaborador {
   nome: string;
   matricula: string;
-  area: string;      // "Elétrica", "Mecânica" ou "Operação"
+  area: string;
   email: string;
-  nomeNorm: string;  // nome normalizado para matching
+  nomeNorm: string;
+  disponibilidade: number; // horas por dia (antes do corte)
 }
 
 export interface RankingItem {
   colaborador: Colaborador;
   totalHoras: number;
   totalOS: number;
+  horasEsperadas: number;   // horas disponíveis no período (dias trabalhados × disponibilidade)
+  eficiencia: number;       // totalHoras / horasEsperadas × 100
   temApontamentos: boolean;
 }
 
@@ -74,13 +81,14 @@ export class ApontamentosService {
       // Arquivo estático bundlado pelo Angular (public/matriculas.json)
       const resp = await fetch('/matriculas.json');
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json() as Array<{ nome: string; matricula: string; area: string; email: string }>;
+      const data = await resp.json() as Array<{ nome: string; matricula: string; area: string; email: string; disponibilidade?: number }>;
       this._colaboradores = data.map(d => ({
-        nome:      d.nome.trim(),
-        matricula: String(d.matricula).trim(),
-        area:      d.area.trim(),
-        email:     d.email?.trim() ?? '',
-        nomeNorm:  this.normalizar(d.nome),
+        nome:           d.nome.trim(),
+        matricula:      String(d.matricula).trim(),
+        area:           d.area.trim(),
+        email:          d.email?.trim() ?? '',
+        nomeNorm:       this.normalizar(d.nome),
+        disponibilidade: typeof d.disponibilidade === 'number' ? d.disponibilidade : DISP_PADRAO,
       }));
     } catch (err) {
       console.warn('[ApontamentosService] Falha ao carregar matriculas.json:', err);
@@ -451,9 +459,34 @@ export class ApontamentosService {
     const membros = this.getColaboradoresPorEquipe(equipe);
     const rankMap = new Map<string, RankingItem>();
 
-    // Inicializa todos com zero
+    // Pré-calcula dias trabalhados por colaborador (para horasEsperadas)
+    const diasPorColab = new Map<string, Set<string>>();
+    for (const a of dados) {
+      const colab = this.matchColaborador(a.executante);
+      if (!colab || !a.data) continue;
+      if (!diasPorColab.has(colab.nomeNorm)) diasPorColab.set(colab.nomeNorm, new Set());
+      diasPorColab.get(colab.nomeNorm)!.add(a.data);
+    }
+
+    // Calcula horas esperadas: soma disponibilidade por dia (com corte em 01/06)
+    const calcEsperadas = (c: Colaborador, dias: Set<string>): number => {
+      let total = 0;
+      for (const dia of dias) {
+        // A partir de 01/06 todos têm 6.5h
+        const disp = dia >= CUTOFF_DISPONIBILIDADE ? DISP_PADRAO : c.disponibilidade;
+        total += disp;
+      }
+      return parseFloat(total.toFixed(2));
+    };
+
+    // Inicializa todos os membros com zero
     for (const c of membros) {
-      rankMap.set(c.nomeNorm, { colaborador: c, totalHoras: 0, totalOS: 0, temApontamentos: false });
+      const dias = diasPorColab.get(c.nomeNorm) ?? new Set<string>();
+      const horasEsperadas = calcEsperadas(c, dias);
+      rankMap.set(c.nomeNorm, {
+        colaborador: c, totalHoras: 0, totalOS: 0,
+        horasEsperadas, eficiencia: 0, temApontamentos: false,
+      });
     }
 
     // Acumula apontamentos
@@ -466,14 +499,21 @@ export class ApontamentosService {
         item.totalOS++;
         item.temApontamentos = true;
       } else {
-        // Executante não está no cadastro mas tem apontamentos — inclui mesmo assim
+        const dias = diasPorColab.get(colab.nomeNorm) ?? new Set<string>();
+        const horasEsperadas = calcEsperadas(colab, dias);
         rankMap.set(colab.nomeNorm, {
           colaborador: colab,
           totalHoras: parseFloat((a.horas ?? 0).toFixed(2)),
-          totalOS: 1,
-          temApontamentos: true,
+          totalOS: 1, horasEsperadas, eficiencia: 0, temApontamentos: true,
         });
       }
+    }
+
+    // Calcula eficiência final
+    for (const item of rankMap.values()) {
+      item.eficiencia = item.horasEsperadas > 0
+        ? parseFloat(((item.totalHoras / item.horasEsperadas) * 100).toFixed(1))
+        : 0;
     }
 
     const ranking = Array.from(rankMap.values())

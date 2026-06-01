@@ -214,9 +214,10 @@
               <th class="px-4 py-3 text-left font-semibold text-gray-600">Colaborador</th>
               <th class="px-3 py-3 text-center font-semibold text-gray-600">Matrícula</th>
               <th class="px-4 py-3 text-right font-semibold text-gray-600">Total OS</th>
-              <th class="px-4 py-3 text-right font-semibold text-gray-600">Horas totais</th>
-              <th class="px-4 py-3 text-right font-semibold text-gray-600">Média/OS</th>
-              <th class="px-4 py-3 text-left font-semibold text-gray-600" style="min-width:120px">Desempenho</th>
+              <th class="px-4 py-3 text-right font-semibold text-gray-600">Horas trabalhadas</th>
+              <th class="px-4 py-3 text-right font-semibold text-gray-600">Horas disponíveis</th>
+              <th class="px-4 py-3 text-right font-semibold text-gray-600">Eficiência</th>
+              <th class="px-4 py-3 text-left font-semibold text-gray-600" style="min-width:100px">Desempenho</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 bg-white">
@@ -247,7 +248,13 @@
                 </td>
                 <td class="px-4 py-2.5 text-right text-xs"
                   [class]="item.temApontamentos ? 'text-gray-500' : 'text-gray-300'">
-                  {{ item.totalOS > 0 ? (item.totalHoras / item.totalOS | number:'1.1-1') + 'h' : '—' }}
+                  {{ item.horasEsperadas > 0 ? item.horasEsperadas + 'h' : '—' }}
+                </td>
+                <td class="px-4 py-2.5 text-right text-xs font-semibold"
+                  [class]="!item.temApontamentos ? 'text-gray-300' :
+                    item.eficiencia >= 90 ? 'text-green-600' :
+                    item.eficiencia >= 70 ? 'text-yellow-600' : 'text-red-500'">
+                  {{ item.temApontamentos && item.horasEsperadas > 0 ? item.eficiencia + '%' : '—' }}
                 </td>
                 <td class="px-4 py-2.5">
                   @if (item.temApontamentos) {
@@ -266,7 +273,7 @@
             }
             @empty {
               <tr>
-                <td colspan="7" class="px-4 py-8 text-center text-gray-400">
+                <td colspan="8" class="px-4 py-8 text-center text-gray-400">
                   Nenhum colaborador encontrado.
                 </td>
               </tr>
