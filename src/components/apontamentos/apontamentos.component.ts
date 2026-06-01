@@ -17,9 +17,9 @@ const STATUS_CORES: Record<string, string> = {
 };
 
 const EQUIPE_LABEL: Record<EquipeTab, string> = {
-  eletrica: '⚡ Elétrica',
-  mecanica: '🔧 Mecânica',
-  operacao: '🏗 Operação',
+  eletrica: 'Elétrica',
+  mecanica: 'Mecânica',
+  operacao: 'Operação',
 };
 
 @Component({

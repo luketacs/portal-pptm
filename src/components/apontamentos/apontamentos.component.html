@@ -17,7 +17,8 @@
           <option [value]="m.value">{{ m.label }}</option>
         }
       </select>
-      <!-- Importar arquivo do SIGMA -->
+
+      <!-- Importar arquivo -->
       <label class="cursor-pointer">
         <input type="file" accept=".xlsx,.xls,.csv" class="hidden" (change)="onFileImport($event)" [disabled]="isImporting()" />
         <span class="flex items-center gap-1.5 bg-slate-700 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-slate-800 transition"
@@ -39,37 +40,49 @@
     </div>
   </div>
 
-  <!-- Feedback importação -->
-  <!-- Indicador de auto-sync em segundo plano -->
+  <!-- Auto-sync em segundo plano -->
   @if (autoSyncStatus() === 'syncing') {
-    <div class="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm text-slate-500">
-      <svg class="animate-spin h-4 w-4 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <div class="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-200 px-4 py-2.5 text-sm text-slate-500">
+      <svg class="animate-spin h-4 w-4 text-blue-400 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
       </svg>
-      Atualizando dados do SIGMA automaticamente...
+      Sincronizando dados com o SIGMA...
     </div>
   }
   @if (autoSyncStatus() === 'done') {
-    <div class="rounded-lg bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-700">
-      ✅ Dados atualizados automaticamente do SIGMA.
+    <div class="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-2.5 text-sm text-green-700">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      Dados sincronizados automaticamente com o SIGMA.
     </div>
   }
 
   @if (importSuccess()) {
-    <div class="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700">{{ importSuccess() }}</div>
+    <div class="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      {{ importSuccess() }}
+    </div>
   }
   @if (importError()) {
-    <div class="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">⚠ {{ importError() }}</div>
+    <div class="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+      </svg>
+      {{ importError() }}
+    </div>
   }
 
-  <!-- Info: link para download + última importação -->
+  <!-- Info: link + última importação -->
   <div class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
     <span>
-      📥 Baixe o arquivo em
+      Para importar manualmente, acesse o
       <a href="https://utepecem.com.br/sigma/export/?dados=apontamentos&empresa=PTPC" target="_blank"
-        class="underline font-semibold hover:text-blue-900">SIGMA Export</a>
-      e importe aqui usando o botão <strong>Importar arquivo</strong>.
+        class="underline font-semibold hover:text-blue-900">SIGMA Export</a>,
+      baixe o arquivo e use o botão <strong>Importar arquivo</strong>.
     </span>
     @if (ultimaImportacao()) {
       <span class="text-xs text-blue-500 whitespace-nowrap">
@@ -80,7 +93,12 @@
   </div>
 
   @if (error() && !isLoading()) {
-    <div class="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700">⚠ {{ error() }}</div>
+    <div class="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+      </svg>
+      {{ error() }}
+    </div>
   }
 
   @if (isLoading()) {
@@ -93,22 +111,25 @@
   }
 
   @if (!isLoading() && !error()) {
-    <!-- Diagnóstico: aparece quando há dados mas 0 na aba ativa -->
+
+    <!-- Diagnóstico -->
     @if (diagnostico().totalSIGMA > 0 && diagnostico().totalEquipe === 0) {
       <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 space-y-1.5">
-        <p class="font-semibold">⚠ {{ diagnostico().totalSIGMA }} registros carregados do SIGMA, mas nenhum corresponde à equipe selecionada.</p>
+        <p class="font-semibold">
+          {{ diagnostico().totalSIGMA }} registros carregados, mas nenhum corresponde à equipe selecionada.
+        </p>
         <p class="text-xs text-amber-700">Executantes no SIGMA: <strong class="font-mono">{{ diagnostico().amostraExecutantes }}</strong></p>
         <p class="text-xs text-amber-700">Colaboradores cadastrados ({{ diagnostico().qtdMembros }}): <strong class="font-mono">{{ diagnostico().amostraMembros }}</strong></p>
-        <p class="text-xs text-amber-500">Compare os nomes acima — o campo Executante do SIGMA deve conter o nome ou matrícula do colaborador cadastrado.</p>
+        <p class="text-xs text-amber-500">Verifique se o campo Executante do SIGMA contém a matrícula do colaborador cadastrado.</p>
       </div>
     }
-    @if (diagnostico().totalSIGMA === 0 && !isLoading()) {
+    @if (diagnostico().totalSIGMA === 0) {
       <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500 text-center">
-        Nenhum apontamento retornado pelo SIGMA para os últimos {{ periodoAtivo() }} dias.
+        Nenhum apontamento disponível. Importe o arquivo do SIGMA para visualizar os dados.
       </div>
     }
 
-    <!-- Tabs de equipe -->
+    <!-- Abas de equipe -->
     <div class="flex gap-0 border-b border-slate-200">
       @for (eq of equipes; track eq) {
         <button (click)="setEquipe(eq)"
@@ -167,24 +188,22 @@
       </div>
     </div>
 
-    <!-- Ranking de colaboradores -->
+    <!-- Ranking -->
     <div class="app-card p-6">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <h3 class="text-base font-semibold text-gray-700">
             Ranking — {{ equipeLabel[equipeAtiva()] }}
-            <span class="text-sm font-normal text-gray-400 ml-2">(últimos {{ periodoAtivo() }} dias)</span>
+            <span class="text-sm font-normal text-gray-400 ml-2">({{ mesSelecionado() ? 'mês selecionado' : 'últimos ' + periodoAtivo() + ' dias' }})</span>
           </h3>
           <p class="text-xs text-gray-400 mt-0.5">
-            Todos os {{ membrosEquipe() }} colaboradores cadastrados — incluindo os sem apontamentos no período
+            {{ membrosEquipe() }} colaboradores cadastrados — incluindo os sem apontamentos no período
           </p>
         </div>
-        <div class="flex gap-2 flex-wrap">
-          <input type="text" placeholder="Filtrar colaborador..."
-            [value]="searchExecutante()"
-            (input)="searchExecutante.set($any($event.target).value)"
-            class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-44" />
-        </div>
+        <input type="text" placeholder="Filtrar colaborador..."
+          [value]="searchExecutante()"
+          (input)="searchExecutante.set($any($event.target).value)"
+          class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-52" />
       </div>
 
       <div class="overflow-x-auto rounded-xl border border-slate-200">
@@ -197,7 +216,7 @@
               <th class="px-4 py-3 text-right font-semibold text-gray-600">Total OS</th>
               <th class="px-4 py-3 text-right font-semibold text-gray-600">Horas totais</th>
               <th class="px-4 py-3 text-right font-semibold text-gray-600">Média/OS</th>
-              <th class="px-4 py-3 text-left font-semibold text-gray-600" style="min-width:120px">Barras</th>
+              <th class="px-4 py-3 text-left font-semibold text-gray-600" style="min-width:120px">Desempenho</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 bg-white">
@@ -207,11 +226,7 @@
                   [class]="item.temApontamentos
                     ? (idx === 0 ? 'text-yellow-500' : idx === 1 ? 'text-slate-400' : idx === 2 ? 'text-orange-400' : 'text-gray-400')
                     : 'text-gray-300'">
-                  @if (item.temApontamentos) {
-                    {{ idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1 }}
-                  } @else {
-                    —
-                  }
+                  @if (item.temApontamentos) { {{ idx + 1 }} } @else { — }
                 </td>
                 <td class="px-4 py-2.5">
                   <p [class]="item.temApontamentos ? 'font-semibold text-gray-800' : 'text-gray-400'">
