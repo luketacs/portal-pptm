@@ -167,6 +167,16 @@ export class ApontamentosService {
     }
   }
 
+  // Auto-sync: baixa direto do SIGMA no browser e importa (sem Vercel, sem timeout)
+  async autoImportar(): Promise<{ inseridos: number }> {
+    const SIGMA_URL = 'https://utepecem.com.br/sigma/export/?dados=apontamentos&empresa=PTPC';
+    const resp = await fetch(SIGMA_URL);
+    if (!resp.ok) throw new Error(`SIGMA retornou HTTP ${resp.status}`);
+    const buffer = await resp.arrayBuffer();
+    const file = new File([buffer], 'apontamentos_auto.xlsx', { type: 'application/octet-stream' });
+    return this.importarArquivo(file);
+  }
+
   // Processa o Excel no browser e insere direto no Supabase (sem Vercel)
   async importarArquivo(file: File): Promise<{ inseridos: number }> {
     const user = this.authService.currentUser();

@@ -40,6 +40,22 @@
   </div>
 
   <!-- Feedback importação -->
+  <!-- Indicador de auto-sync em segundo plano -->
+  @if (autoSyncStatus() === 'syncing') {
+    <div class="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm text-slate-500">
+      <svg class="animate-spin h-4 w-4 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      Atualizando dados do SIGMA automaticamente...
+    </div>
+  }
+  @if (autoSyncStatus() === 'done') {
+    <div class="rounded-lg bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-700">
+      ✅ Dados atualizados automaticamente do SIGMA.
+    </div>
+  }
+
   @if (importSuccess()) {
     <div class="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700">{{ importSuccess() }}</div>
   }

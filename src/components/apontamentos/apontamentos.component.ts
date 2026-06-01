@@ -118,9 +118,14 @@ export class ApontamentosComponent implements OnInit, OnDestroy {
 
   constructor(public service: ApontamentosService) {}
 
+  autoSyncStatus = signal<'idle' | 'syncing' | 'done'>('idle');
+
   async ngOnInit(): Promise<void> {
     await this.service.loadColaboradores();
     await this.carregar();
+
+    // Auto-sync: se a última importação tem mais de 2 horas, importa automaticamente
+    this.verificarAutoSync();
 
     this.efectRef = effect(() => {
       const s = this.stats();
@@ -133,6 +138,28 @@ export class ApontamentosComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void { this.efectRef?.destroy(); }
+
+  private async verificarAutoSync(): Promise<void> {
+    const ultima = this.ultimaImportacao();
+    if (!ultima) return; // sem histórico, usuário importa manualmente na primeira vez
+
+    const horasSemSync = (Date.now() - new Date(ultima.importado_em).getTime()) / 3_600_000;
+
+    // Auto-importa se passaram mais de 2 horas desde a última importação
+    if (horasSemSync >= 2) {
+      this.autoSyncStatus.set('syncing');
+      try {
+        const { inseridos } = await this.service.autoImportar();
+        this.autoSyncStatus.set('done');
+        console.log(`[AutoSync] ${inseridos} apontamentos atualizados.`);
+        await this.carregar();
+        setTimeout(() => this.autoSyncStatus.set('idle'), 5000);
+      } catch (err) {
+        this.autoSyncStatus.set('idle');
+        console.warn('[AutoSync] Falhou (não crítico):', err);
+      }
+    }
+  }
 
   async carregar(): Promise<void> {
     const dados = await this.service.loadApontamentos(this.periodoAtivo());
