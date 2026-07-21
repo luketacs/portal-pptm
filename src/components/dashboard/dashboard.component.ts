@@ -3,6 +3,7 @@ import { CommonModule, CurrencyPipe } from '@angular/common';
 import { RequestService } from '../../services/request.service';
 import { PurchaseRequest, RequestStatus } from '../../models/request.model';
 import { AuthService } from '../../services/auth.service';
+import { drawPieChart } from '../../utils/charts';
 import * as d3 from 'd3';
 
 type DashboardPeriod = 'week' | 'month' | '3months' | 'year' | 'all';
@@ -116,7 +117,14 @@ export class DashboardComponent implements OnDestroy {
             if (this.canViewDashboard() && filtered.length > 0) {
                 if (statusChartEl) {
                     const data = this.statusChartData();
-                    this.drawPieChart(statusChartEl, data, this.statusColorScheme);
+                    drawPieChart(statusChartEl, data, {
+                        height: 300,
+                        labelRadiusOffset: 16,
+                        colorScheme: this.statusColorScheme,
+                        label: d => `${d.percent}%`,
+                        tooltip: d => `${d.name}: ${d.value} (${d.percent}%)`,
+                        centerLabel: 'Solicitações',
+                    });
                 }
                 if (typeChartEl) {
                     const data = this.aggregateBy(filtered, 'materialType');
@@ -273,66 +281,6 @@ export class DashboardComponent implements OnDestroy {
         }));
     }
 
-    private drawPieChart(elementRef: ElementRef, data: any[], colorScheme: string[]) {
-        const element = elementRef.nativeElement;
-        const width = element.offsetWidth;
-        const height = 300;
-        const radius = Math.min(width, height) / 2 - 18;
-        const innerRadius = radius * 0.55;
-        
-        d3.select(element).select("svg").remove();
-
-        const svg = d3.select(element).append("svg")
-            .attr("width", width)
-            .attr("height", height)
-            .append("g")
-            .attr("transform", `translate(${width / 2}, ${height / 2})`);
-
-        const color = d3.scaleOrdinal<string>().range(colorScheme);
-        const pie = d3.pie().value((d: any) => d.value).sort(null);
-        const arc = d3.arc<any, any>().innerRadius(innerRadius).outerRadius(radius);
-        const labelArc = d3.arc<any, any>().innerRadius(radius + 16).outerRadius(radius + 16);
-
-        const g = svg.selectAll(".arc")
-            .data(pie(data))
-            .enter().append("g")
-            .attr("class", "arc");
-
-        g.append("path")
-            .attr("d", arc as any)
-            .style("fill", (d: any) => color(d.data.name) as string)
-            .attr("stroke", "white")
-            .style("stroke-width", "1.5px");
-
-        g.append("title")
-            .text((d: any) => `${d.data.name}: ${d.data.value} (${d.data.percent}%)`);
-
-        g.filter((d: any) => d.data.percent >= 8)
-            .append("text")
-            .attr("transform", (d: any) => `translate(${labelArc.centroid(d)})`)
-            .attr("dy", "0.35em")
-            .style("font-size", "12px")
-            .style("font-weight", "600")
-            .style("fill", "#334155")
-            .style("text-anchor", (d: any) => labelArc.centroid(d)[0] >= 0 ? "start" : "end")
-            .text((d: any) => `${d.data.percent}%`);
-
-        svg.append("text")
-            .attr("dy", "-0.2em")
-            .style("text-anchor", "middle")
-            .style("font-size", "22px")
-            .style("font-weight", "700")
-            .style("fill", "#0f172a")
-            .text(`${data.reduce((sum, item) => sum + item.value, 0)}`);
-
-        svg.append("text")
-            .attr("dy", "1.1em")
-            .style("text-anchor", "middle")
-            .style("font-size", "12px")
-            .style("fill", "#64748b")
-            .text("Solicitações");
-    }
-    
     private drawBarChart(elementRef: ElementRef, data: any[], colorScheme: string[]) {
         const element = elementRef.nativeElement;
         const margin = { top: 20, right: 20, bottom: 30, left: 40 };

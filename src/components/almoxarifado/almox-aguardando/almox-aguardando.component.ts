@@ -32,7 +32,6 @@ export class AlmoxAguardandoComponent implements OnInit {
   }
 
   private _comSA = signal<MaterialComSAs[]>([]);
-  private _semSA = signal<MaterialComSAs[]>([]);
   private _saldoReal = signal<SaldoReal[]>([]);
 
   saldoRealMap = computed(() => new Map(this._saldoReal().map(s => [s.produto_codigo, s])));
@@ -88,9 +87,8 @@ export class AlmoxAguardandoComponent implements OnInit {
         this.almoxService.getSaldoReal(),
         this.almoxService.getUltimaImportacao('saldo'),
       ]);
-      const { comSA, semSA } = this.almoxService.calcularAguardandoRetirada(movs, sas);
+      const { comSA } = this.almoxService.calcularAguardandoRetirada(movs, sas);
       this._comSA.set(comSA);
-      this._semSA.set(semSA);
       this._saldoReal.set(saldoReal);
       this.ultimaAtualizacao.set(ultima);
       this.ultimaConferenciaSaldo.set(ultimaSaldo);

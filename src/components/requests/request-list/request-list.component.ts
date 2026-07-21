@@ -11,6 +11,7 @@ import { MaterialService } from '../../../services/material.service';
 import { StockInfo } from '../../../models/material.model';
 import { PurchaseRequest, RequestStatus, MaterialType } from '../../../models/request.model';
 import { firstValueFrom } from 'rxjs';
+import { createClientPageItems, createPageNavigation } from '../../../utils/pagination';
 
 @Component({
   selector: 'app-request-list',
@@ -55,31 +56,13 @@ export class RequestListComponent implements OnInit, OnDestroy {
   ];
 
   // Paginação
-  currentPage = signal(1);
-  pageSize = signal(15);
-
-  paginatedRequests = computed(() => {
-    const all = this.filteredRequests();
-    const size = this.pageSize();
-    const total = Math.ceil(all.length / size) || 1;
-    const page = Math.min(this.currentPage(), total);
-    const start = (page - 1) * size;
-    return all.slice(start, start + size);
-  });
-
-  totalPages = computed(() => Math.ceil(this.filteredRequests().length / this.pageSize()) || 1);
-  startItem = computed(() => this.filteredRequests().length === 0 ? 0 : (this.currentPage() - 1) * this.pageSize() + 1);
-  endItem = computed(() => Math.min(this.currentPage() * this.pageSize(), this.filteredRequests().length));
-
-  visiblePages = computed(() => {
-    const total = this.totalPages();
-    const current = this.currentPage();
-    const pages: number[] = [];
-    const start = Math.max(1, current - 2);
-    const end = Math.min(total, current + 2);
-    for (let i = start; i <= end; i++) pages.push(i);
-    return pages;
-  });
+  private pageNav = createPageNavigation(computed(() => this.filteredRequests().length), 15);
+  currentPage = this.pageNav.currentPage;
+  totalPages = this.pageNav.totalPages;
+  startItem = this.pageNav.startItem;
+  endItem = this.pageNav.endItem;
+  visiblePages = this.pageNav.visiblePages;
+  paginatedRequests = createClientPageItems(computed(() => this.filteredRequests()), this.pageNav);
 
   constructor(
     public route: ActivatedRoute,
@@ -482,10 +465,7 @@ export class RequestListComponent implements OnInit, OnDestroy {
   }
 
   goToPage(page: number): void {
-    const total = this.totalPages();
-    if (page >= 1 && page <= total) {
-      this.currentPage.set(page);
-    }
+    this.pageNav.goToPage(page);
   }
 
   async exportToExcel(): Promise<void> {

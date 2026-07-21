@@ -345,11 +345,8 @@ export class MaterialFormComponent implements OnInit {
    * Submete o formulário
    */
   async onSubmit(): Promise<void> {
-    console.log('[MaterialForm] onSubmit called');
-    
     // Bloquear submissão se for modo apenas visualização
     if (this.isViewOnlyMode()) {
-      console.log('[MaterialForm] Submit blocked - view only mode');
       return;
     }
     
@@ -437,12 +434,9 @@ export class MaterialFormComponent implements OnInit {
         materialData.codigo = null;
       }
 
-      console.log('[MaterialForm] Submitting material:', materialData);
-
       // Enviar para o serviço
       const userId = this.currentUser()?.id;
-      console.log('[MaterialForm] User ID:', userId);
-      
+
       if (!userId) {
         console.error('[MaterialForm] No user ID found');
         this.errorMessage.set('Usuário não autenticado. Recarregue a página.');
@@ -450,25 +444,10 @@ export class MaterialFormComponent implements OnInit {
         return;
       }
 
-      console.log('[MaterialForm] Calling service...');
-      
-      let data, error;
-
       // Verificar se é modo de edição ou criação
-      if (this.isEditMode() && this.materialId) {
-        // MODO DE EDIÇÃO
-        console.log('[MaterialForm] Updating material...');
-        const result = await this.materialService.updateMaterial(this.materialId, materialData, userId);
-        data = result.data;
-        error = result.error;
-      } else {
-        // MODO DE CRIAÇÃO
-        const result = await this.materialService.createMaterial(materialData, userId);
-        data = result.data;
-        error = result.error;
-      }
-
-      console.log('[MaterialForm] Service response received:', { data, error });
+      const { error } = this.isEditMode() && this.materialId
+        ? await this.materialService.updateMaterial(this.materialId, materialData, userId)
+        : await this.materialService.createMaterial(materialData, userId);
 
       if (error) {
         console.error('[MaterialForm] Error:', error);
@@ -486,7 +465,6 @@ export class MaterialFormComponent implements OnInit {
 
       // Sucesso!
       const action = this.isEditMode() ? 'atualizado' : 'cadastrado';
-      console.log(`[MaterialForm] Material ${action} successfully:`, data);
       this.successMessage.set(`Material ${action} com sucesso!`);
       this.showSuccessModal.set(true);
       this.isSubmitting.set(false);

@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { SupabaseService } from '../../services/supabase.service';
 import { UserService } from '../../services/user.service';
 import { AUDIT_EVENT_LABELS, AUDIT_EVENT_CATEGORIES } from '../../services/audit-log.service';
+import { createPageNavigation } from '../../utils/pagination';
 
 interface AuditLogEntry {
   id: string;
@@ -56,20 +57,14 @@ export class AuditComponent implements OnInit {
   dateFrom = signal('');
   dateTo = signal('');
 
-  // Paginação
-  currentPage = signal(1);
-  readonly pageSize = 25;
-
-  totalPages = computed(() => Math.ceil(this.total() / this.pageSize) || 1);
-  startItem = computed(() => this.total() === 0 ? 0 : (this.currentPage() - 1) * this.pageSize + 1);
-  endItem = computed(() => Math.min(this.currentPage() * this.pageSize, this.total()));
-  visiblePages = computed(() => {
-    const total = this.totalPages();
-    const current = this.currentPage();
-    const pages: number[] = [];
-    for (let i = Math.max(1, current - 2); i <= Math.min(total, current + 2); i++) pages.push(i);
-    return pages;
-  });
+  // Paginação (no servidor — cada página é buscada do Supabase em loadPage())
+  private pageNav = createPageNavigation(this.total, 25);
+  readonly pageSize = this.pageNav.pageSize;
+  currentPage = this.pageNav.currentPage;
+  totalPages = this.pageNav.totalPages;
+  startItem = this.pageNav.startItem;
+  endItem = this.pageNav.endItem;
+  visiblePages = this.pageNav.visiblePages;
 
   readonly eventLabels = AUDIT_EVENT_LABELS;
   readonly eventCategories = AUDIT_EVENT_CATEGORIES;

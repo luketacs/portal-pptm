@@ -8,6 +8,7 @@ import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/toast.service';
 import { Material } from '../../../models/material.model';
 import { PurchaseRequest, RequestStatus } from '../../../models/request.model';
+import { createClientPageItems, createPageNavigation } from '../../../utils/pagination';
 
 interface MyMaterialRow {
   material: Material;
@@ -53,9 +54,6 @@ export class MyMaterialsComponent implements OnInit {
   dateFrom = signal('');
   dateTo = signal('');
 
-  currentPage = signal(1);
-  readonly pageSize = 15;
-
   filteredRows = computed(() => {
     const term = this.normalizeText(this.searchTerm().trim());
     const status = this.statusFilter();
@@ -85,21 +83,14 @@ export class MyMaterialsComponent implements OnInit {
     });
   });
 
-  totalPages = computed(() => Math.ceil(this.filteredRows().length / this.pageSize) || 1);
-  paginatedRows = computed(() => {
-    const page = Math.min(this.currentPage(), this.totalPages());
-    const start = (page - 1) * this.pageSize;
-    return this.filteredRows().slice(start, start + this.pageSize);
-  });
-  startItem = computed(() => this.filteredRows().length === 0 ? 0 : (this.currentPage() - 1) * this.pageSize + 1);
-  endItem = computed(() => Math.min(this.currentPage() * this.pageSize, this.filteredRows().length));
-  visiblePages = computed(() => {
-    const total = this.totalPages();
-    const current = this.currentPage();
-    const pages: number[] = [];
-    for (let i = Math.max(1, current - 2); i <= Math.min(total, current + 2); i++) pages.push(i);
-    return pages;
-  });
+  // Paginação
+  private pageNav = createPageNavigation(computed(() => this.filteredRows().length), 15);
+  currentPage = this.pageNav.currentPage;
+  totalPages = this.pageNav.totalPages;
+  startItem = this.pageNav.startItem;
+  endItem = this.pageNav.endItem;
+  visiblePages = this.pageNav.visiblePages;
+  paginatedRows = createClientPageItems(computed(() => this.filteredRows()), this.pageNav);
 
   constructor(
     private materialService: MaterialService,
@@ -161,9 +152,7 @@ export class MyMaterialsComponent implements OnInit {
   }
 
   goToPage(page: number): void {
-    if (page >= 1 && page <= this.totalPages()) {
-      this.currentPage.set(page);
-    }
+    this.pageNav.goToPage(page);
   }
 
   onFilterChange(): void {

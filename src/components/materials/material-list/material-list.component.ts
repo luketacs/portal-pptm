@@ -8,6 +8,7 @@ import { EmailService } from '../../../services/email.service';
 import { Material } from '../../../models/material.model';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/toast.service';
+import { createClientPageItems, createPageNavigation } from '../../../utils/pagination';
 
 @Component({
   selector: 'app-material-list',
@@ -26,24 +27,19 @@ export class MaterialListComponent implements OnInit {
   searchTerm = signal('');
   statusFilter = signal<'all' | 'pendente' | 'liberado'>('all');
 
-  // Paginação
-  currentPage = signal(1);
-  pageSize = signal(15);
-
   // Confirmação customizada
   showConfirmDialog = signal(false);
   confirmMessage = signal('');
   private confirmResolve: ((value: boolean) => void) | null = null;
 
-  totalPages = computed(() => Math.ceil(this.filteredMaterials().length / this.pageSize()) || 1);
-  paginatedMaterials = computed(() => {
-    const page = Math.min(this.currentPage(), this.totalPages());
-    const start = (page - 1) * this.pageSize();
-    return this.filteredMaterials().slice(start, start + this.pageSize());
-  });
+  // Paginação
+  private pageNav = createPageNavigation(computed(() => this.filteredMaterials().length), 15);
+  currentPage = this.pageNav.currentPage;
+  totalPages = this.pageNav.totalPages;
+  startItem = this.pageNav.startItem;
+  endItem = this.pageNav.endItem;
+  paginatedMaterials = createClientPageItems(computed(() => this.filteredMaterials()), this.pageNav);
   serverTotal = computed(() => this.filteredMaterials().length);
-  startItem = computed(() => this.filteredMaterials().length === 0 ? 0 : (this.currentPage() - 1) * this.pageSize() + 1);
-  endItem = computed(() => Math.min(this.currentPage() * this.pageSize(), this.filteredMaterials().length));
 
   // Material liberado aguardando notificação por e-mail
   lastLiberated = signal<{ material: Material; adminName: string } | null>(null);
@@ -119,20 +115,10 @@ export class MaterialListComponent implements OnInit {
       .replace(/[\u0300-\u036f]/g, '');
   }
 
-  visiblePages = computed(() => {
-    const total = this.totalPages();
-    const current = this.currentPage();
-    const pages: number[] = [];
-    const start = Math.max(1, current - 2);
-    const end = Math.min(total, current + 2);
-    for (let i = start; i <= end; i++) pages.push(i);
-    return pages;
-  });
+  visiblePages = this.pageNav.visiblePages;
 
   goToPage(page: number): void {
-    if (page >= 1 && page <= this.totalPages()) {
-      this.currentPage.set(page);
-    }
+    this.pageNav.goToPage(page);
   }
 
   async notifyCreatorByEmail(): Promise<void> {

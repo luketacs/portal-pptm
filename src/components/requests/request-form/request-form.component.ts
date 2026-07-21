@@ -67,7 +67,6 @@ export class RequestFormComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     // Correção: resetar flags do serviço quando o componente é criado.
     // Garante que, se houve travamento anterior, o estado seja limpo.
-    console.log('[RequestForm] initialized - resetting service state');
     this.requestService.resetLoadingState();
   }
 
@@ -170,69 +169,31 @@ export class RequestFormComponent implements OnInit, OnDestroy {
         )
       )
     ).subscribe(response => {
-      console.log('[RequestForm] response received:', response);
-      console.log('[RequestForm] type:', typeof response);
-      console.log('[RequestForm] response.success:', response.success);
-      console.log('[RequestForm] response.data:', response.data);
-      console.log('[RequestForm] index:', index);
-      
       this.itemStates.update(states => {
         if (states[index]) states[index].isLoading = false;
         return [...states];
       });
 
-      // Log the condition
-      console.log('[RequestForm] response.success =', response.success, ', response.data =', !!response.data);
-      
       if (response.success && response.data) {
         const materialType = this.mapApiTypeToModelType(response.data.tipo);
-        
-        console.log('[RequestForm] - Setting values for item', index, {
-          description: response.data.texto_breve,
-          descriptionDetailed: response.data.texto_completo,
-          unit: response.data.unidade,
-          materialType
-        });
-        
+
         // Directly set values on controls (don't use patchValue for disabled controls)
         const descControl = itemGroup.get('description');
         const descDetailedControl = itemGroup.get('descriptionDetailed');
         const unitControl = itemGroup.get('unit');
         const typeControl = itemGroup.get('materialType');
-        
-        console.log('[RequestForm] found:', {
-          descControl: !!descControl,
-          descDetailedControl: !!descDetailedControl,
-          unitControl: !!unitControl,
-          typeControl: !!typeControl
-        });
-        
-        if (descControl) {
-          descControl.setValue(response.data.texto_breve);
-          console.log('[RequestForm] setValue done');
-        }
-        if (descDetailedControl) {
-          descDetailedControl.setValue(response.data.texto_completo);
-          console.log('[RequestForm] setValue done');
-        }
-        if (unitControl) {
-          unitControl.setValue(response.data.unidade);
-          console.log('[RequestForm] setValue done');
-        }
-        if (typeControl) {
-          typeControl.setValue(materialType);
-          console.log('[RequestForm] setValue done');
-        }
-        
-        console.log('[RequestForm] values set successfully');
+
+        if (descControl) descControl.setValue(response.data.texto_breve);
+        if (descDetailedControl) descDetailedControl.setValue(response.data.texto_completo);
+        if (unitControl) unitControl.setValue(response.data.unidade);
+        if (typeControl) typeControl.setValue(materialType);
 
         // Check for stock alert (PTPC company, location 4922)
         const ptpcStock4922 = response.data.estoques?.find(
           e => e.empresa === 'PTPC' && e.localizacao === '4922'
         );
-        
+
         if (ptpcStock4922 && parseInt(ptpcStock4922.qAtual) > 0) {
-          console.log('[RequestForm] alert: PTPC has', ptpcStock4922.qAtual, 'units at location 4922');
           this.itemStates.update(states => {
             if (states[index]) {
               states[index].stockAlert = {
@@ -252,31 +213,18 @@ export class RequestFormComponent implements OnInit, OnDestroy {
 
         // Check for pending purchase request
         const materialCode = itemGroup.get('materialCode')?.value;
-        console.log('[RequestForm] Code for pending check:', materialCode);
-        console.log('[RequestForm] requests in service:', this.requestService.requests().length);
-        console.log('[RequestForm] requests:', this.requestService.requests().map(r => ({ code: r.materialCode, status: r.status })));
-        
+
         if (materialCode) {
           // Use the service method which filters by material code and open statuses
           const existingRequests = this.requestService.getOpenRequestsByMaterialCode(materialCode);
-          
-          console.log('[RequestForm] for pending requests for material:', materialCode);
-          console.log('[RequestForm] Found', existingRequests.length, 'existing open requests');
-          console.log('[RequestForm] requests details:', existingRequests.map(r => ({ 
-            code: r.materialCode, 
-            status: r.status,
-            requester: r.requester?.name,
-            date: r.requestDate
-          })));
-          
+
           if (existingRequests.length > 0) {
             const firstRequest = existingRequests[0];
             const createdByName = firstRequest.requester?.name || 'Desconhecido';
-            const createdAtStr = firstRequest.requestDate 
+            const createdAtStr = firstRequest.requestDate
               ? new Date(firstRequest.requestDate).toLocaleDateString('pt-BR', { year: 'numeric', month: '2-digit', day: '2-digit' })
               : 'Data desconhecida';
-            
-            console.log('[RequestForm] REQUEST ALERT TRIGGERED: Material already requested by', createdByName, 'on', createdAtStr);
+
             this.itemStates.update(states => {
               if (states[index]) {
                 states[index].pendingRequestAlert = {
@@ -284,12 +232,10 @@ export class RequestFormComponent implements OnInit, OnDestroy {
                   createdBy: createdByName,
                   createdAt: createdAtStr
                 };
-                console.log('[RequestForm] state updated for index', index, ':', states[index].pendingRequestAlert);
               }
               return [...states];
             });
           } else {
-            console.log('[RequestForm] pending requests found for material:', materialCode);
             this.itemStates.update(states => {
               if (states[index]) {
                 states[index].pendingRequestAlert = null;
@@ -297,11 +243,8 @@ export class RequestFormComponent implements OnInit, OnDestroy {
               return [...states];
             });
           }
-        } else {
-          console.log('[RequestForm] code is empty, skipping pending request check');
         }
       } else if (materialCodeControl.value) {
-        console.error('[RequestForm] - Material not found. Response:', response);
         this.itemStates.update(states => {
           if(states[index]) {
             states[index].apiError = response?.error || 'Material não encontrado para o código informado.';
@@ -363,16 +306,9 @@ export class RequestFormComponent implements OnInit, OnDestroy {
         return this.requestService.addRequest(newRequest, requester, true);
       });
 
-      console.log('[RequestForm] request creation...', { itemCount: creationPromises.length });
-
       // Sem timeout: deixar as operações completarem naturalmente.
       // O retry interno do serviço já lida com timeouts e erros de rede.
       const results = await Promise.allSettled(creationPromises);
-
-      console.log('[RequestForm] creation completed:', { 
-        fulfilled: results.filter(r => r.status === 'fulfilled').length,
-        rejected: results.filter(r => r.status === 'rejected').length 
-      });
 
       // Conta sucessos e falhas
       const succeeded = results.filter(r => r.status === 'fulfilled').length;
@@ -386,9 +322,7 @@ export class RequestFormComponent implements OnInit, OnDestroy {
       }
 
       // Recarrega apenas uma vez após todas as operações.
-      console.log('[RequestForm] requests...');
       await this.requestService.loadRequests(true);
-      console.log('[RequestForm] reloaded successfully');
 
       // Mensagem baseada nos resultados
       let message = '';

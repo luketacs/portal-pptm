@@ -8,6 +8,7 @@ import { MaterialService } from '../../../services/material.service';
 import { RequestService } from '../../../services/request.service';
 import { AuthService } from '../../../services/auth.service';
 import { Material } from '../../../models/material.model';
+import { drawPieChart, drawVerticalBarChart } from '../../../utils/charts';
 import * as d3 from 'd3';
 
 @Component({
@@ -120,9 +121,19 @@ export class MaterialsDashboardComponent implements OnInit, OnDestroy {
       const unitEl    = this.unitChartContainer();
       const creatorEl = this.creatorChartContainer();
 
-      if (statusEl)  this.drawPieChart(statusEl,  this.statusChartData(), this.statusColorScheme);
-      if (unitEl)    this.drawBarChart(unitEl,     this.unitChartData(),   this.unitColorScheme);
-      if (creatorEl) this.drawBarChart(creatorEl,  this.creatorChartData(), this.unitColorScheme);
+      if (statusEl) {
+        drawPieChart(statusEl, this.statusChartData(), {
+          colorScheme: this.statusColorScheme,
+          label: d => `${d.percent}%`,
+          centerLabel: 'Materiais',
+        });
+      }
+      if (unitEl) {
+        drawVerticalBarChart(unitEl, this.unitChartData(), { height: 220, colorScheme: this.unitColorScheme });
+      }
+      if (creatorEl) {
+        drawVerticalBarChart(creatorEl, this.creatorChartData(), { height: 220, colorScheme: this.unitColorScheme });
+      }
     });
   }
 
@@ -158,83 +169,4 @@ export class MaterialsDashboardComponent implements OnInit, OnDestroy {
     return remDays > 0 ? `${months}m ${remDays}d` : `${months}m`;
   }
 
-  // ─── D3 Charts ───────────────────────────────────────────────────────────
-
-  private drawPieChart(elementRef: ElementRef, data: { name: string; value: number; percent: number; color: string }[], colorScheme: string[]): void {
-    const element = elementRef.nativeElement;
-    const width   = element.offsetWidth || 300;
-    const height  = 260;
-    const radius  = Math.min(width, height) / 2 - 18;
-    const inner   = radius * 0.55;
-
-    d3.select(element).select('svg').remove();
-    const svg = d3.select(element).append('svg')
-      .attr('width', width).attr('height', height)
-      .append('g').attr('transform', `translate(${width / 2},${height / 2})`);
-
-    const color  = d3.scaleOrdinal<string>().range(colorScheme);
-    const pie    = d3.pie<{ name: string; value: number }>().value(d => d.value).sort(null);
-    const arc    = d3.arc<d3.PieArcDatum<{ name: string; value: number }>>().innerRadius(inner).outerRadius(radius);
-    const lArc   = d3.arc<d3.PieArcDatum<{ name: string; value: number }>>().innerRadius(radius + 14).outerRadius(radius + 14);
-
-    const g = svg.selectAll('.arc').data(pie(data)).enter().append('g').attr('class', 'arc');
-
-    g.append('path').attr('d', arc).style('fill', d => color(d.data.name) as string)
-     .attr('stroke', 'white').style('stroke-width', '1.5px');
-
-    g.append('title').text(d => `${d.data.name}: ${d.data.value}`);
-
-    type DataWithPercent = { name: string; value: number; percent: number; color: string };
-    g.filter(d => ((d.data as unknown as DataWithPercent).percent ?? 0) >= 8)
-     .append('text')
-     .attr('transform', d => `translate(${lArc.centroid(d)})`)
-     .attr('dy', '0.35em').style('font-size', '12px').style('font-weight', '600').style('fill', '#334155')
-     .style('text-anchor', d => lArc.centroid(d)[0] >= 0 ? 'start' : 'end')
-     .text(d => `${(d.data as unknown as DataWithPercent).percent}%`);
-
-    svg.append('text').attr('dy', '-0.2em').style('text-anchor', 'middle')
-       .style('font-size', '22px').style('font-weight', '700').style('fill', '#0f172a')
-       .text(`${data.reduce((s, d) => s + d.value, 0)}`);
-
-    svg.append('text').attr('dy', '1.1em').style('text-anchor', 'middle')
-       .style('font-size', '12px').style('fill', '#64748b').text('Materiais');
-  }
-
-  private drawBarChart(elementRef: ElementRef, data: { name: string; value: number }[], colorScheme: string[]): void {
-    const element = elementRef.nativeElement;
-    const margin  = { top: 20, right: 20, bottom: 40, left: 40 };
-    const width   = (element.offsetWidth || 320) - margin.left - margin.right;
-    const height  = 220 - margin.top - margin.bottom;
-
-    d3.select(element).select('svg').remove();
-    const svg = d3.select(element).append('svg')
-      .attr('width', width + margin.left + margin.right)
-      .attr('height', height + margin.top + margin.bottom)
-      .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-
-    const x     = d3.scaleBand().range([0, width]).padding(0.25);
-    const y     = d3.scaleLinear().range([height, 0]);
-    const color = d3.scaleOrdinal<string>().range(colorScheme);
-
-    x.domain(data.map(d => d.name));
-    const maxVal = d3.max(data, d => d.value) ?? 1;
-    y.domain([0, maxVal * 1.1]);
-
-    svg.selectAll('.bar').data(data).enter().append('rect').attr('class', 'bar')
-       .attr('x', d => x(d.name) ?? 0).attr('width', x.bandwidth())
-       .attr('y', d => y(d.value)).attr('height', d => height - y(d.value))
-       .attr('fill', d => color(d.name) as string).attr('rx', 3);
-
-    svg.selectAll('.label').data(data).enter().append('text')
-       .attr('x', d => (x(d.name) ?? 0) + x.bandwidth() / 2)
-       .attr('y', d => y(d.value) - 4)
-       .attr('text-anchor', 'middle').style('font-size', '11px').style('fill', '#475569')
-       .text(d => d.value);
-
-    svg.append('g').attr('transform', `translate(0,${height})`)
-       .call(d3.axisBottom(x).tickSize(0))
-       .select('.domain').remove();
-
-    svg.append('g').call(d3.axisLeft(y).ticks(Math.min(maxVal, 5)).tickFormat(d3.format('d')));
-  }
 }
