@@ -16,8 +16,8 @@
       @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
   </div>
-} @else if (isPublicAuthRoute()) {
-  <!-- Visualização pública — sem sidebar, sem header de navegação, independente do login -->
+} @else if (isPublicViewRoute()) {
+  <!-- Visualização pública (modo TV) — sem sidebar, sem header de navegação, independente do login -->
   <div class="min-h-screen bg-gray-100 flex flex-col">
     <!-- Header público simples — sem links de navegação -->
     <header class="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 shadow-sm">

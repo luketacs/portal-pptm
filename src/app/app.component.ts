@@ -31,6 +31,7 @@ export class AppComponent implements OnDestroy {
   private routerSubscription?: Subscription;
   currentUrl = signal('/');
   isPublicAuthRoute;
+  isPublicViewRoute;
   shouldShowAuthTransition;
 
   constructor(
@@ -53,15 +54,29 @@ export class AppComponent implements OnDestroy {
       }
     });
 
-    this.isPublicAuthRoute = computed(() => {
+    // Rotas de autenticação (login, recuperação de senha, etc.) — sem sidebar,
+    // sem header, sem o wrapper de visualização pública: o próprio componente
+    // (ex: login) controla seu próprio layout de tela cheia.
+    const isAuthPageRoute = computed(() => {
       const url = this.currentUrl();
-      const pathname = window.location.pathname;  // fallback para o caso de router não ter atualizado
+      const pathname = window.location.pathname;
       const check = (u: string) =>
         u.startsWith('/login') || u.startsWith('/forgot-password') ||
         u.startsWith('/reset-password') || u.startsWith('/privacy-policy') ||
-        u.startsWith('/change-password-required') || u.startsWith('/publico');
+        u.startsWith('/change-password-required');
       return check(url) || check(pathname);
     });
+
+    // Visualização pública (ex: /publico/apontamentos em modo TV) — recebe o
+    // header/footer "Diamante Energia — PPTM" com aviso de somente leitura.
+    this.isPublicViewRoute = computed(() => {
+      const url = this.currentUrl();
+      const pathname = window.location.pathname;
+      const check = (u: string) => u.startsWith('/publico');
+      return check(url) || check(pathname);
+    });
+
+    this.isPublicAuthRoute = computed(() => isAuthPageRoute() || this.isPublicViewRoute());
 
     this.shouldShowAuthTransition = computed(() => {
       const user = this.currentUser();
