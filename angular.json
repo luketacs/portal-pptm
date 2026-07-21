@@ -25,6 +25,7 @@
               }
             ],
             "styles": ["src/index.css"],
+            "allowedCommonJsDependencies": ["xlsx", "xlsx-js-style"],
             "budgets": [
               {
                 "type": "initial",
