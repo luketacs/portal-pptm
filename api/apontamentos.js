@@ -23,19 +23,26 @@ export default async function handler(req, res) {
       if (error || !user) return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const dias = Math.min(parseInt(req.query.dias) || 60, 365);
-    const limite = new Date();
-    limite.setDate(limite.getDate() - dias);
-    const dataLimite = limite.toISOString().split('T')[0];
+    // Paginação: Supabase limita 1000 linhas por query por padrão
+    // Buscamos página a página até trazer todos os registros
+    const PAGE = 1000;
+    let allData = [];
+    let page = 0;
+    while (true) {
+      const { data: pageData, error: pageErr } = await supabase
+        .from('apontamentos')
+        .select('*')
+        .not('data', 'is', null)
+        .order('data', { ascending: true })
+        .range(page * PAGE, (page + 1) * PAGE - 1);
 
-    const { data, error: qe } = await supabase
-      .from('apontamentos')
-      .select('*')
-      .gte('data', dataLimite)
-      .order('data', { ascending: false })
-      .limit(5000);
-
-    if (qe) throw new Error(qe.message);
+      if (pageErr) throw new Error(pageErr.message);
+      if (!pageData || pageData.length === 0) break;
+      allData = allData.concat(pageData);
+      if (pageData.length < PAGE) break;
+      page++;
+    }
+    const data = allData;
 
     // Última importação
     const { data: ultImp } = await supabase
@@ -45,6 +52,7 @@ export default async function handler(req, res) {
       .limit(1)
       .single();
 
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({
       success: true,
       data: data ?? [],

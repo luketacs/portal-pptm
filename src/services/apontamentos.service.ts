@@ -31,21 +31,31 @@ export interface Apontamento {
 const CUTOFF_DISPONIBILIDADE = '2026-06-01';
 const DISP_PADRAO = 6.5;
 
+// "Hora Disponível": jornada cheia do colaborador (sem descontar o intervalo de almoço).
+//  - Turno (07:30-19:30 ou 19:30-07:30): 12h disponíveis.
+//  - Horário ADM (07:30-16:00): 8,5h disponíveis.
+// A partir de 01/06/2026 as equipes elétrica e mecânica passam do turno para o horário ADM;
+// a equipe de operação (restante) permanece no turno de 12h o ano todo.
+const DISPONIVEL_TURNO_HORAS = 12;
+const DISPONIVEL_ADM_HORAS = 8.5;
+
 export interface Colaborador {
   nome: string;
   matricula: string;
   area: string;
   email: string;
   nomeNorm: string;
-  disponibilidade: number; // horas por dia (antes do corte)
+  disponibilidade: number;          // horas por dia antes do corte
+  disponibilidade_pos_corte?: number; // horas por dia a partir do corte (se diferente)
 }
 
 export interface RankingItem {
   colaborador: Colaborador;
   totalHoras: number;
   totalOS: number;
-  horasEsperadas: number;   // horas disponíveis no período (dias trabalhados × disponibilidade)
-  eficiencia: number;       // totalHoras / horasEsperadas × 100
+  horasProgramadas: number; // dias trabalhados × disponibilidade cadastrada — só calculada p/ elétrica e mecânica
+  horasDisponiveis: number; // dias trabalhados × jornada cheia do turno/horário (12h turno ou 8,5h ADM)
+  eficiencia: number;       // totalHoras / horasProgramadas × 100
   temApontamentos: boolean;
 }
 
@@ -56,6 +66,8 @@ export interface ApontamentosStats {
   porStatus: { status: string; count: number }[];
   porArea: { area: string; count: number; horas: number }[];
   ranking: RankingItem[];
+  periodoInicio: string;
+  periodoFim: string;
 }
 
 export type EquipeTab = 'eletrica' | 'mecanica' | 'operacao';
@@ -66,7 +78,8 @@ export class ApontamentosService {
   lastUpdated = signal<Date | null>(null);
   error       = signal('');
 
-  private _colaboradores: Colaborador[] = [];
+  private readonly _colaboradoresData = signal<Colaborador[]>([]);
+  private get _colaboradores(): Colaborador[] { return this._colaboradoresData(); }
 
   constructor(
     private authService: AuthService,
@@ -81,18 +94,19 @@ export class ApontamentosService {
       // Arquivo estático bundlado pelo Angular (public/matriculas.json)
       const resp = await fetch('/matriculas.json');
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json() as Array<{ nome: string; matricula: string; area: string; email: string; disponibilidade?: number }>;
-      this._colaboradores = data.map(d => ({
+      const data = await resp.json() as Array<{ nome: string; matricula: string; area: string; email: string; disponibilidade?: number; disponibilidade_pos_corte?: number }>;
+      this._colaboradoresData.set(data.map(d => ({
         nome:           d.nome.trim(),
         matricula:      String(d.matricula).trim(),
         area:           d.area.trim(),
         email:          d.email?.trim() ?? '',
         nomeNorm:       this.normalizar(d.nome),
-        disponibilidade: typeof d.disponibilidade === 'number' ? d.disponibilidade : DISP_PADRAO,
-      }));
+        disponibilidade:          typeof d.disponibilidade         === 'number' ? d.disponibilidade         : DISP_PADRAO,
+        disponibilidade_pos_corte: typeof d.disponibilidade_pos_corte === 'number' ? d.disponibilidade_pos_corte : undefined,
+      })));
     } catch (err) {
       console.warn('[ApontamentosService] Falha ao carregar matriculas.json:', err);
-      this._colaboradores = [];
+      this._colaboradoresData.set([]);
     }
     return this._colaboradores;
   }
@@ -109,25 +123,43 @@ export class ApontamentosService {
     );
   }
 
-  /** Busca o colaborador pelo executante (matrícula ou nome) */
+  /** Busca o colaborador pelo executante (matrícula ou nome — múltiplos formatos) */
   private matchColaborador(executante: string): Colaborador | null {
     if (!executante?.trim()) return null;
     const exec = executante.trim();
 
-    // 1. Match por matrícula — SIGMA usa matrícula no campo Executante
+    // 1. Matrícula exata
     const porMatricula = this._colaboradores.find(c => c.matricula === exec);
     if (porMatricula) return porMatricula;
 
-    // 2. Fallback por nome (caso o SIGMA mude o formato)
+    // 2. Extrai parte numérica e tenta como matrícula (ex: "20006163 - WILLIANS" → "20006163")
+    const numericPart = exec.replace(/\D+/g, '');
+    if (numericPart.length >= 5) {
+      const porNumerico = this._colaboradores.find(c => c.matricula === numericPart);
+      if (porNumerico) return porNumerico;
+    }
+
+    // 3. Nome normalizado exato
     const normExec = this.normalizar(exec);
     let found = this._colaboradores.find(c => c.nomeNorm === normExec);
     if (found) return found;
 
+    // 4. executante contém o nome completo do colaborador
     found = this._colaboradores.find(c => normExec.includes(c.nomeNorm));
     if (found) return found;
 
+    // 5. nome do colaborador contém o executante
     found = this._colaboradores.find(c => c.nomeNorm.includes(normExec));
     if (found) return found;
+
+    // 6. Cada parte do nome do executante (palavras) bate com início do nome do colaborador
+    const partesExec = normExec.split(/\s+/).filter(p => p.length > 3);
+    if (partesExec.length >= 2) {
+      found = this._colaboradores.find(c =>
+        partesExec.every(p => c.nomeNorm.includes(p))
+      );
+      if (found) return found;
+    }
 
     return null;
   }
@@ -136,14 +168,13 @@ export class ApontamentosService {
 
   ultimaImportacao = signal<{ importado_em: string; total_registros: number } | null>(null);
 
-  async loadApontamentos(dias = 60): Promise<Apontamento[]> {
+  async loadApontamentos(): Promise<Apontamento[]> {
     this.isLoading.set(true);
     this.error.set('');
     try {
       const token = await this.authService.getValidAccessToken();
-      const params = new URLSearchParams({ dias: String(dias) });
 
-      const resp = await fetch(`/api/apontamentos?${params}`, {
+      const resp = await fetch(`/api/apontamentos`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
@@ -175,33 +206,62 @@ export class ApontamentosService {
     }
   }
 
-  // Auto-sync: baixa direto do SIGMA no browser e importa (sem Vercel, sem timeout)
-  async autoImportar(): Promise<{ inseridos: number }> {
-    const SIGMA_URL = 'https://utepecem.com.br/sigma/export/?dados=apontamentos&empresa=PTPC';
-    const resp = await fetch(SIGMA_URL);
-    if (!resp.ok) throw new Error(`SIGMA retornou HTTP ${resp.status}`);
+  // Auto-sync: baixa via proxy Vercel (evita CORS), parseia no browser e grava via
+  // endpoint privilegiado (funciona tanto para usuários autenticados quanto para o link
+  // público — o cooldown global de 30 minutos é controlado no servidor).
+  async autoImportar(): Promise<{ inseridos: number; porMes?: Record<string, number>; cooldownSegundos?: number }> {
+    const token = await this.authService.getValidAccessToken();
+    const resp = await fetch('/api/sigma-proxy', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }));
+      throw new Error(err.error ?? `HTTP ${resp.status}`);
+    }
     const buffer = await resp.arrayBuffer();
     const file = new File([buffer], 'apontamentos_auto.xlsx', { type: 'application/octet-stream' });
-    return this.importarArquivo(file);
+
+    const { recordsFiltrados, porMes, dataLimite } = await this.parsearArquivoSigma(file);
+
+    const syncResp = await fetch('/api/sync-apontamentos', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ records: recordsFiltrados, dataLimite, nomeArquivo: file.name }),
+    });
+    const result = await syncResp.json().catch(() => ({}));
+
+    if (syncResp.status === 429) {
+      return { inseridos: 0, cooldownSegundos: result.cooldownSegundos ?? 0 };
+    }
+    if (!syncResp.ok || !result.success) {
+      throw new Error(result.error ?? `Erro ao sincronizar (HTTP ${syncResp.status}).`);
+    }
+
+    return { inseridos: result.inseridos, porMes };
   }
 
-  // Processa o Excel no browser e insere direto no Supabase (sem Vercel)
-  async importarArquivo(file: File): Promise<{ inseridos: number }> {
-    const user = this.authService.currentUser();
-    if (!user) throw new Error('Sessão expirada.');
-
+  // Lê e normaliza o Excel do SIGMA no browser, sem gravar no banco.
+  // Usado tanto pela importação manual (admin) quanto pelo auto-sync.
+  private async parsearArquivoSigma(file: File): Promise<{
+    recordsFiltrados: Record<string, unknown>[];
+    porMes: Record<string, number>;
+    dataLimite: string;
+  }> {
     // Carrega xlsx dinamicamente (só quando necessário)
     const XLSX = await import('xlsx');
 
     const buffer = await file.arrayBuffer();
+    // raw:true + cellDates:false → datas de Excel viram seriais numéricos (sem conversão de timezone)
+    // parseDateStr converte o serial via math UTC: sem dependência de fuso horário
     const wb    = XLSX.read(buffer, { type: 'array', cellDates: false });
     const ws    = wb.Sheets[wb.SheetNames[0]];
-    // raw:false + dateNF força datas → "YYYY-MM-DD" e horas → "HH:MM" como strings
     const rows  = XLSX.utils.sheet_to_json(ws, {
       header: 1,
       defval: '',
-      raw: false,
-      dateNF: 'yyyy-mm-dd',
+      raw: true,
     }) as unknown[][];
 
     if (rows.length < 2) throw new Error('Arquivo vazio ou sem dados.');
@@ -225,9 +285,10 @@ export class ApontamentosService {
 
     const colByValuePattern = (pattern: RegExp) => {
       if (!primeiraLinhaComDados) return -1;
-      return (primeiraLinhaComDados as unknown[]).findIndex(v =>
-        pattern.test(String(v ?? '').trim())
-      );
+      return (primeiraLinhaComDados as unknown[]).findIndex(v => {
+        if (v instanceof Date) return true; // Date object = célula de data
+        return pattern.test(String(v ?? '').trim());
+      });
     };
 
     // Padrões de data e hora
@@ -271,17 +332,30 @@ export class ApontamentosService {
       console.log('[Apontamentos] Primeira linha de dados:', (primeiraLinhaComDados as unknown[]).slice(0, 22));
     }
 
-    // Helper para extrair hora como "HH:MM" de qualquer formato
+    // Helper para extrair hora como "HH:MM"
+    // Com raw:true os valores chegam como: string "08:30:00", fração decimal 0.354 (hora) ou inteiro 1 (intervalo)
     const extrairHora = (val: unknown): string => {
-      if (!val) return '';
-      if (val instanceof Date) {
-        const h = String(val.getHours()).padStart(2, '0');
-        const m = String(val.getMinutes()).padStart(2, '0');
-        return `${h}:${m}`;
+      if (!val && val !== 0) return '';
+      if (typeof val === 'number') {
+        if (val >= 0 && val < 1) {
+          // Fração de dia: ex 0.354 = 08:30, 0.667 = 16:00
+          const totalMin = Math.round(val * 24 * 60);
+          return `${String(Math.floor(totalMin / 60)).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`;
+        }
+        // Inteiro ≥ 1 → unidades de 30 min (convenção SIGMA: 1 = 30min, 2 = 60min)
+        const totalMin = Math.round(val * 30);
+        return `${String(Math.floor(totalMin / 60)).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`;
       }
       const s = String(val).trim();
-      const match = s.match(/(\d{1,2}):(\d{2})/);
-      return match ? `${String(match[1]).padStart(2,'0')}:${match[2]}` : s;
+      const tmMatch = s.match(/(\d{1,2}):(\d{2})/);
+      if (tmMatch) return `${String(tmMatch[1]).padStart(2, '0')}:${tmMatch[2]}`;
+      // String numérica → mesma lógica: fração = horas do dia, inteiro = unidades de 30 min
+      const n = parseFloat(s);
+      if (!isNaN(n) && n >= 0) {
+        const totalMin = n < 1 ? Math.round(n * 24 * 60) : Math.round(n * 30);
+        return `${String(Math.floor(totalMin / 60)).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`;
+      }
+      return '';
     };
 
     const records = [];
@@ -316,33 +390,37 @@ export class ApontamentosService {
       });
     }
 
-    // Filtra: 1º dia do mês de 3 meses atrás até hoje (meses completos + mês atual)
-    const inicio = new Date();
-    inicio.setMonth(inicio.getMonth() - 3);
-    inicio.setDate(1);
-    inicio.setHours(0, 0, 0, 0);
-    const dataLimite = inicio.toISOString().split('T')[0];
+    // Filtra: a partir de 01/01 do ano atual (ano todo)
+    const dataLimite = `${new Date().getFullYear()}-01-01`;
     const recordsFiltrados = records.filter(r => r.data && r.data >= dataLimite);
+
+    // Diagnóstico: quantos registros por mês
+    const porMes: Record<string, number> = {};
+    for (const r of recordsFiltrados) {
+      const mes = r.data?.substring(0, 7) ?? 'sem-data';
+      porMes[mes] = (porMes[mes] ?? 0) + 1;
+    }
 
     if (recordsFiltrados.length === 0) {
       const amostras = records.slice(0, 3).map(r => r.data ?? 'null').join(', ');
-      const brutos   = (rows as unknown[][]).slice(1, 4)
-        .map(r => JSON.stringify((r as unknown[])[COLS.data])).join(', ');
-      const cabecalhos = headers.slice(0, 22).join(' | ');
-      throw new Error(
-        `Nenhum registro a partir de ${dataLimite}. ` +
-        `Lidos: ${records.length}. ` +
-        `Col data detectada: índice ${COLS.data}. ` +
-        `Datas parseadas: [${amostras}]. ` +
-        `Brutos: [${brutos}]. ` +
-        `Headers: ${cabecalhos}`
-      );
+      throw new Error(`Nenhum registro a partir de ${dataLimite}. Lidos: ${records.length} | Datas: [${amostras}]`);
     }
+
+    return { recordsFiltrados, porMes, dataLimite };
+  }
+
+  // Processa o Excel no browser e insere direto no Supabase via sessão do usuário (RLS)
+  // Usado pela importação manual de arquivo — exige Admin autenticado.
+  async importarArquivo(file: File): Promise<{ inseridos: number; porMes: Record<string, number> }> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+
+    const { recordsFiltrados, porMes, dataLimite } = await this.parsearArquivoSigma(file);
 
     const sb = this.supabaseService.client;
 
-    // Substitui todos os dados anteriores
-    await sb.from('apontamentos').delete().gte('importado_em', '1900-01-01');
+    // Deleta todos os registros do período antes de reinserir (garante dados limpos)
+    await sb.from('apontamentos').delete().gte('data', dataLimite);
 
     const BATCH = 500;
     let inserted = 0;
@@ -358,41 +436,53 @@ export class ApontamentosService {
       importado_por:   user.id,
     });
 
-    return { inseridos: inserted };
+    return { inseridos: inserted, porMes };
   }
 
   private parseDateStr(val: unknown): string | null {
     if (!val && val !== 0) return null;
 
     // Date object (XLSX com cellDates: true)
+    // XLSX gera datas como UTC midnight, mas o timezone local (GMT-3) faz o dia recuar.
+    // Usamos getFullYear/Month/Date (horário LOCAL do browser) que reflete o dia correto.
     if (val instanceof Date) {
       if (isNaN(val.getTime())) return null;
-      // Usa UTC para não perder o dia por fuso horário
-      const y = val.getUTCFullYear();
-      const m = String(val.getUTCMonth() + 1).padStart(2, '0');
-      const d = String(val.getUTCDate()).padStart(2, '0');
+      const y = val.getFullYear();
+      const m = String(val.getMonth() + 1).padStart(2, '0');
+      const d = String(val.getDate()).padStart(2, '0');
       return `${y}-${m}-${d}`;
     }
 
-    // Número serial do Excel (ex: 45345 = dias desde 1900-01-01)
+    // Serial Excel com componente de tempo (ex: 46173.875 = May 31 + 21h local = June 1 00:00 UTC)
+    // O SIGMA guarda datas como DATETIME: a fração .875 representa midnight local UTC-3
+    // Math.round strip o componente de tempo arredondando para o serial do dia correto
     if (typeof val === 'number' && val > 1) {
-      const d = new Date(Math.round((val - 25569) * 86400 * 1000));
-      if (isNaN(d.getTime())) return null;
-      const y = d.getUTCFullYear();
-      const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const da = String(d.getUTCDate()).padStart(2, '0');
+      const dateSerial = Math.round(val); // 46173.875 → 46174 = June 1
+      const dt = new Date((dateSerial - 25569) * 86400 * 1000);
+      if (isNaN(dt.getTime())) return null;
+      const y  = dt.getUTCFullYear();
+      const mo = String(dt.getUTCMonth() + 1).padStart(2, '0');
+      const da = String(dt.getUTCDate()).padStart(2, '0');
       return `${y}-${mo}-${da}`;
     }
 
-    // Formato SIGMA: "M/D/YY" ou "MM/DD/YY" (americano — mês vem primeiro)
-    // ex: "11/3/24" = novembro 3, 2024 → "2024-11-03"
     const s = String(val).trim();
     const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
     if (br) {
-      const m = br[1].padStart(2, '0'); // MÊS (primeiro número)
-      const d = br[2].padStart(2, '0'); // DIA  (segundo número)
-      let y   = parseInt(br[3]);
-      if (y < 100) y += 2000; // "24" → 2024
+      let y = parseInt(br[3]);
+      let m: string, d: string;
+      if (br[3].length === 4) {
+        // Ano com 4 dígitos → formato brasileiro DD/MM/YYYY
+        // ex: "01/06/2026" = dia 1, mês 6 (junho) → "2026-06-01"
+        d = br[1].padStart(2, '0'); // DIA  (primeiro número)
+        m = br[2].padStart(2, '0'); // MÊS (segundo número)
+      } else {
+        // Ano com 2 dígitos → formato americano M/D/YY (confirmado no SIGMA)
+        // ex: "11/3/24" = mês 11 (novembro), dia 3 → "2024-11-03"
+        m = br[1].padStart(2, '0'); // MÊS (primeiro número)
+        d = br[2].padStart(2, '0'); // DIA  (segundo número)
+        if (y < 100) y += 2000;
+      }
       return `${y}-${m}-${d}`;
     }
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
@@ -412,24 +502,33 @@ export class ApontamentosService {
     return Math.max(0, parseFloat((mins / 60).toFixed(2)));
   }
 
-  /** Filtra apontamentos pela área da equipe — usa Matriculas como referência */
+  /** Filtra apontamentos pela área da equipe — usa matrícula/nome E campo equipe do SIGMA */
   filtrarPorEquipe(dados: Apontamento[], equipe: EquipeTab): Apontamento[] {
+    const termosSIGMA: Record<EquipeTab, string> = {
+      eletrica: 'ELETRIC',
+      mecanica: 'MECAN',
+      operacao: 'OPERA',
+    };
+    const termoSIGMA = termosSIGMA[equipe];
+
     const colab = this.getColaboradoresPorEquipe(equipe);
-    if (colab.length === 0) {
-      // Fallback: usa campo Equipe do SIGMA
-      const termos: Record<EquipeTab, string> = { eletrica: 'ELÉTR', mecanica: 'MECÂN', operacao: 'OPERA' };
-      return dados.filter(a => this.normalizar(a.equipe ?? '').includes(this.normalizar(termos[equipe])));
-    }
     const nomesNorm = new Set(colab.map(c => c.nomeNorm));
+
     return dados.filter(a => {
+      // Critério 1: executante bate com colaborador da equipe (matrícula ou nome)
       const match = this.matchColaborador(a.executante);
-      return match ? nomesNorm.has(match.nomeNorm) : false;
+      if (match && nomesNorm.has(match.nomeNorm)) return true;
+
+      // Critério 2: campo equipe do SIGMA indica esta equipe (cobre formatos de executante não reconhecidos)
+      if (a.equipe && this.normalizar(a.equipe).includes(termoSIGMA)) return true;
+
+      return false;
     });
   }
 
-  calcularStats(dados: Apontamento[], equipe: EquipeTab): ApontamentosStats {
+  calcularStats(dados: Apontamento[], equipe: EquipeTab, filtroMes = ''): ApontamentosStats {
     const totalOS    = dados.length;
-    const totalHoras = parseFloat(dados.reduce((s, a) => s + (a.horas ?? 0), 0).toFixed(2));
+    const totalHoras = parseFloat(dados.reduce((s, a) => s + Number(a.horas ?? 0), 0).toFixed(2));
     const mediaHorasPorOS = totalOS > 0 ? parseFloat((totalHoras / totalOS).toFixed(2)) : 0;
 
     // Por status
@@ -448,18 +547,15 @@ export class ApontamentosService {
       const ar = a.area_manutencao?.trim() || 'SEM ÁREA';
       if (!areaMap[ar]) areaMap[ar] = { count: 0, horas: 0 };
       areaMap[ar].count++;
-      areaMap[ar].horas = parseFloat((areaMap[ar].horas + (a.horas ?? 0)).toFixed(2));
+      areaMap[ar].horas = parseFloat((areaMap[ar].horas + Number(a.horas ?? 0)).toFixed(2));
     }
     const porArea = Object.entries(areaMap)
       .map(([area, v]) => ({ area, ...v }))
       .sort((a, b) => b.horas - a.horas)
       .slice(0, 10);
 
-    // Ranking: TODOS os colaboradores da equipe + acumula apontamentos
-    const membros = this.getColaboradoresPorEquipe(equipe);
-    const rankMap = new Map<string, RankingItem>();
-
-    // Pré-calcula dias trabalhados por colaborador (para horasEsperadas)
+    // ── H. Programada / H. Disponível: apenas nos dias em que o colaborador teve apontamento ──
+    // Pré-calcula dias únicos com apontamento por colaborador
     const diasPorColab = new Map<string, Set<string>>();
     for (const a of dados) {
       const colab = this.matchColaborador(a.executante);
@@ -468,58 +564,102 @@ export class ApontamentosService {
       diasPorColab.get(colab.nomeNorm)!.add(a.data);
     }
 
-    // Calcula horas esperadas: soma disponibilidade por dia (com corte em 01/06)
-    const calcEsperadas = (c: Colaborador, dias: Set<string>): number => {
+    // H. Programada = soma da disponibilidade cadastrada (matriculas.json) apenas nos dias com
+    // apontamento. Eficiência é medida contra esse valor — calculado só para elétrica/mecânica.
+    const calcProgramadas = (c: Colaborador): number => {
+      if (equipe === 'operacao') return 0;
+      const dias = diasPorColab.get(c.nomeNorm) ?? new Set<string>();
       let total = 0;
       for (const dia of dias) {
-        // A partir de 01/06 todos têm 6.5h
-        const disp = dia >= CUTOFF_DISPONIBILIDADE ? DISP_PADRAO : c.disponibilidade;
+        const disp = dia >= CUTOFF_DISPONIBILIDADE
+          ? (c.disponibilidade_pos_corte ?? c.disponibilidade)
+          : c.disponibilidade;
         total += disp;
       }
       return parseFloat(total.toFixed(2));
     };
 
-    // Inicializa todos os membros com zero
-    for (const c of membros) {
+    // H. Disponível = soma da jornada cheia (turno de 12h ou horário ADM de 8,5h) apenas nos
+    // dias com apontamento. Elétrica/mecânica migram do turno para o ADM em 01/06/2026;
+    // a operação permanece no turno de 12h o ano todo.
+    const calcDisponivel = (c: Colaborador): number => {
       const dias = diasPorColab.get(c.nomeNorm) ?? new Set<string>();
-      const horasEsperadas = calcEsperadas(c, dias);
+      let total = 0;
+      for (const dia of dias) {
+        const jornada = (equipe !== 'operacao' && dia >= CUTOFF_DISPONIBILIDADE)
+          ? DISPONIVEL_ADM_HORAS
+          : DISPONIVEL_TURNO_HORAS;
+        total += jornada;
+      }
+      return parseFloat(total.toFixed(2));
+    };
+
+    // Para o label do período: usa datas reais dos dados
+    const datasPresentes = dados.map(a => a.data!).filter(Boolean).sort();
+    const periodoInicio = datasPresentes[0] ?? new Date().toISOString().split('T')[0];
+    const periodoFim    = datasPresentes[datasPresentes.length - 1] ?? periodoInicio;
+
+    // Ranking: TODOS os colaboradores da equipe
+    const membros = this.getColaboradoresPorEquipe(equipe);
+    const rankMap = new Map<string, RankingItem>();
+
+    // Inicializa todos os membros com horasProgramadas/horasDisponiveis = 0 (calculado após acumular)
+    for (const c of membros) {
       rankMap.set(c.nomeNorm, {
         colaborador: c, totalHoras: 0, totalOS: 0,
-        horasEsperadas, eficiencia: 0, temApontamentos: false,
+        horasProgramadas: 0, horasDisponiveis: 0, eficiencia: 0, temApontamentos: false,
       });
     }
 
+    // Diagnóstico: executantes que não matcheiam (primeiros 8 de jan-mar)
+    const execSemMatch: string[] = [];
+    let totalSemMatch = 0;
+
     // Acumula apontamentos
     for (const a of dados) {
+      const horas = Number(a.horas ?? 0);
       const colab = this.matchColaborador(a.executante);
-      if (!colab) continue;
+      if (!colab) {
+        totalSemMatch++;
+        if (a.data && a.data < '2026-04-01' && execSemMatch.length < 8) {
+          execSemMatch.push(`[${a.data}] "${a.executante}"`);
+        }
+        continue;
+      }
       const item = rankMap.get(colab.nomeNorm);
       if (item) {
-        item.totalHoras = parseFloat((item.totalHoras + (a.horas ?? 0)).toFixed(2));
+        item.totalHoras = parseFloat((item.totalHoras + horas).toFixed(2));
         item.totalOS++;
         item.temApontamentos = true;
       } else {
-        const dias = diasPorColab.get(colab.nomeNorm) ?? new Set<string>();
-        const horasEsperadas = calcEsperadas(colab, dias);
         rankMap.set(colab.nomeNorm, {
           colaborador: colab,
-          totalHoras: parseFloat((a.horas ?? 0).toFixed(2)),
-          totalOS: 1, horasEsperadas, eficiencia: 0, temApontamentos: true,
+          totalHoras: parseFloat(horas.toFixed(2)),
+          totalOS: 1,
+          horasProgramadas: calcProgramadas(colab),
+          horasDisponiveis: calcDisponivel(colab),
+          eficiencia: 0, temApontamentos: true,
         });
       }
     }
 
-    // Calcula eficiência final
+    if (totalSemMatch > 0) {
+      console.warn(`[Stats] ${totalSemMatch} registros sem colaborador mapeado. Exemplos jan-mar:`, execSemMatch);
+    }
+
+    // Calcula horasProgramadas, horasDisponiveis e eficiência final para cada membro
     for (const item of rankMap.values()) {
-      item.eficiencia = item.horasEsperadas > 0
-        ? parseFloat(((item.totalHoras / item.horasEsperadas) * 100).toFixed(1))
+      item.horasProgramadas = calcProgramadas(item.colaborador);
+      item.horasDisponiveis = calcDisponivel(item.colaborador);
+      item.eficiencia = item.horasProgramadas > 0
+        ? parseFloat(((item.totalHoras / item.horasProgramadas) * 100).toFixed(1))
         : 0;
     }
 
     const ranking = Array.from(rankMap.values())
       .sort((a, b) => b.totalHoras - a.totalHoras || b.totalOS - a.totalOS);
 
-    return { totalOS, totalHoras, mediaHorasPorOS, porStatus, porArea, ranking };
+    return { totalOS, totalHoras, mediaHorasPorOS, porStatus, porArea, ranking, periodoInicio, periodoFim };
   }
 
   parseDate(str: string): Date | null {

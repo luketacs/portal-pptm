@@ -1,12 +1,14 @@
 import {
   ChangeDetectionStrategy, Component, OnInit,
-  computed, signal, ElementRef, viewChild, effect, OnDestroy, EffectRef,
+  computed, signal, ElementRef, viewChild, effect, OnDestroy, EffectRef, Injector,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
   ApontamentosService, Apontamento, ApontamentosStats, EquipeTab,
 } from '../../services/apontamentos.service';
+import { AuthService } from '../../services/auth.service';
+import { ActivatedRoute } from '@angular/router';
 import * as d3 from 'd3';
 
 type Periodo = 15 | 30 | 60 | 90;
@@ -34,9 +36,12 @@ export class ApontamentosComponent implements OnInit, OnDestroy {
   private statusChartEl = viewChild<ElementRef>('statusChart');
   private areaChartEl   = viewChild<ElementRef>('areaChart');
 
-  equipeAtiva  = signal<EquipeTab>('eletrica');
-  periodoAtivo = signal<Periodo>(90);          // carrega sempre 90 dias (janela máxima)
-  mesSelecionado = signal('');                 // '' = sem filtro de mês, 'YYYY-MM' = mês específico
+  equipeAtiva       = signal<EquipeTab>('eletrica');
+  periodoAtivo      = signal<Periodo>(90);
+  filtroTipo        = signal<'mes' | 'semana'>('mes');
+  mesSelecionado    = signal('');   // '' = todos, 'YYYY-MM' = mês
+  semanaSelecionada = signal('');   // '' = todas, 'YYYY-MM-DD' = segunda da semana
+
   readonly periodos: Periodo[] = [15, 30, 60, 90];
   readonly equipes: EquipeTab[] = ['eletrica', 'mecanica', 'operacao'];
   readonly equipeLabel = EQUIPE_LABEL;
@@ -54,19 +59,72 @@ export class ApontamentosComponent implements OnInit, OnDestroy {
     return result;
   })();
 
+  // Gera as últimas 20 semanas (segunda → domingo)
+  readonly semanas = (() => {
+    const iso  = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const br   = (d: Date) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+    const result: { value: string; label: string; fim: string }[] = [
+      { value: '', label: 'Todas as semanas', fim: '' },
+    ];
+    const hoje = new Date();
+    const dow  = hoje.getDay(); // 0=Dom … 6=Sab
+    const seg  = new Date(hoje);
+    seg.setDate(hoje.getDate() + (dow === 0 ? -6 : 1 - dow));
+    seg.setHours(0, 0, 0, 0);
+    for (let i = 0; i < 20; i++) {
+      const ini = new Date(seg); ini.setDate(seg.getDate() - i * 7);
+      const fim = new Date(ini); fim.setDate(ini.getDate() + 6);
+      result.push({ value: iso(ini), label: `${br(ini)} a ${br(fim)}/${fim.getFullYear()}`, fim: iso(fim) });
+    }
+    return result;
+  })();
+
   searchExecutante = signal('');
   searchOS         = signal('');
+
+  // Label descritivo do período selecionado
+  periodoLabel = computed(() => {
+    if (this.filtroTipo() === 'semana') {
+      const semana = this.semanaSelecionada();
+      if (!semana) return 'todas as semanas';
+      const s = this.semanas.find(w => w.value === semana);
+      return s ? `semana ${s.label}` : semana;
+    }
+    const mes = this.mesSelecionado();
+    if (!mes) {
+      const s = this.stats();
+      if (s.periodoInicio && s.periodoFim) {
+        const fmt = (d: string) => `${d.substring(5,7)}/${d.substring(0,4)}`;
+        const inicio = fmt(s.periodoInicio);
+        const fim    = fmt(s.periodoFim);
+        return inicio === fim ? inicio : `${inicio} a ${fim}`;
+      }
+      return `ano (${new Date().getFullYear()})`;
+    }
+    const [ano, m] = mes.split('-').map(Number);
+    const d = new Date(ano, m - 1, 1);
+    return d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  });
 
   private _todos = signal<Apontamento[]>([]);
   totalBruto = signal(0);
   amostraExecutantes = signal<string[]>([]);
 
   dadosDaEquipe = computed(() => {
-    const equipe = this.service.filtrarPorEquipe(this._todos(), this.equipeAtiva());
+    const equipe = this.service.filtrarPorEquipe(this._todos(), this.equipeAtiva())
+      .filter(a => !!a.data);
+
+    if (this.filtroTipo() === 'semana') {
+      const semana = this.semanaSelecionada();
+      if (!semana) return equipe;
+      const s = this.semanas.find(w => w.value === semana);
+      if (!s) return equipe;
+      return equipe.filter(a => a.data >= s.value && a.data <= s.fim);
+    }
+
     const mes = this.mesSelecionado();
     if (!mes) return equipe;
-    // Filtra pelo mês selecionado
-    return equipe.filter(a => a.data && a.data.startsWith(mes));
+    return equipe.filter(a => a.data.startsWith(mes));
   });
 
   dadosFiltrados = computed(() => {
@@ -81,7 +139,7 @@ export class ApontamentosComponent implements OnInit, OnDestroy {
   });
 
   stats = computed<ApontamentosStats>(() =>
-    this.service.calcularStats(this.dadosFiltrados(), this.equipeAtiva())
+    this.service.calcularStats(this.dadosFiltrados(), this.equipeAtiva(), this.mesSelecionado())
   );
 
   countPorEquipe = computed(() => {
@@ -116,16 +174,83 @@ export class ApontamentosComponent implements OnInit, OnDestroy {
   importError      = signal('');
   importSuccess    = signal('');
 
-  constructor(public service: ApontamentosService) {}
+  publicMode = signal(false);
+  isAdmin    = computed(() => this.authService.currentUser()?.role === 'Admin');
 
-  autoSyncStatus = signal<'idle' | 'syncing' | 'done'>('idle');
+  // Cooldown global de 30 minutos — derivado da última sincronização registrada no banco
+  // (compartilhado por TODOS os usuários, não apenas quem clicou em "Atualizar").
+  // Administradores autenticados não têm cooldown.
+  private readonly COOLDOWN_MS = 30 * 60 * 1000;
+  private now = signal(Date.now());
+  private nowTimer?: ReturnType<typeof setInterval>;
+
+  cooldownRestante = computed(() => {
+    if (this.isAdmin()) return 0;
+    const ultima = this.ultimaImportacao();
+    if (!ultima) return 0;
+    const decorrido = this.now() - new Date(ultima.importado_em).getTime();
+    return Math.max(0, Math.ceil((this.COOLDOWN_MS - decorrido) / 1000));
+  });
+  // Modo TV — ativado via ?tv=1 no link público. Alterna automaticamente entre as
+  // equipes (Elétrica → Mecânica → Operação) para exibição contínua em painel/TV,
+  // sem necessidade de interação manual.
+  private readonly TV_ROTATION_MS = 25_000;
+  // Sem botão "Atualizar" visível no modo TV — relê os dados do Supabase periodicamente
+  // para refletir alguma atualização manual feita por um Admin, sem precisar recarregar a página.
+  // Não baixa do SIGMA — só relê o que já está no banco.
+  private readonly TV_REFRESH_MS = 5 * 60 * 1000;
+  tvMode = signal(false);
+  private tvRotationTimer?: ReturnType<typeof setInterval>;
+  private tvRefreshTimer?: ReturnType<typeof setInterval>;
+  private tvRotationStart = Date.now();
+
+  tvProximaEm = computed(() => {
+    if (!this.tvMode()) return 0;
+    const decorrido = (this.now() - this.tvRotationStart) % this.TV_ROTATION_MS;
+    return Math.max(0, Math.ceil((this.TV_ROTATION_MS - decorrido) / 1000));
+  });
+
+  private iniciarRotacaoTv(): void {
+    this.tvRotationStart = Date.now();
+    this.tvRotationTimer = setInterval(() => {
+      const idx = this.equipes.indexOf(this.equipeAtiva());
+      this.equipeAtiva.set(this.equipes[(idx + 1) % this.equipes.length]);
+      this.tvRotationStart = Date.now();
+    }, this.TV_ROTATION_MS);
+
+    this.tvRefreshTimer = setInterval(() => this.carregar(), this.TV_REFRESH_MS);
+  }
+
+  cooldownFormatado = computed(() => {
+    const s = this.cooldownRestante();
+    if (s <= 0) return '';
+    const min = Math.floor(s / 60);
+    const seg = s % 60;
+    return min > 0 ? `${min}min${seg > 0 ? ` ${seg}s` : ''}` : `${seg}s`;
+  });
+
+  constructor(
+    public service: ApontamentosService,
+    private injector: Injector,
+    private authService: AuthService,
+    private route: ActivatedRoute,
+  ) {}
 
   async ngOnInit(): Promise<void> {
+    // Detecta modo público via dados da rota
+    this.publicMode.set(!!this.route.snapshot.data['publicMode']);
+
+    // Modo TV — ?tv=1 no link público liga a rotação automática entre equipes
+    if (this.publicMode() && this.route.snapshot.queryParamMap.get('tv') === '1') {
+      this.tvMode.set(true);
+      this.iniciarRotacaoTv();
+    }
+
     await this.service.loadColaboradores();
     await this.carregar();
 
-    // Auto-sync: se a última importação tem mais de 2 horas, importa automaticamente
-    this.verificarAutoSync();
+    // Atualiza o relógio a cada segundo para a contagem regressiva do cooldown
+    this.nowTimer = setInterval(() => this.now.set(Date.now()), 1000);
 
     this.efectRef = effect(() => {
       const s = this.stats();
@@ -134,35 +259,33 @@ export class ApontamentosComponent implements OnInit, OnDestroy {
       if (s.totalOS === 0) return;
       if (statusEl) this.desenharPizza(statusEl, s.porStatus.map(x => ({ name: x.status, value: x.count })));
       if (areaEl)   this.desenharBarras(areaEl,   s.porArea.map(x => ({ name: x.area, value: x.horas })));
-    });
+    }, { injector: this.injector });
   }
 
-  ngOnDestroy(): void { this.efectRef?.destroy(); }
-
-  private async verificarAutoSync(): Promise<void> {
-    const ultima = this.ultimaImportacao();
-    if (!ultima) return; // sem histórico, usuário importa manualmente na primeira vez
-
-    const horasSemSync = (Date.now() - new Date(ultima.importado_em).getTime()) / 3_600_000;
-
-    // Auto-importa se passaram mais de 2 horas desde a última importação
-    if (horasSemSync >= 2) {
-      this.autoSyncStatus.set('syncing');
-      try {
-        const { inseridos } = await this.service.autoImportar();
-        this.autoSyncStatus.set('done');
-        console.log(`[AutoSync] ${inseridos} apontamentos atualizados.`);
-        await this.carregar();
-        setTimeout(() => this.autoSyncStatus.set('idle'), 5000);
-      } catch (err) {
-        this.autoSyncStatus.set('idle');
-        console.warn('[AutoSync] Falhou (não crítico):', err);
-      }
-    }
+  ngOnDestroy(): void {
+    this.efectRef?.destroy();
+    clearInterval(this.nowTimer);
+    clearInterval(this.tvRotationTimer);
+    clearInterval(this.tvRefreshTimer);
   }
 
   async carregar(): Promise<void> {
-    const dados = await this.service.loadApontamentos(this.periodoAtivo());
+    const dados = await this.service.loadApontamentos();
+
+    // DIAGNÓSTICO — remove quando problema for resolvido
+    const porMesDados: Record<string, number> = {};
+    for (const a of dados) {
+      const mes = (a.data ?? 'null').substring(0, 7);
+      porMesDados[mes] = (porMesDados[mes] ?? 0) + 1;
+    }
+    const resumo = Object.entries(porMesDados).sort().map(([m, n]) => `${m}:${n}`).join(', ');
+    console.log(`[carregar] Total do banco: ${dados.length}. Por mês: ${resumo || 'vazio'}`);
+    // Todos os registros do Anderson — independente do mês
+    const allAnderson = dados.filter(a => a.executante === '708125');
+    const andersonDates = allAnderson.map(a => a.data).sort();
+    console.log(`[carregar] Anderson (708125) - total: ${allAnderson.length} registros`);
+    console.log('[carregar] Anderson - todas as datas:', andersonDates);
+
     this._todos.set(dados);
     this.totalBruto.set(dados.length);
     const exec = [...new Set(dados.map(d => d.executante).filter(Boolean))].slice(0, 8);
@@ -171,14 +294,27 @@ export class ApontamentosComponent implements OnInit, OnDestroy {
 
   async atualizar(): Promise<void> {
     if (this.isImporting() || this.isLoading()) return;
+    if (this.cooldownRestante() > 0) return; // Admin nunca cai aqui (cooldownRestante = 0)
+
     this.isImporting.set(true);
     this.importError.set('');
     this.importSuccess.set('');
     try {
-      const { inseridos } = await this.service.autoImportar();
-      this.importSuccess.set(`${inseridos} apontamentos sincronizados com o SIGMA.`);
-      setTimeout(() => this.importSuccess.set(''), 5000);
-      await this.carregar();
+      // autoImportar baixa do SIGMA, parseia no browser e grava via endpoint
+      // privilegiado — funciona tanto autenticado quanto no link público.
+      // O cooldown global de 30 minutos é validado no servidor.
+      const { inseridos, cooldownSegundos } = await this.service.autoImportar();
+
+      if (cooldownSegundos !== undefined) {
+        // Outro usuário já sincronizou nos últimos 30 minutos — apenas relê os dados
+        await this.carregar();
+        this.importSuccess.set('Os dados já estão atualizados (sincronizados recentemente).');
+        setTimeout(() => this.importSuccess.set(''), 4000);
+      } else {
+        this.importSuccess.set(`${inseridos} apontamentos sincronizados com o SIGMA.`);
+        setTimeout(() => this.importSuccess.set(''), 5000);
+        await this.carregar();
+      }
     } catch (err: unknown) {
       this.importError.set(err instanceof Error ? err.message : 'Erro ao sincronizar com o SIGMA.');
     } finally {
@@ -195,8 +331,10 @@ export class ApontamentosComponent implements OnInit, OnDestroy {
     this.importError.set('');
     this.importSuccess.set('');
     try {
-      const { inseridos } = await this.service.importarArquivo(file);
-      this.importSuccess.set(`✅ ${inseridos} apontamentos importados com sucesso!`);
+      const { inseridos, porMes } = await this.service.importarArquivo(file);
+      const resumoMeses = Object.entries(porMes ?? {}).sort()
+        .map(([m, n]) => `${m.substring(5)}/${m.substring(0,4)}: ${n}`).join(' | ');
+      this.importSuccess.set(`✅ ${inseridos} registros importados. Meses: ${resumoMeses || '—'}`);
       setTimeout(() => this.importSuccess.set(''), 5000);
       await this.carregar(); // recarrega os dados
     } catch (err: unknown) {

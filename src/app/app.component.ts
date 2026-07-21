@@ -43,7 +43,9 @@ export class AppComponent implements OnDestroy {
   ) {
     this.currentUser = this.authService.currentUser;
     this.isInitializing = this.authService.isInitializing;
-    this.currentUrl.set(this.router.url || '/');
+    // Usa window.location.pathname como fonte verdadeira no carregamento inicial
+    // (router.url pode ser '/' antes do Angular processar a rota)
+    this.currentUrl.set(this.router.url && this.router.url !== '/' ? this.router.url : window.location.pathname || '/');
 
     this.routerSubscription = this.router.events.subscribe(event => {
       if (event instanceof NavigationEnd) {
@@ -53,7 +55,12 @@ export class AppComponent implements OnDestroy {
 
     this.isPublicAuthRoute = computed(() => {
       const url = this.currentUrl();
-      return url.startsWith('/login') || url.startsWith('/forgot-password') || url.startsWith('/reset-password') || url.startsWith('/privacy-policy') || url.startsWith('/change-password-required');
+      const pathname = window.location.pathname;  // fallback para o caso de router não ter atualizado
+      const check = (u: string) =>
+        u.startsWith('/login') || u.startsWith('/forgot-password') ||
+        u.startsWith('/reset-password') || u.startsWith('/privacy-policy') ||
+        u.startsWith('/change-password-required') || u.startsWith('/publico');
+      return check(url) || check(pathname);
     });
 
     this.shouldShowAuthTransition = computed(() => {

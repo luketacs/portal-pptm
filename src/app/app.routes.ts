@@ -131,8 +131,17 @@ export const APP_ROUTES: Routes = [
     loadComponent: () =>
       import('../components/apontamentos/apontamentos.component').then(m => m.ApontamentosComponent),
     canActivate: [authGuard],
-    data: { roles: ['Admin'] },
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
     title: 'Apontamentos',
+  },
+
+  // Rota pública — sem login (somente visualização)
+  {
+    path: 'publico/apontamentos',
+    loadComponent: () =>
+      import('../components/apontamentos/apontamentos.component').then(m => m.ApontamentosComponent),
+    data: { publicMode: true },
+    title: 'Apontamentos — PPTM',
   },
 
   {
