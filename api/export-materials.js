@@ -50,19 +50,29 @@ export default async function handler(req, res) {
 
   const { search, status } = req.body || {};
 
-  let query = supabase
-    .from('materials')
-    .select('*, creator:profiles!materials_created_by_fkey(name)')
-    .order('created_at', { ascending: false })
-    .limit(5000);
-
-  if (status && status !== 'all') query = query.eq('status', status);
-  if (search) {
-    query = query.or(`codigo.ilike.%${search}%,descricao_breve.ilike.%${search}%,ncm.ilike.%${search}%`);
+  function buildQuery() {
+    let q = supabase
+      .from('materials')
+      .select('*, creator:profiles!materials_created_by_fkey(name)')
+      .order('created_at', { ascending: false });
+    if (status && status !== 'all') q = q.eq('status', status);
+    if (search) {
+      q = q.or(`codigo.ilike.%${search}%,descricao_breve.ilike.%${search}%,ncm.ilike.%${search}%`);
+    }
+    return q;
   }
 
-  const { data, error } = await query;
-  if (error) return res.status(500).json({ error: 'Erro ao buscar dados.' });
+  // Sem paginar, o PostgREST corta em 1000 linhas por padrão — busca página a página.
+  const PAGE_SIZE = 1000;
+  let data = [];
+  let from = 0;
+  while (true) {
+    const { data: page, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+    if (error) return res.status(500).json({ error: 'Erro ao buscar dados.' });
+    data = data.concat(page ?? []);
+    if (!page || page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
 
   const rows = (data || []).map(r => ({
     'Código': r.codigo || '',

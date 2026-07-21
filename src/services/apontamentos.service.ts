@@ -206,45 +206,8 @@ export class ApontamentosService {
     }
   }
 
-  // Auto-sync: baixa via proxy Vercel (evita CORS), parseia no browser e grava via
-  // endpoint privilegiado (funciona tanto para usuários autenticados quanto para o link
-  // público — o cooldown global de 30 minutos é controlado no servidor).
-  async autoImportar(): Promise<{ inseridos: number; porMes?: Record<string, number>; cooldownSegundos?: number }> {
-    const token = await this.authService.getValidAccessToken();
-    const resp = await fetch('/api/sigma-proxy', {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }));
-      throw new Error(err.error ?? `HTTP ${resp.status}`);
-    }
-    const buffer = await resp.arrayBuffer();
-    const file = new File([buffer], 'apontamentos_auto.xlsx', { type: 'application/octet-stream' });
-
-    const { recordsFiltrados, porMes, dataLimite } = await this.parsearArquivoSigma(file);
-
-    const syncResp = await fetch('/api/sync-apontamentos', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ records: recordsFiltrados, dataLimite, nomeArquivo: file.name }),
-    });
-    const result = await syncResp.json().catch(() => ({}));
-
-    if (syncResp.status === 429) {
-      return { inseridos: 0, cooldownSegundos: result.cooldownSegundos ?? 0 };
-    }
-    if (!syncResp.ok || !result.success) {
-      throw new Error(result.error ?? `Erro ao sincronizar (HTTP ${syncResp.status}).`);
-    }
-
-    return { inseridos: result.inseridos, porMes };
-  }
-
   // Lê e normaliza o Excel do SIGMA no browser, sem gravar no banco.
-  // Usado tanto pela importação manual (admin) quanto pelo auto-sync.
+  // Usado pela importação manual de arquivo (admin).
   private async parsearArquivoSigma(file: File): Promise<{
     recordsFiltrados: Record<string, unknown>[];
     porMes: Record<string, number>;
@@ -420,7 +383,8 @@ export class ApontamentosService {
     const sb = this.supabaseService.client;
 
     // Deleta todos os registros do período antes de reinserir (garante dados limpos)
-    await sb.from('apontamentos').delete().gte('data', dataLimite);
+    const { error: deleteError } = await sb.from('apontamentos').delete().gte('data', dataLimite);
+    if (deleteError) throw new Error(`Erro ao limpar dados anteriores: ${deleteError.message}`);
 
     const BATCH = 500;
     let inserted = 0;

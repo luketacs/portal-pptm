@@ -82,6 +82,29 @@ export class SupabaseRestService {
     }
   }
 
+  // O PostgREST do Supabase limita cada resposta a no máx. 1000 linhas por padrão —
+  // sem paginar, tabelas maiores que isso vêm cortadas silenciosamente (sem erro).
+  // Percorre todas as páginas de `basePath` e devolve a lista completa.
+  async getAllPaged<T>(
+    basePath: string,
+    timeoutMs = this.DEFAULT_TIMEOUT_MS,
+    pageSize = 1000
+  ): Promise<{ data: T[]; error: RestError | null }> {
+    const separator = basePath.includes('?') ? '&' : '?';
+    let all: T[] = [];
+    let offset = 0;
+
+    while (true) {
+      const page = await this.getPaged<T>(`${basePath}${separator}limit=${pageSize}&offset=${offset}`, timeoutMs);
+      if (page.error) return { data: all, error: page.error };
+      all = all.concat(page.data);
+      if (page.data.length < pageSize) break;
+      offset += pageSize;
+    }
+
+    return { data: all, error: null };
+  }
+
   async post(path: string, body: unknown, timeoutMs = this.DEFAULT_TIMEOUT_MS): Promise<RestResult<null>> {
     return this.request<null>('POST', path, body, timeoutMs);
   }

@@ -77,7 +77,7 @@ export class RequestService {
 
     this._isLoading = true;
     try {
-      const { data, error } = await this.supabaseRestService.get<PurchaseRequestRow[]>(
+      const { data, error } = await this.supabaseRestService.getAllPaged<PurchaseRequestRow>(
         'purchase_requests?select=*,requester:profiles!purchase_requests_requester_id_fkey(id,name,email,role)&order=requestdate.desc',
         this.OPERATION_TIMEOUT_MS
       );

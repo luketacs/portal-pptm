@@ -138,14 +138,16 @@ export default async function handler(req, res) {
 
       // Passo 1: Reseta apenas as 'encerradas' de volta para 'aberta'
       // NÃO toca as 'atendidas' (qtd_atendida >= qtd_solicitada — já foram atendidas)
-      await supabase
+      const { error: resetError } = await supabase
         .from('almox_solicitacoes')
         .update({ status: 'aberta' })
         .eq('status', 'encerrada');
+      if (resetError) throw new Error(`Erro ao resetar SAs encerradas: ${resetError.message}`);
 
       // Passo 2: Marca como encerradas apenas os pares confirmados
+      let encerradasOk = 0;
       if (encerradas.length > 0) {
-        await Promise.all(
+        const resultados = await Promise.all(
           encerradas.map(e =>
             supabase
               .from('almox_solicitacoes')
@@ -154,16 +156,21 @@ export default async function handler(req, res) {
               .eq('produto_codigo', e.produto_codigo)
           )
         );
+        const falhas = resultados.filter(r => r.error);
+        encerradasOk = resultados.length - falhas.length;
+        if (falhas.length > 0) {
+          console.error(`[import-almox] ${falhas.length} SA(s) falharam ao encerrar:`, falhas.map(f => f.error.message));
+        }
       }
 
       await supabase.from('almox_importacoes').insert({
         tipo: 'status_sas',
         nome_arquivo: fileName || 'relatorio_ary.xlsx',
-        total_registros: encerradas.length, // pares (sa+produto) efetivamente encerrados
+        total_registros: encerradasOk, // pares (sa+produto) efetivamente encerrados
         importado_por: user.id,
       });
 
-      return res.status(200).json({ success: true, tipo: 'status_sas', encerradas: encerradas.length });
+      return res.status(200).json({ success: true, tipo: 'status_sas', encerradas: encerradasOk, tentativas: encerradas.length });
 
     } else if (tipo === 'saldo') {
       // Conferência de saldo real — relatório de posição de estoque do ERP
@@ -210,7 +217,8 @@ export default async function handler(req, res) {
     }
 
     // Substituição completa: apaga e reinsere
-    await supabase.from(tabela).delete().gte('created_at', '1900-01-01');
+    const { error: deleteError } = await supabase.from(tabela).delete().gte('created_at', '1900-01-01');
+    if (deleteError) throw new Error(`Erro ao limpar dados anteriores de ${tabela}: ${deleteError.message}`);
 
     let inserted = 0;
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {

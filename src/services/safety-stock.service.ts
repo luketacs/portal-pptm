@@ -28,6 +28,10 @@ export class SafetyStockService {
     return this.supabaseRestService.get<T>(path, this.SUPABASE_OPERATION_TIMEOUT_MS);
   }
 
+  private async supabaseRestGetAllPaged<T>(path: string): Promise<{ data: T[]; error: any }> {
+    return this.supabaseRestService.getAllPaged<T>(path, this.SUPABASE_OPERATION_TIMEOUT_MS);
+  }
+
   async getSafetyStockData(): Promise<{ data: SafetyStockDataset | null; error: any }> {
     try {
       const diagnostics: string[] = [];
@@ -81,9 +85,9 @@ export class SafetyStockService {
 
   async getLatestBalanceSnapshot(): Promise<{ data: SafetyStockBalanceSnapshotData | null; error: any }> {
     const queryPath =
-      `${this.SNAPSHOT_TABLE_NAME}?select=material_code,current_stock,error_message,checked_at,updated_by_name&order=checked_at.desc&limit=10000`;
+      `${this.SNAPSHOT_TABLE_NAME}?select=material_code,current_stock,error_message,checked_at,updated_by_name&order=checked_at.desc`;
 
-    const { data: rows, error } = await this.supabaseRestGet<Record<string, unknown>[]>(queryPath);
+    const { data: rows, error } = await this.supabaseRestGetAllPaged<Record<string, unknown>>(queryPath);
     if (error) {
       return { data: null, error };
     }
@@ -186,7 +190,7 @@ export class SafetyStockService {
   }
 
   private async getFromViews(diagnostics: string[]): Promise<{ data: SafetyStockDataset | null; error: any }> {
-    const { data: detailRows, error: detailError } = await this.supabaseRestGet<Record<string, unknown>[]>(
+    const { data: detailRows, error: detailError } = await this.supabaseRestGetAllPaged<Record<string, unknown>>(
       `${this.DETAIL_VIEW_NAME}?select=*`
     );
 
@@ -197,7 +201,7 @@ export class SafetyStockService {
 
     const items = this.mapRowsToItems(detailRows || []);
 
-    const { data: areaRows, error: areaError } = await this.supabaseRestGet<Record<string, unknown>[]>(
+    const { data: areaRows, error: areaError } = await this.supabaseRestGetAllPaged<Record<string, unknown>>(
       `${this.AREA_VIEW_NAME}?select=*`
     );
 
@@ -248,8 +252,8 @@ export class SafetyStockService {
     };
   }
 
-  private async getSafetyStockRows(): Promise<{ data: Record<string, unknown>[] | null; error: any }> {
-    const fullSelect = await this.supabaseRestGet<Record<string, unknown>[]>(`${this.TABLE_NAME}?select=*`);
+  private async getSafetyStockRows(): Promise<{ data: Record<string, unknown>[]; error: any }> {
+    const fullSelect = await this.supabaseRestGetAllPaged<Record<string, unknown>>(`${this.TABLE_NAME}?select=*`);
 
     if (!fullSelect.error) {
       return fullSelect;
@@ -267,7 +271,7 @@ export class SafetyStockService {
     const safeSelectPath =
       `${this.TABLE_NAME}?select=%22Codigo%22,%22Descricao%22,%22Unidade%22,%22EstSeg-PPTM%22,%22Valor_UN%22,%22%C3%81rea%22`;
 
-    const safeSelect = await this.supabaseRestGet<Record<string, unknown>[]>(safeSelectPath);
+    const safeSelect = await this.supabaseRestGetAllPaged<Record<string, unknown>>(safeSelectPath);
     if (!safeSelect.error) {
       return safeSelect;
     }

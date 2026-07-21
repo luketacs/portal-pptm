@@ -60,6 +60,7 @@ export class ChangePasswordRequiredComponent {
     this.isLoading.set(true);
 
     try {
+      const currentPassword = this.form.get('currentPassword')?.value;
       const newPassword = this.form.get('newPassword')?.value;
       const currentUser = this.authService.currentUser();
 
@@ -67,6 +68,17 @@ export class ChangePasswordRequiredComponent {
         this.notificationService.showError('Usuário não identificado. Faça login novamente.');
         this.isLoading.set(false);
         await this.router.navigateByUrl('/login', { replaceUrl: true });
+        return;
+      }
+
+      // 0. Confirmar que a senha atual digitada está correta antes de trocar
+      const { error: verifyError } = await this.supabaseService.client.auth.signInWithPassword({
+        email: currentUser.email,
+        password: currentPassword,
+      });
+      if (verifyError) {
+        this.notificationService.showError('Senha atual incorreta.');
+        this.isLoading.set(false);
         return;
       }
 

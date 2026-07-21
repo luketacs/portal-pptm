@@ -69,6 +69,37 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
+async function fetchJsonSafe(response) {
+  const text = await response.text().catch(() => '');
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text.slice(0, 300) };
+  }
+}
+
+async function getCallerUserId({ supabaseUrl, serviceRoleKey, accessToken }) {
+  const resp = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    method: 'GET',
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!resp.ok) {
+    const body = await fetchJsonSafe(resp);
+    return { ok: false, error: body?.msg || body?.message || 'Token inválido' };
+  }
+
+  const user = await resp.json().catch(() => null);
+  const id = user?.id || user?.user?.id;
+  if (!id) return { ok: false, error: 'Token válido, mas usuário não identificado.' };
+  return { ok: true, id };
+}
+
 async function fetchWithRateLimitBackoff(url, options) {
   let lastResponse = null;
 
@@ -118,18 +149,40 @@ function extrairJsonObjects(text) {
   return results;
 }
 
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['https://portalpptm.com', 'https://www.portalpptm.com', 'https://portalpptm.vercel.app', 'http://localhost:4200', 'http://localhost:3000'];
+
 // Proxy serverless para contornar CORS da API externa
 export default async function handler(req, res) {
-  // Verificação de origem
   const origin = req.headers?.origin || '';
-  const referer = req.headers?.referer || '';
-  const allowedOrigins = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',')
-    : ['https://portalpptm.com', 'https://www.portalpptm.com', 'https://portalpptm.vercel.app', 'http://localhost:4200', 'http://localhost:3000'];
-  const hasValidOrigin = !origin || allowedOrigins.some(o => origin.startsWith(o));
-  const hasValidReferer = !referer || allowedOrigins.some(o => referer.startsWith(o));
-  if (!hasValidOrigin && !hasValidReferer) {
-    return res.status(403).json({ success: false, error: 'Origem não autorizada' });
+  const corsOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  // Verificação de autenticação — qualquer usuário logado pode consultar materiais
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[material-proxy] Missing env vars');
+    return res.status(500).json({ success: false, error: 'Configuração do servidor incompleta.' });
+  }
+
+  const authHeader = String(req.headers?.authorization || '');
+  const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : '';
+  if (!accessToken) {
+    return res.status(401).json({ success: false, error: 'Não autenticado.' });
+  }
+
+  const caller = await getCallerUserId({
+    supabaseUrl: SUPABASE_URL,
+    serviceRoleKey: SUPABASE_SERVICE_ROLE_KEY,
+    accessToken,
+  });
+  if (!caller.ok) {
+    return res.status(401).json({ success: false, error: 'Sessão inválida. Faça login novamente.' });
   }
 
   try {

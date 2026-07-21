@@ -37,11 +37,25 @@ export const AUDIT_EVENT_CATEGORIES: Record<string, string[]> = {
   'Materiais':      ['material_created', 'material_updated', 'material_status_changed', 'material_deleted'],
 };
 
+const MAX_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 1000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 @Injectable({ providedIn: 'root' })
 export class AuditLogService {
   constructor(private supabaseService: SupabaseService) {}
 
+  // Fire-and-forget do ponto de vista de quem chama, mas tenta algumas vezes
+  // antes de desistir — uma falha transitória de rede não deve, sozinha, deixar
+  // um evento de auditoria sem registro.
   log(event: AuditLogEvent): void {
+    this.attempt(event, 1);
+  }
+
+  private attempt(event: AuditLogEvent, attemptNumber: number): void {
     this.supabaseService.client
       .from('audit_logs')
       .insert({
@@ -54,7 +68,15 @@ export class AuditLogService {
         metadata: event.metadata ?? null,
       })
       .then(({ error }) => {
-        if (error) console.warn('[AuditLog] Falha ao registrar evento:', event.event_type, error.message);
+        if (!error) return;
+        if (attemptNumber < MAX_ATTEMPTS) {
+          sleep(RETRY_DELAY_MS * attemptNumber).then(() => this.attempt(event, attemptNumber + 1));
+          return;
+        }
+        console.error(
+          `[AuditLog] Falha ao registrar evento após ${MAX_ATTEMPTS} tentativas:`,
+          event.event_type, error.message
+        );
       });
   }
 }

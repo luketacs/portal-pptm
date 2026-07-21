@@ -3,7 +3,9 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist/browser",
   "functions": {
-    "api/apontamentos.js": { "maxDuration": 10 }
+    "api/apontamentos.js": { "maxDuration": 30 },
+    "api/export-materials.js": { "maxDuration": 30 },
+    "api/export-requests.js": { "maxDuration": 30 }
   },
   "rewrites": [
     {

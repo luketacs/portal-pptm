@@ -67,33 +67,9 @@
         </label>
       }
 
-      <!-- Atualizar — todos (incluindo público); cooldown global de 30min para não-admins -->
-      <button (click)="atualizar()"
-        [disabled]="isLoading() || isImporting() || cooldownRestante() > 0"
-        [title]="cooldownRestante() > 0 ? 'Próxima atualização disponível em ' + cooldownFormatado() : 'Atualizar dados'"
-        class="flex-shrink-0 flex items-center gap-1.5 bg-blue-600 text-white text-sm font-semibold py-1.5 px-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" [class.animate-spin]="isLoading() || isImporting()" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
-        @if (cooldownRestante() > 0) {
-          <span class="hidden sm:inline text-xs">{{ cooldownFormatado() }}</span>
-        } @else {
-          <span class="hidden sm:inline">{{ (isLoading() || isImporting()) ? 'Atualizando...' : 'Atualizar' }}</span>
-        }
-      </button>
     </div>
     }
   </div>
-
-  <!-- Aviso de cooldown — vale para todos, exceto Admin (oculto no modo TV) -->
-  @if (!tvMode() && cooldownRestante() > 0) {
-    <div class="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-200 px-4 py-2.5 text-xs text-slate-500">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-      Os dados foram sincronizados recentemente. Próxima atualização disponível em <strong class="text-slate-600">{{ cooldownFormatado() }}</strong>
-    </div>
-  }
 
   <!-- Mensagens de importação e banner de última atualização — ocultos no modo TV
        (tela fixa, sem interação; o horário fica no indicador junto às abas) -->
@@ -140,16 +116,14 @@
   <div class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
     @if (isAdmin()) {
       <span>
-        Para importar manualmente, acesse o
+        Para atualizar os dados, acesse o
         <a href="https://utepecem.com.br/sigma/export/?dados=apontamentos&empresa=PTPC" target="_blank"
           class="underline font-semibold hover:text-blue-900">SIGMA Export</a>,
-        baixe o arquivo e use o botão <strong>Importar arquivo</strong>.
-        O botão <strong>Atualizar dados</strong> busca automaticamente do SIGMA.
+        baixe o arquivo e use o botão <strong>Importar</strong>.
       </span>
     } @else {
       <span>
-        Os dados são atualizados automaticamente a partir do SIGMA.
-        Use o botão <strong>Atualizar dados</strong> para buscar as informações mais recentes.
+        Os dados são atualizados manualmente por um administrador.
       </span>
     }
     @if (ultimaImportacao()) {

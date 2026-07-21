@@ -88,22 +88,21 @@ async function getProfileRole({ supabaseUrl, serviceRoleKey, userId }) {
   return { ok: true, role };
 }
 
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['https://portalpptm.com', 'https://www.portalpptm.com', 'https://portalpptm.vercel.app', 'http://localhost:4200', 'http://localhost:3000'];
+
 export default async function handler(req, res) {
+  const origin = req.headers?.origin || '';
+  const corsOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
   // Apenas POST é permitido
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Método não permitido' });
-  }
-
-  // Verificação de origem
-  const origin = req.headers?.origin || '';
-  const referer = req.headers?.referer || '';
-  const allowedOrigins = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',')
-    : ['https://portalpptm.com', 'https://www.portalpptm.com', 'https://portalpptm.vercel.app', 'http://localhost:4200', 'http://localhost:3000'];
-  const hasValidOrigin = !origin || allowedOrigins.some(o => origin.startsWith(o));
-  const hasValidReferer = !referer || allowedOrigins.some(o => referer.startsWith(o));
-  if (!hasValidOrigin && !hasValidReferer) {
-    return res.status(403).json({ success: false, error: 'Origem não autorizada' });
   }
 
   // Rate limiting

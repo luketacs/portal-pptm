@@ -63,25 +63,36 @@ export default async function handler(req, res) {
   const { mode, userId, search, status, materialType, materialCode, dateFrom, dateTo } = req.body || {};
 
   // Construir query
-  let query = supabase
-    .from('purchase_requests')
-    .select('*, requester:profiles!purchase_requests_requester_id_fkey(id,name,email,role)')
-    .order('requestdate', { ascending: false })
-    .limit(5000);
+  function buildQuery() {
+    let q = supabase
+      .from('purchase_requests')
+      .select('*, requester:profiles!purchase_requests_requester_id_fkey(id,name,email,role)')
+      .order('requestdate', { ascending: false });
 
-  if (mode === 'my' && userId) query = query.eq('requester_id', userId);
-  if (mode === 'in-progress') query = query.in('status', IN_PROGRESS_STATUSES);
-  if (status && status !== 'all' && mode !== 'in-progress') query = query.eq('status', status);
-  if (materialType && materialType !== 'all') query = query.eq('material_type', materialType);
-  if (materialCode) query = query.ilike('material_code', `%${materialCode}%`);
-  if (search) {
-    query = query.or(`material_code.ilike.%${search}%,description.ilike.%${search}%,workorder.ilike.%${search}%`);
+    if (mode === 'my' && userId) q = q.eq('requester_id', userId);
+    if (mode === 'in-progress') q = q.in('status', IN_PROGRESS_STATUSES);
+    if (status && status !== 'all' && mode !== 'in-progress') q = q.eq('status', status);
+    if (materialType && materialType !== 'all') q = q.eq('material_type', materialType);
+    if (materialCode) q = q.ilike('material_code', `%${materialCode}%`);
+    if (search) {
+      q = q.or(`material_code.ilike.%${search}%,description.ilike.%${search}%,workorder.ilike.%${search}%`);
+    }
+    if (dateFrom) q = q.gte('requestdate', dateFrom);
+    if (dateTo) q = q.lte('requestdate', new Date(dateTo + 'T23:59:59').toISOString());
+    return q;
   }
-  if (dateFrom) query = query.gte('requestdate', dateFrom);
-  if (dateTo) query = query.lte('requestdate', new Date(dateTo + 'T23:59:59').toISOString());
 
-  const { data, error } = await query;
-  if (error) return res.status(500).json({ error: 'Erro ao buscar dados.' });
+  // Sem paginar, o PostgREST corta em 1000 linhas por padrão — busca página a página.
+  const PAGE_SIZE = 1000;
+  let data = [];
+  let from = 0;
+  while (true) {
+    const { data: page, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+    if (error) return res.status(500).json({ error: 'Erro ao buscar dados.' });
+    data = data.concat(page ?? []);
+    if (!page || page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
 
   const rows = (data || []).map(r => ({
     'ID da Solicitação': r.id,

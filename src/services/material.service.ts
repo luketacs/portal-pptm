@@ -1,11 +1,12 @@
 ﻿import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of, timeout } from 'rxjs';
-import { catchError, map, tap } from 'rxjs/operators';
+import { Observable, from, of, timeout } from 'rxjs';
+import { catchError, map, switchMap, tap } from 'rxjs/operators';
 import { CreateMaterialRequest, Material, MaterialApiResponse, MaterialData } from '../models/material.model';
 import { SupabaseService } from './supabase.service';
 import { SupabaseRestService } from './supabase-rest.service';
 import { AuditLogService } from './audit-log.service';
+import { AuthService } from './auth.service';
 
 @Injectable({ providedIn: 'root' })
 export class MaterialService {
@@ -17,7 +18,8 @@ export class MaterialService {
     private http: HttpClient,
     private supabaseService: SupabaseService,
     private supabaseRestService: SupabaseRestService,
-    private auditLogService: AuditLogService
+    private auditLogService: AuditLogService,
+    private authService: AuthService
   ) {}
 
   private async supabaseRestRequest(
@@ -35,6 +37,10 @@ export class MaterialService {
     return this.supabaseRestService.get<T>(path, this.SUPABASE_OPERATION_TIMEOUT_MS);
   }
 
+  private async supabaseRestGetAllPaged<T>(path: string): Promise<{ data: T[]; error: any }> {
+    return this.supabaseRestService.getAllPaged<T>(path, this.SUPABASE_OPERATION_TIMEOUT_MS);
+  }
+
   getMaterialByCode(code: string): Observable<MaterialApiResponse> {
     const normalizedCode = this.normalizeMaterialCodeForApi(code);
     if (!normalizedCode) {
@@ -43,7 +49,12 @@ export class MaterialService {
 
     const url = `${this.API_BASE_URL}?code=${encodeURIComponent(normalizedCode)}`;
 
-    return this.http.get<any>(url).pipe(
+    return from(this.authService.getValidAccessToken()).pipe(
+      switchMap(token =>
+        this.http.get<any>(url, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+      ),
       timeout(this.API_TIMEOUT_MS),
       tap(response => {
         console.log('[MaterialService] Raw response from API:', response);
@@ -172,7 +183,7 @@ export class MaterialService {
 
   async getAllMaterials(): Promise<{ data: Material[] | null; error: any }> {
     try {
-      const { data: materials, error: materialsError } = await this.supabaseRestGet<Material[]>(
+      const { data: materials, error: materialsError } = await this.supabaseRestGetAllPaged<Material>(
         'materials?select=*&order=created_at.desc'
       );
 

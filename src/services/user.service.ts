@@ -44,7 +44,7 @@ export class UserService {
     try {
       forcedTimeout = setTimeout(() => { this._isLoading = false; }, 15000);
 
-      const { data, error } = await this.supabaseRestService.get<UserProfile[]>(
+      const { data, error } = await this.supabaseRestService.getAllPaged<UserProfile>(
         'profiles?select=*&order=name.asc',
         this.OPERATION_TIMEOUT_MS
       );
@@ -72,12 +72,20 @@ export class UserService {
     }
 
     try {
+      const token = await this.authService.getValidAccessToken();
+      if (!token) {
+        return { success: false, error: 'Sessão expirada. Faça login novamente.' };
+      }
+
       await withRetry(
         async () => {
           const response = await Promise.race([
             fetch('/api/create-user', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
               body: JSON.stringify({
                 email: userData.email,
                 password: userData.password,
