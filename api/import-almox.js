@@ -15,6 +15,9 @@ const MOV_COLS = { codigo: 0, descricao: 1, unidade: 2, grupo: 4, custo_medio: 5
 const SA_COLS  = { sa_numero: 0, codigo: 2, qtd_solicitada: 5, ordem_produto: 7, qtd_atendida: 11, recebedor: 12 };
 // Relatorio Ary.xlsx
 const ARY_COLS = { sa_numero: 1, codigo: 3, status: 17 };
+// Saldo.xml — relatório de posição de estoque (sheet "Listagem do Browse")
+// Colunas: Produto | Armazem | Descricao | Saldo Atual | C Unitario | C Unit.FIFO1 | Grupo | Cod.Produto | Status Sld | DescrLocal
+const SALDO_COLS = { produto: 0, armazem: 1, descricao: 2, saldo_qtd: 3, custo_unitario: 4, grupo: 6 };
 // ──────────────────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
@@ -42,8 +45,8 @@ export default async function handler(req, res) {
 
   const { tipo, fileData, fileName } = req.body || {};
   if (!tipo || !fileData) return res.status(400).json({ error: 'Campos obrigatórios: tipo, fileData.' });
-  if (!['movimentacoes', 'solicitacoes', 'status_sas'].includes(tipo)) {
-    return res.status(400).json({ error: 'Tipo inválido. Use: movimentacoes | solicitacoes | status_sas' });
+  if (!['movimentacoes', 'solicitacoes', 'status_sas', 'saldo'].includes(tipo)) {
+    return res.status(400).json({ error: 'Tipo inválido. Use: movimentacoes | solicitacoes | status_sas | saldo' });
   }
 
   try {
@@ -161,6 +164,49 @@ export default async function handler(req, res) {
       });
 
       return res.status(200).json({ success: true, tipo: 'status_sas', encerradas: encerradas.length });
+
+    } else if (tipo === 'saldo') {
+      // Conferência de saldo real — relatório de posição de estoque do ERP
+      // (sheet "Listagem do Browse", mesmo formato de Solicitacoes.xlsx).
+      // Aceita .xlsx/.xls ou o XML nativo do ERP (a lib detecta o formato pelo conteúdo).
+      // Usado na tela "Aguardando Retirada" para conferir se o saldo calculado
+      // pelo sistema bate com o saldo físico real.
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+
+      const linhas = data
+        .slice(2) // título + cabeçalho
+        .filter(r => r[SALDO_COLS.produto]);
+
+      // Soma por produto — pode haver mais de uma linha por armazém
+      const agregados = new Map();
+      for (const r of linhas) {
+        const produto_codigo = String(r[SALDO_COLS.produto] || '').trim();
+        const qtd   = parseFloat(r[SALDO_COLS.saldo_qtd]) || 0;
+        const custo = parseFloat(r[SALDO_COLS.custo_unitario]) || 0;
+
+        const atual = agregados.get(produto_codigo) || {
+          produto_codigo,
+          produto_desc: String(r[SALDO_COLS.descricao] || '').trim() || null,
+          grupo:        String(r[SALDO_COLS.grupo] || '').trim().replace(/^-$/, '') || null,
+          saldo_qtd:    0,
+          valor_total:  0,
+        };
+        atual.saldo_qtd   += qtd;
+        atual.valor_total += qtd * custo;
+        agregados.set(produto_codigo, atual);
+      }
+
+      rows = Array.from(agregados.values()).map(a => ({
+        produto_codigo: a.produto_codigo,
+        produto_desc:   a.produto_desc,
+        grupo:          a.grupo,
+        saldo_qtd:      a.saldo_qtd,
+        custo_medio:    a.saldo_qtd !== 0 ? a.valor_total / a.saldo_qtd : 0,
+      }));
+
+      tabela = 'almox_saldo_real';
     }
 
     // Substituição completa: apaga e reinsere

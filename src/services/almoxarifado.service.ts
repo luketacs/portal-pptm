@@ -61,6 +61,14 @@ export interface UltimaImportacao {
   importado_por_nome?: string;
 }
 
+export interface SaldoReal {
+  produto_codigo: string;
+  produto_desc: string | null;
+  grupo: string | null;
+  custo_medio: number;
+  saldo_qtd: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AlmoxarifadoService {
   constructor(
@@ -85,6 +93,14 @@ export class AlmoxarifadoService {
       .order('sa_numero');
     if (error) throw new Error(error.message);
     return (data ?? []) as Solicitacao[];
+  }
+
+  async getSaldoReal(): Promise<SaldoReal[]> {
+    const { data, error } = await this.supabaseService.client
+      .from('almox_saldo_real')
+      .select('*');
+    if (error) throw new Error(error.message);
+    return (data ?? []) as SaldoReal[];
   }
 
   async getUltimaImportacao(tipo: string): Promise<UltimaImportacao | null> {
@@ -226,7 +242,7 @@ export class AlmoxarifadoService {
 
   // ── Upload ──────────────────────────────────────────────────────────────
 
-  async importarArquivo(tipo: 'movimentacoes' | 'solicitacoes' | 'status_sas', file: File): Promise<{ inseridos?: number; encerradas?: number }> {
+  async importarArquivo(tipo: 'movimentacoes' | 'solicitacoes' | 'status_sas' | 'saldo', file: File): Promise<{ inseridos?: number; encerradas?: number }> {
     const token = await this.authService.getValidAccessToken();
     if (!token) throw new Error('Sessão expirada.');
 

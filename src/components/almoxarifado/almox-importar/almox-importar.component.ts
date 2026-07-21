@@ -5,6 +5,8 @@ import { NotificationService } from '../../../services/toast.service';
 import { AuditLogService } from '../../../services/audit-log.service';
 import { AuthService } from '../../../services/auth.service';
 
+type Tipo = 'mov' | 'sas' | 'ary' | 'saldo';
+
 interface FileState {
   file: File | null;
   name: string;
@@ -18,6 +20,13 @@ function initState(): FileState {
   return { file: null, name: '', loading: false, done: false, error: '', registros: 0 };
 }
 
+const TIPO_API: Record<Tipo, 'movimentacoes' | 'solicitacoes' | 'status_sas' | 'saldo'> = {
+  mov: 'movimentacoes',
+  sas: 'solicitacoes',
+  ary: 'status_sas',
+  saldo: 'saldo',
+};
+
 @Component({
   selector: 'app-almox-importar',
   standalone: true,
@@ -26,9 +35,10 @@ function initState(): FileState {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AlmoxImportarComponent implements OnInit {
-  mov  = signal<FileState>(initState());
-  sas  = signal<FileState>(initState());
-  ary  = signal<FileState>(initState());
+  mov   = signal<FileState>(initState());
+  sas   = signal<FileState>(initState());
+  ary   = signal<FileState>(initState());
+  saldo = signal<FileState>(initState());
   ultimas = signal<UltimaImportacao[]>([]);
 
   constructor(
@@ -43,29 +53,28 @@ export class AlmoxImportarComponent implements OnInit {
     this.ultimas.set(data);
   }
 
-  onFileSelected(tipo: 'mov' | 'sas' | 'ary', event: Event): void {
+  private stateSignal(tipo: Tipo) {
+    return tipo === 'mov' ? this.mov : tipo === 'sas' ? this.sas : tipo === 'ary' ? this.ary : this.saldo;
+  }
+
+  onFileSelected(tipo: Tipo, event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0] ?? null;
     if (!file) return;
-    const update = { file, name: file.name, loading: false, done: false, error: '', registros: 0 };
-    if (tipo === 'mov') this.mov.set(update);
-    else if (tipo === 'sas') this.sas.set(update);
-    else this.ary.set(update);
+    this.stateSignal(tipo).set({ file, name: file.name, loading: false, done: false, error: '', registros: 0 });
     input.value = ''; // limpa o input para permitir re-selecionar o mesmo arquivo
   }
 
-  cancelar(tipo: 'mov' | 'sas' | 'ary'): void {
-    if (tipo === 'mov') this.mov.set(initState());
-    else if (tipo === 'sas') this.sas.set(initState());
-    else this.ary.set(initState());
+  cancelar(tipo: Tipo): void {
+    this.stateSignal(tipo).set(initState());
   }
 
-  async importar(tipo: 'mov' | 'sas' | 'ary'): Promise<void> {
-    const stateSignal = tipo === 'mov' ? this.mov : tipo === 'sas' ? this.sas : this.ary;
+  async importar(tipo: Tipo): Promise<void> {
+    const stateSignal = this.stateSignal(tipo);
     const state = stateSignal();
     if (!state.file || state.loading) return;
 
-    const tipoApi = tipo === 'mov' ? 'movimentacoes' : tipo === 'sas' ? 'solicitacoes' : 'status_sas';
+    const tipoApi = TIPO_API[tipo];
     stateSignal.update(s => ({ ...s, loading: true, error: '', done: false }));
 
     try {
@@ -99,6 +108,6 @@ export class AlmoxImportarComponent implements OnInit {
   }
 
   tipoLabel(tipo: string): string {
-    return { movimentacoes: 'Movimentações', solicitacoes: 'Solicitações (SAs)', status_sas: 'Status das SAs' }[tipo] ?? tipo;
+    return { movimentacoes: 'Movimentações', solicitacoes: 'Solicitações (SAs)', status_sas: 'Status das SAs', saldo: 'Conferência de Saldo' }[tipo] ?? tipo;
   }
 }
