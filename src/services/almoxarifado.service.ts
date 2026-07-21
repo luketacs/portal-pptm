@@ -76,31 +76,54 @@ export class AlmoxarifadoService {
     private authService: AuthService
   ) {}
 
+  // O Supabase/PostgREST limita cada resposta a no máx. 1000 linhas por padrão —
+  // sem paginar, tabelas maiores que isso vêm cortadas silenciosamente (sem erro).
+  private async fetchAllPages<T>(
+    fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  ): Promise<T[]> {
+    const PAGE_SIZE = 1000;
+    let all: T[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await fetchPage(from, from + PAGE_SIZE - 1);
+      if (error) throw new Error(error.message);
+      const page = data ?? [];
+      all = all.concat(page);
+      if (page.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+    return all;
+  }
+
   async getMovimentacoes(): Promise<Movimentacao[]> {
-    const { data, error } = await this.supabaseService.client
-      .from('almox_movimentacoes')
-      .select('*')
-      .order('data_operacao', { ascending: false });
-    if (error) throw new Error(error.message);
-    return (data ?? []) as Movimentacao[];
+    return this.fetchAllPages<Movimentacao>((from, to) =>
+      this.supabaseService.client
+        .from('almox_movimentacoes')
+        .select('*')
+        .order('data_operacao', { ascending: false })
+        .range(from, to)
+    );
   }
 
   async getSolicitacoes(): Promise<Solicitacao[]> {
-    const { data, error } = await this.supabaseService.client
-      .from('almox_solicitacoes')
-      .select('*')
-      .eq('status', 'aberta')   // apenas abertas — exclui 'encerrada' e 'atendida'
-      .order('sa_numero');
-    if (error) throw new Error(error.message);
-    return (data ?? []) as Solicitacao[];
+    return this.fetchAllPages<Solicitacao>((from, to) =>
+      this.supabaseService.client
+        .from('almox_solicitacoes')
+        .select('*')
+        .eq('status', 'aberta')   // apenas abertas — exclui 'encerrada' e 'atendida'
+        .order('sa_numero')
+        .range(from, to)
+    );
   }
 
   async getSaldoReal(): Promise<SaldoReal[]> {
-    const { data, error } = await this.supabaseService.client
-      .from('almox_saldo_real')
-      .select('*');
-    if (error) throw new Error(error.message);
-    return (data ?? []) as SaldoReal[];
+    return this.fetchAllPages<SaldoReal>((from, to) =>
+      this.supabaseService.client
+        .from('almox_saldo_real')
+        .select('*')
+        .order('produto_codigo')
+        .range(from, to)
+    );
   }
 
   async getUltimaImportacao(tipo: string): Promise<UltimaImportacao | null> {
