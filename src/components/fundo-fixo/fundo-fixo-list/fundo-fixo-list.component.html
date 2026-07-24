@@ -244,11 +244,11 @@
                   }
                   @if (s.status === 'comprado' && isAdmin()) {
                     @if (mode === 'gestao') {
-                      <button (click)="abrirEditarFormaPagamento(s)" class="block text-xs font-normal text-gray-400 hover:text-blue-600 hover:underline">
+                      <button (click)="abrirEditarFormaPagamento(s)" class="block w-full text-center text-xs font-normal text-gray-400 hover:text-blue-600 hover:underline">
                         {{ formaPagamentoLabel[s.formaPagamento] }}
                       </button>
                     } @else {
-                      <div class="text-xs text-gray-400 font-normal">{{ formaPagamentoLabel[s.formaPagamento] }}</div>
+                      <div class="text-center text-xs text-gray-400 font-normal">{{ formaPagamentoLabel[s.formaPagamento] }}</div>
                     }
                   }
                 </td>
