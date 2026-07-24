@@ -451,6 +451,32 @@ export class FundoFixoService {
     await this.load();
   }
 
+  // Admin pode corrigir a forma de pagamento mesmo depois da nota fiscal já anexada
+  // (ex.: registrou como cartão por engano, mas foi pago em dinheiro do caixa).
+  async atualizarFormaPagamento(id: string, formaPagamento: FundoFixoFormaPagamento): Promise<void> {
+    const admin = this.authService.currentUser();
+    if (!admin) throw new Error('Sessão expirada.');
+
+    const { error } = await this.supabaseService.client
+      .from('fundo_fixo_solicitacoes')
+      .update({ forma_pagamento: formaPagamento })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+
+    const item = this.getById(id);
+    this.auditLogService.log({
+      user_id: admin.id,
+      user_name: admin.name,
+      event_type: 'fundo_fixo_comprado',
+      resource_type: 'fundo_fixo',
+      resource_id: id,
+      description: `${admin.name} alterou a forma de pagamento de ${item?.material ?? ''} para ${formaPagamento}`,
+      metadata: { forma_pagamento: formaPagamento },
+    });
+
+    await this.load();
+  }
+
   private async uploadAnexo(file: File, subpasta: 'orcamentos' | 'notas-fiscais'): Promise<string | null> {
     try {
       const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf';

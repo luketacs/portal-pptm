@@ -11,9 +11,9 @@ import { FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSolicitacao, FundoFix
 type StatusFiltro = 'todos' | FundoFixoStatus;
 
 const FORMA_PAGAMENTO_LABEL: Record<FundoFixoFormaPagamento, string> = {
-  cartao: '💳 Cartão',
-  dinheiro_caixa: '💵 Dinheiro (caixa)',
-  reembolso: '🔄 Reembolso',
+  cartao: 'Cartão',
+  dinheiro_caixa: 'Dinheiro (caixa)',
+  reembolso: 'Reembolso',
 };
 
 const STATUS_LABEL: Record<FundoFixoStatus, string> = {
@@ -80,6 +80,8 @@ export class FundoFixoListComponent implements OnInit {
   comprarValorFinal = signal<number | null>(null);
   comprarFornecedor = signal('');
   comprarFormaPagamento = signal<FundoFixoFormaPagamento>('cartao');
+  formaPagamentoAlvo = signal<FundoFixoSolicitacao | null>(null);
+  formaPagamentoEscolhida = signal<FundoFixoFormaPagamento>('cartao');
   comprarNotaFiscal = signal<File | null>(null);
   isProcessando = signal(false);
 
@@ -414,6 +416,32 @@ export class FundoFixoListComponent implements OnInit {
       this.fecharAtribuirComprador();
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao direcionar comprador.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  // ── Corrigir forma de pagamento (mesmo após a nota fiscal anexada) ────
+  abrirEditarFormaPagamento(s: FundoFixoSolicitacao): void {
+    this.formaPagamentoAlvo.set(s);
+    this.formaPagamentoEscolhida.set(s.formaPagamento);
+  }
+
+  fecharEditarFormaPagamento(): void {
+    this.formaPagamentoAlvo.set(null);
+  }
+
+  async confirmarFormaPagamento(): Promise<void> {
+    const alvo = this.formaPagamentoAlvo();
+    if (!alvo || this.isProcessando()) return;
+
+    this.isProcessando.set(true);
+    try {
+      await this.fundoFixoService.atualizarFormaPagamento(alvo.id, this.formaPagamentoEscolhida());
+      this.notificationService.showSuccess('Forma de pagamento atualizada.');
+      this.fecharEditarFormaPagamento();
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao atualizar forma de pagamento.');
     } finally {
       this.isProcessando.set(false);
     }
