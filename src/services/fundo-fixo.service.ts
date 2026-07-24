@@ -29,6 +29,8 @@ interface FundoFixoRow {
   aprovador_id: string | null;
   aprovador_nome: string | null;
   motivo_recusa: string | null;
+  comprador_id: string | null;
+  comprador_nome: string | null;
   mes_referencia: string;
   data_solicitacao: string;
   data_aprovacao: string | null;
@@ -72,6 +74,8 @@ function mapRow(r: FundoFixoRow): FundoFixoSolicitacao {
     aprovadorId: r.aprovador_id,
     aprovadorNome: r.aprovador_nome,
     motivoRecusa: r.motivo_recusa,
+    compradorId: r.comprador_id,
+    compradorNome: r.comprador_nome,
     mesReferencia: r.mes_referencia,
     dataSolicitacao: new Date(r.data_solicitacao),
     dataAprovacao: r.data_aprovacao ? new Date(r.data_aprovacao) : null,
@@ -285,9 +289,14 @@ export class FundoFixoService {
       if (!orcamentoUrl) throw new Error('Falha ao enviar o orçamento. Tente novamente.');
     }
 
+    // Só Admin pode registrar em nome de outra pessoa ou direcionar o comprador.
+    const podeDirecionar = user.role === 'Admin';
+    const solicitanteId = podeDirecionar && req.solicitanteId ? req.solicitanteId : user.id;
+    const solicitanteNome = podeDirecionar && req.solicitanteNome ? req.solicitanteNome : user.name;
+
     const payload = {
-      solicitante_id: user.id,
-      solicitante_nome: user.name,
+      solicitante_id: solicitanteId,
+      solicitante_nome: solicitanteNome,
       setor: req.setor,
       fornecedor: req.fornecedor?.trim() || null,
       material: req.material.trim(),
@@ -296,19 +305,45 @@ export class FundoFixoService {
       orcamento_url: orcamentoUrl,
       observacoes: req.observacoes?.trim() || null,
       status: 'pendente',
+      comprador_id: podeDirecionar ? (req.compradorId ?? null) : null,
+      comprador_nome: podeDirecionar ? (req.compradorNome ?? null) : null,
       mes_referencia: mesAtual(),
     };
 
     const { error } = await this.supabaseService.client.from('fundo_fixo_solicitacoes').insert(payload);
     if (error) throw new Error(error.message);
 
+    const descricaoEmNomeDe = solicitanteId !== user.id ? ` em nome de ${solicitanteNome}` : '';
     this.auditLogService.log({
       user_id: user.id,
       user_name: user.name,
       event_type: 'fundo_fixo_solicitado',
       resource_type: 'fundo_fixo',
-      description: `${user.name} solicitou compra via Fundo Fixo: ${req.material} (R$ ${req.valorEstimado.toFixed(2)})`,
-      metadata: { setor: req.setor, valor_estimado: req.valorEstimado },
+      description: `${user.name} solicitou compra via Fundo Fixo${descricaoEmNomeDe}: ${req.material} (R$ ${req.valorEstimado.toFixed(2)})`,
+      metadata: { setor: req.setor, valor_estimado: req.valorEstimado, comprador_id: payload.comprador_id },
+    });
+
+    await this.load();
+  }
+
+  async atribuirComprador(id: string, compradorId: string, compradorNome: string): Promise<void> {
+    const admin = this.authService.currentUser();
+    if (!admin) throw new Error('Sessão expirada.');
+
+    const { error } = await this.supabaseService.client
+      .from('fundo_fixo_solicitacoes')
+      .update({ comprador_id: compradorId, comprador_nome: compradorNome })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+
+    const item = this.getById(id);
+    this.auditLogService.log({
+      user_id: admin.id,
+      user_name: admin.name,
+      event_type: 'fundo_fixo_comprador_atribuido',
+      resource_type: 'fundo_fixo',
+      resource_id: id,
+      description: `${admin.name} direcionou a compra de ${item?.material ?? ''} para ${compradorNome}`,
     });
 
     await this.load();

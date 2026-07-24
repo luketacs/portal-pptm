@@ -10,6 +10,33 @@
   <div class="app-card p-6">
     <form (ngSubmit)="onSubmit()" class="space-y-5">
 
+      @if (isAdmin()) {
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-lg bg-slate-50 border border-slate-200 p-3">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Solicitando em nome de</label>
+            <select [ngModel]="solicitanteId()" (ngModelChange)="solicitanteId.set($event)" name="solicitanteId"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <option value="">Eu mesmo</option>
+              @for (u of usuarios(); track u.id) {
+                <option [value]="u.id">{{ u.name }}</option>
+              }
+            </select>
+            <p class="text-xs text-gray-400 mt-1">Use quando alguém pediu por fora (WhatsApp, pessoalmente) e você está registrando por ela.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Comprador responsável</label>
+            <select [ngModel]="compradorId()" (ngModelChange)="compradorId.set($event)" name="compradorId"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <option value="">A definir</option>
+              @for (a of admins(); track a.id) {
+                <option [value]="a.id">{{ a.name }}</option>
+              }
+            </select>
+            <p class="text-xs text-gray-400 mt-1">Quem vai fazer a compra de fato.</p>
+          </div>
+        </div>
+      }
+
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Setor <span class="text-red-500">*</span></label>

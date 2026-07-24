@@ -5,6 +5,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FundoFixoService, FUNDO_FIXO_LIMITE_MENSAL, FUNDO_FIXO_LIMITE_POR_COMPRA, FUNDO_FIXO_SETORES } from '../../../services/fundo-fixo.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/toast.service';
+import { UserService } from '../../../services/user.service';
 import { FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSolicitacao, FundoFixoStatus } from '../../../models/fundo-fixo.model';
 
 type StatusFiltro = 'todos' | FundoFixoStatus;
@@ -91,6 +92,11 @@ export class FundoFixoListComponent implements OnInit {
   taxaAlvo = signal<FundoFixoSaque | null>(null);
   taxaValor = signal<number | null>(null);
 
+  // Modal: atribuir/reatribuir comprador responsável
+  compradorAlvo = signal<FundoFixoSolicitacao | null>(null);
+  compradorEscolhidoId = signal<string>('');
+  admins = computed(() => this.userService.users().filter(u => u.role === 'Admin'));
+
   isLoading = this.fundoFixoService.isLoading;
   currentUser = this.authService.currentUser;
   isAdmin = computed(() => this.authService.currentUser()?.role === 'Admin');
@@ -139,6 +145,7 @@ export class FundoFixoListComponent implements OnInit {
     private fundoFixoService: FundoFixoService,
     private authService: AuthService,
     private notificationService: NotificationService,
+    private userService: UserService,
   ) {
     if (this.route.snapshot.data['mode'] === 'gestao') {
       this.mode = 'gestao';
@@ -149,6 +156,9 @@ export class FundoFixoListComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     try {
       await this.fundoFixoService.load();
+      if (this.mode === 'gestao') {
+        this.userService.loadUsers().catch(() => {});
+      }
     } catch {
       this.errorMessage.set('Erro ao carregar solicitações do Fundo Fixo.');
     }
@@ -353,6 +363,33 @@ export class FundoFixoListComponent implements OnInit {
       this.notificationService.showSuccess('Saque excluído.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao excluir saque.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  // ── Atribuir comprador ────────────────────────────────────────────────
+  abrirAtribuirComprador(s: FundoFixoSolicitacao): void {
+    this.compradorAlvo.set(s);
+    this.compradorEscolhidoId.set(s.compradorId ?? '');
+  }
+
+  fecharAtribuirComprador(): void {
+    this.compradorAlvo.set(null);
+  }
+
+  async confirmarComprador(): Promise<void> {
+    const alvo = this.compradorAlvo();
+    const admin = this.admins().find(a => a.id === this.compradorEscolhidoId());
+    if (!alvo || !admin || this.isProcessando()) return;
+
+    this.isProcessando.set(true);
+    try {
+      await this.fundoFixoService.atribuirComprador(alvo.id, admin.id, admin.name);
+      this.notificationService.showSuccess(`Compra direcionada para ${admin.name}.`);
+      this.fecharAtribuirComprador();
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao direcionar comprador.');
     } finally {
       this.isProcessando.set(false);
     }

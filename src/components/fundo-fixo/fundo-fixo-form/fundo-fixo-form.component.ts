@@ -1,9 +1,11 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { FundoFixoService, FUNDO_FIXO_LIMITE_POR_COMPRA, FUNDO_FIXO_SETORES } from '../../../services/fundo-fixo.service';
 import { NotificationService } from '../../../services/toast.service';
+import { AuthService } from '../../../services/auth.service';
+import { UserService } from '../../../services/user.service';
 import { FundoFixoSetor } from '../../../models/fundo-fixo.model';
 
 @Component({
@@ -13,7 +15,7 @@ import { FundoFixoSetor } from '../../../models/fundo-fixo.model';
   templateUrl: './fundo-fixo-form.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class FundoFixoFormComponent {
+export class FundoFixoFormComponent implements OnInit {
   readonly setores = FUNDO_FIXO_SETORES;
   readonly limitePorCompra = FUNDO_FIXO_LIMITE_POR_COMPRA;
 
@@ -25,14 +27,30 @@ export class FundoFixoFormComponent {
   observacoes = signal('');
   orcamento = signal<File | null>(null);
 
+  // Só Admin vê/usa: registrar em nome de outra pessoa e direcionar o comprador.
+  solicitanteId = signal<string>('');
+  compradorId = signal<string>('');
+
   isSubmitting = signal(false);
   errorMessage = signal('');
+
+  isAdmin = computed(() => this.authService.currentUser()?.role === 'Admin');
+  usuarios = this.userService.users;
+  admins = computed(() => this.usuarios().filter(u => u.role === 'Admin'));
 
   constructor(
     private fundoFixoService: FundoFixoService,
     private notificationService: NotificationService,
+    private authService: AuthService,
+    private userService: UserService,
     private router: Router,
   ) {}
+
+  ngOnInit(): void {
+    if (this.isAdmin()) {
+      this.userService.loadUsers().catch(() => {});
+    }
+  }
 
   onFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -60,6 +78,9 @@ export class FundoFixoFormComponent {
     this.errorMessage.set('');
 
     try {
+      const solicitante = this.usuarios().find(u => u.id === this.solicitanteId());
+      const comprador = this.usuarios().find(u => u.id === this.compradorId());
+
       await this.fundoFixoService.criarSolicitacao(
         {
           setor: this.setor(),
@@ -68,6 +89,10 @@ export class FundoFixoFormComponent {
           linkProduto: this.linkProduto() || undefined,
           valorEstimado: this.valorEstimado() ?? 0,
           observacoes: this.observacoes() || undefined,
+          solicitanteId: solicitante?.id,
+          solicitanteNome: solicitante?.name,
+          compradorId: comprador?.id,
+          compradorNome: comprador?.name,
         },
         this.orcamento(),
       );

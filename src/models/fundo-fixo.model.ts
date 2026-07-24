@@ -20,6 +20,8 @@ export interface FundoFixoSolicitacao {
   aprovadorId: string | null;
   aprovadorNome: string | null;
   motivoRecusa: string | null;
+  compradorId: string | null;   // quem ficou responsável por fazer a compra
+  compradorNome: string | null;
   mesReferencia: string; // 'YYYY-MM'
   dataSolicitacao: Date;
   dataAprovacao: Date | null;
@@ -33,6 +35,11 @@ export interface CreateFundoFixoRequest {
   linkProduto?: string;
   valorEstimado: number;
   observacoes?: string;
+  // Só usado por Admin registrando em nome de outra pessoa / direcionando a compra.
+  solicitanteId?: string;
+  solicitanteNome?: string;
+  compradorId?: string;
+  compradorNome?: string;
 }
 
 // Saque em dinheiro do cartão — vira saldo em caixa (usado depois em compras

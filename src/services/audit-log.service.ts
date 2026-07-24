@@ -35,6 +35,7 @@ export const AUDIT_EVENT_LABELS: Record<string, string> = {
   fundo_fixo_excluido:      'Fundo Fixo — solicitação excluída',
   fundo_fixo_saque_registrado: 'Fundo Fixo — saque registrado',
   fundo_fixo_saque_excluido: 'Fundo Fixo — saque excluído',
+  fundo_fixo_comprador_atribuido: 'Fundo Fixo — comprador direcionado',
 };
 
 export const AUDIT_EVENT_CATEGORIES: Record<string, string[]> = {
@@ -42,7 +43,7 @@ export const AUDIT_EVENT_CATEGORIES: Record<string, string[]> = {
   'Usuários':       ['user_created', 'user_updated', 'user_deleted'],
   'Solicitações':   ['request_created', 'request_status_changed', 'request_updated', 'request_deleted'],
   'Materiais':      ['material_created', 'material_updated', 'material_status_changed', 'material_deleted'],
-  'Fundo Fixo':     ['fundo_fixo_solicitado', 'fundo_fixo_aprovado', 'fundo_fixo_recusado', 'fundo_fixo_comprado', 'fundo_fixo_excluido', 'fundo_fixo_saque_registrado', 'fundo_fixo_saque_excluido'],
+  'Fundo Fixo':     ['fundo_fixo_solicitado', 'fundo_fixo_aprovado', 'fundo_fixo_recusado', 'fundo_fixo_comprado', 'fundo_fixo_excluido', 'fundo_fixo_saque_registrado', 'fundo_fixo_saque_excluido', 'fundo_fixo_comprador_atribuido'],
 };
 
 const MAX_ATTEMPTS = 3;
