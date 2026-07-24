@@ -166,8 +166,17 @@ export class FundoFixoService {
     if (!admin) throw new Error('Sessão expirada.');
 
     const item = this.getById(id);
-    const { error } = await this.supabaseService.client.from('fundo_fixo_solicitacoes').delete().eq('id', id);
+    const { data, error } = await this.supabaseService.client
+      .from('fundo_fixo_solicitacoes')
+      .delete()
+      .eq('id', id)
+      .select('id');
     if (error) throw new Error(error.message);
+    // Sem a política de DELETE no banco, o RLS bloqueia a exclusão sem retornar erro —
+    // 0 linhas afetadas é o único sinal de que nada foi realmente excluído.
+    if (!data || data.length === 0) {
+      throw new Error('Não foi possível excluir (permissão do banco). Verifique se a migration 012_fundo_fixo_caixa.sql foi executada no Supabase.');
+    }
 
     this.auditLogService.log({
       user_id: admin.id,
