@@ -192,11 +192,11 @@
           <thead class="bg-blue-900 text-white">
             <tr>
               <th class="px-3 py-3 text-center font-semibold">Data</th>
-              <th class="px-3 py-3 text-left font-semibold">Solicitante</th>
+              <th class="px-3 py-3 text-center font-semibold">Solicitante</th>
               <th class="px-3 py-3 text-center font-semibold">Setor</th>
-              <th class="px-3 py-3 text-left font-semibold">Material</th>
-              <th class="px-3 py-3 text-left font-semibold">Fornecedor</th>
-              <th class="px-3 py-3 text-right font-semibold">Valor</th>
+              <th class="px-3 py-3 text-center font-semibold">Material</th>
+              <th class="px-3 py-3 text-center font-semibold">Fornecedor</th>
+              <th class="px-3 py-3 text-center font-semibold">Valor</th>
               <th class="px-3 py-3 text-center font-semibold">Status</th>
               <th class="px-3 py-3 text-center font-semibold">Anexos</th>
               <th class="px-3 py-3 text-center font-semibold">Ações</th>
@@ -206,20 +206,20 @@
             @for (s of listaFiltrada(); track s.id) {
               <tr class="hover:bg-slate-50">
                 <td class="px-3 py-2 text-center text-gray-500 whitespace-nowrap">{{ formatDate(s.dataSolicitacao) }}</td>
-                <td class="px-3 py-2 text-gray-800 font-medium">
+                <td class="px-3 py-2 text-center text-gray-800 font-medium">
                   {{ s.solicitanteNome }}
                   @if (mode === 'gestao' && isAdmin()) {
                     @if (s.compradorNome) {
-                      <button (click)="abrirAtribuirComprador(s)" class="block text-xs font-normal text-blue-600 hover:text-blue-800 hover:underline">
+                      <button (click)="abrirAtribuirComprador(s)" class="block w-full text-center text-xs font-normal text-blue-600 hover:text-blue-800 hover:underline">
                         Comprador: {{ s.compradorNome }}
                       </button>
                     } @else {
-                      <button (click)="abrirAtribuirComprador(s)" class="block text-xs font-normal text-gray-400 hover:text-blue-600 hover:underline">
+                      <button (click)="abrirAtribuirComprador(s)" class="block w-full text-center text-xs font-normal text-gray-400 hover:text-blue-600 hover:underline">
                         Direcionar comprador
                       </button>
                     }
                   } @else if (s.compradorNome) {
-                    <div class="text-xs font-normal text-gray-400">Comprador: {{ s.compradorNome }}</div>
+                    <div class="text-center text-xs font-normal text-gray-400">Comprador: {{ s.compradorNome }}</div>
                   }
                 </td>
                 <td class="px-3 py-2 text-center text-gray-600">
@@ -228,16 +228,16 @@
                     <div class="text-xs text-gray-400">{{ s.gestorAprovador }}</div>
                   }
                 </td>
-                <td class="px-3 py-2 text-gray-700 max-w-xs">
+                <td class="px-3 py-2 text-center text-gray-700 max-w-xs">
                   <span class="truncate block" [title]="s.material">{{ s.material }}</span>
                   @if (s.linkProduto) {
-                    <a [href]="s.linkProduto" target="_blank" rel="noopener" class="text-xs text-blue-600 hover:text-blue-800 inline-flex items-center gap-0.5">
+                    <a [href]="s.linkProduto" target="_blank" rel="noopener" class="text-xs text-blue-600 hover:text-blue-800 inline-flex items-center justify-center gap-0.5">
                       Ver produto
                     </a>
                   }
                 </td>
-                <td class="px-3 py-2 text-gray-600">{{ s.fornecedor || '—' }}</td>
-                <td class="px-3 py-2 text-right font-semibold text-gray-800">
+                <td class="px-3 py-2 text-center text-gray-600">{{ s.fornecedor || '—' }}</td>
+                <td class="px-3 py-2 text-center font-semibold text-gray-800">
                   {{ (s.valorFinal ?? s.valorEstimado) | currency:'BRL' }}
                   @if (s.status === 'comprado' && s.valorFinal !== s.valorEstimado) {
                     <div class="text-xs text-gray-400 font-normal">orç: {{ s.valorEstimado | currency:'BRL' }}</div>
