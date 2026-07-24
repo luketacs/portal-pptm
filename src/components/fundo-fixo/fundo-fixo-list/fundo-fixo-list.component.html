@@ -89,20 +89,42 @@
               <thead>
                 <tr class="text-left text-xs text-gray-500 uppercase">
                   <th class="py-1.5 pr-3">Data</th>
+                  <th class="py-1.5 pr-3">Tipo</th>
                   <th class="py-1.5 pr-3 text-right">Valor</th>
                   <th class="py-1.5 pr-3 text-right">Taxa</th>
                   <th class="py-1.5 pr-3">Registrado por</th>
                   <th class="py-1.5 pr-3">Observações</th>
+                  <th class="py-1.5 pr-3"></th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
                 @for (saque of saquesDoMes(); track saque.id) {
                   <tr>
                     <td class="py-1.5 pr-3 whitespace-nowrap text-gray-600">{{ formatDate(saque.dataSaque) }}</td>
+                    <td class="py-1.5 pr-3 whitespace-nowrap text-gray-500">
+                      {{ saque.tipo === 'ajuste_inicial' ? '🏁 Saldo inicial' : '💵 Saque' }}
+                    </td>
                     <td class="py-1.5 pr-3 text-right font-medium text-gray-800">{{ saque.valor | currency:'BRL' }}</td>
-                    <td class="py-1.5 pr-3 text-right text-gray-500">{{ saque.taxa | currency:'BRL' }}</td>
+                    <td class="py-1.5 pr-3 text-right">
+                      @if (saque.tipo === 'ajuste_inicial') {
+                        <span class="text-gray-300">—</span>
+                      } @else if (saque.taxa !== null) {
+                        <button (click)="abrirEditarTaxa(saque)" class="text-gray-500 hover:text-blue-600 hover:underline">
+                          {{ saque.taxa | currency:'BRL' }}
+                        </button>
+                      } @else {
+                        <button (click)="abrirEditarTaxa(saque)"
+                          class="text-xs font-medium text-amber-600 hover:text-amber-800 hover:underline">
+                          Informar taxa
+                        </button>
+                      }
+                    </td>
                     <td class="py-1.5 pr-3 text-gray-600">{{ saque.registradoPorNome }}</td>
                     <td class="py-1.5 pr-3 text-gray-400">{{ saque.observacoes || '—' }}</td>
+                    <td class="py-1.5 pr-3 text-right">
+                      <button (click)="excluirSaque(saque)" [disabled]="isProcessando()" title="Excluir saque"
+                        class="text-gray-400 hover:text-red-600 transition disabled:opacity-50">🗑️</button>
+                    </td>
                   </tr>
                 }
               </tbody>
@@ -345,18 +367,26 @@
       <h3 class="text-lg font-bold text-gray-800 mb-1">Registrar saque</h3>
       <p class="text-sm text-gray-500 mb-4">Dinheiro sacado do cartão do Fundo Fixo — vai para o saldo em caixa.</p>
 
-      <label class="block text-sm font-medium text-slate-700 mb-1">Data do saque</label>
+      <label class="flex items-center gap-2 mb-4 text-sm text-slate-700 cursor-pointer">
+        <input type="checkbox" [ngModel]="saqueEhSaldoInicial()" (ngModelChange)="saqueEhSaldoInicial.set($event)" class="rounded" />
+        Este é o saldo que eu já tinha em caixa antes de começar a usar o portal (não é um saque novo)
+      </label>
+
+      <label class="block text-sm font-medium text-slate-700 mb-1">Data {{ saqueEhSaldoInicial() ? '' : 'do saque' }}</label>
       <input type="date" [ngModel]="saqueData()" (ngModelChange)="saqueData.set($event)"
         class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
 
-      <label class="block text-sm font-medium text-slate-700 mb-1">Valor sacado (R$) <span class="text-red-500">*</span></label>
+      <label class="block text-sm font-medium text-slate-700 mb-1">{{ saqueEhSaldoInicial() ? 'Valor em caixa (R$)' : 'Valor sacado (R$)' }} <span class="text-red-500">*</span></label>
       <input type="number" step="0.01" min="0" [ngModel]="saqueValor()" (ngModelChange)="saqueValor.set($event)"
         class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
 
-      <label class="block text-sm font-medium text-slate-700 mb-1">Taxa cobrada no saque (R$)</label>
-      <input type="number" step="0.01" min="0" [ngModel]="saqueTaxa()" (ngModelChange)="saqueTaxa.set($event)"
-        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
-      <p class="text-xs text-gray-400 -mt-3 mb-4">A taxa entra no total do mês, junto com o valor sacado, para bater com a fatura.</p>
+      @if (!saqueEhSaldoInicial()) {
+        <label class="block text-sm font-medium text-slate-700 mb-1">Taxa cobrada no saque (R$)</label>
+        <input type="number" step="0.01" min="0" [ngModel]="saqueTaxa()" (ngModelChange)="saqueTaxa.set($event)"
+          placeholder="Deixe em branco se ainda não souber"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+        <p class="text-xs text-gray-400 -mt-3 mb-4">Só se sabe no fechamento da fatura — pode deixar em branco e informar depois na lista de saques.</p>
+      }
 
       <label class="block text-sm font-medium text-slate-700 mb-1">Observações</label>
       <textarea [ngModel]="saqueObservacoes()" (ngModelChange)="saqueObservacoes.set($event)" rows="2"
@@ -368,6 +398,28 @@
         <button (click)="confirmarNovoSaque()" [disabled]="!canConfirmarSaque()"
           class="bg-purple-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-purple-700 transition disabled:opacity-50">
           Registrar saque
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Modal: Informar taxa do saque -->
+@if (taxaAlvo(); as alvo) {
+  <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" (click)="fecharEditarTaxa()">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm" (click)="$event.stopPropagation()">
+      <h3 class="text-lg font-bold text-gray-800 mb-1">Informar taxa do saque</h3>
+      <p class="text-sm text-gray-500 mb-4">Saque de {{ alvo.valor | currency:'BRL' }} em {{ formatDate(alvo.dataSaque) }}</p>
+
+      <label class="block text-sm font-medium text-slate-700 mb-1">Taxa cobrada (R$) <span class="text-red-500">*</span></label>
+      <input type="number" step="0.01" min="0" [ngModel]="taxaValor()" (ngModelChange)="taxaValor.set($event)"
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+
+      <div class="flex justify-end gap-3">
+        <button (click)="fecharEditarTaxa()" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Cancelar</button>
+        <button (click)="confirmarTaxa()" [disabled]="!canConfirmarTaxa()"
+          class="bg-purple-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-purple-700 transition disabled:opacity-50">
+          Salvar
         </button>
       </div>
     </div>

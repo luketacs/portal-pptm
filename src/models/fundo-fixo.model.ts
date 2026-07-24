@@ -38,10 +38,13 @@ export interface CreateFundoFixoRequest {
 // Saque em dinheiro do cartão — vira saldo em caixa (usado depois em compras
 // pagas em 'dinheiro_caixa' ou 'reembolso'). A taxa cobrada no saque também
 // conta no total do mês, pois aparece na fatura do cartão.
+export type FundoFixoSaqueTipo = 'saque' | 'ajuste_inicial';
+
 export interface FundoFixoSaque {
   id: string;
   valor: number;
-  taxa: number;
+  taxa: number | null; // null = ainda não sei (só se descobre no fechamento da fatura)
+  tipo: FundoFixoSaqueTipo;
   dataSaque: Date;
   mesReferencia: string; // 'YYYY-MM'
   observacoes: string | null;
@@ -52,7 +55,8 @@ export interface FundoFixoSaque {
 
 export interface CreateFundoFixoSaque {
   valor: number;
-  taxa: number;
+  taxa?: number;
+  tipo?: FundoFixoSaqueTipo; // default 'saque'
   dataSaque?: string; // 'YYYY-MM-DD', default hoje
   observacoes?: string;
 }

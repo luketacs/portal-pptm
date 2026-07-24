@@ -3,7 +3,7 @@ import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
 import {
-  CreateFundoFixoRequest, CreateFundoFixoSaque, FundoFixoFormaPagamento, FundoFixoSaque,
+  CreateFundoFixoRequest, CreateFundoFixoSaque, FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSaqueTipo,
   FundoFixoSetor, FundoFixoSolicitacao, FundoFixoStatus,
 } from '../models/fundo-fixo.model';
 
@@ -38,7 +38,8 @@ interface FundoFixoRow {
 interface FundoFixoSaqueRow {
   id: string;
   valor: number;
-  taxa: number;
+  taxa: number | null;
+  tipo: string;
   data_saque: string;
   mes_referencia: string;
   observacoes: string | null;
@@ -82,7 +83,8 @@ function mapSaqueRow(r: FundoFixoSaqueRow): FundoFixoSaque {
   return {
     id: r.id,
     valor: Number(r.valor) || 0,
-    taxa: Number(r.taxa) || 0,
+    taxa: r.taxa !== null ? Number(r.taxa) : null,
+    tipo: (r.tipo as FundoFixoSaqueTipo) || 'saque',
     dataSaque: new Date(r.data_saque + 'T00:00:00'),
     mesReferencia: r.mes_referencia,
     observacoes: r.observacoes,
@@ -156,8 +158,8 @@ export class FundoFixoService {
       .filter(s => s.status === 'aprovado' || s.status === 'pendente' || (s.status === 'comprado' && s.formaPagamento === 'cartao'))
       .reduce((sum, s) => sum + (s.valorFinal ?? s.valorEstimado), 0);
     const totalSaques = this._saques()
-      .filter(s => s.mesReferencia === mes)
-      .reduce((sum, s) => sum + s.valor + s.taxa, 0);
+      .filter(s => s.mesReferencia === mes && s.tipo === 'saque')
+      .reduce((sum, s) => sum + s.valor + (s.taxa ?? 0), 0);
     return totalSolicitacoes + totalSaques;
   }
 
@@ -197,7 +199,8 @@ export class FundoFixoService {
     const dataSaque = req.dataSaque || new Date().toISOString().slice(0, 10);
     const payload = {
       valor: req.valor,
-      taxa: req.taxa,
+      taxa: req.tipo === 'ajuste_inicial' ? null : (req.taxa ?? null),
+      tipo: req.tipo ?? 'saque',
       data_saque: dataSaque,
       mes_referencia: dataSaque.slice(0, 7),
       observacoes: req.observacoes?.trim() || null,
@@ -208,13 +211,65 @@ export class FundoFixoService {
     const { error } = await this.supabaseService.client.from('fundo_fixo_saques').insert(payload);
     if (error) throw new Error(error.message);
 
+    const descricao = req.tipo === 'ajuste_inicial'
+      ? `${admin.name} registrou saldo inicial em caixa de R$ ${req.valor.toFixed(2)} no Fundo Fixo`
+      : `${admin.name} registrou saque de R$ ${req.valor.toFixed(2)}${req.taxa != null ? ` (taxa R$ ${req.taxa.toFixed(2)})` : ' (taxa a definir)'} no Fundo Fixo`;
     this.auditLogService.log({
       user_id: admin.id,
       user_name: admin.name,
       event_type: 'fundo_fixo_saque_registrado',
       resource_type: 'fundo_fixo_saque',
-      description: `${admin.name} registrou saque de R$ ${req.valor.toFixed(2)} (taxa R$ ${req.taxa.toFixed(2)}) no Fundo Fixo`,
-      metadata: { valor: req.valor, taxa: req.taxa },
+      description: descricao,
+      metadata: { valor: req.valor, taxa: req.taxa ?? null, tipo: req.tipo ?? 'saque' },
+    });
+
+    await this.load();
+  }
+
+  async atualizarTaxaSaque(id: string, taxa: number): Promise<void> {
+    const admin = this.authService.currentUser();
+    if (!admin) throw new Error('Sessão expirada.');
+
+    const { error } = await this.supabaseService.client
+      .from('fundo_fixo_saques')
+      .update({ taxa })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+
+    this.auditLogService.log({
+      user_id: admin.id,
+      user_name: admin.name,
+      event_type: 'fundo_fixo_saque_registrado',
+      resource_type: 'fundo_fixo_saque',
+      resource_id: id,
+      description: `${admin.name} informou a taxa de R$ ${taxa.toFixed(2)} de um saque do Fundo Fixo`,
+      metadata: { taxa },
+    });
+
+    await this.load();
+  }
+
+  async excluirSaque(id: string): Promise<void> {
+    const admin = this.authService.currentUser();
+    if (!admin) throw new Error('Sessão expirada.');
+
+    const { data, error } = await this.supabaseService.client
+      .from('fundo_fixo_saques')
+      .delete()
+      .eq('id', id)
+      .select('id');
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) {
+      throw new Error('Não foi possível excluir o saque (permissão do banco). Verifique se a migration 013 foi executada no Supabase.');
+    }
+
+    this.auditLogService.log({
+      user_id: admin.id,
+      user_name: admin.name,
+      event_type: 'fundo_fixo_saque_excluido',
+      resource_type: 'fundo_fixo_saque',
+      resource_id: id,
+      description: `${admin.name} excluiu um saque do Fundo Fixo`,
     });
 
     await this.load();

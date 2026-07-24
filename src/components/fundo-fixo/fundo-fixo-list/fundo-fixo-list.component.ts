@@ -5,7 +5,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FundoFixoService, FUNDO_FIXO_LIMITE_MENSAL, FUNDO_FIXO_LIMITE_POR_COMPRA, FUNDO_FIXO_SETORES } from '../../../services/fundo-fixo.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/toast.service';
-import { FundoFixoFormaPagamento, FundoFixoSolicitacao, FundoFixoStatus } from '../../../models/fundo-fixo.model';
+import { FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSolicitacao, FundoFixoStatus } from '../../../models/fundo-fixo.model';
 
 type StatusFiltro = 'todos' | FundoFixoStatus;
 
@@ -82,9 +82,14 @@ export class FundoFixoListComponent implements OnInit {
   // Modal: registrar saque
   saqueModalAberto = signal(false);
   saqueValor = signal<number | null>(null);
-  saqueTaxa = signal<number | null>(0);
+  saqueTaxa = signal<number | null>(null); // null = ainda não sei (só se descobre no fechamento da fatura)
+  saqueEhSaldoInicial = signal(false);
   saqueData = signal(new Date().toISOString().slice(0, 10));
   saqueObservacoes = signal('');
+
+  // Modal: informar taxa de um saque já registrado
+  taxaAlvo = signal<FundoFixoSaque | null>(null);
+  taxaValor = signal<number | null>(null);
 
   isLoading = this.fundoFixoService.isLoading;
   currentUser = this.authService.currentUser;
@@ -269,7 +274,8 @@ export class FundoFixoListComponent implements OnInit {
 
   abrirNovoSaque(): void {
     this.saqueValor.set(null);
-    this.saqueTaxa.set(0);
+    this.saqueTaxa.set(null);
+    this.saqueEhSaldoInicial.set(false);
     this.saqueData.set(new Date().toISOString().slice(0, 10));
     this.saqueObservacoes.set('');
     this.saqueModalAberto.set(true);
@@ -287,16 +293,66 @@ export class FundoFixoListComponent implements OnInit {
     if (!this.canConfirmarSaque()) return;
     this.isProcessando.set(true);
     try {
+      const ehSaldoInicial = this.saqueEhSaldoInicial();
       await this.fundoFixoService.registrarSaque({
         valor: this.saqueValor() ?? 0,
-        taxa: this.saqueTaxa() ?? 0,
+        taxa: ehSaldoInicial ? undefined : (this.saqueTaxa() ?? undefined),
+        tipo: ehSaldoInicial ? 'ajuste_inicial' : 'saque',
         dataSaque: this.saqueData(),
         observacoes: this.saqueObservacoes() || undefined,
       });
-      this.notificationService.showSuccess('Saque registrado.');
+      this.notificationService.showSuccess(ehSaldoInicial ? 'Saldo inicial registrado.' : 'Saque registrado.');
       this.fecharNovoSaque();
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao registrar saque.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  // ── Informar taxa depois (só se sabe no fechamento da fatura) ─────────
+  abrirEditarTaxa(saque: FundoFixoSaque): void {
+    this.taxaAlvo.set(saque);
+    this.taxaValor.set(saque.taxa);
+  }
+
+  fecharEditarTaxa(): void {
+    this.taxaAlvo.set(null);
+  }
+
+  canConfirmarTaxa(): boolean {
+    return (this.taxaValor() ?? -1) >= 0 && !this.isProcessando();
+  }
+
+  async confirmarTaxa(): Promise<void> {
+    const alvo = this.taxaAlvo();
+    if (!alvo || !this.canConfirmarTaxa()) return;
+    this.isProcessando.set(true);
+    try {
+      await this.fundoFixoService.atualizarTaxaSaque(alvo.id, this.taxaValor() ?? 0);
+      this.notificationService.showSuccess('Taxa registrada.');
+      this.fecharEditarTaxa();
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao registrar taxa.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  // ── Excluir saque ──────────────────────────────────────────────────────
+  async excluirSaque(saque: FundoFixoSaque): Promise<void> {
+    if (this.isProcessando()) return;
+    const confirmado = confirm(
+      `Excluir o saque de ${saque.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} de ${this.formatDate(saque.dataSaque)}?\n\nEsta ação não pode ser desfeita.`,
+    );
+    if (!confirmado) return;
+
+    this.isProcessando.set(true);
+    try {
+      await this.fundoFixoService.excluirSaque(saque.id);
+      this.notificationService.showSuccess('Saque excluído.');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao excluir saque.');
     } finally {
       this.isProcessando.set(false);
     }
