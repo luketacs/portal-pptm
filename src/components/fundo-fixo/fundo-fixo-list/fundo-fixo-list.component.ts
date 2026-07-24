@@ -1,13 +1,19 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
-import { FundoFixoService, FUNDO_FIXO_LIMITE_MENSAL, FUNDO_FIXO_SETORES } from '../../../services/fundo-fixo.service';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { FundoFixoService, FUNDO_FIXO_LIMITE_MENSAL, FUNDO_FIXO_LIMITE_POR_COMPRA, FUNDO_FIXO_SETORES } from '../../../services/fundo-fixo.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/toast.service';
-import { FundoFixoSolicitacao, FundoFixoStatus } from '../../../models/fundo-fixo.model';
+import { FundoFixoFormaPagamento, FundoFixoSolicitacao, FundoFixoStatus } from '../../../models/fundo-fixo.model';
 
 type StatusFiltro = 'todos' | FundoFixoStatus;
+
+const FORMA_PAGAMENTO_LABEL: Record<FundoFixoFormaPagamento, string> = {
+  cartao: '💳 Cartão',
+  dinheiro_caixa: '💵 Dinheiro (caixa)',
+  reembolso: '🔄 Reembolso',
+};
 
 const STATUS_LABEL: Record<FundoFixoStatus, string> = {
   pendente: 'Pendente',
@@ -32,9 +38,16 @@ const STATUS_BADGE: Record<FundoFixoStatus, string> = {
 })
 export class FundoFixoListComponent implements OnInit {
   readonly limiteMensal = FUNDO_FIXO_LIMITE_MENSAL;
+  readonly limitePorCompra = FUNDO_FIXO_LIMITE_POR_COMPRA;
   readonly setores = FUNDO_FIXO_SETORES;
   readonly statusLabel = STATUS_LABEL;
   readonly statusBadge = STATUS_BADGE;
+  readonly formaPagamentoLabel = FORMA_PAGAMENTO_LABEL;
+
+  // 'gestao' (Admin, /fundo-fixo): KPIs + aprovar/recusar. 'compras' (/fundo-fixo/lista): lista
+  // operacional — usuário comum vê só as próprias, Admin vê todas, sem ações de aprovação.
+  mode: 'gestao' | 'compras' = 'compras';
+  pageTitle = 'Lista de Compras';
 
   errorMessage = signal('');
 
@@ -62,17 +75,31 @@ export class FundoFixoListComponent implements OnInit {
   comprarAlvo = signal<FundoFixoSolicitacao | null>(null);
   comprarValorFinal = signal<number | null>(null);
   comprarFornecedor = signal('');
+  comprarFormaPagamento = signal<FundoFixoFormaPagamento>('cartao');
   comprarNotaFiscal = signal<File | null>(null);
   isProcessando = signal(false);
+
+  // Modal: registrar saque
+  saqueModalAberto = signal(false);
+  saqueValor = signal<number | null>(null);
+  saqueTaxa = signal<number | null>(0);
+  saqueData = signal(new Date().toISOString().slice(0, 10));
+  saqueObservacoes = signal('');
 
   isLoading = this.fundoFixoService.isLoading;
   currentUser = this.authService.currentUser;
   isAdmin = computed(() => this.authService.currentUser()?.role === 'Admin');
   podeSolicitar = computed(() => this.authService.currentUser()?.role !== 'Visualizador');
 
-  solicitacoesDoMes = computed(() =>
-    this.fundoFixoService.solicitacoes().filter(s => s.mesReferencia === this.mesFiltro())
-  );
+  solicitacoesDoMes = computed(() => {
+    const user = this.currentUser();
+    let lista = this.fundoFixoService.solicitacoes().filter(s => s.mesReferencia === this.mesFiltro());
+    // Na Lista de Compras, quem não é Admin só enxerga as próprias solicitações.
+    if (this.mode === 'compras' && !this.isAdmin() && user) {
+      lista = lista.filter(s => s.solicitanteId === user.id);
+    }
+    return lista;
+  });
 
   totalComprometido = computed(() => this.fundoFixoService.totalComprometidoMes(this.mesFiltro()));
   saldoRestante = computed(() => Math.max(0, this.limiteMensal - this.totalComprometido()));
@@ -103,10 +130,16 @@ export class FundoFixoListComponent implements OnInit {
   });
 
   constructor(
+    private route: ActivatedRoute,
     private fundoFixoService: FundoFixoService,
     private authService: AuthService,
     private notificationService: NotificationService,
-  ) {}
+  ) {
+    if (this.route.snapshot.data['mode'] === 'gestao') {
+      this.mode = 'gestao';
+      this.pageTitle = 'Fundo Fixo';
+    }
+  }
 
   async ngOnInit(): Promise<void> {
     try {
@@ -166,6 +199,7 @@ export class FundoFixoListComponent implements OnInit {
     this.comprarAlvo.set(s);
     this.comprarValorFinal.set(s.valorEstimado);
     this.comprarFornecedor.set(s.fornecedor ?? '');
+    this.comprarFormaPagamento.set('cartao');
     this.comprarNotaFiscal.set(null);
   }
 
@@ -179,7 +213,8 @@ export class FundoFixoListComponent implements OnInit {
   }
 
   canConfirmarCompra(): boolean {
-    return !!this.comprarNotaFiscal() && (this.comprarValorFinal() ?? 0) > 0 && !this.isProcessando();
+    const valor = this.comprarValorFinal() ?? 0;
+    return !!this.comprarNotaFiscal() && valor > 0 && valor <= this.limitePorCompra && !this.isProcessando();
   }
 
   async confirmarCompra(): Promise<void> {
@@ -189,7 +224,7 @@ export class FundoFixoListComponent implements OnInit {
     this.isProcessando.set(true);
     try {
       await this.fundoFixoService.marcarComprado(
-        alvo.id, nota, this.comprarValorFinal() ?? alvo.valorEstimado, this.comprarFornecedor(),
+        alvo.id, nota, this.comprarValorFinal() ?? alvo.valorEstimado, this.comprarFormaPagamento(), this.comprarFornecedor(),
       );
       this.notificationService.showSuccess('Compra registrada com sucesso!');
       this.fecharComprar();
@@ -203,5 +238,67 @@ export class FundoFixoListComponent implements OnInit {
   formatDate(d: Date | null): string {
     if (!d) return '—';
     return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+  }
+
+  // ── Excluir ────────────────────────────────────────────────────────────
+  podeExcluir(): boolean {
+    return this.isAdmin();
+  }
+
+  async excluir(s: FundoFixoSolicitacao): Promise<void> {
+    if (this.isProcessando()) return;
+    const confirmado = confirm(
+      `Excluir a solicitação de ${s.solicitanteNome} (${s.material})?\n\nEsta ação não pode ser desfeita.`,
+    );
+    if (!confirmado) return;
+
+    this.isProcessando.set(true);
+    try {
+      await this.fundoFixoService.excluir(s.id);
+      this.notificationService.showSuccess('Solicitação excluída.');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao excluir.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  // ── Saldo em caixa / saques ────────────────────────────────────────────
+  saldoCaixa = this.fundoFixoService.saldoCaixa;
+  saquesDoMes = computed(() => this.fundoFixoService.saques().filter(s => s.mesReferencia === this.mesFiltro()));
+
+  abrirNovoSaque(): void {
+    this.saqueValor.set(null);
+    this.saqueTaxa.set(0);
+    this.saqueData.set(new Date().toISOString().slice(0, 10));
+    this.saqueObservacoes.set('');
+    this.saqueModalAberto.set(true);
+  }
+
+  fecharNovoSaque(): void {
+    this.saqueModalAberto.set(false);
+  }
+
+  canConfirmarSaque(): boolean {
+    return (this.saqueValor() ?? 0) > 0 && !this.isProcessando();
+  }
+
+  async confirmarNovoSaque(): Promise<void> {
+    if (!this.canConfirmarSaque()) return;
+    this.isProcessando.set(true);
+    try {
+      await this.fundoFixoService.registrarSaque({
+        valor: this.saqueValor() ?? 0,
+        taxa: this.saqueTaxa() ?? 0,
+        dataSaque: this.saqueData(),
+        observacoes: this.saqueObservacoes() || undefined,
+      });
+      this.notificationService.showSuccess('Saque registrado.');
+      this.fecharNovoSaque();
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao registrar saque.');
+    } finally {
+      this.isProcessando.set(false);
+    }
   }
 }

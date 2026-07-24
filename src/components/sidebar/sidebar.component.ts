@@ -222,7 +222,9 @@ export class SidebarComponent implements OnDestroy {
       icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>',
       roles: ['Solicitante', 'Admin', 'Visualizador'],
       links: [
-        { path: '/fundo-fixo', label: 'Fundo Fixo', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
+        { path: '/fundo-fixo/nova',  label: 'Solicitar Compra', icon: '', roles: ['Solicitante', 'Admin'] },
+        { path: '/fundo-fixo/lista', label: 'Lista de Compras', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
+        { path: '/fundo-fixo',       label: 'Fundo Fixo (Gestão)', icon: '', roles: ['Admin'] },
       ],
     },
     {

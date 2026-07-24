@@ -136,8 +136,16 @@ export const APP_ROUTES: Routes = [
     loadComponent: () =>
       import('../components/fundo-fixo/fundo-fixo-list/fundo-fixo-list.component').then(m => m.FundoFixoListComponent),
     canActivate: [authGuard],
-    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    data: { roles: ['Admin'], mode: 'gestao' },
     title: 'Fundo Fixo',
+  },
+  {
+    path: 'fundo-fixo/lista',
+    loadComponent: () =>
+      import('../components/fundo-fixo/fundo-fixo-list/fundo-fixo-list.component').then(m => m.FundoFixoListComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'], mode: 'compras' },
+    title: 'Lista de Compras — Fundo Fixo',
   },
   {
     path: 'fundo-fixo/nova',

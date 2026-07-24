@@ -1,10 +1,16 @@
 <div class="space-y-6">
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
     <div>
-      <h1 class="text-2xl font-bold text-gray-800">Fundo Fixo</h1>
-      <p class="text-sm text-gray-500 mt-0.5">Controle do cartão corporativo — limite de {{ limiteMensal | currency:'BRL' }} por mês.</p>
+      <h1 class="text-2xl font-bold text-gray-800">{{ pageTitle }}</h1>
+      @if (mode === 'gestao') {
+        <p class="text-sm text-gray-500 mt-0.5">Controle do cartão corporativo — limite de {{ limiteMensal | currency:'BRL' }} por mês.</p>
+      } @else {
+        <p class="text-sm text-gray-500 mt-0.5">
+          @if (isAdmin()) { Todas as compras solicitadas via Fundo Fixo. } @else { Suas solicitações de compra via Fundo Fixo. }
+        </p>
+      }
     </div>
-    @if (podeSolicitar()) {
+    @if (mode === 'compras' && podeSolicitar()) {
       <a routerLink="/fundo-fixo/nova"
         class="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-semibold py-2.5 px-4 rounded-lg hover:bg-blue-700 transition flex-shrink-0">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
@@ -26,42 +32,87 @@
     </div>
   } @else {
 
-    <!-- Painel do mês -->
-    <div class="app-card p-5">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-        <span class="text-sm font-semibold text-gray-700">Comprometido no mês selecionado</span>
-        <span class="text-sm text-gray-500">
-          {{ totalComprometido() | currency:'BRL' }} de {{ limiteMensal | currency:'BRL' }}
-          — saldo {{ saldoRestante() | currency:'BRL' }}
-        </span>
+    @if (mode === 'gestao') {
+      <!-- Painel do mês -->
+      <div class="app-card p-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <span class="text-sm font-semibold text-gray-700">Comprometido no mês selecionado</span>
+          <span class="text-sm text-gray-500">
+            {{ totalComprometido() | currency:'BRL' }} de {{ limiteMensal | currency:'BRL' }}
+            — saldo {{ saldoRestante() | currency:'BRL' }}
+          </span>
+        </div>
+        <div class="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all"
+            [class]="percentualUsado() >= 100 ? 'bg-red-500' : percentualUsado() >= 80 ? 'bg-amber-500' : 'bg-green-500'"
+            [style.width.%]="percentualUsado()"></div>
+        </div>
+        @if (percentualUsado() >= 100) {
+          <p class="text-xs text-red-600 mt-2 font-medium">⚠ Limite do mês atingido ou ultrapassado.</p>
+        } @else if (percentualUsado() >= 80) {
+          <p class="text-xs text-amber-600 mt-2 font-medium">Atenção: acima de 80% do limite mensal.</p>
+        }
       </div>
-      <div class="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
-        <div class="h-full rounded-full transition-all"
-          [class]="percentualUsado() >= 100 ? 'bg-red-500' : percentualUsado() >= 80 ? 'bg-amber-500' : 'bg-green-500'"
-          [style.width.%]="percentualUsado()"></div>
-      </div>
-      @if (percentualUsado() >= 100) {
-        <p class="text-xs text-red-600 mt-2 font-medium">⚠ Limite do mês atingido ou ultrapassado.</p>
-      } @else if (percentualUsado() >= 80) {
-        <p class="text-xs text-amber-600 mt-2 font-medium">Atenção: acima de 80% do limite mensal.</p>
-      }
-    </div>
 
-    <!-- KPIs -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
-      <div class="app-card p-4 text-center border-l-4 border-amber-500">
-        <p class="text-xs text-gray-500">Pendentes de aprovação</p>
-        <p class="text-2xl font-bold text-gray-800">{{ countPendentes() }}</p>
+      <!-- KPIs -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="app-card p-4 text-center border-l-4 border-amber-500">
+          <p class="text-xs text-gray-500">Pendentes de aprovação</p>
+          <p class="text-2xl font-bold text-gray-800">{{ countPendentes() }}</p>
+        </div>
+        <div class="app-card p-4 text-center border-l-4 border-blue-500">
+          <p class="text-xs text-gray-500">Aguardando nota fiscal</p>
+          <p class="text-2xl font-bold text-gray-800">{{ countAguardandoNota() }}</p>
+        </div>
+        <div class="app-card p-4 text-center border-l-4 border-green-500">
+          <p class="text-xs text-gray-500">Total comprado no mês</p>
+          <p class="text-2xl font-bold text-green-700">{{ totalComprado() | currency:'BRL' }}</p>
+        </div>
+        <div class="app-card p-4 text-center border-l-4 border-purple-500">
+          <p class="text-xs text-gray-500">Dinheiro em caixa</p>
+          <p class="text-2xl font-bold" [class]="saldoCaixa() < 0 ? 'text-red-600' : 'text-purple-700'">{{ saldoCaixa() | currency:'BRL' }}</p>
+        </div>
       </div>
-      <div class="app-card p-4 text-center border-l-4 border-blue-500">
-        <p class="text-xs text-gray-500">Aguardando nota fiscal</p>
-        <p class="text-2xl font-bold text-gray-800">{{ countAguardandoNota() }}</p>
+
+      <!-- Saques do mês -->
+      <div class="app-card p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Saques do cartão no mês</p>
+          <button (click)="abrirNovoSaque()"
+            class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition">
+            💵 Registrar saque
+          </button>
+        </div>
+        @if (saquesDoMes().length > 0) {
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead>
+                <tr class="text-left text-xs text-gray-500 uppercase">
+                  <th class="py-1.5 pr-3">Data</th>
+                  <th class="py-1.5 pr-3 text-right">Valor</th>
+                  <th class="py-1.5 pr-3 text-right">Taxa</th>
+                  <th class="py-1.5 pr-3">Registrado por</th>
+                  <th class="py-1.5 pr-3">Observações</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                @for (saque of saquesDoMes(); track saque.id) {
+                  <tr>
+                    <td class="py-1.5 pr-3 whitespace-nowrap text-gray-600">{{ formatDate(saque.dataSaque) }}</td>
+                    <td class="py-1.5 pr-3 text-right font-medium text-gray-800">{{ saque.valor | currency:'BRL' }}</td>
+                    <td class="py-1.5 pr-3 text-right text-gray-500">{{ saque.taxa | currency:'BRL' }}</td>
+                    <td class="py-1.5 pr-3 text-gray-600">{{ saque.registradoPorNome }}</td>
+                    <td class="py-1.5 pr-3 text-gray-400">{{ saque.observacoes || '—' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="text-sm text-gray-400">Nenhum saque registrado neste mês.</p>
+        }
       </div>
-      <div class="app-card p-4 text-center border-l-4 border-green-500">
-        <p class="text-xs text-gray-500">Total comprado no mês</p>
-        <p class="text-2xl font-bold text-green-700">{{ totalComprado() | currency:'BRL' }}</p>
-      </div>
-    </div>
+    }
 
     <!-- Filtros -->
     <div class="app-card p-4 space-y-3">
@@ -129,12 +180,22 @@
                 <td class="px-3 py-2 text-center text-gray-500 whitespace-nowrap">{{ formatDate(s.dataSolicitacao) }}</td>
                 <td class="px-3 py-2 text-gray-800 font-medium">{{ s.solicitanteNome }}</td>
                 <td class="px-3 py-2 text-center text-gray-600">{{ s.setor }}</td>
-                <td class="px-3 py-2 text-gray-700 max-w-xs truncate" [title]="s.material">{{ s.material }}</td>
+                <td class="px-3 py-2 text-gray-700 max-w-xs">
+                  <span class="truncate block" [title]="s.material">{{ s.material }}</span>
+                  @if (s.linkProduto) {
+                    <a [href]="s.linkProduto" target="_blank" rel="noopener" class="text-xs text-blue-600 hover:text-blue-800 inline-flex items-center gap-0.5">
+                      🔗 Ver produto
+                    </a>
+                  }
+                </td>
                 <td class="px-3 py-2 text-gray-600">{{ s.fornecedor || '—' }}</td>
                 <td class="px-3 py-2 text-right font-semibold text-gray-800">
                   {{ (s.valorFinal ?? s.valorEstimado) | currency:'BRL' }}
                   @if (s.status === 'comprado' && s.valorFinal !== s.valorEstimado) {
                     <div class="text-xs text-gray-400 font-normal">orç: {{ s.valorEstimado | currency:'BRL' }}</div>
+                  }
+                  @if (s.status === 'comprado' && isAdmin()) {
+                    <div class="text-xs text-gray-400 font-normal">{{ formaPagamentoLabel[s.formaPagamento] }}</div>
                   }
                 </td>
                 <td class="px-3 py-2 text-center">
@@ -159,8 +220,8 @@
                   </div>
                 </td>
                 <td class="px-3 py-2 text-center whitespace-nowrap">
-                  @if (s.status === 'pendente' && isAdmin()) {
-                    <div class="flex items-center justify-center gap-1.5">
+                  <div class="flex items-center justify-center gap-1.5">
+                    @if (mode === 'gestao' && s.status === 'pendente' && isAdmin()) {
                       <button (click)="aprovar(s)" [disabled]="isProcessando()"
                         class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition disabled:opacity-50">
                         Aprovar
@@ -169,15 +230,21 @@
                         class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition disabled:opacity-50">
                         Recusar
                       </button>
-                    </div>
-                  } @else if (podeAnexarNota(s)) {
-                    <button (click)="abrirComprar(s)"
-                      class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition">
-                      Anexar nota fiscal
-                    </button>
-                  } @else {
-                    <span class="text-gray-300 text-xs">—</span>
-                  }
+                    } @else if (podeAnexarNota(s)) {
+                      <button (click)="abrirComprar(s)"
+                        class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition">
+                        Anexar nota fiscal
+                      </button>
+                    } @else if (!(mode === 'gestao' && podeExcluir())) {
+                      <span class="text-gray-300 text-xs">—</span>
+                    }
+                    @if (mode === 'gestao' && podeExcluir()) {
+                      <button (click)="excluir(s)" [disabled]="isProcessando()" title="Excluir"
+                        class="text-xs font-semibold px-2 py-1.5 rounded-lg bg-gray-50 text-gray-500 border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition disabled:opacity-50">
+                        🗑️
+                      </button>
+                    }
+                  </div>
                 </td>
               </tr>
             }
@@ -225,8 +292,28 @@
         class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
 
       <label class="block text-sm font-medium text-slate-700 mb-1">Valor final (R$) <span class="text-red-500">*</span></label>
-      <input type="number" step="0.01" min="0" [ngModel]="comprarValorFinal()" (ngModelChange)="comprarValorFinal.set($event)"
-        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+      <input type="number" step="0.01" min="0" [max]="limitePorCompra" [ngModel]="comprarValorFinal()" (ngModelChange)="comprarValorFinal.set($event)"
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      @if ((comprarValorFinal() ?? 0) > limitePorCompra) {
+        <p class="text-xs text-red-600 mb-4">Cada compra do Fundo Fixo tem limite de {{ limitePorCompra | currency:'BRL' }}.</p>
+      } @else {
+        <p class="text-xs text-gray-400 mb-4">Limite por compra: {{ limitePorCompra | currency:'BRL' }}.</p>
+      }
+
+      <label class="block text-sm font-medium text-slate-700 mb-1">Forma de pagamento</label>
+      <select [ngModel]="comprarFormaPagamento()" (ngModelChange)="comprarFormaPagamento.set($event)"
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-1">
+        <option value="cartao">💳 Cartão (na hora)</option>
+        <option value="dinheiro_caixa">💵 Dinheiro em caixa</option>
+        <option value="reembolso">🔄 Reembolso ao solicitante</option>
+      </select>
+      @if (isAdmin() && comprarFormaPagamento() !== 'cartao') {
+        <p class="text-xs mb-4" [class]="saldoCaixa() < (comprarValorFinal() ?? 0) ? 'text-amber-600' : 'text-gray-400'">
+          Saldo em caixa atual: {{ saldoCaixa() | currency:'BRL' }}
+        </p>
+      } @else {
+        <div class="mb-4"></div>
+      }
 
       <label class="block text-sm font-medium text-slate-700 mb-1">Nota fiscal <span class="text-red-500">*</span></label>
       @if (!comprarNotaFiscal()) {
@@ -245,6 +332,42 @@
         <button (click)="confirmarCompra()" [disabled]="!canConfirmarCompra()"
           class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
           Confirmar compra
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Modal: Registrar saque -->
+@if (saqueModalAberto()) {
+  <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" (click)="fecharNovoSaque()">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md" (click)="$event.stopPropagation()">
+      <h3 class="text-lg font-bold text-gray-800 mb-1">Registrar saque</h3>
+      <p class="text-sm text-gray-500 mb-4">Dinheiro sacado do cartão do Fundo Fixo — vai para o saldo em caixa.</p>
+
+      <label class="block text-sm font-medium text-slate-700 mb-1">Data do saque</label>
+      <input type="date" [ngModel]="saqueData()" (ngModelChange)="saqueData.set($event)"
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+
+      <label class="block text-sm font-medium text-slate-700 mb-1">Valor sacado (R$) <span class="text-red-500">*</span></label>
+      <input type="number" step="0.01" min="0" [ngModel]="saqueValor()" (ngModelChange)="saqueValor.set($event)"
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+
+      <label class="block text-sm font-medium text-slate-700 mb-1">Taxa cobrada no saque (R$)</label>
+      <input type="number" step="0.01" min="0" [ngModel]="saqueTaxa()" (ngModelChange)="saqueTaxa.set($event)"
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+      <p class="text-xs text-gray-400 -mt-3 mb-4">A taxa entra no total do mês, junto com o valor sacado, para bater com a fatura.</p>
+
+      <label class="block text-sm font-medium text-slate-700 mb-1">Observações</label>
+      <textarea [ngModel]="saqueObservacoes()" (ngModelChange)="saqueObservacoes.set($event)" rows="2"
+        placeholder="Opcional"
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
+
+      <div class="flex justify-end gap-3">
+        <button (click)="fecharNovoSaque()" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Cancelar</button>
+        <button (click)="confirmarNovoSaque()" [disabled]="!canConfirmarSaque()"
+          class="bg-purple-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-purple-700 transition disabled:opacity-50">
+          Registrar saque
         </button>
       </div>
     </div>

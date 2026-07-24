@@ -3,10 +3,12 @@ import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
 import {
-  CreateFundoFixoRequest, FundoFixoSetor, FundoFixoSolicitacao, FundoFixoStatus,
+  CreateFundoFixoRequest, CreateFundoFixoSaque, FundoFixoFormaPagamento, FundoFixoSaque,
+  FundoFixoSetor, FundoFixoSolicitacao, FundoFixoStatus,
 } from '../models/fundo-fixo.model';
 
 export const FUNDO_FIXO_LIMITE_MENSAL = 3000;
+export const FUNDO_FIXO_LIMITE_POR_COMPRA = 500;
 export const FUNDO_FIXO_SETORES: FundoFixoSetor[] = ['Manutenção', 'Operação', 'Infraestrutura', 'Outros'];
 
 interface FundoFixoRow {
@@ -16,8 +18,10 @@ interface FundoFixoRow {
   setor: string;
   fornecedor: string | null;
   material: string;
+  link_produto: string | null;
   valor_estimado: number;
   valor_final: number | null;
+  forma_pagamento: string;
   orcamento_url: string | null;
   nota_fiscal_url: string | null;
   observacoes: string | null;
@@ -29,6 +33,18 @@ interface FundoFixoRow {
   data_solicitacao: string;
   data_aprovacao: string | null;
   data_compra: string | null;
+}
+
+interface FundoFixoSaqueRow {
+  id: string;
+  valor: number;
+  taxa: number;
+  data_saque: string;
+  mes_referencia: string;
+  observacoes: string | null;
+  registrado_por_id: string | null;
+  registrado_por_nome: string;
+  created_at: string;
 }
 
 function mesAtual(): string {
@@ -44,8 +60,10 @@ function mapRow(r: FundoFixoRow): FundoFixoSolicitacao {
     setor: r.setor as FundoFixoSetor,
     fornecedor: r.fornecedor,
     material: r.material,
+    linkProduto: r.link_produto,
     valorEstimado: Number(r.valor_estimado) || 0,
     valorFinal: r.valor_final !== null ? Number(r.valor_final) : null,
+    formaPagamento: (r.forma_pagamento as FundoFixoFormaPagamento) || 'cartao',
     orcamentoUrl: r.orcamento_url,
     notaFiscalUrl: r.nota_fiscal_url,
     observacoes: r.observacoes,
@@ -60,13 +78,40 @@ function mapRow(r: FundoFixoRow): FundoFixoSolicitacao {
   };
 }
 
+function mapSaqueRow(r: FundoFixoSaqueRow): FundoFixoSaque {
+  return {
+    id: r.id,
+    valor: Number(r.valor) || 0,
+    taxa: Number(r.taxa) || 0,
+    dataSaque: new Date(r.data_saque + 'T00:00:00'),
+    mesReferencia: r.mes_referencia,
+    observacoes: r.observacoes,
+    registradoPorId: r.registrado_por_id,
+    registradoPorNome: r.registrado_por_nome,
+    createdAt: new Date(r.created_at),
+  };
+}
+
 @Injectable({ providedIn: 'root' })
 export class FundoFixoService {
   private _solicitacoes = signal<FundoFixoSolicitacao[]>([]);
   solicitacoes = this._solicitacoes.asReadonly();
+  private _saques = signal<FundoFixoSaque[]>([]);
+  saques = this._saques.asReadonly();
   isLoading = signal(false);
 
   mesAtual = computed(() => mesAtual());
+
+  // Dinheiro que o admin tem fisicamente em mãos: soma de tudo que já sacou,
+  // menos o que já usou em compras pagas em dinheiro/reembolso. É um saldo
+  // corrido — não reseta por mês, ao contrário do limite do cartão.
+  saldoCaixa = computed(() => {
+    const totalSacado = this._saques().reduce((sum, s) => sum + s.valor, 0);
+    const totalUsadoEmCaixa = this._solicitacoes()
+      .filter(s => s.status === 'comprado' && (s.formaPagamento === 'dinheiro_caixa' || s.formaPagamento === 'reembolso'))
+      .reduce((sum, s) => sum + (s.valorFinal ?? s.valorEstimado), 0);
+    return totalSacado - totalUsadoEmCaixa;
+  });
 
   constructor(
     private supabaseService: SupabaseService,
@@ -77,12 +122,20 @@ export class FundoFixoService {
   async load(): Promise<void> {
     this.isLoading.set(true);
     try {
-      const { data, error } = await this.supabaseService.client
-        .from('fundo_fixo_solicitacoes')
-        .select('*')
-        .order('data_solicitacao', { ascending: false });
-      if (error) throw new Error(error.message);
-      this._solicitacoes.set((data ?? []).map(mapRow));
+      const [solicitacoesRes, saquesRes] = await Promise.all([
+        this.supabaseService.client
+          .from('fundo_fixo_solicitacoes')
+          .select('*')
+          .order('data_solicitacao', { ascending: false }),
+        this.supabaseService.client
+          .from('fundo_fixo_saques')
+          .select('*')
+          .order('data_saque', { ascending: false }),
+      ]);
+      if (solicitacoesRes.error) throw new Error(solicitacoesRes.error.message);
+      if (saquesRes.error) throw new Error(saquesRes.error.message);
+      this._solicitacoes.set((solicitacoesRes.data ?? []).map(mapRow));
+      this._saques.set((saquesRes.data ?? []).map(mapSaqueRow));
     } finally {
       this.isLoading.set(false);
     }
@@ -92,12 +145,70 @@ export class FundoFixoService {
     return this._solicitacoes().find(s => s.id === id);
   }
 
-  // Total comprometido no mês (aprovado + comprado) — o que já saiu ou vai sair do limite.
-  // Usa valorFinal quando já disponível (nota fiscal anexada), senão o valor estimado.
+  // Total do mês que deve bater com a fatura do cartão: pendentes/aprovados contam pelo
+  // valor estimado (previsão), compras já feitas no cartão contam pelo valor final, e
+  // saques (+ taxa) contam no mês em que caem na fatura. Compras pagas em dinheiro/reembolso
+  // NÃO entram aqui de novo — o valor já foi contabilizado quando o saque que as financiou
+  // foi registrado, senão o total ficaria duplicado.
   totalComprometidoMes(mes: string): number {
-    return this._solicitacoes()
-      .filter(s => s.mesReferencia === mes && (s.status === 'aprovado' || s.status === 'comprado'))
+    const totalSolicitacoes = this._solicitacoes()
+      .filter(s => s.mesReferencia === mes)
+      .filter(s => s.status === 'aprovado' || s.status === 'pendente' || (s.status === 'comprado' && s.formaPagamento === 'cartao'))
       .reduce((sum, s) => sum + (s.valorFinal ?? s.valorEstimado), 0);
+    const totalSaques = this._saques()
+      .filter(s => s.mesReferencia === mes)
+      .reduce((sum, s) => sum + s.valor + s.taxa, 0);
+    return totalSolicitacoes + totalSaques;
+  }
+
+  async excluir(id: string): Promise<void> {
+    const admin = this.authService.currentUser();
+    if (!admin) throw new Error('Sessão expirada.');
+
+    const item = this.getById(id);
+    const { error } = await this.supabaseService.client.from('fundo_fixo_solicitacoes').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+
+    this.auditLogService.log({
+      user_id: admin.id,
+      user_name: admin.name,
+      event_type: 'fundo_fixo_excluido',
+      resource_type: 'fundo_fixo',
+      resource_id: id,
+      description: `${admin.name} excluiu solicitação de Fundo Fixo de ${item?.solicitanteNome ?? ''}: ${item?.material ?? ''}`,
+    });
+
+    await this.load();
+  }
+
+  async registrarSaque(req: CreateFundoFixoSaque): Promise<void> {
+    const admin = this.authService.currentUser();
+    if (!admin) throw new Error('Sessão expirada.');
+
+    const dataSaque = req.dataSaque || new Date().toISOString().slice(0, 10);
+    const payload = {
+      valor: req.valor,
+      taxa: req.taxa,
+      data_saque: dataSaque,
+      mes_referencia: dataSaque.slice(0, 7),
+      observacoes: req.observacoes?.trim() || null,
+      registrado_por_id: admin.id,
+      registrado_por_nome: admin.name,
+    };
+
+    const { error } = await this.supabaseService.client.from('fundo_fixo_saques').insert(payload);
+    if (error) throw new Error(error.message);
+
+    this.auditLogService.log({
+      user_id: admin.id,
+      user_name: admin.name,
+      event_type: 'fundo_fixo_saque_registrado',
+      resource_type: 'fundo_fixo_saque',
+      description: `${admin.name} registrou saque de R$ ${req.valor.toFixed(2)} (taxa R$ ${req.taxa.toFixed(2)}) no Fundo Fixo`,
+      metadata: { valor: req.valor, taxa: req.taxa },
+    });
+
+    await this.load();
   }
 
   async criarSolicitacao(req: CreateFundoFixoRequest, orcamento: File | null): Promise<void> {
@@ -116,6 +227,7 @@ export class FundoFixoService {
       setor: req.setor,
       fornecedor: req.fornecedor?.trim() || null,
       material: req.material.trim(),
+      link_produto: req.linkProduto?.trim() || null,
       valor_estimado: req.valorEstimado,
       orcamento_url: orcamentoUrl,
       observacoes: req.observacoes?.trim() || null,
@@ -195,7 +307,9 @@ export class FundoFixoService {
     await this.load();
   }
 
-  async marcarComprado(id: string, notaFiscal: File, valorFinal: number, fornecedor?: string): Promise<void> {
+  async marcarComprado(
+    id: string, notaFiscal: File, valorFinal: number, formaPagamento: FundoFixoFormaPagamento, fornecedor?: string,
+  ): Promise<void> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
 
@@ -206,6 +320,7 @@ export class FundoFixoService {
       status: 'comprado',
       nota_fiscal_url: notaFiscalUrl,
       valor_final: valorFinal,
+      forma_pagamento: formaPagamento,
       data_compra: new Date().toISOString(),
     };
     if (fornecedor?.trim()) payload['fornecedor'] = fornecedor.trim();
