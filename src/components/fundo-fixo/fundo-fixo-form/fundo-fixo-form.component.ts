@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@a
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { FundoFixoService, FUNDO_FIXO_LIMITE_POR_COMPRA, FUNDO_FIXO_SETORES } from '../../../services/fundo-fixo.service';
+import { FundoFixoService, FUNDO_FIXO_GESTORES, FUNDO_FIXO_LIMITE_POR_COMPRA, FUNDO_FIXO_SETORES } from '../../../services/fundo-fixo.service';
 import { NotificationService } from '../../../services/toast.service';
 import { AuthService } from '../../../services/auth.service';
 import { UserService } from '../../../services/user.service';
@@ -18,6 +18,7 @@ import { FundoFixoSetor } from '../../../models/fundo-fixo.model';
 export class FundoFixoFormComponent implements OnInit {
   readonly setores = FUNDO_FIXO_SETORES;
   readonly limitePorCompra = FUNDO_FIXO_LIMITE_POR_COMPRA;
+  readonly gestores = FUNDO_FIXO_GESTORES;
 
   setor = signal<FundoFixoSetor>('Manutenção');
   fornecedor = signal('');
@@ -26,6 +27,7 @@ export class FundoFixoFormComponent implements OnInit {
   valorEstimado = signal<number | null>(null);
   observacoes = signal('');
   orcamento = signal<File | null>(null);
+  gestorAprovador = signal('');
 
   // Só Admin vê/usa: registrar em nome de outra pessoa e direcionar o comprador.
   solicitanteId = signal<string>('');
@@ -69,7 +71,8 @@ export class FundoFixoFormComponent implements OnInit {
 
   canSubmit(): boolean {
     const valor = this.valorEstimado() ?? 0;
-    return !!this.material().trim() && valor > 0 && valor <= this.limitePorCompra && !this.isSubmitting();
+    return !!this.material().trim() && !!this.gestorAprovador()
+      && valor > 0 && valor <= this.limitePorCompra && !this.isSubmitting();
   }
 
   async onSubmit(): Promise<void> {
@@ -89,6 +92,7 @@ export class FundoFixoFormComponent implements OnInit {
           linkProduto: this.linkProduto() || undefined,
           valorEstimado: this.valorEstimado() ?? 0,
           observacoes: this.observacoes() || undefined,
+          gestorAprovador: this.gestorAprovador() || undefined,
           solicitanteId: solicitante?.id,
           solicitanteNome: solicitante?.name,
           compradorId: comprador?.id,

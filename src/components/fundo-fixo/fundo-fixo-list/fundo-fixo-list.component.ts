@@ -133,7 +133,7 @@ export class FundoFixoListComponent implements OnInit {
       if (status !== 'todos' && s.status !== status) return false;
       if (setor !== 'todos' && s.setor !== setor) return false;
       if (termo) {
-        const texto = `${s.material} ${s.solicitanteNome} ${s.fornecedor ?? ''}`.toLowerCase();
+        const texto = `${s.material} ${s.solicitanteNome} ${s.fornecedor ?? ''} ${s.gestorAprovador ?? ''} ${s.compradorNome ?? ''}`.toLowerCase();
         if (!texto.includes(termo)) return false;
       }
       return true;

@@ -10,6 +10,9 @@ import {
 export const FUNDO_FIXO_LIMITE_MENSAL = 3000;
 export const FUNDO_FIXO_LIMITE_POR_COMPRA = 500;
 export const FUNDO_FIXO_SETORES: FundoFixoSetor[] = ['Manutenção', 'Operação', 'Infraestrutura', 'Outros'];
+// Gestores responsáveis fora do portal — só informativo (aparece em listas/relatórios).
+// A aprovação de fato no sistema é feita só pelo Admin, por enquanto.
+export const FUNDO_FIXO_GESTORES: string[] = ['Charles Rabelo', 'João Nunes'];
 
 interface FundoFixoRow {
   id: string;
@@ -31,6 +34,7 @@ interface FundoFixoRow {
   motivo_recusa: string | null;
   comprador_id: string | null;
   comprador_nome: string | null;
+  gestor_aprovador: string | null;
   mes_referencia: string;
   data_solicitacao: string;
   data_aprovacao: string | null;
@@ -76,6 +80,7 @@ function mapRow(r: FundoFixoRow): FundoFixoSolicitacao {
     motivoRecusa: r.motivo_recusa,
     compradorId: r.comprador_id,
     compradorNome: r.comprador_nome,
+    gestorAprovador: r.gestor_aprovador,
     mesReferencia: r.mes_referencia,
     dataSolicitacao: new Date(r.data_solicitacao),
     dataAprovacao: r.data_aprovacao ? new Date(r.data_aprovacao) : null,
@@ -305,6 +310,7 @@ export class FundoFixoService {
       orcamento_url: orcamentoUrl,
       observacoes: req.observacoes?.trim() || null,
       status: 'pendente',
+      gestor_aprovador: req.gestorAprovador?.trim() || null,
       comprador_id: podeDirecionar ? (req.compradorId ?? null) : null,
       comprador_nome: podeDirecionar ? (req.compradorNome ?? null) : null,
       mes_referencia: mesAtual(),

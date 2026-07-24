@@ -22,6 +22,7 @@ export interface FundoFixoSolicitacao {
   motivoRecusa: string | null;
   compradorId: string | null;   // quem ficou responsável por fazer a compra
   compradorNome: string | null;
+  gestorAprovador: string | null; // gestor (fora do portal) associado, só para listas/relatórios
   mesReferencia: string; // 'YYYY-MM'
   dataSolicitacao: Date;
   dataAprovacao: Date | null;
@@ -35,6 +36,7 @@ export interface CreateFundoFixoRequest {
   linkProduto?: string;
   valorEstimado: number;
   observacoes?: string;
+  gestorAprovador?: string;
   // Só usado por Admin registrando em nome de outra pessoa / direcionando a compra.
   solicitanteId?: string;
   solicitanteNome?: string;
