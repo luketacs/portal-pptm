@@ -55,7 +55,7 @@
       </div>
 
       <!-- KPIs -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <div class="app-card p-4 text-center border-l-4 border-amber-500">
           <p class="text-xs text-gray-500">Pendentes de aprovação</p>
           <p class="text-2xl font-bold text-gray-800">{{ countPendentes() }}</p>
@@ -65,8 +65,14 @@
           <p class="text-2xl font-bold text-gray-800">{{ countAguardandoNota() }}</p>
         </div>
         <div class="app-card p-4 text-center border-l-4 border-green-500">
-          <p class="text-xs text-gray-500">Total aprovado + comprado</p>
-          <p class="text-2xl font-bold text-green-700">{{ totalComprado() | currency:'BRL' }}</p>
+          <p class="text-xs text-gray-500">💳 No cartão (mês)</p>
+          <p class="text-2xl font-bold text-green-700">{{ totalCartao() | currency:'BRL' }}</p>
+          <p class="text-[10px] text-gray-400 mt-0.5">Isso é o que aparece na fatura</p>
+        </div>
+        <div class="app-card p-4 text-center border-l-4 border-orange-500">
+          <p class="text-xs text-gray-500">🔄 Reembolso / caixa (mês)</p>
+          <p class="text-2xl font-bold text-orange-700">{{ totalReembolsoCaixa() | currency:'BRL' }}</p>
+          <p class="text-[10px] text-gray-400 mt-0.5">Não aparece na fatura — já saiu como saque</p>
         </div>
         <div class="app-card p-4 text-center border-l-4 border-purple-500">
           <p class="text-xs text-gray-500">Dinheiro em caixa</p>

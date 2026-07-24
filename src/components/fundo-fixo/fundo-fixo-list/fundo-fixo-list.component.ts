@@ -119,13 +119,18 @@ export class FundoFixoListComponent implements OnInit {
   saldoRestante = computed(() => Math.max(0, this.limiteMensal - this.totalComprometido()));
   percentualUsado = computed(() => Math.min(100, (this.totalComprometido() / this.limiteMensal) * 100));
 
-  // Aprovado + comprado: dinheiro já autorizado no mês (usa valor final quando já
-  // disponível, senão o estimado) — diferente do "Comprometido" do topo, que também
-  // inclui pendentes (ainda nem aprovados) e saques.
-  totalComprado = computed(() =>
+  // Compras já finalizadas no mês, separadas por origem do dinheiro: no cartão
+  // (aparece direto na fatura) vs reembolso/caixa (já saiu como saque antes — não
+  // aparece de novo na fatura quando a compra é registrada).
+  totalCartao = computed(() =>
     this.solicitacoesDoMes()
-      .filter(s => s.status === 'aprovado' || s.status === 'comprado')
-      .reduce((sum, s) => sum + (s.valorFinal ?? s.valorEstimado), 0)
+      .filter(s => s.status === 'comprado' && s.formaPagamento === 'cartao')
+      .reduce((sum, s) => sum + (s.valorFinal ?? 0), 0)
+  );
+  totalReembolsoCaixa = computed(() =>
+    this.solicitacoesDoMes()
+      .filter(s => s.status === 'comprado' && (s.formaPagamento === 'dinheiro_caixa' || s.formaPagamento === 'reembolso'))
+      .reduce((sum, s) => sum + (s.valorFinal ?? 0), 0)
   );
   countPendentes = computed(() => this.solicitacoesDoMes().filter(s => s.status === 'pendente').length);
   countAguardandoNota = computed(() => this.solicitacoesDoMes().filter(s => s.status === 'aprovado').length);
