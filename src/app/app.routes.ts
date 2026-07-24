@@ -126,22 +126,26 @@ export const APP_ROUTES: Routes = [
     title: 'Gestão à vista do Estoque de Segurança',
   },
 
+  // Apontamentos descontinuado temporariamente — rotas removidas de propósito
+  // (cai no wildcard "**" → página não encontrada). Reativar: restaurar as
+  // rotas 'apontamentos' e 'publico/apontamentos' apontando para
+  // ApontamentosComponent, e o grupo do menu em sidebar.component.ts.
+
   {
-    path: 'apontamentos',
+    path: 'fundo-fixo',
     loadComponent: () =>
-      import('../components/apontamentos/apontamentos.component').then(m => m.ApontamentosComponent),
+      import('../components/fundo-fixo/fundo-fixo-list/fundo-fixo-list.component').then(m => m.FundoFixoListComponent),
     canActivate: [authGuard],
     data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
-    title: 'Apontamentos',
+    title: 'Fundo Fixo',
   },
-
-  // Rota pública — sem login (somente visualização)
   {
-    path: 'publico/apontamentos',
+    path: 'fundo-fixo/nova',
     loadComponent: () =>
-      import('../components/apontamentos/apontamentos.component').then(m => m.ApontamentosComponent),
-    data: { publicMode: true },
-    title: 'Apontamentos — PPTM',
+      import('../components/fundo-fixo/fundo-fixo-form/fundo-fixo-form.component').then(m => m.FundoFixoFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante'] },
+    title: 'Nova Solicitação — Fundo Fixo',
   },
 
   {

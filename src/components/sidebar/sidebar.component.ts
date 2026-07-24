@@ -151,7 +151,7 @@ export class SidebarComponent implements OnDestroy {
     requests: false,
     materials: false,
     admin: false,
-    apontamentos: false,
+    fundoFixo: false,
     almoxarifado: false,
     estoque: false,
     profile: false,
@@ -213,13 +213,16 @@ export class SidebarComponent implements OnDestroy {
         { path: '/audit', label: 'Auditoria', icon: '', roles: ['Admin'] },
       ],
     },
+    // Apontamentos descontinuado temporariamente — grupo do menu removido de
+    // propósito (a rota também foi removida em app.routes.ts). Reativar: ver
+    // comentário em app.routes.ts.
     {
-      id: 'apontamentos',
-      label: 'Apontamentos',
-      icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>',
-      roles: ['Admin', 'Solicitante', 'Visualizador'],
+      id: 'fundoFixo',
+      label: 'Fundo Fixo',
+      icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>',
+      roles: ['Solicitante', 'Admin', 'Visualizador'],
       links: [
-        { path: '/apontamentos', label: 'Apontamentos', icon: '', roles: ['Admin', 'Solicitante', 'Visualizador'] },
+        { path: '/fundo-fixo', label: 'Fundo Fixo', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
       ],
     },
     {

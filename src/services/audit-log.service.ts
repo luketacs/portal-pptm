@@ -28,6 +28,10 @@ export const AUDIT_EVENT_LABELS: Record<string, string> = {
   material_updated:         'Material editado',
   material_status_changed:  'Status de material alterado',
   material_deleted:         'Material excluído',
+  fundo_fixo_solicitado:    'Fundo Fixo solicitado',
+  fundo_fixo_aprovado:      'Fundo Fixo aprovado',
+  fundo_fixo_recusado:      'Fundo Fixo recusado',
+  fundo_fixo_comprado:      'Fundo Fixo — compra registrada',
 };
 
 export const AUDIT_EVENT_CATEGORIES: Record<string, string[]> = {
@@ -35,6 +39,7 @@ export const AUDIT_EVENT_CATEGORIES: Record<string, string[]> = {
   'Usuários':       ['user_created', 'user_updated', 'user_deleted'],
   'Solicitações':   ['request_created', 'request_status_changed', 'request_updated', 'request_deleted'],
   'Materiais':      ['material_created', 'material_updated', 'material_status_changed', 'material_deleted'],
+  'Fundo Fixo':     ['fundo_fixo_solicitado', 'fundo_fixo_aprovado', 'fundo_fixo_recusado', 'fundo_fixo_comprado'],
 };
 
 const MAX_ATTEMPTS = 3;
