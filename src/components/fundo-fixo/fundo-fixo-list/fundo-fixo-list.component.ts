@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@a
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { FundoFixoService, FUNDO_FIXO_LIMITE_MENSAL, FUNDO_FIXO_LIMITE_POR_COMPRA, FUNDO_FIXO_SETORES } from '../../../services/fundo-fixo.service';
+import { FundoFixoService, FUNDO_FIXO_GESTORES, FUNDO_FIXO_LIMITE_MENSAL, FUNDO_FIXO_LIMITE_POR_COMPRA, FUNDO_FIXO_SETORES } from '../../../services/fundo-fixo.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/toast.service';
 import { UserService } from '../../../services/user.service';
@@ -41,6 +41,7 @@ export class FundoFixoListComponent implements OnInit {
   readonly limiteMensal = FUNDO_FIXO_LIMITE_MENSAL;
   readonly limitePorCompra = FUNDO_FIXO_LIMITE_POR_COMPRA;
   readonly setores = FUNDO_FIXO_SETORES;
+  readonly gestores = FUNDO_FIXO_GESTORES;
   readonly statusLabel = STATUS_LABEL;
   readonly statusBadge = STATUS_BADGE;
   readonly formaPagamentoLabel = FORMA_PAGAMENTO_LABEL;
@@ -71,6 +72,8 @@ export class FundoFixoListComponent implements OnInit {
   })();
 
   // Modais
+  aprovarAlvo = signal<FundoFixoSolicitacao | null>(null);
+  aprovarGestor = signal('');
   recusarAlvo = signal<FundoFixoSolicitacao | null>(null);
   motivoRecusa = signal('');
   comprarAlvo = signal<FundoFixoSolicitacao | null>(null);
@@ -171,12 +174,25 @@ export class FundoFixoListComponent implements OnInit {
   }
 
   // ── Aprovar ────────────────────────────────────────────────────────────
-  async aprovar(s: FundoFixoSolicitacao): Promise<void> {
-    if (this.isProcessando()) return;
+  abrirAprovar(s: FundoFixoSolicitacao): void {
+    this.aprovarAlvo.set(s);
+    this.aprovarGestor.set('');
+  }
+
+  fecharAprovar(): void {
+    this.aprovarAlvo.set(null);
+  }
+
+  async confirmarAprovacao(): Promise<void> {
+    const alvo = this.aprovarAlvo();
+    const gestor = this.aprovarGestor();
+    if (!alvo || !gestor || this.isProcessando()) return;
+
     this.isProcessando.set(true);
     try {
-      await this.fundoFixoService.aprovar(s.id);
-      this.notificationService.showSuccess(`Solicitação de ${s.solicitanteNome} aprovada.`);
+      await this.fundoFixoService.aprovar(alvo.id, gestor);
+      this.notificationService.showSuccess(`Solicitação de ${alvo.solicitanteNome} aprovada.`);
+      this.fecharAprovar();
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao aprovar.');
     } finally {

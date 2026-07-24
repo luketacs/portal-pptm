@@ -355,7 +355,7 @@ export class FundoFixoService {
     await this.load();
   }
 
-  async aprovar(id: string): Promise<void> {
+  async aprovar(id: string, gestorAprovador: string): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
 
@@ -365,6 +365,7 @@ export class FundoFixoService {
         status: 'aprovado',
         aprovador_id: admin.id,
         aprovador_nome: admin.name,
+        gestor_aprovador: gestorAprovador,
         data_aprovacao: new Date().toISOString(),
       })
       .eq('id', id);
@@ -377,7 +378,8 @@ export class FundoFixoService {
       event_type: 'fundo_fixo_aprovado',
       resource_type: 'fundo_fixo',
       resource_id: id,
-      description: `${admin.name} aprovou solicitação de Fundo Fixo de ${item?.solicitanteNome ?? ''}: ${item?.material ?? ''}`,
+      description: `${admin.name} aprovou solicitação de Fundo Fixo de ${item?.solicitanteNome ?? ''} (gestor: ${gestorAprovador}): ${item?.material ?? ''}`,
+      metadata: { gestor_aprovador: gestorAprovador },
     });
 
     await this.load();
