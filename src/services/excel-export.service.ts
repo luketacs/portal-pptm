@@ -3,6 +3,15 @@ import * as XLSX from 'xlsx-js-style';
 import type { CellStyle, WorkSheet, WorkBook } from 'xlsx-js-style';
 import type { MaterialComSAs, Movimentacao, SaldoReal } from './almoxarifado.service';
 
+export interface FechamentoFundoFixoLinha {
+  fornecedor: string;
+  solicitante: string;
+  setor: string;
+  material: string;
+  valor: number;
+  aprovador: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ExcelExportService {
 
@@ -93,6 +102,38 @@ export class ExcelExportService {
       fill: { fgColor: { rgb: 'FFE699' }, patternType: 'solid' },
       alignment: { horizontal: align, vertical: 'center' },
       border: { top: { color: { rgb: 'CCAA00' }, style: 'medium' } },
+    };
+  }
+
+  private sSecao(): CellStyle {
+    return {
+      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 10 },
+      fill: { fgColor: { rgb: '2E5C8A' }, patternType: 'solid' },
+      alignment: { horizontal: 'center', vertical: 'center' },
+    };
+  }
+
+  private sTotalSalmao(): CellStyle {
+    return {
+      font: { bold: true, sz: 10, color: { rgb: '7A1F1F' } },
+      fill: { fgColor: { rgb: 'F4A8A0' }, patternType: 'solid' },
+      alignment: { horizontal: 'right', vertical: 'center' },
+    };
+  }
+
+  private sReferenciaVerde(): CellStyle {
+    return {
+      font: { bold: true, sz: 10, color: { rgb: '2E5C2E' } },
+      fill: { fgColor: { rgb: 'C6E0B4' }, patternType: 'solid' },
+      alignment: { horizontal: 'right', vertical: 'center' },
+    };
+  }
+
+  private sCaixaAmarelo(): CellStyle {
+    return {
+      font: { bold: true, sz: 10, color: { rgb: '7C3A00' } },
+      fill: { fgColor: { rgb: 'FFE699' }, patternType: 'solid' },
+      alignment: { horizontal: 'right', vertical: 'center' },
     };
   }
 
@@ -345,5 +386,125 @@ export class ExcelExportService {
     wb.Props = { Title: `Entradas por Período — ${periodo} dias`, Company: 'Diamante Energia' };
     XLSX.utils.book_append_sheet(wb, ws, 'Entradas por Período');
     XLSX.writeFile(wb, `entradas_periodo_${periodo}d_${this.todayStr()}.xlsx`);
+  }
+
+  // ── Exportar Fechamento do Fundo Fixo ─────────────────────────────────────
+  // Mesmo layout da planilha que já era usada para pedir aprovação por e-mail:
+  // duas tabelas (Cartão / Reembolsos), cada uma com seu total e as referências
+  // (limite mensal, total sacado no mês, saldo em caixa) logo abaixo.
+
+  private tabelaFechamento(
+    ws: WorkSheet, rowInicial: number, NC: number, titulo: string, linhas: FechamentoFundoFixoLinha[],
+  ): { proximaLinha: number; linhaTotal: number } {
+    let row = rowInicial;
+
+    this.fillRow(ws, row, NC, this.sSecao());
+    ws[this.enc(row, 0)] = { v: titulo, t: 's', s: this.sSecao() };
+    const linhaBanner = row;
+    row++;
+
+    const headers: Array<[string, 'left' | 'center' | 'right']> = [
+      ['Nº',                        'center'],
+      ['Fornecedor',                'left'  ],
+      ['Solicitante',               'left'  ],
+      ['Setor',                     'center'],
+      ['Material',                  'left'  ],
+      ['Valor',                     'right' ],
+      ['Aprovador',                 'center'],
+      ['Solicitação de Pagamento',  'center'],
+    ];
+    headers.forEach(([label, align], c) => {
+      ws[this.enc(row, c)] = { v: label, t: 's', s: this.sHeader(align) };
+    });
+    row++;
+
+    linhas.forEach((linha, i) => {
+      const even = i % 2 === 1;
+      this.n(ws, row, 0, i + 1,           this.sData('center', even), '#,##0');
+      this.s(ws, row, 1, linha.fornecedor, this.sData('left', even));
+      this.s(ws, row, 2, linha.solicitante, this.sData('left', even));
+      this.s(ws, row, 3, linha.setor,      this.sData('center', even));
+      this.s(ws, row, 4, linha.material,   this.sData('left', even));
+      this.n(ws, row, 5, linha.valor,      this.sData('right', even), '"R$"\\ #,##0.00');
+      this.s(ws, row, 6, linha.aprovador,  this.sData('center', even));
+      this.s(ws, row, 7, '',               this.sData('center', even));
+      row++;
+    });
+
+    if (linhas.length === 0) {
+      for (let c = 0; c < NC; c++) this.s(ws, row, c, c === 0 ? 'Nenhum lançamento no mês' : '', this.sData('left'));
+      row++;
+    }
+
+    const linhaTotal = row;
+    const total = linhas.reduce((sum, l) => sum + l.valor, 0);
+    for (let c = 0; c < 5; c++) this.s(ws, row, c, '', this.sData());
+    this.n(ws, row, 5, total, this.sTotalSalmao(), '"R$"\\ #,##0.00');
+    for (let c = 6; c < NC; c++) this.s(ws, row, c, '', this.sData());
+    row++;
+
+    ws['!merges'] = ws['!merges'] ?? [];
+    (ws['!merges'] as { s: { r: number; c: number }; e: { r: number; c: number } }[]).push(
+      { s: { r: linhaBanner, c: 0 }, e: { r: linhaBanner, c: NC - 1 } },
+    );
+
+    return { proximaLinha: row, linhaTotal };
+  }
+
+  exportarFechamentoFundoFixo(params: {
+    mesLabel: string;
+    cartao: FechamentoFundoFixoLinha[];
+    reembolsos: FechamentoFundoFixoLinha[];
+    limiteMensal: number;
+    totalSacadoMes: number;
+    saldoCaixaAtual: number;
+  }): void {
+    const NC = 8;
+    const ws: WorkSheet = {};
+    let row = 0;
+
+    this.fillRow(ws, row, NC, this.sTitle());
+    ws[this.enc(row, 0)] = { v: `FUNDO FIXO — FECHAMENTO DE ${params.mesLabel.toUpperCase()}`, t: 's', s: this.sTitle() };
+    const linhaTitulo = row;
+    row++;
+
+    this.fillRow(ws, row, NC, this.sSub());
+    ws[this.enc(row, 0)] = { v: `Gerado em ${this.nowStr()}`, t: 's', s: this.sSub() };
+    const linhaSub = row;
+    row++;
+    row++; // espaço
+
+    const cartaoResult = this.tabelaFechamento(ws, row, NC, 'CARTÃO CRÉDITO - FUNDO FIXO', params.cartao);
+    row = cartaoResult.proximaLinha;
+    this.n(ws, row, 5, params.limiteMensal, this.sReferenciaVerde(), '"R$"\\ #,##0.00');
+    for (let c = 0; c < NC; c++) if (c !== 5) this.s(ws, row, c, '', this.sData());
+    row++;
+    row++; // espaço
+
+    const reembolsosResult = this.tabelaFechamento(ws, row, NC, 'REEMBOLSOS', params.reembolsos);
+    row = reembolsosResult.proximaLinha;
+    this.n(ws, row, 5, params.totalSacadoMes, this.sReferenciaVerde(), '"R$"\\ #,##0.00');
+    for (let c = 0; c < NC; c++) if (c !== 5) this.s(ws, row, c, '', this.sData());
+    row++;
+    this.n(ws, row, 5, params.saldoCaixaAtual, this.sCaixaAmarelo(), '"R$"\\ #,##0.00');
+    this.s(ws, row, 6, 'Valor em caixa', this.sData('left'));
+    for (let c = 0; c < NC; c++) if (c !== 5 && c !== 6) this.s(ws, row, c, '', this.sData());
+    row++;
+
+    ws['!ref']    = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: row - 1, c: NC - 1 } });
+    ws['!merges'] = [
+      ...(ws['!merges'] as { s: { r: number; c: number }; e: { r: number; c: number } }[]),
+      { s: { r: linhaTitulo, c: 0 }, e: { r: linhaTitulo, c: NC - 1 } },
+      { s: { r: linhaSub, c: 0 }, e: { r: linhaSub, c: NC - 1 } },
+    ];
+    ws['!cols'] = [
+      { wch: 5  }, { wch: 24 }, { wch: 16 }, { wch: 14 }, { wch: 34 },
+      { wch: 14 }, { wch: 14 }, { wch: 22 },
+    ];
+
+    const wb: WorkBook = XLSX.utils.book_new();
+    wb.Props = { Title: `Fundo Fixo — Fechamento ${params.mesLabel}`, Company: 'Diamante Energia' };
+    XLSX.utils.book_append_sheet(wb, ws, 'Fechamento');
+    XLSX.writeFile(wb, `fundo_fixo_fechamento_${this.todayStr()}.xlsx`);
   }
 }

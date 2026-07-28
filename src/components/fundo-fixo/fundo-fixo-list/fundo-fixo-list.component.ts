@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@angular/core';
+import JSZip from 'jszip';
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -6,6 +7,7 @@ import { FundoFixoService, FUNDO_FIXO_GESTORES, FUNDO_FIXO_LIMITE_MENSAL, FUNDO_
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/toast.service';
 import { UserService } from '../../../services/user.service';
+import { ExcelExportService } from '../../../services/excel-export.service';
 import { FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSolicitacao, FundoFixoStatus } from '../../../models/fundo-fixo.model';
 
 type StatusFiltro = 'todos' | FundoFixoStatus;
@@ -137,6 +139,17 @@ export class FundoFixoListComponent implements OnInit {
   countPendentes = computed(() => this.solicitacoesDoMes().filter(s => s.status === 'pendente').length);
   countAguardandoNota = computed(() => this.solicitacoesDoMes().filter(s => s.status === 'aprovado').length);
 
+  // ── Fechamento do mês (relatório para os gestores) ────────────────────
+  itensCartaoDoMes = computed(() => this.solicitacoesDoMes().filter(s => s.status === 'comprado' && s.formaPagamento === 'cartao'));
+  itensReembolsoDoMes = computed(() => this.solicitacoesDoMes().filter(s => s.status === 'comprado' && (s.formaPagamento === 'dinheiro_caixa' || s.formaPagamento === 'reembolso')));
+  totalSacadoMes = computed(() =>
+    this.fundoFixoService.saques()
+      .filter(s => s.mesReferencia === this.mesFiltro() && s.tipo === 'saque')
+      .reduce((sum, s) => sum + s.valor, 0)
+  );
+  mesFiltroLabel = computed(() => this.meses.find(m => m.value === this.mesFiltro())?.label ?? this.mesFiltro());
+  isExportandoFechamento = signal(false);
+
   listaFiltrada = computed(() => {
     const status = this.statusFiltro();
     const setor = this.setorFiltro();
@@ -159,6 +172,7 @@ export class FundoFixoListComponent implements OnInit {
     private authService: AuthService,
     private notificationService: NotificationService,
     private userService: UserService,
+    private excelExportService: ExcelExportService,
   ) {
     if (this.route.snapshot.data['mode'] === 'gestao') {
       this.mode = 'gestao';
@@ -445,5 +459,85 @@ export class FundoFixoListComponent implements OnInit {
     } finally {
       this.isProcessando.set(false);
     }
+  }
+
+  // ── Fechar mês: excel no formato da planilha + zip das NFs + e-mail pronto ──
+  async fecharMes(): Promise<void> {
+    if (this.isExportandoFechamento()) return;
+    this.isExportandoFechamento.set(true);
+
+    try {
+      const mesLabel = this.mesFiltroLabel();
+      const cartao = this.itensCartaoDoMes();
+      const reembolsos = this.itensReembolsoDoMes();
+
+      this.excelExportService.exportarFechamentoFundoFixo({
+        mesLabel,
+        cartao: cartao.map(s => ({
+          fornecedor: s.fornecedor ?? '—',
+          solicitante: s.solicitanteNome,
+          setor: s.setor,
+          material: s.material,
+          valor: s.valorFinal ?? s.valorEstimado,
+          aprovador: s.gestorAprovador ?? '—',
+        })),
+        reembolsos: reembolsos.map(s => ({
+          fornecedor: s.fornecedor ?? '—',
+          solicitante: s.solicitanteNome,
+          setor: s.setor,
+          material: s.material,
+          valor: s.valorFinal ?? s.valorEstimado,
+          aprovador: s.gestorAprovador ?? '—',
+        })),
+        limiteMensal: this.limiteMensal,
+        totalSacadoMes: this.totalSacadoMes(),
+        saldoCaixaAtual: this.saldoCaixa(),
+      });
+
+      await this.baixarNotasFiscaisZip([...cartao, ...reembolsos], mesLabel);
+
+      const assunto = encodeURIComponent(`Fundo Fixo — Fechamento de ${mesLabel}`);
+      const corpo = encodeURIComponent(
+        `Senhores, bom dia,\n\nSegue para conhecimento e aprovação os gastos com o fundo fixo da fatura de ${mesLabel}.\n\n` +
+        `Planilha e notas fiscais em anexo.\n\nAguardo de acordo para seguir com o pagamento da fatura.\n\nAtenciosamente,`,
+      );
+      window.location.href = `mailto:?subject=${assunto}&body=${corpo}`;
+
+      this.notificationService.showSuccess('Excel e notas fiscais baixados. Anexe os dois arquivos no e-mail que abriu.');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao gerar o fechamento do mês.');
+    } finally {
+      this.isExportandoFechamento.set(false);
+    }
+  }
+
+  private async baixarNotasFiscaisZip(itens: FundoFixoSolicitacao[], mesLabel: string): Promise<void> {
+    const comNota = itens.filter(s => !!s.notaFiscalUrl);
+    if (comNota.length === 0) return;
+
+    const zip = new JSZip();
+    const resultados = await Promise.allSettled(
+      comNota.map(async (s, i) => {
+        const res = await fetch(s.notaFiscalUrl!);
+        if (!res.ok) throw new Error(`Falha ao baixar nota fiscal de ${s.fornecedor ?? s.material}`);
+        const blob = await res.blob();
+        const ext = s.notaFiscalUrl!.split('.').pop()?.split('?')[0] || 'pdf';
+        const nomeBase = `${s.fornecedor ?? s.material}`.replace(/[^\w\sÀ-ÿ-]/g, '').trim().slice(0, 40) || 'nota';
+        zip.file(`${String(i + 1).padStart(2, '0')}_${nomeBase}.${ext}`, blob);
+      }),
+    );
+
+    const falhas = resultados.filter(r => r.status === 'rejected').length;
+    if (falhas > 0) {
+      this.notificationService.showError(`${falhas} nota(s) fiscal(is) não puderam ser baixadas para o zip.`);
+    }
+
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `notas_fiscais_fundo_fixo_${mesLabel.replace(/\s+/g, '_')}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 }
