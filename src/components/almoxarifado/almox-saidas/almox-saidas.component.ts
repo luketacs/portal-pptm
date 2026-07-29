@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, effect, signal, untracked } from '@angular/core';
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AlmoxarifadoService, Movimentacao, UltimaImportacao } from '../../../services/almoxarifado.service';
 import { ExcelExportService } from '../../../services/excel-export.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/toast.service';
+import { createClientPageItems, createPageNavigation } from '../../../utils/pagination';
 
 type Periodo = 7 | 15 | 30 | 60;
 type ModoFiltro = 'dias' | 'mes';
@@ -52,6 +53,15 @@ export class AlmoxSaidasComponent implements OnInit {
       : this.almoxService.filtrarSaidasPorPeriodo(todas, this.periodoSelecionado());
     return lista.sort((a, b) => (a.data_operacao ?? '') < (b.data_operacao ?? '') ? -1 : 1);
   });
+
+  // Paginação
+  private pageNav = createPageNavigation(computed(() => this.saidasFiltradas().length), 25);
+  currentPage = this.pageNav.currentPage;
+  totalPages = this.pageNav.totalPages;
+  startItem = this.pageNav.startItem;
+  endItem = this.pageNav.endItem;
+  visiblePages = this.pageNav.visiblePages;
+  saidasPaginadas = createClientPageItems(this.saidasFiltradas, this.pageNav);
 
   resumo = computed(() => {
     const saidas = this.saidasFiltradas();
@@ -138,7 +148,20 @@ export class AlmoxSaidasComponent implements OnInit {
     private excelExport: ExcelExportService,
     private authService: AuthService,
     private notificationService: NotificationService,
-  ) {}
+  ) {
+    let isFirstRun = true;
+    effect(() => {
+      this.saidasFiltradas();
+      untracked(() => {
+        if (isFirstRun) { isFirstRun = false; return; }
+        this.currentPage.set(1);
+      });
+    });
+  }
+
+  goToPage(page: number): void {
+    this.pageNav.goToPage(page);
+  }
 
   exportarExcel(): void {
     this.excelExport.exportarSaidasPorPeriodo(

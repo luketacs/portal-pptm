@@ -109,110 +109,6 @@
   }
 
   @if (!isLoading() && !errorMessage()) {
-    <!-- Cards de resumo -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      <div class="app-card p-4 text-center">
-        <p class="text-xs text-gray-500">Período</p>
-        <p class="text-sm font-semibold text-gray-700 mt-1">{{ dateRange().from }} a {{ dateRange().to }}</p>
-      </div>
-      <div class="app-card p-4 text-center">
-        <p class="text-xs text-gray-500">Lançamentos</p>
-        <p class="text-2xl font-bold text-gray-800">{{ resumo().total }}</p>
-      </div>
-      <div class="app-card p-4 text-center">
-        <p class="text-xs text-gray-500">Materiais distintos</p>
-        <p class="text-2xl font-bold text-blue-700">{{ resumo().distintos }}</p>
-      </div>
-      <div class="app-card p-4 text-center">
-        <p class="text-xs text-gray-500">Qtd. total saída</p>
-        <p class="text-2xl font-bold text-gray-800">{{ resumo().qtdTotal | number:'1.2-2' }}</p>
-      </div>
-    </div>
-    <div class="app-card p-4 flex items-center justify-between">
-      <span class="text-sm text-gray-600 font-medium">Valor total das saídas no período</span>
-      <span class="text-2xl font-bold text-indigo-700">{{ resumo().valorTotal | currency:'BRL' }}</span>
-    </div>
-
-    <!-- Comparativo com a meta do mês selecionado -->
-    @if (modoFiltro() === 'mes') {
-      <div class="app-card p-5">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-          <span class="text-sm font-semibold text-gray-700">Meta de retirada do mês</span>
-          @if (metaMesFiltro() > 0) {
-            <span class="text-sm text-gray-500">
-              {{ resumo().valorTotal | currency:'BRL' }} de {{ metaMesFiltro() | currency:'BRL' }}
-              ({{ percentualMesFiltro() | number:'1.0-0' }}%)
-            </span>
-          }
-        </div>
-        @if (metaMesFiltro() > 0) {
-          <div class="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
-            <div class="h-full rounded-full transition-all"
-              [class]="percentualMesFiltro() >= 100 ? 'bg-green-500' : percentualMesFiltro() >= 80 ? 'bg-amber-500' : 'bg-blue-500'"
-              [style.width.%]="percentualMesFiltro() > 100 ? 100 : percentualMesFiltro()"></div>
-          </div>
-          @if (percentualMesFiltro() >= 100) {
-            <p class="text-xs text-green-600 mt-2 font-medium">Meta do mês atingida.</p>
-          }
-        } @else {
-          <p class="text-sm text-gray-400">
-            Nenhuma meta cadastrada para este mês.
-            @if (isAdmin()) { Defina uma na tabela de metas abaixo. }
-          </p>
-        }
-      </div>
-    }
-
-    <!-- Tabela -->
-    @if (saidasFiltradas().length > 0) {
-      <div class="overflow-x-auto rounded-xl border border-slate-200">
-        <table class="min-w-full divide-y divide-slate-200 text-sm">
-          <thead class="bg-blue-900 text-white">
-            <tr>
-              <th class="px-3 py-3 text-left font-semibold">Nº</th>
-              <th class="px-3 py-3 text-center font-semibold">Data</th>
-              <th class="px-3 py-3 text-left font-semibold">Código</th>
-              <th class="px-3 py-3 text-left font-semibold">Descrição</th>
-              <th class="px-3 py-3 text-center font-semibold">UM</th>
-              <th class="px-3 py-3 text-center font-semibold">Grupo</th>
-              <th class="px-3 py-3 text-right font-semibold">Qtd. Saída</th>
-              <th class="px-3 py-3 text-right font-semibold">Custo Médio</th>
-              <th class="px-3 py-3 text-right font-semibold">Valor Total</th>
-              <th class="px-3 py-3 text-left font-semibold">Referência</th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-slate-100">
-            @for (m of saidasFiltradas(); track m.id; let idx = $index) {
-              <tr [class]="idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-blue-50/30 hover:bg-blue-50'">
-                <td class="px-3 py-2 text-gray-500">{{ idx + 1 }}</td>
-                <td class="px-3 py-2 text-center text-gray-600 whitespace-nowrap">{{ formatDate(m.data_operacao) }}</td>
-                <td class="px-3 py-2 font-mono text-xs">{{ m.produto_codigo }}</td>
-                <td class="px-3 py-2 text-gray-800 max-w-xs truncate" [title]="m.produto_desc ?? ''">{{ m.produto_desc }}</td>
-                <td class="px-3 py-2 text-center text-gray-600">{{ m.unidade }}</td>
-                <td class="px-3 py-2 text-center text-gray-600">{{ m.grupo }}</td>
-                <td class="px-3 py-2 text-right font-semibold">{{ m.qtd_saida | number:'1.2-2' }}</td>
-                <td class="px-3 py-2 text-right text-gray-600">{{ m.custo_medio | currency:'BRL' }}</td>
-                <td class="px-3 py-2 text-right font-semibold text-indigo-700">{{ valorSaida(m) | currency:'BRL' }}</td>
-                <td class="px-3 py-2 text-gray-500 text-xs font-mono">{{ m.referencia }}</td>
-              </tr>
-            }
-            <!-- Total -->
-            <tr class="bg-yellow-50 font-bold border-t-2 border-yellow-200">
-              <td colspan="6" class="px-3 py-2 text-gray-700">TOTAL</td>
-              <td class="px-3 py-2 text-right">{{ resumo().qtdTotal | number:'1.2-2' }}</td>
-              <td class="px-3 py-2"></td>
-              <td class="px-3 py-2 text-right text-indigo-700">{{ resumo().valorTotal | currency:'BRL' }}</td>
-              <td class="px-3 py-2"></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    } @else {
-      <div class="app-card p-10 text-center text-gray-400">
-        Nenhuma saída nos últimos {{ periodoSelecionado() }} dias. Verifique se os dados foram importados.
-      </div>
-    }
-
     <!-- Meta de retirada de materiais (visão anual) -->
     <div class="app-card p-4 space-y-3">
       <div class="flex items-center justify-between flex-wrap gap-2">
@@ -288,6 +184,134 @@
         <p class="text-xs text-gray-400">Só o Admin pode editar as metas mensais.</p>
       }
     </div>
+
+    <!-- Cards de resumo -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="app-card p-4 text-center">
+        <p class="text-xs text-gray-500">Período</p>
+        <p class="text-sm font-semibold text-gray-700 mt-1">{{ dateRange().from }} a {{ dateRange().to }}</p>
+      </div>
+      <div class="app-card p-4 text-center">
+        <p class="text-xs text-gray-500">Lançamentos</p>
+        <p class="text-2xl font-bold text-gray-800">{{ resumo().total }}</p>
+      </div>
+      <div class="app-card p-4 text-center">
+        <p class="text-xs text-gray-500">Materiais distintos</p>
+        <p class="text-2xl font-bold text-blue-700">{{ resumo().distintos }}</p>
+      </div>
+      <div class="app-card p-4 text-center">
+        <p class="text-xs text-gray-500">Qtd. total saída</p>
+        <p class="text-2xl font-bold text-gray-800">{{ resumo().qtdTotal | number:'1.2-2' }}</p>
+      </div>
+    </div>
+    <div class="app-card p-4 flex items-center justify-between">
+      <span class="text-sm text-gray-600 font-medium">Valor total das saídas no período</span>
+      <span class="text-2xl font-bold text-indigo-700">{{ resumo().valorTotal | currency:'BRL' }}</span>
+    </div>
+
+    <!-- Comparativo com a meta do mês selecionado -->
+    @if (modoFiltro() === 'mes') {
+      <div class="app-card p-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <span class="text-sm font-semibold text-gray-700">Meta de retirada do mês</span>
+          @if (metaMesFiltro() > 0) {
+            <span class="text-sm text-gray-500">
+              {{ resumo().valorTotal | currency:'BRL' }} de {{ metaMesFiltro() | currency:'BRL' }}
+              ({{ percentualMesFiltro() | number:'1.0-0' }}%)
+            </span>
+          }
+        </div>
+        @if (metaMesFiltro() > 0) {
+          <div class="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all"
+              [class]="percentualMesFiltro() >= 100 ? 'bg-green-500' : percentualMesFiltro() >= 80 ? 'bg-amber-500' : 'bg-blue-500'"
+              [style.width.%]="percentualMesFiltro() > 100 ? 100 : percentualMesFiltro()"></div>
+          </div>
+          @if (percentualMesFiltro() >= 100) {
+            <p class="text-xs text-green-600 mt-2 font-medium">Meta do mês atingida.</p>
+          }
+        } @else {
+          <p class="text-sm text-gray-400">
+            Nenhuma meta cadastrada para este mês.
+            @if (isAdmin()) { Defina uma na tabela de metas no topo da tela. }
+          </p>
+        }
+      </div>
+    }
+
+    <!-- Tabela -->
+    @if (saidasFiltradas().length > 0) {
+      <div class="overflow-x-auto rounded-xl border border-slate-200">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+          <thead class="bg-blue-900 text-white">
+            <tr>
+              <th class="px-3 py-3 text-left font-semibold">Nº</th>
+              <th class="px-3 py-3 text-center font-semibold">Data</th>
+              <th class="px-3 py-3 text-left font-semibold">Código</th>
+              <th class="px-3 py-3 text-left font-semibold">Descrição</th>
+              <th class="px-3 py-3 text-center font-semibold">UM</th>
+              <th class="px-3 py-3 text-center font-semibold">Grupo</th>
+              <th class="px-3 py-3 text-right font-semibold">Qtd. Saída</th>
+              <th class="px-3 py-3 text-right font-semibold">Custo Médio</th>
+              <th class="px-3 py-3 text-right font-semibold">Valor Total</th>
+              <th class="px-3 py-3 text-left font-semibold">Referência</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-slate-100">
+            @for (m of saidasPaginadas(); track m.id; let idx = $index) {
+              <tr [class]="idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-blue-50/30 hover:bg-blue-50'">
+                <td class="px-3 py-2 text-gray-500">{{ startItem() + idx }}</td>
+                <td class="px-3 py-2 text-center text-gray-600 whitespace-nowrap">{{ formatDate(m.data_operacao) }}</td>
+                <td class="px-3 py-2 font-mono text-xs">{{ m.produto_codigo }}</td>
+                <td class="px-3 py-2 text-gray-800 max-w-xs truncate" [title]="m.produto_desc ?? ''">{{ m.produto_desc }}</td>
+                <td class="px-3 py-2 text-center text-gray-600">{{ m.unidade }}</td>
+                <td class="px-3 py-2 text-center text-gray-600">{{ m.grupo }}</td>
+                <td class="px-3 py-2 text-right font-semibold">{{ m.qtd_saida | number:'1.2-2' }}</td>
+                <td class="px-3 py-2 text-right text-gray-600">{{ m.custo_medio | currency:'BRL' }}</td>
+                <td class="px-3 py-2 text-right font-semibold text-indigo-700">{{ valorSaida(m) | currency:'BRL' }}</td>
+                <td class="px-3 py-2 text-gray-500 text-xs font-mono">{{ m.referencia }}</td>
+              </tr>
+            }
+            <!-- Total -->
+            <tr class="bg-yellow-50 font-bold border-t-2 border-yellow-200">
+              <td colspan="6" class="px-3 py-2 text-gray-700">TOTAL</td>
+              <td class="px-3 py-2 text-right">{{ resumo().qtdTotal | number:'1.2-2' }}</td>
+              <td class="px-3 py-2"></td>
+              <td class="px-3 py-2 text-right text-indigo-700">{{ resumo().valorTotal | currency:'BRL' }}</td>
+              <td class="px-3 py-2"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      @if (totalPages() > 1) {
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 px-4 py-3 bg-slate-50 rounded-xl border border-slate-200">
+          <p class="text-sm text-gray-500 m-0">
+            Mostrando {{ startItem() }}–{{ endItem() }} de {{ saidasFiltradas().length }} lançamentos
+          </p>
+          <div class="flex items-center gap-1">
+            <button (click)="goToPage(currentPage() - 1)" [disabled]="currentPage() === 1"
+              class="px-3 py-1.5 text-sm rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition">
+              Anterior
+            </button>
+            @for (page of visiblePages(); track page) {
+              <button (click)="goToPage(page)"
+                class="px-3 py-1.5 text-sm rounded-lg border transition"
+                [class]="page === currentPage() ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-100'">
+                {{ page }}
+              </button>
+            }
+            <button (click)="goToPage(currentPage() + 1)" [disabled]="currentPage() === totalPages()"
+              class="px-3 py-1.5 text-sm rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition">
+              Próximo
+            </button>
+          </div>
+        </div>
+      }
+    } @else {
+      <div class="app-card p-10 text-center text-gray-400">
+        Nenhuma saída nos últimos {{ periodoSelecionado() }} dias. Verifique se os dados foram importados.
+      </div>
+    }
   }
 </div>
 
