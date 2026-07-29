@@ -5,17 +5,43 @@
       <p class="text-sm text-gray-500 mt-0.5">Materiais que saíram do almoxarifado no período selecionado.</p>
     </div>
     <div class="flex items-center gap-3 flex-wrap">
-      <!-- Seletor de período -->
+      <!-- Alterna entre janela de dias e mês específico -->
       <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
-        @for (p of periodos; track p) {
-          <button (click)="periodoSelecionado.set(p)"
-            [class]="periodoSelecionado() === p
-              ? 'px-3 py-1.5 rounded-md text-sm font-semibold bg-white text-blue-700 shadow-sm'
-              : 'px-3 py-1.5 rounded-md text-sm text-gray-600 hover:text-gray-900'">
-            {{ p }} dias
-          </button>
-        }
+        <button (click)="modoFiltro.set('dias')"
+          [class]="modoFiltro() === 'dias'
+            ? 'px-3 py-1.5 rounded-md text-sm font-semibold bg-white text-blue-700 shadow-sm'
+            : 'px-3 py-1.5 rounded-md text-sm text-gray-600 hover:text-gray-900'">
+          Por período
+        </button>
+        <button (click)="modoFiltro.set('mes')"
+          [class]="modoFiltro() === 'mes'
+            ? 'px-3 py-1.5 rounded-md text-sm font-semibold bg-white text-blue-700 shadow-sm'
+            : 'px-3 py-1.5 rounded-md text-sm text-gray-600 hover:text-gray-900'">
+          Por mês
+        </button>
       </div>
+      <!-- Seletor de período (dias) -->
+      @if (modoFiltro() === 'dias') {
+        <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+          @for (p of periodos; track p) {
+            <button (click)="periodoSelecionado.set(p)"
+              [class]="periodoSelecionado() === p
+                ? 'px-3 py-1.5 rounded-md text-sm font-semibold bg-white text-blue-700 shadow-sm'
+                : 'px-3 py-1.5 rounded-md text-sm text-gray-600 hover:text-gray-900'">
+              {{ p }} dias
+            </button>
+          }
+        </div>
+      }
+      <!-- Seletor de mês específico -->
+      @if (modoFiltro() === 'mes') {
+        <select [ngModel]="mesEspecifico()" (ngModelChange)="mesEspecifico.set($event)"
+          class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          @for (m of mesesDoAno(); track m.key) {
+            <option [value]="m.key">{{ m.label }}</option>
+          }
+        </select>
+      }
       <!-- Exportar -->
       @if (!isLoading() && !errorMessage() && saidasFiltradas().length > 0) {
         <button (click)="exportarExcel()"
@@ -107,6 +133,36 @@
       <span class="text-2xl font-bold text-indigo-700">{{ resumo().valorTotal | currency:'BRL' }}</span>
     </div>
 
+    <!-- Comparativo com a meta do mês selecionado -->
+    @if (modoFiltro() === 'mes') {
+      <div class="app-card p-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <span class="text-sm font-semibold text-gray-700">Meta de retirada do mês</span>
+          @if (metaMesFiltro() > 0) {
+            <span class="text-sm text-gray-500">
+              {{ resumo().valorTotal | currency:'BRL' }} de {{ metaMesFiltro() | currency:'BRL' }}
+              ({{ percentualMesFiltro() | number:'1.0-0' }}%)
+            </span>
+          }
+        </div>
+        @if (metaMesFiltro() > 0) {
+          <div class="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all"
+              [class]="percentualMesFiltro() >= 100 ? 'bg-green-500' : percentualMesFiltro() >= 80 ? 'bg-amber-500' : 'bg-blue-500'"
+              [style.width.%]="percentualMesFiltro() > 100 ? 100 : percentualMesFiltro()"></div>
+          </div>
+          @if (percentualMesFiltro() >= 100) {
+            <p class="text-xs text-green-600 mt-2 font-medium">Meta do mês atingida.</p>
+          }
+        } @else {
+          <p class="text-sm text-gray-400">
+            Nenhuma meta cadastrada para este mês.
+            @if (isAdmin()) { Defina uma na tabela de metas abaixo. }
+          </p>
+        }
+      </div>
+    }
+
     <!-- Tabela -->
     @if (saidasFiltradas().length > 0) {
       <div class="overflow-x-auto rounded-xl border border-slate-200">
@@ -156,5 +212,103 @@
         Nenhuma saída nos últimos {{ periodoSelecionado() }} dias. Verifique se os dados foram importados.
       </div>
     }
+
+    <!-- Meta de retirada de materiais (visão anual) -->
+    <div class="app-card p-4 space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Meta de Retirada de Materiais</p>
+        <select [ngModel]="anoSelecionado()" (ngModelChange)="anoSelecionado.set($event)"
+          class="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          @for (ano of anosDisponiveis; track ano) {
+            <option [value]="ano">{{ ano }}</option>
+          }
+        </select>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm border-collapse">
+          <thead>
+            <tr>
+              <th class="px-3 py-2 text-left font-semibold text-gray-500 sticky left-0 bg-white"></th>
+              @for (m of mesesDoAno(); track m.key) {
+                <th class="px-3 py-2 text-center font-semibold text-blue-800 whitespace-nowrap">{{ m.label }}</th>
+              }
+              <th class="px-3 py-2 text-center font-semibold text-gray-700 whitespace-nowrap">Total</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr>
+              <td class="px-3 py-2 font-semibold text-gray-700 whitespace-nowrap sticky left-0 bg-white">Meta</td>
+              @for (m of mesesDoAno(); track m.key) {
+                <td class="px-3 py-2 text-right whitespace-nowrap">
+                  @if (isAdmin()) {
+                    <button (click)="abrirEditarMeta(m.key)" class="text-blue-600 hover:text-blue-800 hover:underline">
+                      {{ metaDoMes(m.key) | currency:'BRL' }}
+                    </button>
+                  } @else {
+                    <span class="text-gray-700">{{ metaDoMes(m.key) | currency:'BRL' }}</span>
+                  }
+                </td>
+              }
+              <td class="px-3 py-2 text-right font-semibold text-gray-800 whitespace-nowrap">{{ totalMetaAno() | currency:'BRL' }}</td>
+            </tr>
+            <tr>
+              <td class="px-3 py-2 font-semibold text-gray-700 whitespace-nowrap sticky left-0 bg-white">Realizado</td>
+              @for (m of mesesDoAno(); track m.key) {
+                <td class="px-3 py-2 text-right text-gray-600 whitespace-nowrap">{{ realizadoDoMes(m.key) | currency:'BRL' }}</td>
+              }
+              <td class="px-3 py-2 text-right font-semibold text-indigo-700 whitespace-nowrap">{{ totalRealizadoAno() | currency:'BRL' }}</td>
+            </tr>
+            <tr>
+              <td class="px-3 py-2 font-semibold text-gray-700 whitespace-nowrap sticky left-0 bg-white">% Atingido</td>
+              @for (m of mesesDoAno(); track m.key) {
+                <td class="px-3 py-2 text-right whitespace-nowrap">
+                  @if (metaDoMes(m.key) > 0) {
+                    <span [class]="percentualMes(m.key) >= 100 ? 'text-green-600 font-semibold' : percentualMes(m.key) >= 80 ? 'text-amber-600 font-semibold' : 'text-red-500'">
+                      {{ percentualMes(m.key) | number:'1.0-0' }}%
+                    </span>
+                  } @else {
+                    <span class="text-gray-300">—</span>
+                  }
+                </td>
+              }
+              <td class="px-3 py-2 text-right whitespace-nowrap">
+                @if (totalMetaAno() > 0) {
+                  <span class="font-semibold" [class]="(totalRealizadoAno() / totalMetaAno() * 100) >= 100 ? 'text-green-600' : 'text-gray-700'">
+                    {{ (totalRealizadoAno() / totalMetaAno() * 100) | number:'1.0-0' }}%
+                  </span>
+                } @else {
+                  <span class="text-gray-300">—</span>
+                }
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      @if (!isAdmin()) {
+        <p class="text-xs text-gray-400">Só o Admin pode editar as metas mensais.</p>
+      }
+    </div>
   }
 </div>
+
+<!-- Modal: Editar meta do mês -->
+@if (metaEditandoMes(); as mesKey) {
+  <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" (click)="fecharEditarMeta()">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm" (click)="$event.stopPropagation()">
+      <h3 class="text-lg font-bold text-gray-800 mb-1">Editar meta de retirada</h3>
+      <p class="text-sm text-gray-500 mb-4">{{ mesesDoAno()[+mesKey.slice(5,7) - 1].label }}</p>
+
+      <label class="block text-sm font-medium text-slate-700 mb-1">Meta (R$)</label>
+      <input type="number" step="0.01" min="0" [ngModel]="metaValorEditando()" (ngModelChange)="metaValorEditando.set($event)"
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+
+      <div class="flex justify-end gap-3">
+        <button (click)="fecharEditarMeta()" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Cancelar</button>
+        <button (click)="salvarMeta()" [disabled]="isSalvandoMeta()"
+          class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
+          Salvar
+        </button>
+      </div>
+    </div>
+  </div>
+}

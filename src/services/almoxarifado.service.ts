@@ -69,6 +69,12 @@ export interface SaldoReal {
   saldo_qtd: number;
 }
 
+export interface MetaSaidaMensal {
+  mesReferencia: string; // 'YYYY-MM'
+  valorMeta: number;
+  atualizadoPorNome: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AlmoxarifadoService {
   constructor(
@@ -269,6 +275,34 @@ export class AlmoxarifadoService {
     desde.setHours(0, 0, 0, 0);
     const ref = desde.toISOString().split('T')[0];
     return movs.filter(m => m.qtd_saida > 0 && m.data_operacao && m.data_operacao >= ref);
+  }
+
+  // ── Metas de saída ─────────────────────────────────────────────────────
+
+  async getMetasSaida(): Promise<MetaSaidaMensal[]> {
+    const { data, error } = await this.supabaseService.client
+      .from('almox_metas_saida')
+      .select('mes_referencia, valor_meta, atualizado_por_nome');
+    if (error) throw new Error(error.message);
+    return (data ?? []).map(r => ({
+      mesReferencia: r['mes_referencia'] as string,
+      valorMeta: Number(r['valor_meta']) || 0,
+      atualizadoPorNome: r['atualizado_por_nome'] as string | null,
+    }));
+  }
+
+  async salvarMetaSaida(mesReferencia: string, valorMeta: number): Promise<void> {
+    const user = this.authService.currentUser();
+    const { error } = await this.supabaseService.client
+      .from('almox_metas_saida')
+      .upsert({
+        mes_referencia: mesReferencia,
+        valor_meta: valorMeta,
+        atualizado_por_id: user?.id ?? null,
+        atualizado_por_nome: user?.name ?? null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'mes_referencia' });
+    if (error) throw new Error(error.message);
   }
 
   // ── Upload ──────────────────────────────────────────────────────────────
