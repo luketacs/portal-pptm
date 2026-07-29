@@ -7,7 +7,7 @@ import { FundoFixoService, FUNDO_FIXO_GESTORES, FUNDO_FIXO_LIMITE_MENSAL, FUNDO_
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/toast.service';
 import { UserService } from '../../../services/user.service';
-import { ExcelExportService } from '../../../services/excel-export.service';
+import { ExcelExportService, FechamentoFundoFixoLinha } from '../../../services/excel-export.service';
 import { FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSolicitacao, FundoFixoStatus } from '../../../models/fundo-fixo.model';
 
 type StatusFiltro = 'todos' | FundoFixoStatus;
@@ -123,13 +123,22 @@ export class FundoFixoListComponent implements OnInit {
   saldoRestante = computed(() => Math.max(0, this.limiteMensal - this.totalComprometido()));
   percentualUsado = computed(() => Math.min(100, (this.totalComprometido() / this.limiteMensal) * 100));
 
+  // Saques do cartão no mês (valor + taxa) — é o que realmente aparece na fatura,
+  // então entra na conta de "No cartão" junto com as compras diretas.
+  totalSaquesFaturaMes = computed(() =>
+    this.fundoFixoService.saques()
+      .filter(s => s.mesReferencia === this.mesFiltro() && s.tipo === 'saque')
+      .reduce((sum, s) => sum + s.valor + (s.taxa ?? 0), 0)
+  );
+
   // Compras já finalizadas no mês, separadas por origem do dinheiro: no cartão
-  // (aparece direto na fatura) vs reembolso/caixa (já saiu como saque antes — não
-  // aparece de novo na fatura quando a compra é registrada).
+  // (compras no cartão + saques, que aparecem direto na fatura) vs reembolso/caixa
+  // (já saiu como saque antes — não aparece de novo na fatura quando a compra é registrada).
   totalCartao = computed(() =>
     this.solicitacoesDoMes()
       .filter(s => s.status === 'comprado' && s.formaPagamento === 'cartao')
       .reduce((sum, s) => sum + (s.valorFinal ?? 0), 0)
+    + this.totalSaquesFaturaMes()
   );
   totalReembolsoCaixa = computed(() =>
     this.solicitacoesDoMes()
@@ -470,17 +479,45 @@ export class FundoFixoListComponent implements OnInit {
       const mesLabel = this.mesFiltroLabel();
       const cartao = this.itensCartaoDoMes();
       const reembolsos = this.itensReembolsoDoMes();
+      const saquesDoMesReais = this.saquesDoMes().filter(s => s.tipo === 'saque');
+
+      // Saques (e a taxa cobrada) entram como linhas na tabela do cartão — é assim que
+      // aparecem na fatura de verdade, igual na planilha que já era usada manualmente.
+      const linhasSaque: FechamentoFundoFixoLinha[] = [];
+      for (const saque of saquesDoMesReais) {
+        linhasSaque.push({
+          fornecedor: `${saque.registradoPorNome} - SAQUE CAIXA 24H`,
+          solicitante: saque.registradoPorNome,
+          setor: '—',
+          material: saque.observacoes || 'Saque em dinheiro',
+          valor: saque.valor,
+          aprovador: '—',
+        });
+        if (saque.taxa) {
+          linhasSaque.push({
+            fornecedor: 'TARIFA SAQUE',
+            solicitante: saque.registradoPorNome,
+            setor: '—',
+            material: 'Taxa cobrada no saque',
+            valor: saque.taxa,
+            aprovador: '—',
+          });
+        }
+      }
 
       this.excelExportService.exportarFechamentoFundoFixo({
         mesLabel,
-        cartao: cartao.map(s => ({
-          fornecedor: s.fornecedor ?? '—',
-          solicitante: s.solicitanteNome,
-          setor: s.setor,
-          material: s.material,
-          valor: s.valorFinal ?? s.valorEstimado,
-          aprovador: s.gestorAprovador ?? '—',
-        })),
+        cartao: [
+          ...cartao.map(s => ({
+            fornecedor: s.fornecedor ?? '—',
+            solicitante: s.solicitanteNome,
+            setor: s.setor,
+            material: s.material,
+            valor: s.valorFinal ?? s.valorEstimado,
+            aprovador: s.gestorAprovador ?? '—',
+          })),
+          ...linhasSaque,
+        ],
         reembolsos: reembolsos.map(s => ({
           fornecedor: s.fornecedor ?? '—',
           solicitante: s.solicitanteNome,
