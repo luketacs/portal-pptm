@@ -263,6 +263,14 @@ export class AlmoxarifadoService {
     return movs.filter(m => m.qtd_entrada > 0 && m.data_operacao && m.data_operacao >= ref);
   }
 
+  filtrarSaidasPorPeriodo(movs: Movimentacao[], dias: number): Movimentacao[] {
+    const desde = new Date();
+    desde.setDate(desde.getDate() - dias);
+    desde.setHours(0, 0, 0, 0);
+    const ref = desde.toISOString().split('T')[0];
+    return movs.filter(m => m.qtd_saida > 0 && m.data_operacao && m.data_operacao >= ref);
+  }
+
   // ── Upload ──────────────────────────────────────────────────────────────
 
   async importarArquivo(tipo: 'movimentacoes' | 'solicitacoes' | 'status_sas' | 'saldo', file: File): Promise<{ inseridos?: number; encerradas?: number }> {

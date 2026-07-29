@@ -169,6 +169,12 @@ export const APP_ROUTES: Routes = [
     title: 'Entradas por Período',
   },
   {
+    path: 'almoxarifado/saidas',
+    loadComponent: () => import('../components/almoxarifado/almox-saidas/almox-saidas.component').then(m => m.AlmoxSaidasComponent),
+    canActivate: [authGuard],
+    title: 'Saídas por Período',
+  },
+  {
     path: 'almoxarifado/importar',
     loadComponent: () => import('../components/almoxarifado/almox-importar/almox-importar.component').then(m => m.AlmoxImportarComponent),
     canActivate: [authGuard],

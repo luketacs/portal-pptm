@@ -235,6 +235,7 @@ export class SidebarComponent implements OnDestroy {
       links: [
         { path: '/almoxarifado/aguardando', label: 'Aguardando Retirada', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
         { path: '/almoxarifado/entradas',   label: 'Entradas por Período', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
+        { path: '/almoxarifado/saidas',     label: 'Saídas por Período', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
         { path: '/almoxarifado/importar',   label: 'Importar Dados', icon: '', roles: ['Admin'] },
       ],
     },

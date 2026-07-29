@@ -388,6 +388,95 @@ export class ExcelExportService {
     XLSX.writeFile(wb, `entradas_periodo_${periodo}d_${this.todayStr()}.xlsx`);
   }
 
+  // ── Exportar Saídas por Período ────────────────────────────────────────────
+
+  exportarSaidasPorPeriodo(
+    dados: Movimentacao[],
+    resumo: { total: number; distintos: number; qtdTotal: number; valorTotal: number },
+    periodo: number,
+    dateRange: { from: string; to: string },
+  ): void {
+    const NC = 10;
+    const ws: WorkSheet = {};
+    let row = 0;
+
+    // Título
+    this.fillRow(ws, row, NC, this.sTitle());
+    ws[this.enc(row, 0)] = {
+      v: `SAÍDAS POR PERÍODO — Últimos ${periodo} dias  (${dateRange.from} a ${dateRange.to})`,
+      t: 's', s: this.sTitle(),
+    };
+    row++;
+
+    // Subtítulo
+    this.fillRow(ws, row, NC, this.sSub());
+    ws[this.enc(row, 0)] = {
+      v: `${resumo.total} lançamentos  |  ${resumo.distintos} materiais distintos  |  Gerado em ${this.nowStr()}`,
+      t: 's', s: this.sSub(),
+    };
+    row++;
+
+    // Cabeçalhos
+    const headers: Array<[string, 'left' | 'center' | 'right']> = [
+      ['Nº',               'center'],
+      ['Data',             'center'],
+      ['Código',           'left'  ],
+      ['Descrição',        'left'  ],
+      ['UM',               'center'],
+      ['Grupo',            'center'],
+      ['Qtd. Saída',       'right' ],
+      ['Custo Médio (R$)', 'right' ],
+      ['Valor Total (R$)', 'right' ],
+      ['Referência',       'left'  ],
+    ];
+    headers.forEach(([label, align], c) => {
+      ws[this.enc(row, c)] = { v: label, t: 's', s: this.sHeader(align) };
+    });
+    row++;
+
+    // Dados
+    dados.forEach((m, i) => {
+      const even  = i % 2 === 1;
+      const valor = (m.qtd_saida ?? 0) * (m.custo_medio ?? 0);
+      this.n(ws, row, 0, i + 1,            this.sData('center', even), '#,##0');
+      this.s(ws, row, 1, this.formatDate(m.data_operacao), this.sData('center', even));
+      this.s(ws, row, 2, m.produto_codigo, this.sData('left', even));
+      this.s(ws, row, 3, m.produto_desc,   this.sData('left', even));
+      this.s(ws, row, 4, m.unidade,        this.sData('center', even));
+      this.s(ws, row, 5, m.grupo,          this.sData('center', even));
+      this.n(ws, row, 6, m.qtd_saida ?? 0, this.sData('right', even), '#,##0.00');
+      this.n(ws, row, 7, m.custo_medio ?? 0, this.sData('right', even), '"R$"\\ #,##0.00');
+      this.n(ws, row, 8, valor,            this.sData('right', even), '"R$"\\ #,##0.00');
+      this.s(ws, row, 9, m.referencia,     this.sData('left', even));
+      row++;
+    });
+
+    // Total
+    ws[this.enc(row, 0)] = { v: 'TOTAL', t: 's', s: this.sTotal('left') };
+    for (let c = 1; c < 6; c++) this.s(ws, row, c, '', this.sTotal());
+    this.n(ws, row, 6, resumo.qtdTotal,   this.sTotal('right'), '#,##0.00');
+    this.s(ws, row, 7, '', this.sTotal());
+    this.n(ws, row, 8, resumo.valorTotal, this.sTotal('right'), '"R$"\\ #,##0.00');
+    this.s(ws, row, 9, '', this.sTotal());
+    row++;
+
+    ws['!ref']    = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: row - 1, c: NC - 1 } });
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: NC - 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: NC - 1 } },
+    ];
+    ws['!rows'] = [{ hpt: 26 }, { hpt: 16 }, { hpt: 22 }];
+    ws['!cols'] = [
+      { wch: 5  }, { wch: 12 }, { wch: 13 }, { wch: 36 }, { wch: 6  },
+      { wch: 8  }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 18 },
+    ];
+
+    const wb: WorkBook = XLSX.utils.book_new();
+    wb.Props = { Title: `Saídas por Período — ${periodo} dias`, Company: 'Diamante Energia' };
+    XLSX.utils.book_append_sheet(wb, ws, 'Saídas por Período');
+    XLSX.writeFile(wb, `saidas_periodo_${periodo}d_${this.todayStr()}.xlsx`);
+  }
+
   // ── Exportar Fechamento do Fundo Fixo ─────────────────────────────────────
   // Mesmo layout da planilha que já era usada para pedir aprovação por e-mail:
   // duas tabelas (Cartão / Reembolsos), cada uma com seu total e as referências
