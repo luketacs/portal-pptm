@@ -117,15 +117,6 @@ export const APP_ROUTES: Routes = [
     title: 'Auditoria',
   },
 
-  {
-    path: 'safety-stock',
-    loadComponent: () =>
-      import('../components/safety-stock/safety-stock.component').then(m => m.SafetyStockComponent),
-    canActivate: [authGuard],
-    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
-    title: 'Gestão à vista do Estoque de Segurança',
-  },
-
   // Apontamentos descontinuado temporariamente — rotas removidas de propósito
   // (cai no wildcard "**" → página não encontrada). Reativar: restaurar as
   // rotas 'apontamentos' e 'publico/apontamentos' apontando para
