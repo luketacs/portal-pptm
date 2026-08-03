@@ -87,7 +87,7 @@ export class RequestFormComponent implements OnInit, OnDestroy {
   
   createItem(): FormGroup {
     return this.fb.group({
-      materialCode: ['', Validators.required],
+      materialCode: ['', [Validators.required, Validators.pattern(/^[0-9]{1,8}$/)]],
       description: [{ value: '', disabled: true }, Validators.required],
       descriptionDetailed: [{ value: '', disabled: true }],
       quantity: [1, [Validators.required, Validators.min(1)]],
@@ -106,6 +106,18 @@ export class RequestFormComponent implements OnInit, OnDestroy {
       pendingRequestAlert: null
     }]);
     this.setupMaterialCodeListener(this.items().length - 1);
+  }
+
+  // Bloqueia letras/espaços/caracteres especiais e limita a 8 dígitos enquanto digita —
+  // roda independente da ordem de bind com o formControlName, pois corrige tanto o valor
+  // do DOM quanto o do FormControl ao final do handler.
+  onMaterialCodeInput(event: Event, index: number): void {
+    const input = event.target as HTMLInputElement;
+    const sanitized = input.value.replace(/\D/g, '').slice(0, 8);
+    if (sanitized !== input.value) {
+      input.value = sanitized;
+      this.items().at(index).get('materialCode')?.setValue(sanitized);
+    }
   }
 
   removeItem(index: number): void {
