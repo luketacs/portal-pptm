@@ -103,6 +103,16 @@ export class MyMaterialsComponent implements OnInit {
     await this.load();
   }
 
+  async copyMaterialCode(codigo: string, event: Event): Promise<void> {
+    event.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(codigo);
+      this.toast.showSuccess(`Código ${codigo} copiado.`);
+    } catch {
+      this.toast.showError('Erro ao copiar o código.');
+    }
+  }
+
   private async load(): Promise<void> {
     this.isLoading.set(true);
     this.errorMessage.set('');
