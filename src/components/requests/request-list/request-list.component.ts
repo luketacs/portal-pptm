@@ -562,6 +562,16 @@ export class RequestListComponent implements OnInit, OnDestroy {
     return user?.role === 'Admin' && this.mode === 'admin';
   }
 
+  async copyMaterialCode(code: string, event: Event): Promise<void> {
+    event.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(code);
+      this.notificationService.showSuccess(`Código ${code} copiado.`);
+    } catch {
+      this.notificationService.showError('Erro ao copiar o código.');
+    }
+  }
+
   // --- Consulta de saldo ---
   stockBalanceMap = signal<Record<string, { loading: boolean; estoques: StockInfo[] | null; error: string | null }>>({});
 

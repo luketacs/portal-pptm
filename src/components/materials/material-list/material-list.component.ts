@@ -199,6 +199,16 @@ export class MaterialListComponent implements OnInit {
     this.router.navigate(['/materials', id]);
   }
 
+  async copyMaterialCode(codigo: string, event: Event): Promise<void> {
+    event.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(codigo);
+      this.toast.showSuccess(`Código ${codigo} copiado.`);
+    } catch {
+      this.toast.showError('Erro ao copiar o código.');
+    }
+  }
+
   /**
    * Edita material (navega para tela de edição) - apenas admin
    */
