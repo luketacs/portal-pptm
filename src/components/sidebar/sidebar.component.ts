@@ -180,18 +180,6 @@ export class SidebarComponent implements OnDestroy {
       ],
     },
     {
-      id: 'requests',
-      label: 'Solicitações de Compra',
-      icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>',
-      roles: ['Solicitante', 'Admin', 'Visualizador'],
-      links: [
-        { path: '/requests/new', label: 'Nova Solicitação', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
-        { path: '/requests', label: 'Minhas Solicitações', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
-        { path: '/requests/in-progress', label: 'Em andamento', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
-        { path: '/requests/all', label: 'Todas as Solicitações', icon: '', roles: ['Admin', 'Visualizador'] },
-      ],
-    },
-    {
       id: 'materials',
       label: 'Materiais',
       icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>',
@@ -203,18 +191,17 @@ export class SidebarComponent implements OnDestroy {
       ],
     },
     {
-      id: 'admin',
-      label: 'Administração',
-      icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.125-1.274-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.125-1.274.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>',
-      roles: ['Admin'],
+      id: 'requests',
+      label: 'Solic de compras',
+      icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>',
+      roles: ['Solicitante', 'Admin', 'Visualizador'],
       links: [
-        { path: '/users', label: 'Usuários', icon: '', roles: ['Admin'] },
-        { path: '/audit', label: 'Auditoria', icon: '', roles: ['Admin'] },
+        { path: '/requests/new', label: 'Nova Solicitação', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
+        { path: '/requests', label: 'Minhas Solicitações', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
+        { path: '/requests/in-progress', label: 'Em andamento', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
+        { path: '/requests/all', label: 'Todas as Solicitações', icon: '', roles: ['Admin', 'Visualizador'] },
       ],
     },
-    // Apontamentos descontinuado temporariamente — grupo do menu removido de
-    // propósito (a rota também foi removida em app.routes.ts). Reativar: ver
-    // comentário em app.routes.ts.
     {
       id: 'fundoFixo',
       label: 'Fundo Fixo',
@@ -239,8 +226,18 @@ export class SidebarComponent implements OnDestroy {
       ],
     },
     {
+      id: 'admin',
+      label: 'Admin',
+      icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.125-1.274-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.125-1.274.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>',
+      roles: ['Admin'],
+      links: [
+        { path: '/users', label: 'Usuários', icon: '', roles: ['Admin'] },
+        { path: '/audit', label: 'Auditoria', icon: '', roles: ['Admin'] },
+      ],
+    },
+    {
       id: 'profile',
-      label: 'Meu Perfil',
+      label: 'Perfil',
       icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>',
       roles: ['Solicitante', 'Admin', 'Visualizador'],
       links: [
