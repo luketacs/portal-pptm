@@ -39,8 +39,8 @@
       <div class="flex-1 text-sm text-blue-800">
         <p class="font-semibold mb-1">Dica: use o seletor de período para ver diferentes janelas de tempo</p>
         <ul class="space-y-0.5 text-blue-700">
-          <li>📅 Clique em <strong>7 / 15 / 30 / 60 dias</strong> para ajustar o período de consulta</li>
-          <li>📊 Os totais e a tabela atualizam automaticamente ao mudar o período</li>
+          <li>Clique em <strong>7 / 15 / 30 / 60 dias</strong> para ajustar o período de consulta</li>
+          <li>Os totais e a tabela atualizam automaticamente ao mudar o período</li>
         </ul>
       </div>
       <button (click)="dismissTip()" class="text-blue-400 hover:text-blue-700 flex-shrink-0 p-1 rounded hover:bg-blue-100 transition" title="Fechar dica">
@@ -79,7 +79,7 @@
   }
 
   @if (errorMessage() && !isLoading()) {
-    <div class="rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">⚠️ {{ errorMessage() }}</div>
+    <div class="rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">{{ errorMessage() }}</div>
   }
 
   @if (!isLoading() && !errorMessage()) {

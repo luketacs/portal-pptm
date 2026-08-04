@@ -17,7 +17,7 @@
 
         @if (mov().done) {
           <div class="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700 mb-3">
-            ✅ {{ mov().registros }} registros importados com sucesso.
+            {{ mov().registros }} registros importados com sucesso.
           </div>
         }
         @if (mov().error) {
@@ -33,11 +33,11 @@
             </span>
           </label>
           @if (mov().name) {
-            <span class="text-sm text-gray-600 truncate max-w-xs">📄 {{ mov().name }}</span>
+            <span class="text-sm text-gray-600 truncate max-w-xs">{{ mov().name }}</span>
           }
           @if (mov().file && !mov().loading) {
             <button (click)="importar('mov')" class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition">Importar</button>
-            <button (click)="cancelar('mov')" class="text-sm text-gray-500 hover:text-red-600 py-2 px-3 rounded-lg hover:bg-red-50 transition border border-slate-200">✕ Cancelar</button>
+            <button (click)="cancelar('mov')" class="text-sm text-gray-500 hover:text-red-600 py-2 px-3 rounded-lg hover:bg-red-50 transition border border-slate-200">Cancelar</button>
           }
           @if (mov().loading) {
             <span class="text-sm text-blue-600 font-medium flex items-center gap-2">
@@ -60,7 +60,7 @@
 
         @if (sas().done) {
           <div class="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700 mb-3">
-            ✅ {{ sas().registros }} SAs importadas com sucesso.
+            {{ sas().registros }} SAs importadas com sucesso.
           </div>
         }
         @if (sas().error) {
@@ -76,11 +76,11 @@
             </span>
           </label>
           @if (sas().name) {
-            <span class="text-sm text-gray-600 truncate max-w-xs">📄 {{ sas().name }}</span>
+            <span class="text-sm text-gray-600 truncate max-w-xs">{{ sas().name }}</span>
           }
           @if (sas().file && !sas().loading) {
             <button (click)="importar('sas')" class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition">Importar</button>
-            <button (click)="cancelar('sas')" class="text-sm text-gray-500 hover:text-red-600 py-2 px-3 rounded-lg hover:bg-red-50 transition border border-slate-200">✕ Cancelar</button>
+            <button (click)="cancelar('sas')" class="text-sm text-gray-500 hover:text-red-600 py-2 px-3 rounded-lg hover:bg-red-50 transition border border-slate-200">Cancelar</button>
           }
           @if (sas().loading) {
             <span class="text-sm text-blue-600 font-medium flex items-center gap-2">
@@ -103,11 +103,11 @@
           <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium">Opcional</span>
         </div>
         <p class="text-sm text-gray-500 mb-1">Arquivo: <code class="bg-slate-100 px-1 rounded">Relatorio Ary.xlsx</code></p>
-        <p class="text-xs text-amber-600 mb-3">⚠ Só importe quando houver novas SAs encerradas. Este relatório não precisa ser atualizado a cada importação.</p>
+        <p class="text-xs text-amber-600 mb-3">Só importe quando houver novas SAs encerradas. Este relatório não precisa ser atualizado a cada importação.</p>
 
         @if (ary().done) {
           <div class="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700 mb-3">
-            ✅ {{ ary().registros }} SAs marcadas como encerradas.
+            {{ ary().registros }} SAs marcadas como encerradas.
           </div>
         }
         @if (ary().error) {
@@ -123,11 +123,11 @@
             </span>
           </label>
           @if (ary().name) {
-            <span class="text-sm text-gray-600 truncate max-w-xs">📄 {{ ary().name }}</span>
+            <span class="text-sm text-gray-600 truncate max-w-xs">{{ ary().name }}</span>
           }
           @if (ary().file && !ary().loading) {
             <button (click)="importar('ary')" class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition">Aplicar</button>
-            <button (click)="cancelar('ary')" class="text-sm text-gray-500 hover:text-red-600 py-2 px-3 rounded-lg hover:bg-red-50 transition border border-slate-200">✕ Cancelar</button>
+            <button (click)="cancelar('ary')" class="text-sm text-gray-500 hover:text-red-600 py-2 px-3 rounded-lg hover:bg-red-50 transition border border-slate-200">Cancelar</button>
           }
           @if (ary().loading) {
             <span class="text-sm text-blue-600 font-medium flex items-center gap-2">
@@ -150,11 +150,11 @@
           <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium">Opcional</span>
         </div>
         <p class="text-sm text-gray-500 mb-1">Relatório de posição de estoque do ERP — Sheet: "Listagem do Browse"</p>
-        <p class="text-xs text-amber-600 mb-3">⚠ Usado na tela <strong>Aguardando Retirada</strong> para conferir se o saldo calculado bate com o saldo físico real. Aceita Excel (.xlsx/.xls) ou o XML nativo do ERP.</p>
+        <p class="text-xs text-amber-600 mb-3">Usado na tela <strong>Aguardando Retirada</strong> para conferir se o saldo calculado bate com o saldo físico real. Aceita Excel (.xlsx/.xls) ou o XML nativo do ERP.</p>
 
         @if (saldo().done) {
           <div class="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700 mb-3">
-            ✅ {{ saldo().registros }} produtos importados com sucesso.
+            {{ saldo().registros }} produtos importados com sucesso.
           </div>
         }
         @if (saldo().error) {
@@ -170,11 +170,11 @@
             </span>
           </label>
           @if (saldo().name) {
-            <span class="text-sm text-gray-600 truncate max-w-xs">📄 {{ saldo().name }}</span>
+            <span class="text-sm text-gray-600 truncate max-w-xs">{{ saldo().name }}</span>
           }
           @if (saldo().file && !saldo().loading) {
             <button (click)="importar('saldo')" class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition">Importar</button>
-            <button (click)="cancelar('saldo')" class="text-sm text-gray-500 hover:text-red-600 py-2 px-3 rounded-lg hover:bg-red-50 transition border border-slate-200">✕ Cancelar</button>
+            <button (click)="cancelar('saldo')" class="text-sm text-gray-500 hover:text-red-600 py-2 px-3 rounded-lg hover:bg-red-50 transition border border-slate-200">Cancelar</button>
           }
           @if (saldo().loading) {
             <span class="text-sm text-blue-600 font-medium flex items-center gap-2">
