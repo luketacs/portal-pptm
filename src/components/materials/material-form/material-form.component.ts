@@ -1,8 +1,7 @@
-﻿import { Component, OnInit, signal, DestroyRef, inject } from '@angular/core';
+﻿import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MaterialService } from '../../../services/material.service';
 import { AuthService } from '../../../services/auth.service';
 import { UnidadeMedida, Material } from '../../../models/material.model';
@@ -22,8 +21,7 @@ const DS_ACCEPT       = ['application/pdf'];
 export class MaterialFormComponent implements OnInit {
   materialForm!: FormGroup;
   currentUser = this.authService.currentUser;
-  private destroyRef = inject(DestroyRef);
-  
+
   // Signals para controle de estado
   isSubmitting = signal(false);
   showSuccessModal = signal(false);
@@ -66,7 +64,6 @@ export class MaterialFormComponent implements OnInit {
     this.isViewOnlyMode.set(this.isEditMode() && !canEdit);
 
     this.initForm();
-    this.setupFormListeners();
 
     // Se for modo de edição, carregar dados
     if (this.isEditMode() && this.materialId) {
@@ -104,8 +101,6 @@ export class MaterialFormComponent implements OnInit {
           descricao_detalhada: data.descricao_detalhada,
           unidade: data.unidade,
           ncm: data.ncm,
-          estoque_seguranca: data.estoque_seguranca,
-          qtd_estoque_seguranca: data.qtd_estoque_seguranca,
           complementar: (data as any).complementar || ''
         });
         // Carrega URLs de arquivos existentes
@@ -153,47 +148,10 @@ export class MaterialFormComponent implements OnInit {
           Validators.maxLength(8)
         ]
       ],
-      estoque_seguranca: [
-        false,
-        [Validators.required]
-      ],
-      qtd_estoque_seguranca: [
-        { value: null, disabled: true },
-        []
-      ],
       complementar: [
         '',
         [Validators.maxLength(500)]
       ]
-    });
-  }
-
-  /**
-   * Configura listeners para mudanças no formulário
-   */
-  private setupFormListeners(): void {
-    // Listener para habilitar/desabilitar campo de quantidade de estoque
-    this.materialForm.get('estoque_seguranca')?.valueChanges.pipe(
-      takeUntilDestroyed(this.destroyRef)
-    ).subscribe(value => {
-      const qtdControl = this.materialForm.get('qtd_estoque_seguranca');
-      
-      if (value === true) {
-        // Habilitar e tornar obrigatório
-        qtdControl?.enable();
-        qtdControl?.setValidators([
-          Validators.required,
-          Validators.min(1),
-          Validators.pattern(/^\d+$/) // Apenas números inteiros
-        ]);
-      } else {
-        // Desabilitar e limpar validações
-        qtdControl?.disable();
-        qtdControl?.clearValidators();
-        qtdControl?.setValue(null);
-      }
-      
-      qtdControl?.updateValueAndValidity();
     });
   }
 
@@ -232,9 +190,6 @@ export class MaterialFormComponent implements OnInit {
     if (field.errors['pattern']) {
       if (fieldName === 'ncm') {
         return 'NCM deve conter exatamente 8 dígitos numéricos';
-      }
-      if (fieldName === 'qtd_estoque_seguranca') {
-        return 'Deve ser um número inteiro positivo';
       }
     }
     
@@ -422,8 +377,6 @@ export class MaterialFormComponent implements OnInit {
         descricao_detalhada: formValue.descricao_detalhada.trim().toUpperCase(),
         unidade: formValue.unidade,
         ncm: formValue.ncm.trim(),
-        estoque_seguranca: formValue.estoque_seguranca,
-        qtd_estoque_seguranca: formValue.estoque_seguranca ? formValue.qtd_estoque_seguranca : null,
         complementar: formValue.complementar?.trim().toUpperCase() || null,
         photo_url: photoUrl ?? null,
         datasheet_url: datasheetUrl ?? null,
@@ -482,8 +435,6 @@ export class MaterialFormComponent implements OnInit {
           descricao_detalhada: '',
           unidade: 'UN',
           ncm: '',
-          estoque_seguranca: false,
-          qtd_estoque_seguranca: null,
           complementar: ''
         });
         this.selectedPhoto.set(null);
@@ -499,7 +450,6 @@ export class MaterialFormComponent implements OnInit {
         if (!this.isAdmin) {
           this.materialForm.get('codigo')?.disable();
         }
-        this.materialForm.get('qtd_estoque_seguranca')?.disable();
 
         // Auto-fechar modal após 3 segundos
         setTimeout(() => {

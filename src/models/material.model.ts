@@ -60,7 +60,7 @@ export interface CreateMaterialRequest {
   descricao_detalhada: string;
   unidade: UnidadeMedida;
   ncm: string;
-  estoque_seguranca: boolean;
+  estoque_seguranca?: boolean;
   qtd_estoque_seguranca?: number | null;
   complementar?: string | null;
   photo_url?: string | null;
