@@ -4,6 +4,7 @@ import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { Router, ActivatedRoute } from '@angular/router';
 import { MaterialService } from '../../../services/material.service';
 import { AuthService } from '../../../services/auth.service';
+import { NcmService, NcmEntry } from '../../../services/ncm.service';
 import { UnidadeMedida, Material } from '../../../models/material.model';
 
 const PHOTO_MAX_BYTES = 5 * 1024 * 1024;   // 5 MB
@@ -50,9 +51,40 @@ export class MaterialFormComponent implements OnInit {
     private fb: FormBuilder,
     private materialService: MaterialService,
     private authService: AuthService,
+    private ncmService: NcmService,
     private router: Router,
     private route: ActivatedRoute
   ) {}
+
+  // ── Busca de NCM ──────────────────────────────────────────────────────
+  ncmModalAberto = signal(false);
+  ncmBusca = signal('');
+  ncmResultados = signal<NcmEntry[]>([]);
+  ncmCarregando = this.ncmService.isLoading;
+
+  async abrirBuscaNcm(): Promise<void> {
+    this.ncmModalAberto.set(true);
+    this.ncmBusca.set('');
+    this.ncmResultados.set([]);
+    await this.ncmService.load();
+  }
+
+  fecharBuscaNcm(): void {
+    this.ncmModalAberto.set(false);
+  }
+
+  onNcmBuscaInput(event: Event): void {
+    const termo = (event.target as HTMLInputElement).value;
+    this.ncmBusca.set(termo);
+    this.ncmResultados.set(this.ncmService.buscar(termo));
+  }
+
+  selecionarNcm(entry: NcmEntry): void {
+    this.materialForm.get('ncm')?.setValue(entry.codigo);
+    this.materialForm.get('ncm')?.markAsDirty();
+    this.materialForm.get('ncm')?.markAsTouched();
+    this.fecharBuscaNcm();
+  }
 
   async ngOnInit(): Promise<void> {
     // Verificar se é modo de edição

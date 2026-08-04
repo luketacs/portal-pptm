@@ -48,7 +48,8 @@
     </div>
     }
 
-    <!-- Código do Material -->
+    <!-- Código do Material (só aparece pra usuário comum se o material já existir) -->
+    @if (isAdmin || isEditMode()) {
     <div class="form-group">
       <label for="codigo" class="form-label">
         Código do Material
@@ -81,6 +82,7 @@
       </p>
       }
     </div>
+    }
 
     <!-- Descrição Breve -->
     <div class="form-group">
@@ -168,18 +170,27 @@
         NCM (Nomenclatura Comum do Mercosul)
         <span class="required">*</span>
       </label>
-      <input
-        type="text"
-        id="ncm"
-        formControlName="ncm"
-        class="form-input"
-        [class.input-error]="showError('ncm')"
-        placeholder="0000.00.00"
-        maxlength="8"
-        (keydown)="onlyNumbers($event)"
-        (input)="formatNCM($event)"
-      />
-      <p class="form-help">Digite exatamente 8 dígitos numéricos</p>
+      <div class="alert alert-info app-card" style="margin-bottom: 0.5rem; padding: 0.5rem 0.75rem;">
+        <span style="font-size: 0.85rem;">Agora é possível consultar o NCM do produto — clique em "Buscar NCM" e procure pela descrição do material (ex: "parafuso", "rolamento", "tinta").</span>
+      </div>
+      <div style="display:flex; gap:0.5rem; align-items:flex-start;">
+        <input
+          type="text"
+          id="ncm"
+          formControlName="ncm"
+          class="form-input"
+          [class.input-error]="showError('ncm')"
+          placeholder="0000.00.00"
+          maxlength="8"
+          (keydown)="onlyNumbers($event)"
+          (input)="formatNCM($event)"
+          style="flex:1;"
+        />
+        <button type="button" (click)="abrirBuscaNcm()" class="btn btn-secondary" style="white-space:nowrap;">
+          Buscar NCM
+        </button>
+      </div>
+      <p class="form-help">Digite exatamente 8 dígitos numéricos, ou use a busca para encontrar pela descrição</p>
       @if (showError('ncm')) {
       <p class="error-message">
         {{ getErrorMessage('ncm') }}
@@ -336,6 +347,46 @@
       <button class="btn btn-primary" (click)="closeSuccessModal()">
         OK
       </button>
+    </div>
+  </div>
+  }
+
+  <!-- Modal de Busca de NCM -->
+  @if (ncmModalAberto()) {
+  <div class="modal-overlay" (click)="fecharBuscaNcm()" role="dialog" aria-modal="true">
+    <div class="modal-content" style="max-width: 640px; width: 100%; text-align: left;" (click)="$event.stopPropagation()">
+      <h2 class="modal-title" style="margin-bottom: 0.25rem;">Buscar NCM</h2>
+      <p class="subtitle" style="margin-bottom: 1rem;">Tabela oficial da Receita Federal (Siscomex). Digite parte da descrição do material ou os primeiros dígitos do código.</p>
+
+      <input
+        type="text"
+        class="form-input"
+        placeholder="Ex: parafuso, rolamento, correia transportadora, tinta..."
+        [value]="ncmBusca()"
+        (input)="onNcmBuscaInput($event)"
+        autofocus
+      />
+
+      <div style="margin-top: 1rem; max-height: 360px; overflow-y: auto;">
+        @if (ncmCarregando()) {
+          <p class="form-help">Carregando tabela de NCM...</p>
+        } @else if (ncmBusca().trim().length === 0) {
+          <p class="form-help">Digite ao menos uma palavra para buscar.</p>
+        } @else if (ncmResultados().length === 0) {
+          <p class="form-help">Nenhum NCM encontrado para "{{ ncmBusca() }}".</p>
+        } @else {
+          @for (item of ncmResultados(); track item.codigo) {
+            <button type="button" (click)="selecionarNcm(item)" class="ncm-result-item">
+              <span class="ncm-result-codigo">{{ item.codigo }}</span>
+              <span class="ncm-result-descricao">{{ item.descricao }}</span>
+            </button>
+          }
+        }
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; margin-top:1rem;">
+        <button type="button" class="btn btn-secondary" (click)="fecharBuscaNcm()">Fechar</button>
+      </div>
     </div>
   </div>
   }
