@@ -6,6 +6,7 @@ import {
   CreateFundoFixoRequest, CreateFundoFixoSaque, FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSaqueTipo,
   FundoFixoSetor, FundoFixoSolicitacao, FundoFixoStatus,
 } from '../models/fundo-fixo.model';
+import { calcularSaldoCaixa, calcularTotalComprometidoMes } from '../utils/fundo-fixo-calc';
 
 export const FUNDO_FIXO_LIMITE_MENSAL = 3000;
 export const FUNDO_FIXO_LIMITE_POR_COMPRA = 500;
@@ -113,16 +114,7 @@ export class FundoFixoService {
 
   mesAtual = computed(() => mesAtual());
 
-  // Dinheiro que o admin tem fisicamente em mãos: soma de tudo que já sacou,
-  // menos o que já usou em compras pagas em dinheiro/reembolso. É um saldo
-  // corrido — não reseta por mês, ao contrário do limite do cartão.
-  saldoCaixa = computed(() => {
-    const totalSacado = this._saques().reduce((sum, s) => sum + s.valor, 0);
-    const totalUsadoEmCaixa = this._solicitacoes()
-      .filter(s => s.status === 'comprado' && (s.formaPagamento === 'dinheiro_caixa' || s.formaPagamento === 'reembolso'))
-      .reduce((sum, s) => sum + (s.valorFinal ?? s.valorEstimado), 0);
-    return totalSacado - totalUsadoEmCaixa;
-  });
+  saldoCaixa = computed(() => calcularSaldoCaixa(this._saques(), this._solicitacoes()));
 
   constructor(
     private supabaseService: SupabaseService,
@@ -156,20 +148,8 @@ export class FundoFixoService {
     return this._solicitacoes().find(s => s.id === id);
   }
 
-  // Total do mês que deve bater com a fatura do cartão: pendentes/aprovados contam pelo
-  // valor estimado (previsão), compras já feitas no cartão contam pelo valor final, e
-  // saques (+ taxa) contam no mês em que caem na fatura. Compras pagas em dinheiro/reembolso
-  // NÃO entram aqui de novo — o valor já foi contabilizado quando o saque que as financiou
-  // foi registrado, senão o total ficaria duplicado.
   totalComprometidoMes(mes: string): number {
-    const totalSolicitacoes = this._solicitacoes()
-      .filter(s => s.mesReferencia === mes)
-      .filter(s => s.status === 'aprovado' || s.status === 'pendente' || (s.status === 'comprado' && s.formaPagamento === 'cartao'))
-      .reduce((sum, s) => sum + (s.valorFinal ?? s.valorEstimado), 0);
-    const totalSaques = this._saques()
-      .filter(s => s.mesReferencia === mes && s.tipo === 'saque')
-      .reduce((sum, s) => sum + s.valor + (s.taxa ?? 0), 0);
-    return totalSolicitacoes + totalSaques;
+    return calcularTotalComprometidoMes(this._solicitacoes(), this._saques(), mes);
   }
 
   async excluir(id: string): Promise<void> {

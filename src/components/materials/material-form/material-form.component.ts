@@ -5,6 +5,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { MaterialService } from '../../../services/material.service';
 import { AuthService } from '../../../services/auth.service';
 import { NcmService, NcmEntry } from '../../../services/ncm.service';
+import { formatarNcmExibicao as formatarNcmExibicaoUtil } from '../../../utils/ncm-search';
 import { UnidadeMedida, Material } from '../../../models/material.model';
 
 const PHOTO_MAX_BYTES = 5 * 1024 * 1024;   // 5 MB
@@ -66,13 +67,7 @@ export class MaterialFormComponent implements OnInit {
 
   // Formata visualmente como "0000.00.00" enquanto digita — o valor guardado no
   // formulário continua só com os 8 dígitos (é o que o banco espera).
-  formatarNcmExibicao(digits: string): string {
-    const limpo = (digits ?? '').replace(/\D/g, '').slice(0, 8);
-    let out = limpo.slice(0, 4);
-    if (limpo.length > 4) out += '.' + limpo.slice(4, 6);
-    if (limpo.length > 6) out += '.' + limpo.slice(6, 8);
-    return out;
-  }
+  readonly formatarNcmExibicao = formatarNcmExibicaoUtil;
 
   async abrirBuscaNcm(): Promise<void> {
     this.ncmModalAberto.set(true);
