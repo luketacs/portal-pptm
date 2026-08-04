@@ -1,4 +1,4 @@
-﻿import { Component, OnInit, signal } from '@angular/core';
+﻿import { Component, ElementRef, OnInit, ViewChild, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -57,10 +57,22 @@ export class MaterialFormComponent implements OnInit {
   ) {}
 
   // ── Busca de NCM ──────────────────────────────────────────────────────
+  @ViewChild('ncmInput') ncmInputRef?: ElementRef<HTMLInputElement>;
+
   ncmModalAberto = signal(false);
   ncmBusca = signal('');
   ncmResultados = signal<NcmEntry[]>([]);
   ncmCarregando = this.ncmService.isLoading;
+
+  // Formata visualmente como "0000.00.00" enquanto digita — o valor guardado no
+  // formulário continua só com os 8 dígitos (é o que o banco espera).
+  formatarNcmExibicao(digits: string): string {
+    const limpo = (digits ?? '').replace(/\D/g, '').slice(0, 8);
+    let out = limpo.slice(0, 4);
+    if (limpo.length > 4) out += '.' + limpo.slice(4, 6);
+    if (limpo.length > 6) out += '.' + limpo.slice(6, 8);
+    return out;
+  }
 
   async abrirBuscaNcm(): Promise<void> {
     this.ncmModalAberto.set(true);
@@ -83,6 +95,9 @@ export class MaterialFormComponent implements OnInit {
     this.materialForm.get('ncm')?.setValue(entry.codigo);
     this.materialForm.get('ncm')?.markAsDirty();
     this.materialForm.get('ncm')?.markAsTouched();
+    if (this.ncmInputRef) {
+      this.ncmInputRef.nativeElement.value = this.formatarNcmExibicao(entry.codigo);
+    }
     this.fecharBuscaNcm();
   }
 
@@ -135,6 +150,9 @@ export class MaterialFormComponent implements OnInit {
           ncm: data.ncm,
           complementar: (data as any).complementar || ''
         });
+        if (this.ncmInputRef) {
+          this.ncmInputRef.nativeElement.value = this.formatarNcmExibicao(data.ncm ?? '');
+        }
         // Carrega URLs de arquivos existentes
         this.existingPhotoUrl.set(data.photo_url ?? null);
         this.existingDsUrl.set(data.datasheet_url ?? null);
@@ -540,13 +558,14 @@ export class MaterialFormComponent implements OnInit {
   formatNCM(event: Event): void {
     const input = event.target as HTMLInputElement;
     let value = input.value.replace(/\D/g, ''); // Remove não-dígitos
-    
+
     // Limitar a 8 dígitos
     if (value.length > 8) {
       value = value.substring(0, 8);
     }
-    
+
     this.materialForm.get('ncm')?.setValue(value, { emitEvent: false });
+    input.value = this.formatarNcmExibicao(value);
   }
 
   /**

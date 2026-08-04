@@ -1,7 +1,7 @@
 <div class="app-panel material-list-container">
   <div class="list-header">
     <div class="title-section">
-      <h1 style="font-family:'Manrope','Segoe UI',Arial,sans-serif;">Materiais Cadastrados</h1>
+      <h1>Materiais Cadastrados</h1>
       <p class="subtitle">Gerencie os materiais do sistema (Admin, Solicitante e Visualizador podem cadastrar)</p>
     </div>
     <div class="actions-section">
@@ -47,18 +47,19 @@
         <button (click)="lastLiberated.set(null)"
           class="text-green-600 hover:text-green-800 text-sm px-2 py-1.5 rounded-lg hover:bg-green-100 transition"
           title="Fechar" aria-label="Fechar">
-          ✕
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
         </button>
       </div>
     </div>
   }
 
   <!-- Filtros -->
-  <div class="search-bar" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+  <div class="search-bar flex gap-4 items-center flex-wrap">
     <input
       type="text"
-      class="search-input"
-      style="flex: 1; min-width: 250px;"
+      class="search-input flex-1 min-w-[250px]"
       placeholder="Buscar por item, código, NCM ou cadastrador (ex: Pedro - Rolamento)"
       aria-label="Buscar materiais"
       (input)="onSearchChange($event)"
@@ -66,8 +67,7 @@
     <select
       [ngModel]="statusFilter()"
       (ngModelChange)="onStatusFilterChange($event)"
-      class="search-input"
-      style="flex: 0 0 180px; cursor: pointer;"
+      class="search-input flex-none w-[180px] cursor-pointer"
       aria-label="Filtrar por status"
     >
       <option value="all">Todos os Status</option>
@@ -114,7 +114,7 @@
     <table class="materials-table">
       <thead>
         <tr>
-          <th style="width: 56px; padding: 0.5rem;">Foto</th>
+          <th class="w-14 p-2">Foto</th>
           <th>Código</th>
           <th>Descrição</th>
           <th>Unidade</th>

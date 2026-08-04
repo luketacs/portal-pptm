@@ -170,23 +170,23 @@
         NCM (Nomenclatura Comum do Mercosul)
         <span class="required">*</span>
       </label>
-      <div class="alert alert-info app-card" style="margin-bottom: 0.5rem; padding: 0.5rem 0.75rem;">
-        <span style="font-size: 0.85rem;">Agora é possível consultar o NCM do produto — clique em "Buscar NCM" e procure pela descrição do material (ex: "parafuso", "rolamento", "tinta").</span>
+      <div class="alert alert-info app-card mb-2 py-2 px-3">
+        <span class="text-[0.85rem]">Agora é possível consultar o NCM do produto — clique em "Buscar NCM" e procure pela descrição do material (ex: "parafuso", "rolamento", "tinta").</span>
       </div>
-      <div style="display:flex; gap:0.5rem; align-items:flex-start;">
+      <div class="flex gap-2 items-start">
         <input
+          #ncmInput
           type="text"
           id="ncm"
           formControlName="ncm"
-          class="form-input"
+          class="form-input flex-1"
           [class.input-error]="showError('ncm')"
           placeholder="0000.00.00"
-          maxlength="8"
+          maxlength="10"
           (keydown)="onlyNumbers($event)"
           (input)="formatNCM($event)"
-          style="flex:1;"
         />
-        <button type="button" (click)="abrirBuscaNcm()" class="btn btn-secondary" style="white-space:nowrap;">
+        <button type="button" (click)="abrirBuscaNcm()" class="btn btn-secondary whitespace-nowrap">
           Buscar NCM
         </button>
       </div>
@@ -377,7 +377,7 @@
         } @else {
           @for (item of ncmResultados(); track item.codigo) {
             <button type="button" (click)="selecionarNcm(item)" class="ncm-result-item">
-              <span class="ncm-result-codigo">{{ item.codigo }}</span>
+              <span class="ncm-result-codigo">{{ formatarNcmExibicao(item.codigo) }}</span>
               <span class="ncm-result-descricao">{{ item.descricao }}</span>
             </button>
           }

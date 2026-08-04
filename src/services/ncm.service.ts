@@ -7,7 +7,8 @@ export interface NcmEntry {
 
 interface NcmEntryInterna extends NcmEntry {
   descricaoNorm: string;
-  folhaNorm: string; // só o último trecho da hierarquia (o mais específico)
+  folhaNorm: string;  // só o último trecho da hierarquia (o mais específico)
+  restoNorm: string;  // tudo, exceto o 1º trecho (o capítulo)
 }
 
 // Tabela oficial da Receita Federal / Siscomex (portalunico.siscomex.gov.br), baixada
@@ -43,12 +44,16 @@ export class NcmService {
         const data = await resp.json() as { codigos: { c: string; d: string }[] };
         this._codigos.set(data.codigos.map(x => {
           const descricaoNorm = this.normalizar(x.d);
-          const ultimoSeparador = descricaoNorm.lastIndexOf(' > ');
+          const segmentos = descricaoNorm.split(' > ');
           return {
             codigo: x.c,
             descricao: x.d,
             descricaoNorm,
-            folhaNorm: ultimoSeparador >= 0 ? descricaoNorm.slice(ultimoSeparador + 3) : descricaoNorm,
+            folhaNorm: segmentos[segmentos.length - 1],
+            // Sem o 1º trecho (capítulo) — ele costuma listar várias famílias de produto
+            // diferentes numa frase só (ex.: "Sabões... preparações lubrificantes... ceras..."),
+            // então um termo que só aparece ali é falso positivo na maioria das vezes.
+            restoNorm: segmentos.length > 1 ? segmentos.slice(1).join(' > ') : descricaoNorm,
           };
         }));
         this.loaded = true;
@@ -83,17 +88,27 @@ export class NcmService {
     // "enrolamento", "parafuso" dentro de "aparafusado", etc.
     const regexes = palavras.map(p => new RegExp(`\\b${this.escapeRegex(p)}`));
 
-    // Prioriza quem bate no trecho mais específico (a "folha" da hierarquia) — um termo
-    // que só aparece lá em cima, num capítulo genérico (ex.: "parafusos" citado de
-    // passagem na descrição de um lubrificante), é bem menos relevante.
-    const encontrados: { item: NcmEntryInterna; relevancia: number }[] = [];
+    // Relevância: 2 = bate no trecho mais específico (a "folha"); 1 = bate em algum
+    // trecho intermediário; 0 = só bate no título do capítulo (1º trecho), que costuma
+    // listar várias famílias de produto bem diferentes numa frase só — nesse caso o termo
+    // buscado geralmente não tem nada a ver com o item em si, é só menção de passagem.
+    const bons: { item: NcmEntryInterna; relevancia: number }[] = [];
+    const somenteCapitulo: NcmEntryInterna[] = [];
     for (const item of this._codigos()) {
       if (!regexes.every(r => r.test(item.descricaoNorm))) continue;
-      const relevancia = regexes.every(r => r.test(item.folhaNorm)) ? 1 : 0;
-      encontrados.push({ item, relevancia });
+      if (regexes.every(r => r.test(item.folhaNorm))) {
+        bons.push({ item, relevancia: 2 });
+      } else if (regexes.every(r => r.test(item.restoNorm))) {
+        bons.push({ item, relevancia: 1 });
+      } else {
+        somenteCapitulo.push(item);
+      }
     }
 
-    encontrados.sort((a, b) => b.relevancia - a.relevancia);
-    return encontrados.slice(0, limite).map(({ item }) => ({ codigo: item.codigo, descricao: item.descricao }));
+    bons.sort((a, b) => b.relevancia - a.relevancia);
+    // Só cai pros resultados "só bate no capítulo" se não achou nada melhor — mais vale
+    // isso do que dizer que não encontrou nada.
+    const fonte = bons.length > 0 ? bons.map(b => b.item) : somenteCapitulo;
+    return fonte.slice(0, limite).map(item => ({ codigo: item.codigo, descricao: item.descricao }));
   }
 }
