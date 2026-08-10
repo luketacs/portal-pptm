@@ -257,6 +257,11 @@
                 <td class="px-3 py-2 text-center text-gray-500 whitespace-nowrap">{{ formatDate(s.dataSolicitacao) }}</td>
                 <td class="px-3 py-2 text-center text-gray-800 font-medium">
                   {{ s.solicitanteNome }}
+                  @if (!s.solicitanteId) {
+                    <span class="block text-[10px] font-normal text-amber-600" title="Enviado pelo formulário público, sem login — confira a identidade antes de aprovar.">
+                      Via link público
+                    </span>
+                  }
                   @if (mode === 'gestao' && isAdmin()) {
                     @if (s.compradorNome) {
                       <button (click)="abrirAtribuirComprador(s)" class="block w-full text-center text-xs font-normal text-blue-600 hover:text-blue-800 hover:underline">

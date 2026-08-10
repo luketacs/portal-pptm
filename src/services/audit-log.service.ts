@@ -29,6 +29,7 @@ export const AUDIT_EVENT_LABELS: Record<string, string> = {
   material_status_changed:  'Status de material alterado',
   material_deleted:         'Material excluído',
   fundo_fixo_solicitado:    'Fundo Fixo solicitado',
+  fundo_fixo_solicitado_publico: 'Fundo Fixo solicitado (link público)',
   fundo_fixo_aprovado:      'Fundo Fixo aprovado',
   fundo_fixo_recusado:      'Fundo Fixo recusado',
   fundo_fixo_comprado:      'Fundo Fixo — compra registrada',
@@ -43,7 +44,7 @@ export const AUDIT_EVENT_CATEGORIES: Record<string, string[]> = {
   'Usuários':       ['user_created', 'user_updated', 'user_deleted'],
   'Solicitações':   ['request_created', 'request_status_changed', 'request_updated', 'request_deleted'],
   'Materiais':      ['material_created', 'material_updated', 'material_status_changed', 'material_deleted'],
-  'Fundo Fixo':     ['fundo_fixo_solicitado', 'fundo_fixo_aprovado', 'fundo_fixo_recusado', 'fundo_fixo_comprado', 'fundo_fixo_excluido', 'fundo_fixo_saque_registrado', 'fundo_fixo_saque_excluido', 'fundo_fixo_comprador_atribuido'],
+  'Fundo Fixo':     ['fundo_fixo_solicitado', 'fundo_fixo_solicitado_publico', 'fundo_fixo_aprovado', 'fundo_fixo_recusado', 'fundo_fixo_comprado', 'fundo_fixo_excluido', 'fundo_fixo_saque_registrado', 'fundo_fixo_saque_excluido', 'fundo_fixo_comprador_atribuido'],
 };
 
 const MAX_ATTEMPTS = 3;

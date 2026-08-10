@@ -146,6 +146,12 @@ export const APP_ROUTES: Routes = [
     data: { roles: ['Admin', 'Solicitante'] },
     title: 'Nova Solicitação — Fundo Fixo',
   },
+  {
+    path: 'publico/fundo-fixo',
+    loadComponent: () =>
+      import('../components/fundo-fixo/fundo-fixo-form-publico/fundo-fixo-form-publico.component').then(m => m.FundoFixoFormPublicoComponent),
+    title: 'Solicitar Compra — Fundo Fixo',
+  },
 
   {
     path: 'almoxarifado/aguardando',
