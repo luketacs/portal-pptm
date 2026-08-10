@@ -1,4 +1,4 @@
-﻿import { Component, ElementRef, OnInit, ViewChild, signal } from '@angular/core';
+﻿import { Component, ElementRef, OnInit, ViewChild, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -94,6 +94,28 @@ export class MaterialFormComponent implements OnInit {
       this.ncmInputRef.nativeElement.value = this.formatarNcmExibicao(entry.codigo);
     }
     this.fecharBuscaNcm();
+  }
+
+  // ── Confirmação de pesquisa prévia (obrigatória antes de liberar o cadastro) ──
+  // A checagem de duplicidade é feita pelo usuário direto no sistema (Protheus) —
+  // o Portal não tem acesso à base completa dele. Aqui só forçamos e registramos
+  // a confirmação de que essa pesquisa foi feita antes de seguir com o cadastro.
+  duplicidadeChecada = signal(false);
+  confirmacaoPesquisa = signal(false);
+
+  podeContinuarCadastro = computed(() => this.confirmacaoPesquisa());
+
+  onConfirmacaoPesquisaChange(event: Event): void {
+    this.confirmacaoPesquisa.set((event.target as HTMLInputElement).checked);
+  }
+
+  continuarCadastro(): void {
+    if (!this.podeContinuarCadastro()) return;
+    this.duplicidadeChecada.set(true);
+  }
+
+  voltarParaBusca(): void {
+    this.duplicidadeChecada.set(false);
   }
 
   async ngOnInit(): Promise<void> {

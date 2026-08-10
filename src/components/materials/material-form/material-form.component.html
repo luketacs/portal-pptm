@@ -14,9 +14,44 @@
   </div>
   }
 
-  @if (!isLoading()) {
+  @if (!isLoading() && !isEditMode() && !duplicidadeChecada()) {
+  <!-- Confirmação de pesquisa prévia (obrigatória antes de liberar o cadastro) -->
+  <div class="app-card p-5">
+    <div class="alert alert-warning app-card mb-4">
+      <div>
+        <strong>Antes de cadastrar:</strong> pesquise no sistema se este material já não possui código cadastrado, para evitar duplicidade.
+      </div>
+    </div>
+
+    <label class="flex items-start gap-3 p-4 rounded-lg border border-slate-200 bg-white cursor-pointer">
+      <input
+        type="checkbox"
+        class="mt-1 w-4 h-4 shrink-0"
+        [checked]="confirmacaoPesquisa()"
+        (change)="onConfirmacaoPesquisaChange($event)"
+      />
+      <span class="text-sm text-slate-700">
+        Já pesquisei no sistema e confirmo que este material <strong>não possui código cadastrado</strong>.
+      </span>
+    </label>
+
+    <div class="form-actions mt-4">
+      <button type="button" (click)="onCancel()" class="btn btn-secondary">Voltar</button>
+      <button
+        type="button"
+        (click)="continuarCadastro()"
+        class="btn btn-primary"
+        [disabled]="!podeContinuarCadastro()"
+      >
+        Continuar cadastro
+      </button>
+    </div>
+  </div>
+  }
+
+  @if (!isLoading() && (isEditMode() || duplicidadeChecada())) {
   <form [formGroup]="materialForm" (ngSubmit)="onSubmit()" class="material-form">
-    
+
     <!-- Aviso de modo visualização -->
     @if (isViewOnlyMode()) {
     <div class="alert alert-info app-card mb-4">
@@ -39,6 +74,12 @@
         Por favor, preencha todas as informações solicitadas com atenção.
       </div>
     </div>
+    }
+
+    @if (!isEditMode()) {
+    <button type="button" (click)="voltarParaBusca()" class="text-xs text-blue-600 bg-transparent border-none cursor-pointer p-0 mb-4">
+      ← Voltar para a pesquisa de duplicidade
+    </button>
     }
 
     <!-- Mensagem de erro global -->
