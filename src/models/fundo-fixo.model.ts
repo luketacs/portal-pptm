@@ -27,6 +27,11 @@ export interface FundoFixoSolicitacao {
   dataSolicitacao: Date;
   dataAprovacao: Date | null;
   dataCompra: Date | null;
+  // Só relevante quando formaPagamento === 'reembolso': a pessoa pagou do próprio bolso
+  // e ainda não recebeu o dinheiro de volta do caixa. Fica pendente entre meses até ser
+  // marcado — não depende do mesReferencia da solicitação original.
+  reembolsado: boolean;
+  dataReembolso: Date | null;
 }
 
 export interface CreateFundoFixoRequest {

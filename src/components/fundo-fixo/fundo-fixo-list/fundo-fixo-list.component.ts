@@ -151,6 +151,18 @@ export class FundoFixoListComponent implements OnInit {
   // ── Fechamento do mês (relatório para os gestores) ────────────────────
   itensCartaoDoMes = computed(() => this.solicitacoesDoMes().filter(s => s.status === 'comprado' && s.formaPagamento === 'cartao'));
   itensReembolsoDoMes = computed(() => this.solicitacoesDoMes().filter(s => s.status === 'comprado' && (s.formaPagamento === 'dinheiro_caixa' || s.formaPagamento === 'reembolso')));
+
+  // Quem pagou do próprio bolso e ainda não recebeu de volta — de propósito NÃO filtra
+  // pelo mês selecionado (mesFiltro), senão some da tela assim que o mês vira e ninguém
+  // lembra de reembolsar quem comprou no mês anterior.
+  reembolsosPendentes = computed(() =>
+    this.fundoFixoService.solicitacoes()
+      .filter(s => s.status === 'comprado' && s.formaPagamento === 'reembolso' && !s.reembolsado)
+      .sort((a, b) => (a.dataCompra?.getTime() ?? 0) - (b.dataCompra?.getTime() ?? 0))
+  );
+  totalReembolsosPendentes = computed(() =>
+    this.reembolsosPendentes().reduce((sum, s) => sum + (s.valorFinal ?? s.valorEstimado), 0)
+  );
   totalSacadoMes = computed(() =>
     this.fundoFixoService.saques()
       .filter(s => s.mesReferencia === this.mesFiltro() && s.tipo === 'saque')
@@ -412,6 +424,23 @@ export class FundoFixoListComponent implements OnInit {
       this.notificationService.showSuccess('Saque excluído.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao excluir saque.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  // ── Marcar reembolso como pago ─────────────────────────────────────────
+  async marcarReembolsado(s: FundoFixoSolicitacao): Promise<void> {
+    if (this.isProcessando()) return;
+    const confirmado = confirm(`Confirmar que ${s.solicitanteNome} já recebeu de volta o valor de "${s.material}"?`);
+    if (!confirmado) return;
+
+    this.isProcessando.set(true);
+    try {
+      await this.fundoFixoService.marcarReembolsado(s.id);
+      this.notificationService.showSuccess('Reembolso marcado como pago.');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao marcar reembolso.');
     } finally {
       this.isProcessando.set(false);
     }

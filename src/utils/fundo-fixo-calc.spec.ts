@@ -43,6 +43,8 @@ function solicitacao(overrides: Partial<FundoFixoSolicitacao> = {}): FundoFixoSo
     dataSolicitacao: new Date('2026-07-01'),
     dataAprovacao: null,
     dataCompra: null,
+    reembolsado: false,
+    dataReembolso: null,
     ...overrides,
   };
 }

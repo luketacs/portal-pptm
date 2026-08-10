@@ -40,6 +40,8 @@ interface FundoFixoRow {
   data_solicitacao: string;
   data_aprovacao: string | null;
   data_compra: string | null;
+  reembolsado: boolean | null;
+  data_reembolso: string | null;
 }
 
 interface FundoFixoSaqueRow {
@@ -86,6 +88,8 @@ function mapRow(r: FundoFixoRow): FundoFixoSolicitacao {
     dataSolicitacao: new Date(r.data_solicitacao),
     dataAprovacao: r.data_aprovacao ? new Date(r.data_aprovacao) : null,
     dataCompra: r.data_compra ? new Date(r.data_compra) : null,
+    reembolsado: r.reembolsado ?? false,
+    dataReembolso: r.data_reembolso ? new Date(r.data_reembolso) : null,
   };
 }
 
@@ -452,6 +456,31 @@ export class FundoFixoService {
       resource_id: id,
       description: `${admin.name} alterou a forma de pagamento de ${item?.material ?? ''} para ${formaPagamento}`,
       metadata: { forma_pagamento: formaPagamento },
+    });
+
+    await this.load();
+  }
+
+  // Marca que a pessoa já recebeu de volta o dinheiro que pagou do próprio bolso.
+  // Fica pendente entre meses até ser marcado, independente do mesReferencia da compra.
+  async marcarReembolsado(id: string): Promise<void> {
+    const admin = this.authService.currentUser();
+    if (!admin) throw new Error('Sessão expirada.');
+
+    const { error } = await this.supabaseService.client
+      .from('fundo_fixo_solicitacoes')
+      .update({ reembolsado: true, data_reembolso: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+
+    const item = this.getById(id);
+    this.auditLogService.log({
+      user_id: admin.id,
+      user_name: admin.name,
+      event_type: 'fundo_fixo_reembolsado',
+      resource_type: 'fundo_fixo',
+      resource_id: id,
+      description: `${admin.name} marcou como reembolsado: ${item?.material ?? ''} (${item?.solicitanteNome ?? ''})`,
     });
 
     await this.load();
