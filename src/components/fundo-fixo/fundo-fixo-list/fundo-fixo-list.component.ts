@@ -619,6 +619,17 @@ export class FundoFixoListComponent implements OnInit {
     }
   }
 
+  // ── Link público de solicitação (sem login) ────────────────────────────
+  async copiarLinkPublico(): Promise<void> {
+    const url = `${window.location.origin}/publico/fundo-fixo`;
+    try {
+      await navigator.clipboard.writeText(url);
+      this.notificationService.showSuccess('Link público copiado!');
+    } catch {
+      this.notificationService.showError('Erro ao copiar o link.');
+    }
+  }
+
   // ── Fechar mês: excel no formato da planilha + zip das NFs + e-mail pronto ──
   async fecharMes(): Promise<void> {
     if (this.isExportandoFechamento()) return;
