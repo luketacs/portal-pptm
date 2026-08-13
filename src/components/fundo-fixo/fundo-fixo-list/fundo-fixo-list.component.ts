@@ -87,6 +87,17 @@ export class FundoFixoListComponent implements OnInit {
   comprarNotaFiscal = signal<File | null>(null);
   isProcessando = signal(false);
 
+  // Modal: ver detalhes completos da solicitação (material/observações sem corte)
+  detalheAlvo = signal<FundoFixoSolicitacao | null>(null);
+
+  abrirDetalhe(s: FundoFixoSolicitacao): void {
+    this.detalheAlvo.set(s);
+  }
+
+  fecharDetalhe(): void {
+    this.detalheAlvo.set(null);
+  }
+
   // Modal: registrar saque
   saqueModalAberto = signal(false);
   saqueValor = signal<number | null>(null);
