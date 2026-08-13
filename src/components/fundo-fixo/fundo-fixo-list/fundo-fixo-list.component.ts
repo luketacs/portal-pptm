@@ -329,6 +329,13 @@ export class FundoFixoListComponent implements OnInit {
     }
   }
 
+  // O formulário público permite mais de um link (um por linha, no mesmo campo
+  // link_produto) — aqui é onde isso vira uma lista pra exibir na tela.
+  parseLinks(raw: string | null): string[] {
+    if (!raw) return [];
+    return raw.split('\n').map(l => l.trim()).filter(Boolean);
+  }
+
   formatDate(d: Date | null): string {
     if (!d) return '—';
     return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);

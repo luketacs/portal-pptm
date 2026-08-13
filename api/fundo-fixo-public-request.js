@@ -69,7 +69,8 @@ export default async function handler(req, res) {
   const setor = sanitize(body.setor, 30);
   const fornecedor = sanitize(body.fornecedor, 150);
   const material = sanitize(body.material, 1000);
-  const linkProduto = sanitize(body.linkProduto, 500);
+  // Pode vir mais de um link (um por linha), então precisa de mais espaço que uma URL só.
+  const linkProduto = sanitize(body.linkProduto, 2000);
   const observacoesBase = sanitize(body.observacoes, 1000);
   const orcamentoPath = sanitize(body.orcamentoPath, 300);
   const valorEstimado = Number(body.valorEstimado);

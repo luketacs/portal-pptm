@@ -32,7 +32,7 @@ export class FundoFixoFormPublicoComponent {
   setor = signal<FundoFixoSetor>('Manutenção');
   fornecedor = signal('');
   material = signal('');
-  linkProduto = signal('');
+  linksProduto = signal<string[]>(['']);
   valorEstimado = signal<number | null>(null);
   observacoes = signal('');
   orcamento = signal<File | null>(null);
@@ -64,6 +64,21 @@ export class FundoFixoFormPublicoComponent {
 
   removerAnexo(): void {
     this.orcamento.set(null);
+  }
+
+  onLinkChange(index: number, value: string): void {
+    const copy = [...this.linksProduto()];
+    copy[index] = value;
+    this.linksProduto.set(copy);
+  }
+
+  adicionarLink(): void {
+    this.linksProduto.set([...this.linksProduto(), '']);
+  }
+
+  removerLink(index: number): void {
+    const copy = this.linksProduto().filter((_, i) => i !== index);
+    this.linksProduto.set(copy.length > 0 ? copy : ['']);
   }
 
   canSubmit(): boolean {
@@ -100,7 +115,7 @@ export class FundoFixoFormPublicoComponent {
           setor: this.setor(),
           fornecedor: this.fornecedor(),
           material: this.material(),
-          linkProduto: this.linkProduto(),
+          linkProduto: this.linksProduto().map(l => l.trim()).filter(Boolean).join('\n'),
           valorEstimado: this.valorEstimado(),
           observacoes: this.observacoes(),
           orcamentoPath,
@@ -144,7 +159,7 @@ export class FundoFixoFormPublicoComponent {
     this.setor.set('Manutenção');
     this.fornecedor.set('');
     this.material.set('');
-    this.linkProduto.set('');
+    this.linksProduto.set(['']);
     this.valorEstimado.set(null);
     this.observacoes.set('');
     this.orcamento.set(null);
