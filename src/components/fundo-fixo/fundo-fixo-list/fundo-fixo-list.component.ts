@@ -8,7 +8,7 @@ import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/toast.service';
 import { UserService } from '../../../services/user.service';
 import { ExcelExportService, FechamentoFundoFixoLinha } from '../../../services/excel-export.service';
-import { FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSolicitacao, FundoFixoStatus } from '../../../models/fundo-fixo.model';
+import { FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSetor, FundoFixoSolicitacao, FundoFixoStatus } from '../../../models/fundo-fixo.model';
 
 type StatusFiltro = 'todos' | FundoFixoStatus;
 
@@ -119,6 +119,15 @@ export class FundoFixoListComponent implements OnInit {
   vincularAlvo = signal<FundoFixoSolicitacao | null>(null);
   vincularEscolhidoId = signal<string>('');
   usuariosOrdenados = computed(() => [...this.userService.users()].sort((a, b) => a.name.localeCompare(b.name)));
+
+  // Modal: editar dados originais da solicitação (link errado, valor digitado errado etc.)
+  editarAlvo = signal<FundoFixoSolicitacao | null>(null);
+  editarSetor = signal<FundoFixoSetor>('Manutenção');
+  editarFornecedor = signal('');
+  editarMaterial = signal('');
+  editarLinksProduto = signal<string[]>(['']);
+  editarValorEstimado = signal<number | null>(null);
+  editarObservacoes = signal('');
 
   isLoading = this.fundoFixoService.isLoading;
   currentUser = this.authService.currentUser;
@@ -520,6 +529,65 @@ export class FundoFixoListComponent implements OnInit {
       this.fecharVincularSolicitante();
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao vincular solicitante.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  // ── Editar dados originais da solicitação ──────────────────────────────
+  abrirEditar(s: FundoFixoSolicitacao): void {
+    this.editarAlvo.set(s);
+    this.editarSetor.set(s.setor);
+    this.editarFornecedor.set(s.fornecedor ?? '');
+    this.editarMaterial.set(s.material);
+    const links = this.parseLinks(s.linkProduto);
+    this.editarLinksProduto.set(links.length > 0 ? links : ['']);
+    this.editarValorEstimado.set(s.valorEstimado);
+    this.editarObservacoes.set(s.observacoes ?? '');
+  }
+
+  fecharEditar(): void {
+    this.editarAlvo.set(null);
+  }
+
+  onEditarLinkChange(index: number, value: string): void {
+    const copy = [...this.editarLinksProduto()];
+    copy[index] = value;
+    this.editarLinksProduto.set(copy);
+  }
+
+  adicionarEditarLink(): void {
+    this.editarLinksProduto.set([...this.editarLinksProduto(), '']);
+  }
+
+  removerEditarLink(index: number): void {
+    const copy = this.editarLinksProduto().filter((_, i) => i !== index);
+    this.editarLinksProduto.set(copy.length > 0 ? copy : ['']);
+  }
+
+  canConfirmarEditar(): boolean {
+    const valor = this.editarValorEstimado() ?? 0;
+    return !!this.editarMaterial().trim() && valor > 0 && valor <= this.limitePorCompra && !this.isProcessando();
+  }
+
+  async confirmarEditar(): Promise<void> {
+    const alvo = this.editarAlvo();
+    if (!alvo || !this.canConfirmarEditar()) return;
+
+    this.isProcessando.set(true);
+    try {
+      await this.fundoFixoService.editarSolicitacao(alvo.id, {
+        setor: this.editarSetor(),
+        fornecedor: this.editarFornecedor().trim() || null,
+        material: this.editarMaterial().trim(),
+        linkProduto: this.editarLinksProduto().map(l => l.trim()).filter(Boolean).join('\n') || null,
+        valorEstimado: this.editarValorEstimado() ?? 0,
+        observacoes: this.editarObservacoes().trim() || null,
+      });
+      this.notificationService.showSuccess('Solicitação atualizada.');
+      this.fecharEditar();
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao editar solicitação.');
     } finally {
       this.isProcessando.set(false);
     }

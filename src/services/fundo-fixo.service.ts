@@ -365,6 +365,41 @@ export class FundoFixoService {
     await this.load();
   }
 
+  // Admin corrige os dados originais da solicitação (link errado, valor digitado errado
+  // etc.) — funciona em qualquer status, mesmo depois de comprado, já que isso não mexe
+  // no valor_final que já foi registrado na compra.
+  async editarSolicitacao(id: string, updates: {
+    setor: FundoFixoSetor; fornecedor: string | null; material: string;
+    linkProduto: string | null; valorEstimado: number; observacoes: string | null;
+  }): Promise<void> {
+    const admin = this.authService.currentUser();
+    if (!admin) throw new Error('Sessão expirada.');
+
+    const { error } = await this.supabaseService.client
+      .from('fundo_fixo_solicitacoes')
+      .update({
+        setor: updates.setor,
+        fornecedor: updates.fornecedor,
+        material: updates.material,
+        link_produto: updates.linkProduto,
+        valor_estimado: updates.valorEstimado,
+        observacoes: updates.observacoes,
+      })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+
+    this.auditLogService.log({
+      user_id: admin.id,
+      user_name: admin.name,
+      event_type: 'fundo_fixo_editado',
+      resource_type: 'fundo_fixo',
+      resource_id: id,
+      description: `${admin.name} editou a solicitação "${updates.material}"`,
+    });
+
+    await this.load();
+  }
+
   async aprovar(id: string, gestorAprovador: string): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
