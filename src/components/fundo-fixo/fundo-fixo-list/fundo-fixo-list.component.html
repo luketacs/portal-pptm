@@ -261,6 +261,11 @@
                     <span class="block text-[10px] font-normal text-amber-600" title="Enviado pelo formulário público, sem login — confira a identidade antes de aprovar.">
                       Via link público
                     </span>
+                    @if (isAdmin()) {
+                      <button (click)="abrirVincularSolicitante(s)" class="block w-full text-center text-xs font-normal text-blue-600 hover:text-blue-800 hover:underline">
+                        Vincular a um usuário
+                      </button>
+                    }
                   }
                   @if (mode === 'gestao' && isAdmin()) {
                     @if (s.compradorNome) {
@@ -464,6 +469,36 @@
 
       <div class="flex justify-end mt-5">
         <button (click)="fecharDetalhe()" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Fechar</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Modal: Vincular solicitante (solicitação sem dono, veio do link público) -->
+@if (vincularAlvo(); as alvo) {
+  <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" (click)="fecharVincularSolicitante()">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md" (click)="$event.stopPropagation()">
+      <h3 class="text-lg font-bold text-gray-800 mb-1">Vincular a um usuário</h3>
+      <p class="text-sm text-gray-500 mb-4">
+        "{{ alvo.solicitanteNome }}" — {{ alvo.material }}. Depois de vinculada, a solicitação passa a
+        aparecer na Lista de Compras / Minhas Solicitações do usuário escolhido.
+      </p>
+
+      <label class="block text-sm font-medium text-slate-700 mb-1">Quem fez essa solicitação? <span class="text-red-500">*</span></label>
+      <select [ngModel]="vincularEscolhidoId()" (ngModelChange)="vincularEscolhidoId.set($event)"
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-4">
+        <option value="">Selecione...</option>
+        @for (u of usuariosOrdenados(); track u.id) {
+          <option [value]="u.id">{{ u.name }}</option>
+        }
+      </select>
+
+      <div class="flex justify-end gap-3">
+        <button (click)="fecharVincularSolicitante()" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Cancelar</button>
+        <button (click)="confirmarVincularSolicitante()" [disabled]="!vincularEscolhidoId() || isProcessando()"
+          class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
+          Vincular
+        </button>
       </div>
     </div>
   </div>

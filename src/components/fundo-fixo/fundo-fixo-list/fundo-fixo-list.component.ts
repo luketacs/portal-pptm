@@ -115,6 +115,11 @@ export class FundoFixoListComponent implements OnInit {
   compradorEscolhidoId = signal<string>('');
   admins = computed(() => this.userService.users().filter(u => u.role === 'Admin'));
 
+  // Modal: vincular uma solicitação sem dono (veio do link público) a um usuário real
+  vincularAlvo = signal<FundoFixoSolicitacao | null>(null);
+  vincularEscolhidoId = signal<string>('');
+  usuariosOrdenados = computed(() => [...this.userService.users()].sort((a, b) => a.name.localeCompare(b.name)));
+
   isLoading = this.fundoFixoService.isLoading;
   currentUser = this.authService.currentUser;
   isAdmin = computed(() => this.authService.currentUser()?.role === 'Admin');
@@ -215,7 +220,9 @@ export class FundoFixoListComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     try {
       await this.fundoFixoService.load();
-      if (this.mode === 'gestao') {
+      // Precisa da lista completa de usuários (não só admins) pra poder vincular
+      // solicitações sem dono, vindas do link público, a um usuário real.
+      if (this.isAdmin()) {
         this.userService.loadUsers().catch(() => {});
       }
     } catch {
@@ -479,6 +486,33 @@ export class FundoFixoListComponent implements OnInit {
       this.fecharAtribuirComprador();
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao direcionar comprador.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  // ── Vincular solicitante (pra solicitações sem dono, vindas do link público) ──
+  abrirVincularSolicitante(s: FundoFixoSolicitacao): void {
+    this.vincularAlvo.set(s);
+    this.vincularEscolhidoId.set('');
+  }
+
+  fecharVincularSolicitante(): void {
+    this.vincularAlvo.set(null);
+  }
+
+  async confirmarVincularSolicitante(): Promise<void> {
+    const alvo = this.vincularAlvo();
+    const usuario = this.usuariosOrdenados().find(u => u.id === this.vincularEscolhidoId());
+    if (!alvo || !usuario || this.isProcessando()) return;
+
+    this.isProcessando.set(true);
+    try {
+      await this.fundoFixoService.vincularSolicitante(alvo.id, usuario.id, usuario.name);
+      this.notificationService.showSuccess(`Solicitação vinculada a ${usuario.name}.`);
+      this.fecharVincularSolicitante();
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao vincular solicitante.');
     } finally {
       this.isProcessando.set(false);
     }

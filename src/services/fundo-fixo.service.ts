@@ -339,6 +339,32 @@ export class FundoFixoService {
     await this.load();
   }
 
+  // Vincula uma solicitação sem dono (veio do link público, solicitante_id null) a um
+  // usuário de verdade do Portal — assim ela passa a aparecer na Lista de Compras/Minhas
+  // Solicitações dessa pessoa, que antes não enxergava o que pediu por fora do login.
+  async vincularSolicitante(id: string, solicitanteId: string, solicitanteNome: string): Promise<void> {
+    const admin = this.authService.currentUser();
+    if (!admin) throw new Error('Sessão expirada.');
+
+    const { error } = await this.supabaseService.client
+      .from('fundo_fixo_solicitacoes')
+      .update({ solicitante_id: solicitanteId, solicitante_nome: solicitanteNome })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+
+    const item = this.getById(id);
+    this.auditLogService.log({
+      user_id: admin.id,
+      user_name: admin.name,
+      event_type: 'fundo_fixo_solicitante_vinculado',
+      resource_type: 'fundo_fixo',
+      resource_id: id,
+      description: `${admin.name} vinculou a solicitação "${item?.material ?? ''}" (via link público) ao usuário ${solicitanteNome}`,
+    });
+
+    await this.load();
+  }
+
   async aprovar(id: string, gestorAprovador: string): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
