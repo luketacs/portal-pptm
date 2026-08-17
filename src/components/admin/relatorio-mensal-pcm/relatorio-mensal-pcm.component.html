@@ -1,0 +1,300 @@
+<div class="space-y-6">
+  <div class="no-print">
+    <h1 class="text-2xl font-bold text-gray-800">Relatório Mensal PCM</h1>
+    <p class="text-sm text-gray-500 mt-0.5">
+      KPIs do mês e acumulado do ano, a partir da mesma planilha "Painel de Indicadores de PCM".
+      Reconciliação de horas por colaborador ainda não está disponível aqui.
+    </p>
+  </div>
+
+  @if (!dadosMensal()) {
+    <div class="app-card p-6 max-w-2xl no-print">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Planilha (.xlsx) <span class="text-red-500">*</span></label>
+          @if (!arquivo()) {
+            <label class="cursor-pointer inline-block">
+              <input type="file" accept=".xlsx" class="hidden" (change)="onFileSelected($event)" />
+              <span class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
+                Selecionar planilha
+              </span>
+            </label>
+          } @else {
+            <div class="flex items-center gap-3">
+              <span class="text-sm text-gray-600 truncate max-w-xs">{{ arquivo()!.name }}</span>
+              <label class="cursor-pointer text-sm text-blue-600 hover:text-blue-700">
+                Trocar
+                <input type="file" accept=".xlsx" class="hidden" (change)="onFileSelected($event)" />
+              </label>
+            </div>
+          }
+          <p class="text-xs text-gray-400 mt-1">Aba "Indicadores Mensais" da planilha usada pelo PCM.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Mês <span class="text-red-500">*</span></label>
+            <select [ngModel]="mes()" (ngModelChange)="mes.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              @for (m of meses; track m) {
+                <option [value]="m">{{ mesesCompleto[m] }}</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Ano <span class="text-red-500">*</span></label>
+            <input type="number" min="2024" max="2030" [ngModel]="ano()" (ngModelChange)="ano.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Data inicial do período (opcional)</label>
+            <input type="date" [ngModel]="dataInicioIso()" (ngModelChange)="dataInicioIso.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Data final do período (opcional)</label>
+            <input type="date" [ngModel]="dataFimIso()" (ngModelChange)="dataFimIso.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+        <p class="text-xs text-gray-400 -mt-2">Deixe em branco para usar o mês inteiro (do dia 1 ao último dia).</p>
+
+        @if (errorMessage()) {
+          <div class="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{{ errorMessage() }}</div>
+        }
+
+        <button (click)="gerarRelatorio()" [disabled]="!canGerar()"
+          class="bg-blue-600 text-white font-semibold py-2.5 px-6 rounded-lg hover:bg-blue-700 transition disabled:bg-blue-300 disabled:cursor-not-allowed flex items-center gap-2">
+          @if (isProcessando()) {
+            <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+          }
+          Gerar Relatório
+        </button>
+      </div>
+    </div>
+  } @else {
+
+  <div class="flex items-center gap-3 no-print">
+    <button (click)="novoRelatorio()" class="text-sm font-semibold text-slate-600 hover:text-slate-800 px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50">
+      ← Novo relatório
+    </button>
+    <button (click)="imprimir()" class="text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
+      Imprimir / Salvar PDF
+    </button>
+  </div>
+
+  <div class="pcm-report">
+    <!-- Cabeçalho -->
+    <header class="pcm-header">
+      <div class="pcm-logos">
+        <img src="/relatorio-pcm-logo-principal.svg" alt="PPTM" class="pcm-logo-principal" />
+        <div class="pcm-logo-secondary">
+          <img src="/relatorio-pcm-logo-secundaria.svg" alt="Logo Secundária" class="pcm-logo-secundaria" />
+        </div>
+      </div>
+      <div class="pcm-company-info">
+        <div class="pcm-company-name">PORTO DO PECÉM TRANSPORTADORA DE MINÉRIOS</div>
+        <div class="pcm-report-title">Relatório Mensal Atividades Manutenção - PPTM</div>
+      </div>
+      <div class="pcm-report-info">
+        <div><strong>MÊS:</strong> {{ dadosMensal()!.mesCompleto }}/{{ dadosMensal()!.ano }}</div>
+        <div class="pcm-periodo-info"><strong>PERÍODO:</strong> {{ dadosMensal()!.periodoMes }}</div>
+        <div class="pcm-status-badge" [style.background-color]="statusCor(dadosMensal()!.statusGeral)">
+          STATUS GERAL: {{ dadosMensal()!.statusGeral }}
+        </div>
+      </div>
+    </header>
+
+    <!-- Resumo executivo do mês -->
+    <section class="pcm-section">
+      <h2 class="pcm-section-title">Resumo Executivo — {{ dadosMensal()!.mesCompleto }}</h2>
+      <div class="pcm-cards">
+        <div class="pcm-card pcm-card--green">
+          <div class="pcm-card-title">Atendimento à Programação</div>
+          <div class="pcm-card-value">{{ dadosMensal()!.atendimentoGeral }}%</div>
+          <div class="pcm-card-meta">Meta: {{ dadosMensal()!.metaAtendimento }}%</div>
+        </div>
+        <div class="pcm-card pcm-card--blue">
+          <div class="pcm-card-title">Cumprimento do Plano</div>
+          <div class="pcm-card-value">{{ dadosMensal()!.cumprimentoGeral }}%</div>
+          <div class="pcm-card-meta">Meta: {{ dadosMensal()!.metaCumprimento }}%</div>
+        </div>
+        <div class="pcm-card pcm-card--purple">
+          <div class="pcm-card-title">OS's Executadas</div>
+          <div class="pcm-card-value">{{ dadosMensal()!.totalExecutadas }}/{{ dadosMensal()!.totalProgramadas }}</div>
+        </div>
+        <div class="pcm-card pcm-card--orange">
+          <div class="pcm-card-title">OS's Não Executadas</div>
+          <div class="pcm-card-value">{{ dadosMensal()!.totalNaoExecutadas }}</div>
+        </div>
+        <div class="pcm-card pcm-card--red">
+          <div class="pcm-card-title">OS's Fora da Programação</div>
+          <div class="pcm-card-value">{{ dadosMensal()!.totalForaProgramacao }}</div>
+        </div>
+        <div class="pcm-card pcm-card--teal">
+          <div class="pcm-card-title">OS's Planejadas Plano</div>
+          <div class="pcm-card-value">{{ dadosMensal()!.totalPlanejadasPlano }}</div>
+          <div class="pcm-card-meta">{{ dadosMensal()!.totalExecutadasPlano }} executadas do plano</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Visão acumulada do ano -->
+    <section class="pcm-section">
+      <h2 class="pcm-section-title">Visão Acumulada — {{ dadosAcumulado()!.periodoAcumulado }}</h2>
+      <div class="pcm-cards-secundario">
+        <div class="pcm-card-sec">
+          <div class="pcm-card-sec-title">Atendimento acumulado</div>
+          <div class="pcm-card-sec-value">{{ dadosAcumulado()!.atendimentoGeral }}%</div>
+        </div>
+        <div class="pcm-card-sec">
+          <div class="pcm-card-sec-title">Cumprimento acumulado</div>
+          <div class="pcm-card-sec-value">{{ dadosAcumulado()!.cumprimentoGeral }}%</div>
+        </div>
+        <div class="pcm-card-sec">
+          <div class="pcm-card-sec-title">OS's executadas no ano</div>
+          <div class="pcm-card-sec-value">{{ dadosAcumulado()!.totalExecutadas }}/{{ dadosAcumulado()!.totalProgramadas }}</div>
+        </div>
+        <div class="pcm-card-sec">
+          <div class="pcm-card-sec-title">% fora da programação (ano)</div>
+          <div class="pcm-card-sec-value">{{ dadosAcumulado()!.percentualForaProgramacao }}%</div>
+        </div>
+        <div class="pcm-card-sec">
+          <div class="pcm-card-sec-title">Meses acumulados</div>
+          <div class="pcm-card-sec-value">{{ dadosAcumulado()!.qtdMeses }}</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Desempenho por área -->
+    <section class="pcm-section">
+      <h2 class="pcm-section-title">Desempenho por Área — {{ dadosMensal()!.mesCompleto }}</h2>
+      <div class="pcm-table-container">
+        <table class="pcm-table">
+          <thead>
+            <tr>
+              <th rowspan="2" style="min-width: 150px;">Área</th>
+              <th colspan="4" class="pcm-subheader-atendimento">Atendimento à Programação</th>
+              <th colspan="4" class="pcm-subheader-cumprimento">Cumprimento do Plano</th>
+            </tr>
+            <tr>
+              <th>Programadas</th>
+              <th>Executadas</th>
+              <th>Não Executadas</th>
+              <th>Atendimento</th>
+              <th>Planejadas</th>
+              <th>Executadas</th>
+              <th>Não Executadas</th>
+              <th>Cumprimento</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (area of dadosMensal()!.detalhesAreas; track area.area; let i = $index) {
+              <tr [class]="i % 2 === 0 ? 'pcm-even-row' : 'pcm-odd-row'">
+                <td class="pcm-area-name">{{ area.area }}</td>
+                <td>{{ area.programadas }}</td>
+                <td>{{ area.executadas }}</td>
+                <td>{{ area.naoExecutadas }}</td>
+                <td><strong class="pcm-percentage">{{ area.atendimento }}%</strong></td>
+                <td>{{ area.planejadasPlano }}</td>
+                <td>{{ area.executadasPlano }}</td>
+                <td>{{ area.naoExecutadasPlano }}</td>
+                <td><strong class="pcm-percentage">{{ area.cumprimento }}%</strong></td>
+              </tr>
+            }
+          </tbody>
+          <tfoot>
+            <tr>
+              <td class="pcm-area-name">TOTAL GERAL</td>
+              <td>{{ dadosMensal()!.totalProgramadas }}</td>
+              <td>{{ dadosMensal()!.totalExecutadas }}</td>
+              <td>{{ dadosMensal()!.totalNaoExecutadas }}</td>
+              <td><strong>{{ dadosMensal()!.atendimentoGeral }}%</strong></td>
+              <td>{{ dadosMensal()!.totalPlanejadasPlano }}</td>
+              <td>{{ dadosMensal()!.totalExecutadasPlano }}</td>
+              <td>{{ dadosMensal()!.totalNaoExecutadasPlano }}</td>
+              <td><strong>{{ dadosMensal()!.cumprimentoGeral }}%</strong></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <!-- Destaques, pontos de atenção e ações -->
+    <section class="pcm-highlights">
+      <div class="pcm-panel pcm-panel--green">
+        <h2 class="pcm-section-title">Destaques do Período</h2>
+        <div class="pcm-list">
+          @for (d of destaques(); track d.texto) {
+            <div class="pcm-list-item">
+              <span class="pcm-icon pcm-icon--achievement"></span>
+              <div>
+                <strong>{{ d.texto }}</strong><br />
+                <small>{{ d.detalhe }}</small>
+              </div>
+            </div>
+          }
+          @if (destaques().length === 0) {
+            <p class="pcm-empty">Nenhum destaque neste período.</p>
+          }
+        </div>
+      </div>
+
+      <div class="pcm-panel pcm-panel--orange">
+        <h2 class="pcm-section-title">Pontos de Atenção</h2>
+        <div class="pcm-list">
+          @for (p of pontosAtencao(); track p.titulo) {
+            <div class="pcm-list-item">
+              <span class="pcm-icon" [class]="severidadeIconClasse(p.severidade)"></span>
+              <div>
+                <strong>{{ p.titulo }}</strong><br />
+                <small>{{ p.descricao }}</small>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="pcm-panel pcm-panel--blue">
+        <h2 class="pcm-section-title">Ações Prioritárias</h2>
+        <div class="pcm-list">
+          @for (a of acoesPrioritarias(); track a.acao; let i = $index) {
+            <div class="pcm-list-item">
+              <span class="pcm-icon pcm-icon--action" [class]="prioridadeIconClasse(a.prioridade)">{{ i + 1 }}</span>
+              <div>
+                <strong>{{ a.acao }}</strong>
+                <div class="pcm-action-details">
+                  <span>{{ prioridadeLabel[a.prioridade] }}</span>
+                  <span>{{ a.prazo }}</span>
+                  <span>{{ a.responsavel }}</span>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    </section>
+
+    <!-- Rodapé -->
+    <footer class="pcm-footer">
+      <div>
+        <div class="pcm-footer-label">DOCUMENTO</div>
+        <div>Relatório Mensal — Portal PPTM</div>
+      </div>
+      <div>
+        <div class="pcm-footer-label">EMITIDO POR</div>
+        <div>{{ currentUser()?.name || 'Planejamento PPTM' }}</div>
+        <div>Gerado em: {{ geradoEm() | date:'dd/MM/yyyy' }} às {{ geradoEm() | date:'HH:mm' }}</div>
+      </div>
+      <div>
+        <div class="pcm-footer-label">PERÍODO</div>
+        <div>{{ dadosMensal()!.periodoMes }}</div>
+        <div>{{ dadosMensal()!.mesCompleto }}/{{ dadosMensal()!.ano }}</div>
+      </div>
+    </footer>
+  </div>
+  }
+</div>
