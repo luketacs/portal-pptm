@@ -1,6 +1,6 @@
 import {
   AREAS_PCM_MENSAL, DadosAcumulado, DadosMensal, analisarPontosAtencaoEAcoesMensal,
-  gerarDestaquesMensal, localizarCabecalhoMeses, localizarLinhaRotulo, parseIndicadoresMensais,
+  extrairHistoricoMeses, gerarDestaquesMensal, localizarCabecalhoMeses, localizarLinhaRotulo, parseIndicadoresMensais,
 } from './relatorio-mensal-pcm';
 
 // Monta uma planilha sintetica no mesmo layout REAL validado contra o arquivo de
@@ -49,6 +49,56 @@ function montarPlanilha(): unknown[][] {
 
   return rows;
 }
+
+// Monta uma planilha so com a linha "Geral" preenchida pra alguns meses — usada
+// pra testar a linha do tempo, que le varios meses de uma vez.
+function montarPlanilhaMultiMeses(porMes: Record<string, [number, number, number, number]>): unknown[][] {
+  // [programadas, executadas, planejadas_plano, executadas_plano]
+  const rows: unknown[][] = [];
+  const linhaCabecalho: unknown[] = [];
+  const meses = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+  meses.forEach((m, i) => { linhaCabecalho[6 + i] = m; linhaCabecalho[26 + i] = m; });
+  rows[4] = linhaCabecalho;
+
+  rows[40] = []; rows[40][0] = 'Geral';
+  rows[41] = []; rows[42] = []; rows[43] = [];
+
+  for (const [mes, [prog, exec, planPlano, execPlano]] of Object.entries(porMes)) {
+    const i = meses.indexOf(mes);
+    rows[40][6 + i] = prog; rows[41][6 + i] = exec;
+    rows[40][26 + i] = planPlano; rows[41][26 + i] = execPlano;
+  }
+  return rows;
+}
+
+describe('extrairHistoricoMeses', () => {
+  it('extrai um ponto por mes com dados, na ordem dos meses', () => {
+    const rows = montarPlanilhaMultiMeses({
+      JAN: [10, 10, 10, 10], // 100% / 100%
+      FEV: [10, 5, 10, 8],   // 50% / 80%
+    });
+    const pontos = extrairHistoricoMeses(rows, 'FEV');
+    expect(pontos).toEqual([
+      { label: 'JAN', atendimento: 100, cumprimento: 100 },
+      { label: 'FEV', atendimento: 50, cumprimento: 80 },
+    ]);
+  });
+
+  it('pula meses sem nenhuma ordem programada (ainda nao aconteceram)', () => {
+    const rows = montarPlanilhaMultiMeses({ JAN: [10, 10, 10, 10] });
+    const pontos = extrairHistoricoMeses(rows, 'MAR');
+    expect(pontos.map(p => p.label)).toEqual(['JAN']);
+  });
+
+  it('nao inclui meses depois do mes pedido, mesmo que tenham dados', () => {
+    const rows = montarPlanilhaMultiMeses({
+      JAN: [10, 10, 10, 10],
+      MAR: [10, 10, 10, 10],
+    });
+    const pontos = extrairHistoricoMeses(rows, 'FEV');
+    expect(pontos.map(p => p.label)).toEqual(['JAN']);
+  });
+});
 
 describe('localizarCabecalhoMeses', () => {
   it('acha as duas colunas de JAN (atendimento e plano) na linha de cabecalho', () => {
@@ -118,7 +168,7 @@ describe('parseIndicadoresMensais', () => {
   it('classifica o status geral usando as mesmas metas do semanal (91% / 93%)', () => {
     const rows = montarPlanilha();
     const { dadosMensal, dadosAcumulado } = parseIndicadoresMensais(rows, 'JAN', 2026);
-    expect(dadosMensal.statusGeral).toBe('ATENÇÃO'); // 90% atendimento < 91%, mas >= 91*0.9
+    expect(dadosMensal.statusGeral).toBe('Próximo da Meta'); // 90% atendimento < 91%, mas >= 91*0.9
     // o acumulado reaproveita o status do mes, igual ao original (nao recalcula)
     expect(dadosAcumulado.statusGeral).toBe(dadosMensal.statusGeral);
   });
@@ -136,7 +186,7 @@ function dadosMensalBase(overrides: Partial<DadosMensal> = {}): DadosMensal {
     atendimentoGeral: 95, cumprimentoGeral: 95,
     totalProgramadas: 100, totalExecutadas: 95, totalNaoExecutadas: 5, totalForaProgramacao: 0,
     totalPlanejadasPlano: 100, totalExecutadasPlano: 95, totalNaoExecutadasPlano: 5,
-    detalhesAreas: [], statusGeral: 'EM DIA', metaAtendimento: 91, metaCumprimento: 93,
+    detalhesAreas: [], statusGeral: 'Dentro da Meta', metaAtendimento: 91, metaCumprimento: 93,
     ...overrides,
   };
 }
@@ -147,14 +197,14 @@ function dadosAcumuladoBase(overrides: Partial<DadosAcumulado> = {}): DadosAcumu
     atendimentoGeral: 90, cumprimentoGeral: 90, percentualForaProgramacao: 5,
     totalProgramadas: 100, totalExecutadas: 90, totalNaoExecutadas: 10, totalForaProgramacao: 5,
     totalPlanejadasPlano: 100, totalExecutadasPlano: 90, totalNaoExecutadasPlano: 10,
-    detalhesAreas: [], statusGeral: 'EM DIA', metaAtendimento: 91, metaCumprimento: 93, qtdMeses: 1,
+    detalhesAreas: [], statusGeral: 'Dentro da Meta', metaAtendimento: 91, metaCumprimento: 93, qtdMeses: 1,
     ...overrides,
   };
 }
 
 describe('analisarPontosAtencaoEAcoesMensal', () => {
   it('abre com alerta critico quando o status do mes e CRITICO', () => {
-    const dados = dadosMensalBase({ statusGeral: 'CRÍTICO', atendimentoGeral: 40, cumprimentoGeral: 40 });
+    const dados = dadosMensalBase({ statusGeral: 'Abaixo da Meta', atendimentoGeral: 40, cumprimentoGeral: 40 });
     const { pontosAtencao, acoesPrioritarias } = analisarPontosAtencaoEAcoesMensal(dados, null);
     expect(pontosAtencao[0].tipo).toBe('critico');
     expect(acoesPrioritarias[0].prioridade).toBe('urgente');
@@ -184,7 +234,7 @@ describe('analisarPontosAtencaoEAcoesMensal', () => {
 
   it('limita pontos de atencao e acoes a 5 itens', () => {
     const dados = dadosMensalBase({
-      statusGeral: 'CRÍTICO', atendimentoGeral: 40, cumprimentoGeral: 40,
+      statusGeral: 'Abaixo da Meta', atendimentoGeral: 40, cumprimentoGeral: 40,
       totalNaoExecutadas: 20, totalForaProgramacao: 10,
     });
     const acumulado = dadosAcumuladoBase({ percentualForaProgramacao: 30 });

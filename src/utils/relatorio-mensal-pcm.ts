@@ -12,6 +12,7 @@
 // de descompasso se a planilha for reorganizada de novo no futuro.
 
 import { AcaoPrioritaria, Destaque, PontoAtencao } from './relatorio-semanal-pcm';
+import { PontoLinhaTempo } from './relatorio-linha-tempo';
 
 export const META_ATENDIMENTO_MENSAL = 91.0;
 export const META_CUMPRIMENTO_MENSAL = 93.0;
@@ -28,7 +29,7 @@ export const AREAS_PCM_MENSAL = [
   'MECÂNICA', 'ELÉTRICA', 'LUBRIFICAÇÃO', 'OPERAÇÃO', 'LIMPEZA OPERACIONAL', 'REFRIGERAÇÃO', 'SPCI',
 ];
 
-export type StatusGeralMensal = 'EM DIA' | 'ATENÇÃO' | 'CRÍTICO';
+export type StatusGeralMensal = 'Dentro da Meta' | 'Próximo da Meta' | 'Abaixo da Meta';
 
 export interface AreaMensal {
   area: string;
@@ -136,9 +137,9 @@ function normalizarIndice(v: number): number {
 }
 
 function classificarStatus(atendimento: number, cumprimento: number): StatusGeralMensal {
-  if (atendimento >= META_ATENDIMENTO_MENSAL && cumprimento >= META_CUMPRIMENTO_MENSAL) return 'EM DIA';
-  if (atendimento >= META_ATENDIMENTO_MENSAL * 0.9 || cumprimento >= META_CUMPRIMENTO_MENSAL * 0.9) return 'ATENÇÃO';
-  return 'CRÍTICO';
+  if (atendimento >= META_ATENDIMENTO_MENSAL && cumprimento >= META_CUMPRIMENTO_MENSAL) return 'Dentro da Meta';
+  if (atendimento >= META_ATENDIMENTO_MENSAL * 0.9 || cumprimento >= META_CUMPRIMENTO_MENSAL * 0.9) return 'Próximo da Meta';
+  return 'Abaixo da Meta';
 }
 
 // Acha a linha de cabeçalho dos meses procurando "JAN" — ele aparece duas vezes
@@ -278,22 +279,53 @@ export function parseIndicadoresMensais(
   return { dadosMensal, dadosAcumulado };
 }
 
+// Histórico mês a mês (JAN..mesAte) pra linha do tempo do acumulado — pula meses
+// sem nenhuma ordem programada (ainda não chegaram / planilha não preenchida).
+export function extrairHistoricoMeses(rows: unknown[][], mesAte: MesAbrev): PontoLinhaTempo[] {
+  const cab = localizarCabecalhoMeses(rows);
+  const linhaGeral = localizarLinhaRotulo(rows, 'Geral');
+  const mesAteIdx = MESES_ABREV.indexOf(mesAte);
+  const cell = (r: number, c: number) => safeConvert(rows[r]?.[c]);
+
+  const pontos: PontoLinhaTempo[] = [];
+  for (let i = 0; i <= mesAteIdx; i++) {
+    const col = cab.colAtendimentoJan + i;
+    const colPlano = cab.colPlanoJan + i;
+
+    const programadas = cell(linhaGeral, col);
+    if (programadas === 0) continue;
+
+    const executadas = cell(linhaGeral + 1, col);
+    const indice = normalizarIndice(cell(linhaGeral + 3, col));
+    const programadasPlano = cell(linhaGeral, colPlano);
+    const executadasPlano = cell(linhaGeral + 1, colPlano);
+    const indicePlano = normalizarIndice(cell(linhaGeral + 3, colPlano));
+
+    pontos.push({
+      label: MESES_ABREV[i],
+      atendimento: round2(programadas > 0 ? (executadas / programadas) * 100 : (indice > 0 ? indice * 100 : 0)),
+      cumprimento: round2(programadasPlano > 0 ? (executadasPlano / programadasPlano) * 100 : (indicePlano > 0 ? indicePlano * 100 : 0)),
+    });
+  }
+  return pontos;
+}
+
 export function analisarPontosAtencaoEAcoesMensal(
   dadosMensal: DadosMensal, dadosAcumulado: DadosAcumulado | null,
 ): { pontosAtencao: PontoAtencao[]; acoesPrioritarias: AcaoPrioritaria[] } {
   const pontosAtencao: PontoAtencao[] = [];
   let acoesPrioritarias: AcaoPrioritaria[] = [];
 
-  if (dadosMensal.statusGeral === 'CRÍTICO') {
+  if (dadosMensal.statusGeral === 'Abaixo da Meta') {
     pontosAtencao.push({
-      tipo: 'critico', titulo: 'PERÍODO CRÍTICO - AÇÃO IMEDIATA REQUERIDA',
-      descricao: `O período ${dadosMensal.periodoMes} apresentou resultados críticos: ${dadosMensal.atendimentoGeral}% de atendimento e ${dadosMensal.cumprimentoGeral}% de cumprimento.`,
+      tipo: 'critico', titulo: 'ABAIXO DA META - AÇÃO NECESSÁRIA',
+      descricao: `O período ${dadosMensal.periodoMes} ficou abaixo da meta: ${dadosMensal.atendimentoGeral}% de atendimento e ${dadosMensal.cumprimentoGeral}% de cumprimento.`,
       severidade: 'alta',
     });
-    acoesPrioritarias.push({ prioridade: 'urgente', acao: 'Agendar reunião de emergência para análise do período crítico', prazo: 'Hoje mesmo', responsavel: 'Gestores' });
-  } else if (dadosMensal.statusGeral === 'ATENÇÃO') {
+    acoesPrioritarias.push({ prioridade: 'urgente', acao: 'Agendar reunião de emergência para análise do período', prazo: 'Hoje mesmo', responsavel: 'Gestores' });
+  } else if (dadosMensal.statusGeral === 'Próximo da Meta') {
     pontosAtencao.push({
-      tipo: 'alerta', titulo: 'SINAL DE ALERTA - MONITORAMENTO REFORÇADO',
+      tipo: 'alerta', titulo: 'PRÓXIMO DA META - MONITORAMENTO REFORÇADO',
       descricao: `Os indicadores do período ${dadosMensal.periodoMes} estão próximos das metas. Vamos acompanhar de perto.`,
       severidade: 'media',
     });

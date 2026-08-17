@@ -239,6 +239,62 @@
   background-color: #f0f4ff;
 }
 
+/* ── Linha do tempo do acumulado ──────────────────────────────────────── */
+.pcm-linha-tempo-svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.pcm-linha-tempo-grid {
+  stroke: #eef1f6;
+  stroke-width: 1;
+}
+
+.pcm-linha-tempo-eixo-y {
+  font-size: 10px;
+  fill: #94a3b8;
+  text-anchor: end;
+  dominant-baseline: middle;
+}
+
+.pcm-linha-tempo-eixo-x {
+  font-size: 10px;
+  fill: #64748b;
+  text-anchor: middle;
+}
+
+.pcm-linha-tempo-linha {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.pcm-linha-tempo-linha--atendimento { stroke: #4CAF50; }
+.pcm-linha-tempo-linha--cumprimento { stroke: #2196F3; }
+
+.pcm-linha-tempo-ponto--atendimento { fill: #4CAF50; }
+.pcm-linha-tempo-ponto--cumprimento { fill: #2196F3; }
+
+.pcm-linha-tempo-legenda {
+  display: flex;
+  gap: 20px;
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: #555;
+}
+
+.pcm-legenda-cor {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.pcm-legenda-cor--atendimento { background-color: #4CAF50; }
+.pcm-legenda-cor--cumprimento { background-color: #2196F3; }
+
 /* ── Cards de acumulado / backlog (usado só no relatório mensal) ────────── */
 .pcm-cards-secundario {
   display: grid;

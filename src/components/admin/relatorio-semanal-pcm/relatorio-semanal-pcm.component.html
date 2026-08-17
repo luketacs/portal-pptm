@@ -203,6 +203,36 @@
       </div>
     </section>
 
+    <!-- Linha do tempo do acumulado -->
+    <section class="pcm-section">
+      <h2 class="pcm-section-title">Evolução ao Longo do Ano</h2>
+      @if (linhaTempo(); as lt) {
+        <svg [attr.viewBox]="'0 0 ' + lt.largura + ' ' + lt.altura" class="pcm-linha-tempo-svg">
+          @for (g of lt.eixoY; track g.label) {
+            <line [attr.x1]="lt.margem.esquerda" [attr.x2]="lt.largura - lt.margem.direita" [attr.y1]="g.posicao" [attr.y2]="g.posicao" class="pcm-linha-tempo-grid" />
+            <text [attr.x]="lt.margem.esquerda - 6" [attr.y]="g.posicao" class="pcm-linha-tempo-eixo-y">{{ g.label }}</text>
+          }
+          @for (l of lt.eixoX; track l.label) {
+            <text [attr.x]="l.posicao" [attr.y]="lt.altura - 8" class="pcm-linha-tempo-eixo-x">{{ l.label }}</text>
+          }
+          <polyline [attr.points]="lt.linhaCumprimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
+          <polyline [attr.points]="lt.linhaAtendimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
+          @for (p of lt.pontosCumprimento; track $index) {
+            <circle [attr.cx]="p.x" [attr.cy]="p.y" r="3" class="pcm-linha-tempo-ponto--cumprimento" />
+          }
+          @for (p of lt.pontosAtendimento; track $index) {
+            <circle [attr.cx]="p.x" [attr.cy]="p.y" r="3" class="pcm-linha-tempo-ponto--atendimento" />
+          }
+        </svg>
+        <div class="pcm-linha-tempo-legenda">
+          <span><span class="pcm-legenda-cor pcm-legenda-cor--atendimento"></span>Atendimento à Programação</span>
+          <span><span class="pcm-legenda-cor pcm-legenda-cor--cumprimento"></span>Cumprimento do Plano</span>
+        </div>
+      } @else {
+        <p class="pcm-empty">Sem dados suficientes nas semanas anteriores para montar a linha do tempo.</p>
+      }
+    </section>
+
     <!-- Destaques, pontos de atenção e ações -->
     <section class="pcm-highlights">
       <div class="pcm-panel pcm-panel--green">

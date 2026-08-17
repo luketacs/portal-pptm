@@ -4,7 +4,9 @@
 // igual ao original) e reproduz fielmente as mesmas fórmulas de indicador e as mesmas
 // regras de destaques/pontos de atenção/ações prioritárias.
 
-export type StatusGeralSemana = 'EM DIA' | 'ATENÇÃO' | 'CRÍTICO';
+import { PontoLinhaTempo } from './relatorio-linha-tempo';
+
+export type StatusGeralSemana = 'Dentro da Meta' | 'Próximo da Meta' | 'Abaixo da Meta';
 export type ModoCalendarioSemana = 'ISO' | 'SIMPLES';
 
 export const META_ATENDIMENTO = 91.0;
@@ -216,11 +218,11 @@ export function parseIndicadoresSemanais(
 
   let statusGeral: StatusGeralSemana;
   if (atendimentoGeral >= META_ATENDIMENTO && cumprimentoGeral >= META_CUMPRIMENTO) {
-    statusGeral = 'EM DIA';
+    statusGeral = 'Dentro da Meta';
   } else if (atendimentoGeral >= META_ATENDIMENTO * 0.9 || cumprimentoGeral >= META_CUMPRIMENTO * 0.9) {
-    statusGeral = 'ATENÇÃO';
+    statusGeral = 'Próximo da Meta';
   } else {
-    statusGeral = 'CRÍTICO';
+    statusGeral = 'Abaixo da Meta';
   }
 
   return {
@@ -243,6 +245,41 @@ export function parseIndicadoresSemanais(
   };
 }
 
+// Atendimento/cumprimento gerais de uma única semana (soma das áreas), sem montar o
+// detalhamento por área — usado só pela linha do tempo, que precisa disso pra cada
+// semana do período, não só pra semana selecionada no relatório.
+function calcularTotaisSemana(rows: unknown[][], coluna: number): { atendimento: number; cumprimento: number; totalProgramadas: number } {
+  let totalProgramadas = 0, totalExecutadas = 0, totalPlanejadasPlano = 0, totalExecutadasPlano = 0;
+  for (const { linhaBase } of AREAS_PCM) {
+    const programadas = safeNumericCell(rows, linhaBase, coluna);
+    if (programadas === 0) continue;
+    totalProgramadas += programadas;
+    totalExecutadas += safeNumericCell(rows, linhaBase + 1, coluna);
+    totalPlanejadasPlano += safeNumericCell(rows, linhaBase + 3, coluna);
+    totalExecutadasPlano += safeNumericCell(rows, linhaBase + 4, coluna);
+  }
+  return {
+    totalProgramadas,
+    atendimento: totalProgramadas > 0 ? round2((totalExecutadas / totalProgramadas) * 100) : 0,
+    cumprimento: totalPlanejadasPlano > 0 ? round2((totalExecutadasPlano / totalPlanejadasPlano) * 100) : 0,
+  };
+}
+
+// Histórico semana a semana (1..semanaAte) pra linha do tempo do acumulado — pula
+// semanas sem nenhuma ordem programada (ainda não chegaram / planilha não preenchida).
+export function extrairHistoricoSemanas(rows: unknown[][], semanaAte: number): PontoLinhaTempo[] {
+  const linhaSemanas = rows[LINHA_SEMANAS] ?? [];
+  const pontos: PontoLinhaTempo[] = [];
+  for (let semana = 1; semana <= semanaAte; semana++) {
+    const coluna = encontrarColunaSemana(linhaSemanas, semana);
+    if (coluna === null) continue;
+    const totais = calcularTotaisSemana(rows, coluna);
+    if (totais.totalProgramadas === 0) continue;
+    pontos.push({ label: `S${semana}`, atendimento: totais.atendimento, cumprimento: totais.cumprimento });
+  }
+  return pontos;
+}
+
 export function analisarPontosAtencaoEAcoes(
   dados: DadosSemana,
 ): { pontosAtencao: PontoAtencao[]; acoesPrioritarias: AcaoPrioritaria[] } {
@@ -252,18 +289,18 @@ export function analisarPontosAtencaoEAcoes(
   const { atendimentoGeral, cumprimentoGeral, totalNaoExecutadas, totalForaProgramacao, detalhesAreas } = dados;
 
   // 1. Status geral
-  if (dados.statusGeral === 'CRÍTICO') {
+  if (dados.statusGeral === 'Abaixo da Meta') {
     pontosAtencao.push({
       tipo: 'critico',
-      titulo: 'ATENÇÃO CRÍTICA - AÇÃO IMEDIATA REQUERIDA',
-      descricao: `Esta semana apresentou resultados críticos: ${atendimentoGeral}% de atendimento e ${cumprimentoGeral}% de cumprimento. Precisamos agir rapidamente para reverter esta situação.`,
+      titulo: 'ABAIXO DA META - AÇÃO NECESSÁRIA',
+      descricao: `Esta semana ficou abaixo da meta: ${atendimentoGeral}% de atendimento e ${cumprimentoGeral}% de cumprimento. Vamos agir para reverter esta situação.`,
       severidade: 'alta',
     });
     acoesPrioritarias.push({ prioridade: 'urgente', acao: 'Agendar reunião de emergência com todas as áreas para análise conjunta', prazo: 'Hoje mesmo', responsavel: 'Gestores das áreas' });
-  } else if (dados.statusGeral === 'ATENÇÃO') {
+  } else if (dados.statusGeral === 'Próximo da Meta') {
     pontosAtencao.push({
       tipo: 'alerta',
-      titulo: 'SINAL DE ALERTA - MONITORAMENTO REFORÇADO',
+      titulo: 'PRÓXIMO DA META - MONITORAMENTO REFORÇADO',
       descricao: `Os indicadores estão próximos das metas (${atendimentoGeral}% atendimento, ${cumprimentoGeral}% cumprimento). Vamos acompanhar de perto para garantir que não regridam.`,
       severidade: 'media',
     });
@@ -458,7 +495,7 @@ export function analisarPontosAtencaoEAcoes(
   });
 
   // 8. Reconhecimento de desempenho excelente
-  if (dados.statusGeral === 'EM DIA' && totalNaoExecutadas === 0) {
+  if (dados.statusGeral === 'Dentro da Meta' && totalNaoExecutadas === 0) {
     acoesPrioritarias.push({
       prioridade: 'baixa', acao: 'Reconhecer o bom trabalho da equipe esta semana',
       prazo: 'Esta semana', responsavel: 'Liderança',
@@ -547,7 +584,7 @@ export function gerarDestaques(dados: DadosSemana): Destaque[] {
   }
 
   // 8. Semana exemplar
-  if (dados.statusGeral === 'EM DIA' && dados.totalNaoExecutadas === 0 && dados.totalForaProgramacao <= 2) {
+  if (dados.statusGeral === 'Dentro da Meta' && dados.totalNaoExecutadas === 0 && dados.totalForaProgramacao <= 2) {
     destaques.push({ icon: 'fa-star', tipo: 'excelente', texto: 'SEMANA EXEMPLAR!', detalhe: 'Desempenho excepcional em todos os aspectos' });
   }
 

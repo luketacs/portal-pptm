@@ -1,6 +1,6 @@
 import {
   AREAS_PCM, DadosSemana, analisarPontosAtencaoEAcoes, calcularPeriodoSemana,
-  encontrarColunaSemana, gerarDestaques, parseIndicadoresSemanais,
+  encontrarColunaSemana, extrairHistoricoSemanas, gerarDestaques, parseIndicadoresSemanais,
 } from './relatorio-semanal-pcm';
 
 describe('calcularPeriodoSemana', () => {
@@ -87,32 +87,78 @@ describe('parseIndicadoresSemanais', () => {
     expect(dados.detalhesAreas[0].cumprimento).toBe(0);
   });
 
-  it('classifica como EM DIA quando as duas metas sao atingidas', () => {
+  it('classifica como Dentro da Meta quando as duas metas sao atingidas', () => {
     const rows = montarPlanilha({ 'MECÂNICA': [10, 10, 0, 10, 10, 0, 0] });
     const dados = parseIndicadoresSemanais(rows, 11, 2026);
     expect(dados.atendimentoGeral).toBe(100);
     expect(dados.cumprimentoGeral).toBe(100);
-    expect(dados.statusGeral).toBe('EM DIA');
+    expect(dados.statusGeral).toBe('Dentro da Meta');
   });
 
-  it('classifica como CRITICO quando as duas metas ficam bem abaixo (< 90% da meta)', () => {
+  it('classifica como Abaixo da Meta quando as duas metas ficam bem abaixo (< 90% da meta)', () => {
     const rows = montarPlanilha({ 'MECÂNICA': [10, 5, 5, 10, 5, 5, 0] }); // 50% / 50%
     const dados = parseIndicadoresSemanais(rows, 11, 2026);
-    expect(dados.statusGeral).toBe('CRÍTICO');
+    expect(dados.statusGeral).toBe('Abaixo da Meta');
   });
 
-  it('classifica como ATENCAO quando fica perto da meta (>= 90% dela) sem bater as duas', () => {
+  it('classifica como Proximo da Meta quando fica perto da meta (>= 90% dela) sem bater as duas', () => {
     const rows = montarPlanilha({ 'MECÂNICA': [100, 85, 15, 100, 100, 0, 0] }); // atendimento 85% (>=81.9), cumprimento 100%
     const dados = parseIndicadoresSemanais(rows, 11, 2026);
-    // cumprimento geral bate 100% (>=93), mas isoladamente o atendimento (85%) ja nao seria EM DIA
-    // porque falta bater as DUAS metas ao mesmo tempo pra ser EM DIA... aqui as duas passam do requisito de EM DIA
-    // entao ajusta o cenario abaixo pra realmente cair em ATENCAO:
-    expect(['EM DIA', 'ATENÇÃO']).toContain(dados.statusGeral);
+    // cumprimento geral bate 100% (>=93), mas isoladamente o atendimento (85%) ja nao seria Dentro da Meta
+    // porque falta bater as DUAS metas ao mesmo tempo... aqui as duas passam do requisito de Dentro da Meta
+    // entao ajusta o cenario abaixo pra realmente cair em Proximo da Meta:
+    expect(['Dentro da Meta', 'Próximo da Meta']).toContain(dados.statusGeral);
   });
 
   it('lanca erro quando a semana pedida nao existe na planilha', () => {
     const rows = montarPlanilha({});
     expect(() => parseIndicadoresSemanais(rows, 40, 2026)).toThrow(/não encontrada/);
+  });
+});
+
+// Monta uma planilha com varias semanas preenchidas (cada semana na sua propria
+// coluna, comecando na coluna 6, igual a planilha real) — usada pra testar a linha
+// do tempo, que precisa ler mais de uma semana de uma vez.
+function montarPlanilhaMultiSemanas(porSemana: Record<number, [number, number, number, number]>): unknown[][] {
+  // [programadas, executadas, planejadas_plano, executadas_plano] só da MECÂNICA
+  const rows: unknown[][] = [];
+  rows[5] = [];
+  const linhaBase = AREAS_PCM[0].linhaBase; // MECÂNICA
+  for (const [semanaStr, [prog, exec, planPlano, execPlano]] of Object.entries(porSemana)) {
+    const semana = Number(semanaStr);
+    const col = 5 + semana; // coluna 6 = semana 1, coluna 7 = semana 2, etc.
+    rows[5][col] = semana;
+    rows[linhaBase] = rows[linhaBase] ?? []; rows[linhaBase][col] = prog;
+    rows[linhaBase + 1] = rows[linhaBase + 1] ?? []; rows[linhaBase + 1][col] = exec;
+    rows[linhaBase + 3] = rows[linhaBase + 3] ?? []; rows[linhaBase + 3][col] = planPlano;
+    rows[linhaBase + 4] = rows[linhaBase + 4] ?? []; rows[linhaBase + 4][col] = execPlano;
+  }
+  return rows;
+}
+
+describe('extrairHistoricoSemanas', () => {
+  it('extrai um ponto por semana com dados, na ordem das semanas', () => {
+    const rows = montarPlanilhaMultiSemanas({
+      1: [10, 10, 10, 10], // 100% / 100%
+      2: [10, 5, 10, 8],   // 50% / 80%
+    });
+    const pontos = extrairHistoricoSemanas(rows, 2);
+    expect(pontos).toEqual([
+      { label: 'S1', atendimento: 100, cumprimento: 100 },
+      { label: 'S2', atendimento: 50, cumprimento: 80 },
+    ]);
+  });
+
+  it('pula semanas sem nenhuma ordem programada (ainda nao aconteceram)', () => {
+    const rows = montarPlanilhaMultiSemanas({ 1: [10, 10, 10, 10] });
+    // pede historico ate a semana 3, mas so a 1 tem dados na planilha
+    const pontos = extrairHistoricoSemanas(rows, 3);
+    expect(pontos.map(p => p.label)).toEqual(['S1']);
+  });
+
+  it('retorna lista vazia quando nenhuma semana tem dados', () => {
+    const rows = montarPlanilhaMultiSemanas({});
+    expect(extrairHistoricoSemanas(rows, 5)).toEqual([]);
   });
 });
 
@@ -127,14 +173,14 @@ function dadosBase(overrides: Partial<DadosSemana> = {}): DadosSemana {
       area: 'MECÂNICA', programadas: 10, executadas: 10, naoExecutadas: 0, foraProgramacao: 0,
       planejadasPlano: 10, executadasPlano: 10, naoExecutadasPlano: 0, atendimento: 100, cumprimento: 100,
     }],
-    statusGeral: 'EM DIA', metaAtendimento: 91, metaCumprimento: 93,
+    statusGeral: 'Dentro da Meta', metaAtendimento: 91, metaCumprimento: 93,
     ...overrides,
   };
 }
 
 describe('analisarPontosAtencaoEAcoes', () => {
-  it('abre com alerta critico quando o status geral e CRITICO', () => {
-    const dados = dadosBase({ statusGeral: 'CRÍTICO', atendimentoGeral: 40, cumprimentoGeral: 40 });
+  it('abre com alerta critico quando o status geral e Abaixo da Meta', () => {
+    const dados = dadosBase({ statusGeral: 'Abaixo da Meta', atendimentoGeral: 40, cumprimentoGeral: 40 });
     const { pontosAtencao, acoesPrioritarias } = analisarPontosAtencaoEAcoes(dados);
     expect(pontosAtencao[0].tipo).toBe('critico');
     expect(acoesPrioritarias[0].prioridade).toBe('urgente');
@@ -142,7 +188,7 @@ describe('analisarPontosAtencaoEAcoes', () => {
 
   it('nao repete a mesma acao duas vezes', () => {
     const dados = dadosBase({
-      statusGeral: 'CRÍTICO', atendimentoGeral: 40, cumprimentoGeral: 40,
+      statusGeral: 'Abaixo da Meta', atendimentoGeral: 40, cumprimentoGeral: 40,
       totalNaoExecutadas: 3, totalForaProgramacao: 2,
     });
     const { acoesPrioritarias } = analisarPontosAtencaoEAcoes(dados);
@@ -152,7 +198,7 @@ describe('analisarPontosAtencaoEAcoes', () => {
 
   it('limita pontos de atencao a 6 e acoes a 5', () => {
     const dados = dadosBase({
-      statusGeral: 'CRÍTICO', atendimentoGeral: 40, cumprimentoGeral: 40,
+      statusGeral: 'Abaixo da Meta', atendimentoGeral: 40, cumprimentoGeral: 40,
       totalNaoExecutadas: 20, totalForaProgramacao: 20,
       detalhesAreas: [
         { area: 'MECÂNICA', programadas: 30, executadas: 5, naoExecutadas: 25, foraProgramacao: 15, planejadasPlano: 30, executadasPlano: 5, naoExecutadasPlano: 25, atendimento: 17, cumprimento: 17 },
@@ -178,7 +224,7 @@ describe('gerarDestaques', () => {
         area: 'MECÂNICA', programadas: 10, executadas: 8, naoExecutadas: 2, foraProgramacao: 0,
         planejadasPlano: 10, executadasPlano: 8, naoExecutadasPlano: 2, atendimento: 80, cumprimento: 80,
       }],
-      atendimentoGeral: 80, cumprimentoGeral: 80, statusGeral: 'CRÍTICO',
+      atendimentoGeral: 80, cumprimentoGeral: 80, statusGeral: 'Abaixo da Meta',
     });
     const destaques = gerarDestaques(dados);
     expect(destaques.some(d => d.tipo === 'melhor_atendimento')).toBe(false);

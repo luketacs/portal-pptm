@@ -4,8 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../../services/auth.service';
 import {
   AcaoPrioritaria, DadosSemana, Destaque, ModoCalendarioSemana, PontoAtencao,
-  analisarPontosAtencaoEAcoes, gerarDestaques, parseIndicadoresSemanais,
+  analisarPontosAtencaoEAcoes, extrairHistoricoSemanas, gerarDestaques, parseIndicadoresSemanais,
 } from '../../../utils/relatorio-semanal-pcm';
+import { LinhaTempoGeometria, calcularLinhaTempo } from '../../../utils/relatorio-linha-tempo';
 
 function semanaIsoAtual(): number {
   const hoje = new Date();
@@ -20,7 +21,7 @@ const SEVERIDADE_LABEL: Record<PontoAtencao['severidade'], string> = { alta: 'Al
 const PRIORIDADE_LABEL: Record<AcaoPrioritaria['prioridade'], string> = { urgente: 'Urgente', alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 
 // Cores por status geral — iguais às do relatório original (era literal no HTML: {dados['status_cor']}).
-const STATUS_COR: Record<string, string> = { 'EM DIA': '#4CAF50', 'ATENÇÃO': '#FF9800', 'CRÍTICO': '#F44336' };
+const STATUS_COR: Record<string, string> = { 'Dentro da Meta': '#4CAF50', 'Próximo da Meta': '#FF9800', 'Abaixo da Meta': '#F44336' };
 
 // Port do gerador de Relatório Semanal PCM (antes um app desktop em Python) — lê a
 // mesma planilha "Painel de Indicadores de PCM - 2026.xlsx" que a equipe já usa e
@@ -53,6 +54,7 @@ export class RelatorioSemanalPcmComponent {
   pontosAtencao = signal<PontoAtencao[]>([]);
   acoesPrioritarias = signal<AcaoPrioritaria[]>([]);
   destaques = signal<Destaque[]>([]);
+  linhaTempo = signal<LinhaTempoGeometria | null>(null);
   geradoEm = signal<Date | null>(null);
 
   constructor(private authService: AuthService) {}
@@ -96,11 +98,13 @@ export class RelatorioSemanalPcmComponent {
       const dados = parseIndicadoresSemanais(rows, this.semana(), this.ano(), this.modoCalendario());
       const { pontosAtencao, acoesPrioritarias } = analisarPontosAtencaoEAcoes(dados);
       const destaques = gerarDestaques(dados);
+      const historico = extrairHistoricoSemanas(rows, this.semana());
 
       this.dados.set(dados);
       this.pontosAtencao.set(pontosAtencao);
       this.acoesPrioritarias.set(acoesPrioritarias);
       this.destaques.set(destaques);
+      this.linhaTempo.set(calcularLinhaTempo(historico));
       this.geradoEm.set(new Date());
     } catch (err: unknown) {
       this.errorMessage.set(err instanceof Error ? err.message : 'Erro ao processar a planilha.');
@@ -114,6 +118,7 @@ export class RelatorioSemanalPcmComponent {
     this.pontosAtencao.set([]);
     this.acoesPrioritarias.set([]);
     this.destaques.set([]);
+    this.linhaTempo.set(null);
     this.geradoEm.set(null);
     this.errorMessage.set('');
   }

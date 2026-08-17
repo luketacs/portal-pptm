@@ -5,8 +5,9 @@ import { AuthService } from '../../../services/auth.service';
 import { AcaoPrioritaria, Destaque, PontoAtencao } from '../../../utils/relatorio-semanal-pcm';
 import {
   DadosAcumulado, DadosMensal, MESES_ABREV, MESES_COMPLETO, MesAbrev,
-  analisarPontosAtencaoEAcoesMensal, gerarDestaquesMensal, parseIndicadoresMensais,
+  analisarPontosAtencaoEAcoesMensal, extrairHistoricoMeses, gerarDestaquesMensal, parseIndicadoresMensais,
 } from '../../../utils/relatorio-mensal-pcm';
+import { LinhaTempoGeometria, calcularLinhaTempo } from '../../../utils/relatorio-linha-tempo';
 
 function mesAtualAbrev(): MesAbrev {
   return MESES_ABREV[new Date().getMonth()];
@@ -21,7 +22,7 @@ function isoParaBr(iso: string): string {
 
 const SEVERIDADE_LABEL: Record<PontoAtencao['severidade'], string> = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 const PRIORIDADE_LABEL: Record<AcaoPrioritaria['prioridade'], string> = { urgente: 'Urgente', alta: 'Alta', media: 'Média', baixa: 'Baixa' };
-const STATUS_COR: Record<string, string> = { 'EM DIA': '#4CAF50', 'ATENÇÃO': '#FF9800', 'CRÍTICO': '#F44336' };
+const STATUS_COR: Record<string, string> = { 'Dentro da Meta': '#4CAF50', 'Próximo da Meta': '#FF9800', 'Abaixo da Meta': '#F44336' };
 
 // Port do gerador de Relatório Mensal PCM (Fase 1: KPIs do mês + acumulado do ano —
 // ver src/utils/relatorio-mensal-pcm.ts para o porquê da leitura por rótulo em vez
@@ -56,6 +57,7 @@ export class RelatorioMensalPcmComponent {
   pontosAtencao = signal<PontoAtencao[]>([]);
   acoesPrioritarias = signal<AcaoPrioritaria[]>([]);
   destaques = signal<Destaque[]>([]);
+  linhaTempo = signal<LinhaTempoGeometria | null>(null);
   geradoEm = signal<Date | null>(null);
 
   constructor(private authService: AuthService) {}
@@ -102,12 +104,14 @@ export class RelatorioMensalPcmComponent {
       const { dadosMensal, dadosAcumulado } = parseIndicadoresMensais(rows, this.mes(), this.ano(), dataInicioBr, dataFimBr);
       const { pontosAtencao, acoesPrioritarias } = analisarPontosAtencaoEAcoesMensal(dadosMensal, dadosAcumulado);
       const destaques = gerarDestaquesMensal(dadosMensal, dadosAcumulado);
+      const historico = extrairHistoricoMeses(rows, this.mes());
 
       this.dadosMensal.set(dadosMensal);
       this.dadosAcumulado.set(dadosAcumulado);
       this.pontosAtencao.set(pontosAtencao);
       this.acoesPrioritarias.set(acoesPrioritarias);
       this.destaques.set(destaques);
+      this.linhaTempo.set(calcularLinhaTempo(historico));
       this.geradoEm.set(new Date());
     } catch (err: unknown) {
       this.errorMessage.set(err instanceof Error ? err.message : 'Erro ao processar a planilha.');
@@ -122,6 +126,7 @@ export class RelatorioMensalPcmComponent {
     this.pontosAtencao.set([]);
     this.acoesPrioritarias.set([]);
     this.destaques.set([]);
+    this.linhaTempo.set(null);
     this.geradoEm.set(null);
     this.errorMessage.set('');
   }
