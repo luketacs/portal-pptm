@@ -76,176 +76,205 @@
     </button>
   </div>
 
-  <div class="relatorio-print space-y-6">
+  <div class="pcm-report">
     <!-- Cabeçalho -->
-    <div class="app-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-      <div>
-        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Relatório Semanal de Atividades — Manutenção PPTM</p>
-        <p class="text-lg font-bold text-gray-800">Semana {{ dados()!.semana }}/{{ dados()!.ano }}</p>
-        <p class="text-sm text-gray-500">Período: {{ dados()!.periodoSemana }}</p>
+    <header class="pcm-header">
+      <div class="pcm-logos">
+        <img src="/relatorio-pcm-logo-principal.svg" alt="PPTM" class="pcm-logo-principal" />
+        <div class="pcm-logo-secondary">
+          <img src="/relatorio-pcm-logo-secundaria.svg" alt="Logo Secundária" class="pcm-logo-secundaria" />
+        </div>
       </div>
-      <span class="text-sm font-bold px-4 py-2 rounded-full border" [class]="statusClasse(dados()!.statusGeral)">
-        STATUS: {{ dados()!.statusGeral }}
-      </span>
-    </div>
+      <div class="pcm-company-info">
+        <div class="pcm-company-name">PORTO DO PECÉM TRANSPORTADORA DE MINÉRIOS</div>
+        <div class="pcm-report-title">Relatório Semanal Atividades Manutenção - PPTM</div>
+      </div>
+      <div class="pcm-report-info">
+        <div><strong>SEMANA:</strong> {{ dados()!.semana }}/{{ dados()!.ano }}</div>
+        <div class="pcm-periodo-info"><strong>PERÍODO:</strong> {{ dados()!.periodoSemana }}</div>
+        <div class="pcm-status-badge" [style.background-color]="statusCor(dados()!.statusGeral)">
+          STATUS GERAL: {{ dados()!.statusGeral }}
+        </div>
+      </div>
+    </header>
 
     <!-- Resumo executivo -->
-    <div>
-      <h2 class="text-base font-bold text-gray-800 mb-3">Resumo Executivo</h2>
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div class="app-card p-3 text-center border-l-4 border-green-500">
-          <p class="text-[11px] text-gray-500">Atendimento à Programação</p>
-          <p class="text-xl font-bold text-gray-800">{{ dados()!.atendimentoGeral }}%</p>
-          <p class="text-[11px] text-gray-400">Meta: {{ dados()!.metaAtendimento }}%</p>
+    <section class="pcm-section">
+      <h2 class="pcm-section-title">Resumo Executivo — Semana {{ dados()!.semana }}</h2>
+      <div class="pcm-cards">
+        <div class="pcm-card pcm-card--green">
+          <div class="pcm-card-title">Atendimento à Programação</div>
+          <div class="pcm-card-value">{{ dados()!.atendimentoGeral }}%</div>
+          <div class="pcm-card-meta">Meta: {{ dados()!.metaAtendimento }}%</div>
         </div>
-        <div class="app-card p-3 text-center border-l-4 border-blue-500">
-          <p class="text-[11px] text-gray-500">Cumprimento do Plano</p>
-          <p class="text-xl font-bold text-gray-800">{{ dados()!.cumprimentoGeral }}%</p>
-          <p class="text-[11px] text-gray-400">Meta: {{ dados()!.metaCumprimento }}%</p>
+        <div class="pcm-card pcm-card--blue">
+          <div class="pcm-card-title">Cumprimento do Plano</div>
+          <div class="pcm-card-value">{{ dados()!.cumprimentoGeral }}%</div>
+          <div class="pcm-card-meta">Meta: {{ dados()!.metaCumprimento }}%</div>
         </div>
-        <div class="app-card p-3 text-center border-l-4 border-purple-500">
-          <p class="text-[11px] text-gray-500">OS's Executadas</p>
-          <p class="text-xl font-bold text-gray-800">{{ dados()!.totalExecutadas }}/{{ dados()!.totalProgramadas }}</p>
+        <div class="pcm-card pcm-card--purple">
+          <div class="pcm-card-title">OS's Executadas</div>
+          <div class="pcm-card-value">{{ dados()!.totalExecutadas }}/{{ dados()!.totalProgramadas }}</div>
         </div>
-        <div class="app-card p-3 text-center border-l-4 border-orange-500">
-          <p class="text-[11px] text-gray-500">OS's Não Executadas</p>
-          <p class="text-xl font-bold text-gray-800">{{ dados()!.totalNaoExecutadas }}</p>
+        <div class="pcm-card pcm-card--orange">
+          <div class="pcm-card-title">OS's Não Executadas</div>
+          <div class="pcm-card-value">{{ dados()!.totalNaoExecutadas }}</div>
         </div>
-        <div class="app-card p-3 text-center border-l-4 border-red-500">
-          <p class="text-[11px] text-gray-500">Fora da Programação</p>
-          <p class="text-xl font-bold text-gray-800">{{ dados()!.totalForaProgramacao }}</p>
+        <div class="pcm-card pcm-card--red">
+          <div class="pcm-card-title">OS's Fora da Programação</div>
+          <div class="pcm-card-value">{{ dados()!.totalForaProgramacao }}</div>
         </div>
-        <div class="app-card p-3 text-center border-l-4 border-teal-500">
-          <p class="text-[11px] text-gray-500">Planejadas Plano</p>
-          <p class="text-xl font-bold text-gray-800">{{ dados()!.totalPlanejadasPlano }}</p>
+        <div class="pcm-card pcm-card--teal">
+          <div class="pcm-card-title">OS's Planejadas Plano</div>
+          <div class="pcm-card-value">{{ dados()!.totalPlanejadasPlano }}</div>
+          <div class="pcm-card-meta">{{ dados()!.totalExecutadasPlano }} executadas do plano</div>
         </div>
       </div>
-    </div>
+    </section>
 
     <!-- Desempenho por área -->
-    <div>
-      <h2 class="text-base font-bold text-gray-800 mb-3">Desempenho por Área</h2>
-      <div class="overflow-x-auto rounded-xl border border-slate-200">
-        <table class="min-w-full divide-y divide-slate-200 text-sm">
-          <thead class="bg-blue-900 text-white">
+    <section class="pcm-section">
+      <h2 class="pcm-section-title">Desempenho por Área</h2>
+      <div class="pcm-table-container">
+        <table class="pcm-table">
+          <thead>
             <tr>
-              <th rowspan="2" class="px-3 py-2 text-left">Área</th>
-              <th colspan="6" class="px-3 py-1.5 text-center border-l border-blue-800">Atendimento à Programação</th>
-              <th colspan="5" class="px-3 py-1.5 text-center border-l border-blue-800">Cumprimento do Plano</th>
+              <th rowspan="2" style="min-width: 150px;">Área</th>
+              <th colspan="6" class="pcm-subheader-atendimento">Atendimento à Programação</th>
+              <th colspan="5" class="pcm-subheader-cumprimento">Cumprimento do Plano</th>
             </tr>
-            <tr class="text-[11px]">
-              <th class="px-2 py-1.5 text-center border-l border-blue-800">Program.</th>
-              <th class="px-2 py-1.5 text-center">Exec.</th>
-              <th class="px-2 py-1.5 text-center">Não Exec.</th>
-              <th class="px-2 py-1.5 text-center">Fora Prog.</th>
-              <th class="px-2 py-1.5 text-center">Atend.</th>
-              <th class="px-2 py-1.5 text-center">Status</th>
-              <th class="px-2 py-1.5 text-center border-l border-blue-800">Planej.</th>
-              <th class="px-2 py-1.5 text-center">Exec.</th>
-              <th class="px-2 py-1.5 text-center">Não Exec.</th>
-              <th class="px-2 py-1.5 text-center">Cumpr.</th>
-              <th class="px-2 py-1.5 text-center">Status</th>
+            <tr>
+              <th>Programadas</th>
+              <th>Executadas</th>
+              <th>Não Executadas</th>
+              <th>Fora Programação</th>
+              <th>Atendimento</th>
+              <th>Status</th>
+              <th>Planejadas</th>
+              <th>Executadas</th>
+              <th>Não Executadas</th>
+              <th>Cumprimento</th>
+              <th>Status</th>
             </tr>
           </thead>
-          <tbody class="bg-white divide-y divide-slate-100">
-            @for (area of dados()!.detalhesAreas; track area.area) {
-              <tr>
-                <td class="px-3 py-1.5 font-medium text-gray-800">{{ area.area }}</td>
-                <td class="px-2 py-1.5 text-center border-l border-slate-100">{{ area.programadas }}</td>
-                <td class="px-2 py-1.5 text-center">{{ area.executadas }}</td>
-                <td class="px-2 py-1.5 text-center">{{ area.naoExecutadas }}</td>
-                <td class="px-2 py-1.5 text-center">{{ area.foraProgramacao }}</td>
-                <td class="px-2 py-1.5 text-center font-semibold">{{ area.atendimento }}%</td>
-                <td class="px-2 py-1.5 text-center">
-                  <span class="text-xs font-semibold" [class]="area.atendimento >= dados()!.metaAtendimento ? 'text-green-600' : 'text-amber-600'">
+          <tbody>
+            @for (area of dados()!.detalhesAreas; track area.area; let i = $index) {
+              <tr [class]="i % 2 === 0 ? 'pcm-even-row' : 'pcm-odd-row'">
+                <td class="pcm-area-name">{{ area.area }}</td>
+                <td>{{ area.programadas }}</td>
+                <td>{{ area.executadas }}</td>
+                <td>{{ area.naoExecutadas }}</td>
+                <td>{{ area.foraProgramacao }}</td>
+                <td><strong class="pcm-percentage">{{ area.atendimento }}%</strong></td>
+                <td>
+                  <span class="pcm-status-indicator" [class.pcm-status-meta]="area.atendimento >= dados()!.metaAtendimento" [class.pcm-status-alert]="area.atendimento < dados()!.metaAtendimento">
                     {{ area.atendimento >= dados()!.metaAtendimento ? 'Meta' : (area.atendimento + '%') }}
                   </span>
                 </td>
-                <td class="px-2 py-1.5 text-center border-l border-slate-100">{{ area.planejadasPlano }}</td>
-                <td class="px-2 py-1.5 text-center">{{ area.executadasPlano }}</td>
-                <td class="px-2 py-1.5 text-center">{{ area.naoExecutadasPlano }}</td>
-                <td class="px-2 py-1.5 text-center font-semibold">{{ area.cumprimento }}%</td>
-                <td class="px-2 py-1.5 text-center">
-                  <span class="text-xs font-semibold" [class]="area.cumprimento >= dados()!.metaCumprimento ? 'text-green-600' : 'text-amber-600'">
+                <td>{{ area.planejadasPlano }}</td>
+                <td>{{ area.executadasPlano }}</td>
+                <td>{{ area.naoExecutadasPlano }}</td>
+                <td><strong class="pcm-percentage">{{ area.cumprimento }}%</strong></td>
+                <td>
+                  <span class="pcm-status-indicator" [class.pcm-status-meta]="area.cumprimento >= dados()!.metaCumprimento" [class.pcm-status-alert]="area.cumprimento < dados()!.metaCumprimento">
                     {{ area.cumprimento >= dados()!.metaCumprimento ? 'Meta' : (area.cumprimento + '%') }}
                   </span>
                 </td>
               </tr>
             }
           </tbody>
-          <tfoot class="bg-slate-50 font-bold">
+          <tfoot>
             <tr>
-              <td class="px-3 py-2">TOTAL GERAL</td>
-              <td class="px-2 py-2 text-center border-l border-slate-200">{{ dados()!.totalProgramadas }}</td>
-              <td class="px-2 py-2 text-center">{{ dados()!.totalExecutadas }}</td>
-              <td class="px-2 py-2 text-center">{{ dados()!.totalNaoExecutadas }}</td>
-              <td class="px-2 py-2 text-center">{{ dados()!.totalForaProgramacao }}</td>
-              <td class="px-2 py-2 text-center">{{ dados()!.atendimentoGeral }}%</td>
-              <td class="px-2 py-2 text-center"></td>
-              <td class="px-2 py-2 text-center border-l border-slate-200">{{ dados()!.totalPlanejadasPlano }}</td>
-              <td class="px-2 py-2 text-center">{{ dados()!.totalExecutadasPlano }}</td>
-              <td class="px-2 py-2 text-center">{{ dados()!.totalNaoExecutadasPlano }}</td>
-              <td class="px-2 py-2 text-center">{{ dados()!.cumprimentoGeral }}%</td>
-              <td class="px-2 py-2 text-center"></td>
+              <td class="pcm-area-name">TOTAL GERAL</td>
+              <td>{{ dados()!.totalProgramadas }}</td>
+              <td>{{ dados()!.totalExecutadas }}</td>
+              <td>{{ dados()!.totalNaoExecutadas }}</td>
+              <td>{{ dados()!.totalForaProgramacao }}</td>
+              <td><strong>{{ dados()!.atendimentoGeral }}%</strong></td>
+              <td></td>
+              <td>{{ dados()!.totalPlanejadasPlano }}</td>
+              <td>{{ dados()!.totalExecutadasPlano }}</td>
+              <td>{{ dados()!.totalNaoExecutadasPlano }}</td>
+              <td><strong>{{ dados()!.cumprimentoGeral }}%</strong></td>
+              <td></td>
             </tr>
           </tfoot>
         </table>
       </div>
-    </div>
+    </section>
 
     <!-- Destaques, pontos de atenção e ações -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <div class="app-card p-4">
-        <h2 class="text-sm font-bold text-gray-800 mb-3">Destaques da Semana</h2>
-        <div class="space-y-2">
+    <section class="pcm-highlights">
+      <div class="pcm-panel pcm-panel--green">
+        <h2 class="pcm-section-title">Destaques da Semana</h2>
+        <div class="pcm-list">
           @for (d of destaques(); track d.texto) {
-            <div class="border border-slate-200 rounded-lg p-2.5">
-              <p class="text-xs font-bold text-gray-800">{{ d.texto }}</p>
-              <p class="text-xs text-gray-500">{{ d.detalhe }}</p>
+            <div class="pcm-list-item">
+              <span class="pcm-icon pcm-icon--achievement"></span>
+              <div>
+                <strong>{{ d.texto }}</strong><br />
+                <small>{{ d.detalhe }}</small>
+              </div>
             </div>
           }
           @if (destaques().length === 0) {
-            <p class="text-xs text-gray-400">Nenhum destaque nesta semana.</p>
+            <p class="pcm-empty">Nenhum destaque nesta semana.</p>
           }
         </div>
       </div>
 
-      <div class="app-card p-4">
-        <h2 class="text-sm font-bold text-gray-800 mb-3">Pontos de Atenção</h2>
-        <div class="space-y-2">
+      <div class="pcm-panel pcm-panel--orange">
+        <h2 class="pcm-section-title">Pontos de Atenção</h2>
+        <div class="pcm-list">
           @for (p of pontosAtencao(); track p.titulo) {
-            <div class="border-l-4 rounded-lg p-2.5" [class]="severidadeClasse(p.severidade)">
-              <div class="flex items-center justify-between gap-2">
-                <p class="text-xs font-bold text-gray-800">{{ p.titulo }}</p>
-                <span class="text-[10px] font-semibold text-gray-500 whitespace-nowrap">{{ severidadeLabel[p.severidade] }}</span>
+            <div class="pcm-list-item">
+              <span class="pcm-icon" [class]="severidadeIconClasse(p.severidade)"></span>
+              <div>
+                <strong>{{ p.titulo }}</strong><br />
+                <small>{{ p.descricao }}</small>
               </div>
-              <p class="text-xs text-gray-500 mt-0.5">{{ p.descricao }}</p>
             </div>
           }
         </div>
       </div>
 
-      <div class="app-card p-4">
-        <h2 class="text-sm font-bold text-gray-800 mb-3">Ações Prioritárias</h2>
-        <div class="space-y-2">
+      <div class="pcm-panel pcm-panel--blue">
+        <h2 class="pcm-section-title">Ações Prioritárias</h2>
+        <div class="pcm-list">
           @for (a of acoesPrioritarias(); track a.acao; let i = $index) {
-            <div class="border border-slate-200 rounded-lg p-2.5">
-              <div class="flex items-start justify-between gap-2">
-                <p class="text-xs font-bold text-gray-800">{{ i + 1 }}. {{ a.acao }}</p>
-                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap" [class]="prioridadeClasse(a.prioridade)">
-                  {{ prioridadeLabel[a.prioridade] }}
-                </span>
+            <div class="pcm-list-item">
+              <span class="pcm-icon pcm-icon--action" [class]="prioridadeIconClasse(a.prioridade)">{{ i + 1 }}</span>
+              <div>
+                <strong>{{ a.acao }}</strong>
+                <div class="pcm-action-details">
+                  <span>{{ prioridadeLabel[a.prioridade] }}</span>
+                  <span>{{ a.prazo }}</span>
+                  <span>{{ a.responsavel }}</span>
+                </div>
               </div>
-              <p class="text-[11px] text-gray-400 mt-1">Prazo: {{ a.prazo }} · {{ a.responsavel }}</p>
             </div>
           }
         </div>
       </div>
-    </div>
+    </section>
 
-    <p class="text-xs text-gray-400 text-center">
-      Relatório gerado pelo Portal PPTM em {{ geradoEm() | date:'dd/MM/yyyy HH:mm' }}
-    </p>
+    <!-- Rodapé -->
+    <footer class="pcm-footer">
+      <div>
+        <div class="pcm-footer-label">DOCUMENTO</div>
+        <div>Relatório Semanal — Portal PPTM</div>
+      </div>
+      <div>
+        <div class="pcm-footer-label">EMITIDO POR</div>
+        <div>{{ currentUser()?.name || 'Planejamento PPTM' }}</div>
+        <div>Gerado em: {{ geradoEm() | date:'dd/MM/yyyy' }} às {{ geradoEm() | date:'HH:mm' }}</div>
+      </div>
+      <div>
+        <div class="pcm-footer-label">PERÍODO DA SEMANA</div>
+        <div>{{ dados()!.periodoSemana }}</div>
+        <div>Semana {{ dados()!.semana }}/{{ dados()!.ano }}</div>
+      </div>
+    </footer>
   </div>
   }
 </div>

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { AuthService } from '../../../services/auth.service';
 import {
   AcaoPrioritaria, DadosSemana, Destaque, ModoCalendarioSemana, PontoAtencao,
   analisarPontosAtencaoEAcoes, gerarDestaques, parseIndicadoresSemanais,
@@ -18,9 +19,14 @@ function semanaIsoAtual(): number {
 const SEVERIDADE_LABEL: Record<PontoAtencao['severidade'], string> = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 const PRIORIDADE_LABEL: Record<AcaoPrioritaria['prioridade'], string> = { urgente: 'Urgente', alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 
+// Cores por status geral — iguais às do relatório original (era literal no HTML: {dados['status_cor']}).
+const STATUS_COR: Record<string, string> = { 'EM DIA': '#4CAF50', 'ATENÇÃO': '#FF9800', 'CRÍTICO': '#F44336' };
+
 // Port do gerador de Relatório Semanal PCM (antes um app desktop em Python) — lê a
 // mesma planilha "Painel de Indicadores de PCM - 2026.xlsx" que a equipe já usa e
-// gera o mesmo relatório, direto no navegador, sem precisar instalar nada.
+// gera o mesmo relatório, direto no navegador, sem precisar instalar nada. O layout
+// (logos, cores, tabela) reproduz de propósito o relatório original — é um documento
+// gerencial que já circula com essa identidade visual, não a tela padrão do Portal.
 @Component({
   selector: 'app-relatorio-semanal-pcm',
   standalone: true,
@@ -32,6 +38,8 @@ const PRIORIDADE_LABEL: Record<AcaoPrioritaria['prioridade'], string> = { urgent
 export class RelatorioSemanalPcmComponent {
   readonly severidadeLabel = SEVERIDADE_LABEL;
   readonly prioridadeLabel = PRIORIDADE_LABEL;
+
+  currentUser = this.authService.currentUser;
 
   arquivo = signal<File | null>(null);
   semana = signal(semanaIsoAtual());
@@ -46,6 +54,8 @@ export class RelatorioSemanalPcmComponent {
   acoesPrioritarias = signal<AcaoPrioritaria[]>([]);
   destaques = signal<Destaque[]>([]);
   geradoEm = signal<Date | null>(null);
+
+  constructor(private authService: AuthService) {}
 
   onFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -112,22 +122,20 @@ export class RelatorioSemanalPcmComponent {
     window.print();
   }
 
-  statusClasse(status: string): string {
-    if (status === 'EM DIA') return 'bg-green-100 text-green-700 border-green-200';
-    if (status === 'ATENÇÃO') return 'bg-amber-100 text-amber-700 border-amber-200';
-    return 'bg-red-100 text-red-700 border-red-200';
+  statusCor(status: string): string {
+    return STATUS_COR[status] ?? '#757575';
   }
 
-  severidadeClasse(sev: PontoAtencao['severidade']): string {
-    if (sev === 'alta') return 'border-red-400 bg-red-50';
-    if (sev === 'media') return 'border-amber-400 bg-amber-50';
-    return 'border-slate-300 bg-slate-50';
+  severidadeIconClasse(sev: PontoAtencao['severidade']): string {
+    if (sev === 'alta') return 'icon-critical';
+    if (sev === 'media') return 'icon-warning';
+    return 'icon-pending';
   }
 
-  prioridadeClasse(p: AcaoPrioritaria['prioridade']): string {
-    if (p === 'urgente') return 'bg-red-100 text-red-700';
-    if (p === 'alta') return 'bg-amber-100 text-amber-700';
-    if (p === 'media') return 'bg-blue-100 text-blue-700';
-    return 'bg-slate-100 text-slate-600';
+  prioridadeIconClasse(p: AcaoPrioritaria['prioridade']): string {
+    if (p === 'urgente') return 'icon-critical';
+    if (p === 'alta') return 'icon-warning';
+    if (p === 'media') return 'icon-info';
+    return 'icon-pending';
   }
 }
