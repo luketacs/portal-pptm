@@ -117,6 +117,15 @@ export const APP_ROUTES: Routes = [
     title: 'Auditoria',
   },
 
+  {
+    path: 'admin/relatorio-semanal-pcm',
+    loadComponent: () =>
+      import('../components/admin/relatorio-semanal-pcm/relatorio-semanal-pcm.component').then(m => m.RelatorioSemanalPcmComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin'] },
+    title: 'Relatório Semanal PCM',
+  },
+
   // Apontamentos descontinuado temporariamente — rotas removidas de propósito
   // (cai no wildcard "**" → página não encontrada). Reativar: restaurar as
   // rotas 'apontamentos' e 'publico/apontamentos' apontando para

@@ -1,0 +1,251 @@
+<div class="space-y-6">
+  <div class="no-print">
+    <h1 class="text-2xl font-bold text-gray-800">Relatório Semanal PCM</h1>
+    <p class="text-sm text-gray-500 mt-0.5">
+      Gera o relatório de atendimento à programação e cumprimento do plano a partir da planilha
+      "Painel de Indicadores de PCM" — direto no navegador, sem precisar do programa desktop.
+    </p>
+  </div>
+
+  @if (!dados()) {
+    <div class="app-card p-6 max-w-2xl no-print">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Planilha (.xlsx) <span class="text-red-500">*</span></label>
+          @if (!arquivo()) {
+            <label class="cursor-pointer inline-block">
+              <input type="file" accept=".xlsx" class="hidden" (change)="onFileSelected($event)" />
+              <span class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
+                Selecionar planilha
+              </span>
+            </label>
+          } @else {
+            <div class="flex items-center gap-3">
+              <span class="text-sm text-gray-600 truncate max-w-xs">{{ arquivo()!.name }}</span>
+              <label class="cursor-pointer text-sm text-blue-600 hover:text-blue-700">
+                Trocar
+                <input type="file" accept=".xlsx" class="hidden" (change)="onFileSelected($event)" />
+              </label>
+            </div>
+          }
+          <p class="text-xs text-gray-400 mt-1">Aba "Indicadores Semanais" da planilha usada pelo PCM.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Semana <span class="text-red-500">*</span></label>
+            <input type="number" min="1" max="53" [ngModel]="semana()" (ngModelChange)="semana.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Ano <span class="text-red-500">*</span></label>
+            <input type="number" min="2024" max="2030" [ngModel]="ano()" (ngModelChange)="ano.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Calendário</label>
+            <select [ngModel]="modoCalendario()" (ngModelChange)="modoCalendario.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <option value="ISO">ISO</option>
+              <option value="SIMPLES">Simples</option>
+            </select>
+          </div>
+        </div>
+
+        @if (errorMessage()) {
+          <div class="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{{ errorMessage() }}</div>
+        }
+
+        <button (click)="gerarRelatorio()" [disabled]="!canGerar()"
+          class="bg-blue-600 text-white font-semibold py-2.5 px-6 rounded-lg hover:bg-blue-700 transition disabled:bg-blue-300 disabled:cursor-not-allowed flex items-center gap-2">
+          @if (isProcessando()) {
+            <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+          }
+          Gerar Relatório
+        </button>
+      </div>
+    </div>
+  } @else {
+
+  <div class="flex items-center gap-3 no-print">
+    <button (click)="novoRelatorio()" class="text-sm font-semibold text-slate-600 hover:text-slate-800 px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50">
+      ← Novo relatório
+    </button>
+    <button (click)="imprimir()" class="text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
+      Imprimir / Salvar PDF
+    </button>
+  </div>
+
+  <div class="relatorio-print space-y-6">
+    <!-- Cabeçalho -->
+    <div class="app-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div>
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Relatório Semanal de Atividades — Manutenção PPTM</p>
+        <p class="text-lg font-bold text-gray-800">Semana {{ dados()!.semana }}/{{ dados()!.ano }}</p>
+        <p class="text-sm text-gray-500">Período: {{ dados()!.periodoSemana }}</p>
+      </div>
+      <span class="text-sm font-bold px-4 py-2 rounded-full border" [class]="statusClasse(dados()!.statusGeral)">
+        STATUS: {{ dados()!.statusGeral }}
+      </span>
+    </div>
+
+    <!-- Resumo executivo -->
+    <div>
+      <h2 class="text-base font-bold text-gray-800 mb-3">Resumo Executivo</h2>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div class="app-card p-3 text-center border-l-4 border-green-500">
+          <p class="text-[11px] text-gray-500">Atendimento à Programação</p>
+          <p class="text-xl font-bold text-gray-800">{{ dados()!.atendimentoGeral }}%</p>
+          <p class="text-[11px] text-gray-400">Meta: {{ dados()!.metaAtendimento }}%</p>
+        </div>
+        <div class="app-card p-3 text-center border-l-4 border-blue-500">
+          <p class="text-[11px] text-gray-500">Cumprimento do Plano</p>
+          <p class="text-xl font-bold text-gray-800">{{ dados()!.cumprimentoGeral }}%</p>
+          <p class="text-[11px] text-gray-400">Meta: {{ dados()!.metaCumprimento }}%</p>
+        </div>
+        <div class="app-card p-3 text-center border-l-4 border-purple-500">
+          <p class="text-[11px] text-gray-500">OS's Executadas</p>
+          <p class="text-xl font-bold text-gray-800">{{ dados()!.totalExecutadas }}/{{ dados()!.totalProgramadas }}</p>
+        </div>
+        <div class="app-card p-3 text-center border-l-4 border-orange-500">
+          <p class="text-[11px] text-gray-500">OS's Não Executadas</p>
+          <p class="text-xl font-bold text-gray-800">{{ dados()!.totalNaoExecutadas }}</p>
+        </div>
+        <div class="app-card p-3 text-center border-l-4 border-red-500">
+          <p class="text-[11px] text-gray-500">Fora da Programação</p>
+          <p class="text-xl font-bold text-gray-800">{{ dados()!.totalForaProgramacao }}</p>
+        </div>
+        <div class="app-card p-3 text-center border-l-4 border-teal-500">
+          <p class="text-[11px] text-gray-500">Planejadas Plano</p>
+          <p class="text-xl font-bold text-gray-800">{{ dados()!.totalPlanejadasPlano }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Desempenho por área -->
+    <div>
+      <h2 class="text-base font-bold text-gray-800 mb-3">Desempenho por Área</h2>
+      <div class="overflow-x-auto rounded-xl border border-slate-200">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+          <thead class="bg-blue-900 text-white">
+            <tr>
+              <th rowspan="2" class="px-3 py-2 text-left">Área</th>
+              <th colspan="6" class="px-3 py-1.5 text-center border-l border-blue-800">Atendimento à Programação</th>
+              <th colspan="5" class="px-3 py-1.5 text-center border-l border-blue-800">Cumprimento do Plano</th>
+            </tr>
+            <tr class="text-[11px]">
+              <th class="px-2 py-1.5 text-center border-l border-blue-800">Program.</th>
+              <th class="px-2 py-1.5 text-center">Exec.</th>
+              <th class="px-2 py-1.5 text-center">Não Exec.</th>
+              <th class="px-2 py-1.5 text-center">Fora Prog.</th>
+              <th class="px-2 py-1.5 text-center">Atend.</th>
+              <th class="px-2 py-1.5 text-center">Status</th>
+              <th class="px-2 py-1.5 text-center border-l border-blue-800">Planej.</th>
+              <th class="px-2 py-1.5 text-center">Exec.</th>
+              <th class="px-2 py-1.5 text-center">Não Exec.</th>
+              <th class="px-2 py-1.5 text-center">Cumpr.</th>
+              <th class="px-2 py-1.5 text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-slate-100">
+            @for (area of dados()!.detalhesAreas; track area.area) {
+              <tr>
+                <td class="px-3 py-1.5 font-medium text-gray-800">{{ area.area }}</td>
+                <td class="px-2 py-1.5 text-center border-l border-slate-100">{{ area.programadas }}</td>
+                <td class="px-2 py-1.5 text-center">{{ area.executadas }}</td>
+                <td class="px-2 py-1.5 text-center">{{ area.naoExecutadas }}</td>
+                <td class="px-2 py-1.5 text-center">{{ area.foraProgramacao }}</td>
+                <td class="px-2 py-1.5 text-center font-semibold">{{ area.atendimento }}%</td>
+                <td class="px-2 py-1.5 text-center">
+                  <span class="text-xs font-semibold" [class]="area.atendimento >= dados()!.metaAtendimento ? 'text-green-600' : 'text-amber-600'">
+                    {{ area.atendimento >= dados()!.metaAtendimento ? 'Meta' : (area.atendimento + '%') }}
+                  </span>
+                </td>
+                <td class="px-2 py-1.5 text-center border-l border-slate-100">{{ area.planejadasPlano }}</td>
+                <td class="px-2 py-1.5 text-center">{{ area.executadasPlano }}</td>
+                <td class="px-2 py-1.5 text-center">{{ area.naoExecutadasPlano }}</td>
+                <td class="px-2 py-1.5 text-center font-semibold">{{ area.cumprimento }}%</td>
+                <td class="px-2 py-1.5 text-center">
+                  <span class="text-xs font-semibold" [class]="area.cumprimento >= dados()!.metaCumprimento ? 'text-green-600' : 'text-amber-600'">
+                    {{ area.cumprimento >= dados()!.metaCumprimento ? 'Meta' : (area.cumprimento + '%') }}
+                  </span>
+                </td>
+              </tr>
+            }
+          </tbody>
+          <tfoot class="bg-slate-50 font-bold">
+            <tr>
+              <td class="px-3 py-2">TOTAL GERAL</td>
+              <td class="px-2 py-2 text-center border-l border-slate-200">{{ dados()!.totalProgramadas }}</td>
+              <td class="px-2 py-2 text-center">{{ dados()!.totalExecutadas }}</td>
+              <td class="px-2 py-2 text-center">{{ dados()!.totalNaoExecutadas }}</td>
+              <td class="px-2 py-2 text-center">{{ dados()!.totalForaProgramacao }}</td>
+              <td class="px-2 py-2 text-center">{{ dados()!.atendimentoGeral }}%</td>
+              <td class="px-2 py-2 text-center"></td>
+              <td class="px-2 py-2 text-center border-l border-slate-200">{{ dados()!.totalPlanejadasPlano }}</td>
+              <td class="px-2 py-2 text-center">{{ dados()!.totalExecutadasPlano }}</td>
+              <td class="px-2 py-2 text-center">{{ dados()!.totalNaoExecutadasPlano }}</td>
+              <td class="px-2 py-2 text-center">{{ dados()!.cumprimentoGeral }}%</td>
+              <td class="px-2 py-2 text-center"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- Destaques, pontos de atenção e ações -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="app-card p-4">
+        <h2 class="text-sm font-bold text-gray-800 mb-3">Destaques da Semana</h2>
+        <div class="space-y-2">
+          @for (d of destaques(); track d.texto) {
+            <div class="border border-slate-200 rounded-lg p-2.5">
+              <p class="text-xs font-bold text-gray-800">{{ d.texto }}</p>
+              <p class="text-xs text-gray-500">{{ d.detalhe }}</p>
+            </div>
+          }
+          @if (destaques().length === 0) {
+            <p class="text-xs text-gray-400">Nenhum destaque nesta semana.</p>
+          }
+        </div>
+      </div>
+
+      <div class="app-card p-4">
+        <h2 class="text-sm font-bold text-gray-800 mb-3">Pontos de Atenção</h2>
+        <div class="space-y-2">
+          @for (p of pontosAtencao(); track p.titulo) {
+            <div class="border-l-4 rounded-lg p-2.5" [class]="severidadeClasse(p.severidade)">
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-xs font-bold text-gray-800">{{ p.titulo }}</p>
+                <span class="text-[10px] font-semibold text-gray-500 whitespace-nowrap">{{ severidadeLabel[p.severidade] }}</span>
+              </div>
+              <p class="text-xs text-gray-500 mt-0.5">{{ p.descricao }}</p>
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="app-card p-4">
+        <h2 class="text-sm font-bold text-gray-800 mb-3">Ações Prioritárias</h2>
+        <div class="space-y-2">
+          @for (a of acoesPrioritarias(); track a.acao; let i = $index) {
+            <div class="border border-slate-200 rounded-lg p-2.5">
+              <div class="flex items-start justify-between gap-2">
+                <p class="text-xs font-bold text-gray-800">{{ i + 1 }}. {{ a.acao }}</p>
+                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap" [class]="prioridadeClasse(a.prioridade)">
+                  {{ prioridadeLabel[a.prioridade] }}
+                </span>
+              </div>
+              <p class="text-[11px] text-gray-400 mt-1">Prazo: {{ a.prazo }} · {{ a.responsavel }}</p>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+
+    <p class="text-xs text-gray-400 text-center">
+      Relatório gerado pelo Portal PPTM em {{ geradoEm() | date:'dd/MM/yyyy HH:mm' }}
+    </p>
+  </div>
+  }
+</div>

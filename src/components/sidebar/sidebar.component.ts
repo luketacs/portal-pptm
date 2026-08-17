@@ -233,6 +233,7 @@ export class SidebarComponent implements OnDestroy {
       links: [
         { path: '/users', label: 'Usuários', icon: '', roles: ['Admin'] },
         { path: '/audit', label: 'Auditoria', icon: '', roles: ['Admin'] },
+        { path: '/admin/relatorio-semanal-pcm', label: 'Relatório Semanal PCM', icon: '', roles: ['Admin'] },
       ],
     },
     {
