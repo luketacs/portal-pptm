@@ -3,7 +3,7 @@
     <h1 class="text-2xl font-bold text-gray-800">Relatório Mensal PCM</h1>
     <p class="text-sm text-gray-500 mt-0.5">
       KPIs do mês e acumulado do ano, a partir da mesma planilha "Painel de Indicadores de PCM".
-      Reconciliação de horas por colaborador ainda não está disponível aqui.
+      Envie também Programação, Ponto, Matrículas e Fechamento Semanal para incluir a reconciliação de horas por colaborador.
     </p>
   </div>
 
@@ -61,6 +61,65 @@
           </div>
         </div>
         <p class="text-xs text-gray-400 -mt-2">Deixe em branco para usar o mês inteiro (do dia 1 ao último dia).</p>
+
+        <div class="border-t border-slate-200 pt-4">
+          <p class="text-sm font-medium text-slate-700 mb-1">Horas e Ordens de Serviço (opcional)</p>
+          <p class="text-xs text-gray-400 mb-3">Envie Matrículas + Fechamento Semanal para incluir essa seção. Programação e Ponto são opcionais dentro dela (sem eles, horas programadas/disponíveis ficam em branco).</p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Programação (Elétrica/Mecânica, .xlsx)</label>
+              <div class="flex items-center gap-2">
+                <label class="cursor-pointer inline-block">
+                  <input type="file" accept=".xlsx" class="hidden" (change)="onProgramacaoSelected($event)" />
+                  <span class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">Selecionar</span>
+                </label>
+                @if (arquivoProgramacao()) {
+                  <span class="text-xs text-gray-600 truncate max-w-[140px]">{{ arquivoProgramacao()!.name }}</span>
+                }
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Espelho de Ponto (.pdf)</label>
+              <div class="flex items-center gap-2">
+                <label class="cursor-pointer inline-block">
+                  <input type="file" accept=".pdf" class="hidden" (change)="onPontoSelected($event)" />
+                  <span class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">Selecionar</span>
+                </label>
+                @if (arquivoPonto()) {
+                  <span class="text-xs text-gray-600 truncate max-w-[140px]">{{ arquivoPonto()!.name }}</span>
+                }
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Matrículas (.xlsx)</label>
+              <div class="flex items-center gap-2">
+                <label class="cursor-pointer inline-block">
+                  <input type="file" accept=".xlsx" class="hidden" (change)="onMatriculasSelected($event)" />
+                  <span class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">Selecionar</span>
+                </label>
+                @if (arquivoMatriculas()) {
+                  <span class="text-xs text-gray-600 truncate max-w-[140px]">{{ arquivoMatriculas()!.name }}</span>
+                }
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Fechamento Semanal (.xlsx, aba "Apontamentos")</label>
+              <div class="flex items-center gap-2">
+                <label class="cursor-pointer inline-block">
+                  <input type="file" accept=".xlsx" class="hidden" (change)="onFechamentoSelected($event)" />
+                  <span class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">Selecionar</span>
+                </label>
+                @if (arquivoFechamento()) {
+                  <span class="text-xs text-gray-600 truncate max-w-[140px]">{{ arquivoFechamento()!.name }}</span>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
 
         @if (errorMessage()) {
           <div class="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{{ errorMessage() }}</div>
@@ -222,6 +281,97 @@
         </table>
       </div>
     </section>
+
+    <!-- Horas e Ordens de Serviço (opcional) -->
+    @if (dadosHoras(); as dh) {
+      <section class="pcm-section">
+        <h2 class="pcm-section-title">Horas e Ordens de Serviço — {{ dadosMensal()!.mesCompleto }}</h2>
+        <div class="pcm-cards-secundario">
+          <div class="pcm-card-sec">
+            <div class="pcm-card-sec-title">Horas apontadas</div>
+            <div class="pcm-card-sec-value">{{ dh.horasGeral }}h</div>
+          </div>
+          <div class="pcm-card-sec">
+            <div class="pcm-card-sec-title">Ordens únicas</div>
+            <div class="pcm-card-sec-value">{{ dh.ordensUnicasPeriodo }}</div>
+          </div>
+          <div class="pcm-card-sec">
+            <div class="pcm-card-sec-title">Colaboradores com ordens</div>
+            <div class="pcm-card-sec-value">{{ dh.colaboradoresComOrdens }}/{{ dh.totalColaboradores }}</div>
+          </div>
+          <div class="pcm-card-sec">
+            <div class="pcm-card-sec-title">Dias no período</div>
+            <div class="pcm-card-sec-value">{{ dh.diasPeriodo }}</div>
+          </div>
+        </div>
+
+        <div class="pcm-table-container" style="margin-top: 16px;">
+          <table class="pcm-table">
+            <thead>
+              <tr>
+                <th>Colaborador</th>
+                <th>Área</th>
+                <th>H. Apontadas</th>
+                <th>H. Programadas</th>
+                <th>H. Disponíveis</th>
+                <th>Ordens</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (c of dh.horasPorColaborador; track c.matricula; let i = $index) {
+                <tr [class]="i % 2 === 0 ? 'pcm-even-row' : 'pcm-odd-row'">
+                  <td class="pcm-area-name">{{ c.funcionario }}</td>
+                  <td>{{ c.area }}</td>
+                  <td>{{ c.horasApontadas }}h</td>
+                  <td>{{ c.horasProgramadas !== null ? (c.horasProgramadas + 'h') : '—' }}</td>
+                  <td>{{ c.horasDisponiveis !== null ? (c.horasDisponiveis + 'h') : '—' }}</td>
+                  <td>{{ c.qtdOrdens }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        @if (nomesNaoMapeados().length > 0) {
+          <div class="pcm-panel pcm-panel--orange" style="margin-top: 16px;">
+            <h2 class="pcm-section-title">Nomes da Programação Não Mapeados</h2>
+            <div class="pcm-list">
+              @for (n of nomesNaoMapeados(); track n.origem + n.nomePrograma) {
+                <div class="pcm-list-item">
+                  <span class="pcm-icon icon-warning"></span>
+                  <div><strong>{{ n.nomePrograma }}</strong> ({{ n.origem }}) — {{ n.horas }}h não atribuídas a nenhuma matrícula</div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        @if (dh.ocorrenciasNaoContabilizadas.length > 0) {
+          <div class="pcm-panel pcm-panel--orange" style="margin-top: 16px;">
+            <h2 class="pcm-section-title">Ocorrências Não Contabilizadas ({{ dh.ocorrenciasNaoContabilizadas.length }})</h2>
+            <div class="pcm-table-container">
+              <table class="pcm-table">
+                <thead>
+                  <tr><th>Tipo</th><th>Colaborador</th><th>Data</th><th>Ordem</th><th>Horas</th><th>Motivo</th></tr>
+                </thead>
+                <tbody>
+                  @for (o of dh.ocorrenciasNaoContabilizadas; track $index) {
+                    <tr>
+                      <td>{{ o.tipo }}</td>
+                      <td>{{ o.nome }}</td>
+                      <td>{{ o.data }}</td>
+                      <td>{{ o.ordem }}</td>
+                      <td>{{ o.horas }}h</td>
+                      <td>{{ o.motivo }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        }
+      </section>
+    }
 
     <!-- Linha do tempo do acumulado -->
     <section class="pcm-section">

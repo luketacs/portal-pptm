@@ -8,6 +8,12 @@ import {
   analisarPontosAtencaoEAcoesMensal, extrairHistoricoMeses, gerarDestaquesMensal, parseIndicadoresMensais,
 } from '../../../utils/relatorio-mensal-pcm';
 import { LinhaTempoGeometria, calcularLinhaTempo } from '../../../utils/relatorio-linha-tempo';
+import { OrigemPrograma, RegistroMatricula, parseMatriculas } from '../../../utils/relatorio-colaboradores';
+import { HorasProgramadasPorColaborador, extrairHorasProgramadasSemana } from '../../../utils/relatorio-programacao-semanal';
+import { agregarHorasPonto } from '../../../utils/relatorio-ponto';
+import {
+  DadosHoras, NomeNaoMapeado, calcularHorasEOrdensApontadas, mapearHorasDisponiveisPonto, mapearHorasProgramadasParaMatricula,
+} from '../../../utils/relatorio-apontamentos';
 
 function mesAtualAbrev(): MesAbrev {
   return MESES_ABREV[new Date().getMonth()];
@@ -18,6 +24,10 @@ function isoParaBr(iso: string): string {
   if (!m) return '';
   const [, y, mo, d] = m;
   return `${d}/${mo}/${y}`;
+}
+
+function normalizarNomeAba(nome: string): string {
+  return nome.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase();
 }
 
 const SEVERIDADE_LABEL: Record<PontoAtencao['severidade'], string> = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
@@ -44,6 +54,10 @@ export class RelatorioMensalPcmComponent {
   currentUser = this.authService.currentUser;
 
   arquivo = signal<File | null>(null);
+  arquivoProgramacao = signal<File | null>(null);
+  arquivoPonto = signal<File | null>(null);
+  arquivoMatriculas = signal<File | null>(null);
+  arquivoFechamento = signal<File | null>(null);
   mes = signal<MesAbrev>(mesAtualAbrev());
   ano = signal(new Date().getFullYear());
   dataInicioIso = signal('');
@@ -58,26 +72,104 @@ export class RelatorioMensalPcmComponent {
   acoesPrioritarias = signal<AcaoPrioritaria[]>([]);
   destaques = signal<Destaque[]>([]);
   linhaTempo = signal<LinhaTempoGeometria | null>(null);
+  dadosHoras = signal<DadosHoras | null>(null);
+  nomesNaoMapeados = signal<NomeNaoMapeado[]>([]);
   geradoEm = signal<Date | null>(null);
 
   constructor(private authService: AuthService) {}
 
   onFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
+    const file = this.selecionarArquivo(event.target as HTMLInputElement, ['.xlsx']);
+    if (file) this.arquivo.set(file);
+  }
+
+  onProgramacaoSelected(event: Event): void {
+    const file = this.selecionarArquivo(event.target as HTMLInputElement, ['.xlsx']);
+    if (file) this.arquivoProgramacao.set(file);
+  }
+
+  onPontoSelected(event: Event): void {
+    const file = this.selecionarArquivo(event.target as HTMLInputElement, ['.pdf']);
+    if (file) this.arquivoPonto.set(file);
+  }
+
+  onMatriculasSelected(event: Event): void {
+    const file = this.selecionarArquivo(event.target as HTMLInputElement, ['.xlsx']);
+    if (file) this.arquivoMatriculas.set(file);
+  }
+
+  onFechamentoSelected(event: Event): void {
+    const file = this.selecionarArquivo(event.target as HTMLInputElement, ['.xlsx']);
+    if (file) this.arquivoFechamento.set(file);
+  }
+
+  private selecionarArquivo(input: HTMLInputElement, extensoes: string[]): File | null {
     const file = input.files?.[0] ?? null;
     this.errorMessage.set('');
-    if (!file) return;
+    if (!file) return null;
 
-    if (!file.name.toLowerCase().endsWith('.xlsx')) {
-      this.errorMessage.set('Selecione um arquivo .xlsx.');
+    if (!extensoes.some(ext => file.name.toLowerCase().endsWith(ext))) {
+      this.errorMessage.set(`Selecione um arquivo ${extensoes.join(' ou ')}.`);
       input.value = '';
-      return;
+      return null;
     }
-    this.arquivo.set(file);
+    return file;
   }
 
   canGerar(): boolean {
     return !!this.arquivo() && !this.isProcessando();
+  }
+
+  private periodoDatas(): { inicio: Date; fim: Date } {
+    const ano = this.ano();
+    const mesIdx = MESES_ABREV.indexOf(this.mes());
+    const inicioIso = this.dataInicioIso();
+    const fimIso = this.dataFimIso();
+    const inicio = inicioIso ? new Date(`${inicioIso}T00:00:00Z`) : new Date(Date.UTC(ano, mesIdx, 1));
+    const fim = fimIso ? new Date(`${fimIso}T00:00:00Z`) : new Date(Date.UTC(ano, mesIdx + 1, 0));
+    return { inicio, fim };
+  }
+
+  private async extrairOrigensProgramacao(
+    file: File, XLSX: typeof import('xlsx'),
+  ): Promise<{ origem: OrigemPrograma; totais: HorasProgramadasPorColaborador }[]> {
+    const buffer = await file.arrayBuffer();
+    const wb = XLSX.read(buffer, { type: 'array', cellDates: false });
+    const origens: { origem: OrigemPrograma; totais: HorasProgramadasPorColaborador }[] = [];
+
+    for (const nomeAba of wb.SheetNames) {
+      const normalizado = normalizarNomeAba(nomeAba);
+      const origem: OrigemPrograma | null = normalizado.includes('ELETR')
+        ? 'ELETRICA' : normalizado.includes('MECAN') ? 'MECANICA' : null;
+      if (!origem) continue;
+
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[nomeAba], { header: 1, defval: '', raw: true }) as unknown[][];
+      origens.push({ origem, totais: extrairHorasProgramadasSemana([rows]) });
+    }
+    return origens;
+  }
+
+  private async parseMatriculasArquivo(file: File, XLSX: typeof import('xlsx')): Promise<RegistroMatricula[]> {
+    const buffer = await file.arrayBuffer();
+    const wb = XLSX.read(buffer, { type: 'array', cellDates: false });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: true }) as unknown[][];
+    return parseMatriculas(rows);
+  }
+
+  private async extrairTextoPdf(file: File): Promise<string[]> {
+    const pdfjsLib = await import('pdfjs-dist');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
+    const textos: string[] = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      textos.push(content.items.map(item => ('str' in item ? item.str : '') + ('hasEOL' in item && item.hasEOL ? '\n' : '')).join(''));
+    }
+    return textos;
   }
 
   async gerarRelatorio(): Promise<void> {
@@ -112,6 +204,48 @@ export class RelatorioMensalPcmComponent {
       this.acoesPrioritarias.set(acoesPrioritarias);
       this.destaques.set(destaques);
       this.linhaTempo.set(calcularLinhaTempo(historico));
+
+      const arqMatriculas = this.arquivoMatriculas();
+      const arqFechamento = this.arquivoFechamento();
+      if (arqMatriculas && arqFechamento) {
+        const periodo = this.periodoDatas();
+        const matriculas = await this.parseMatriculasArquivo(arqMatriculas, XLSX);
+
+        let origensProgramadas: { origem: OrigemPrograma; totais: HorasProgramadasPorColaborador }[] = [];
+        const arqProgramacao = this.arquivoProgramacao();
+        if (arqProgramacao) {
+          origensProgramadas = await this.extrairOrigensProgramacao(arqProgramacao, XLSX);
+        }
+        const { horasPorMatricula: horasProgramadas, naoMapeados } =
+          mapearHorasProgramadasParaMatricula(origensProgramadas, matriculas);
+
+        let horasDisponiveis: Record<string, number> = {};
+        const arqPonto = this.arquivoPonto();
+        if (arqPonto) {
+          const textosPorPagina = await this.extrairTextoPdf(arqPonto);
+          const totaisPonto = agregarHorasPonto(textosPorPagina, periodo.inicio, periodo.fim);
+          horasDisponiveis = mapearHorasDisponiveisPonto(totaisPonto, matriculas);
+        }
+
+        const bufferFechamento = await arqFechamento.arrayBuffer();
+        const wbFechamento = XLSX.read(bufferFechamento, { type: 'array', cellDates: false });
+        const nomeAbaApontamentos = wbFechamento.SheetNames.find(n => n.trim().toLowerCase() === 'apontamentos');
+        if (!nomeAbaApontamentos) throw new Error('Aba "Apontamentos" não encontrada no arquivo de Fechamento Semanal.');
+        const rowsApontamentos = XLSX.utils.sheet_to_json(
+          wbFechamento.Sheets[nomeAbaApontamentos], { header: 1, defval: '', raw: true },
+        ) as unknown[][];
+
+        const dados = calcularHorasEOrdensApontadas(rowsApontamentos, {
+          dataInicio: periodo.inicio, dataFim: periodo.fim, matriculas,
+          horasProgramadasPorMatricula: horasProgramadas, horasDisponiveisPorMatricula: horasDisponiveis,
+        });
+        this.dadosHoras.set(dados);
+        this.nomesNaoMapeados.set(naoMapeados);
+      } else {
+        this.dadosHoras.set(null);
+        this.nomesNaoMapeados.set([]);
+      }
+
       this.geradoEm.set(new Date());
     } catch (err: unknown) {
       this.errorMessage.set(err instanceof Error ? err.message : 'Erro ao processar a planilha.');
@@ -127,6 +261,8 @@ export class RelatorioMensalPcmComponent {
     this.acoesPrioritarias.set([]);
     this.destaques.set([]);
     this.linhaTempo.set(null);
+    this.dadosHoras.set(null);
+    this.nomesNaoMapeados.set([]);
     this.geradoEm.set(null);
     this.errorMessage.set('');
   }
