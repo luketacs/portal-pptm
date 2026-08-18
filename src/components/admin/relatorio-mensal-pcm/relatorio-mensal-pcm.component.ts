@@ -12,7 +12,7 @@ import { OrigemPrograma, RegistroMatricula, parseMatriculas } from '../../../uti
 import { HorasProgramadasPorColaborador, extrairHorasProgramadasSemana } from '../../../utils/relatorio-programacao-semanal';
 import { agregarHorasPonto } from '../../../utils/relatorio-ponto';
 import {
-  DadosHoras, NomeNaoMapeado, calcularHorasEOrdensApontadas, colaboradoresOperacaoEmManutencao,
+  ColaboradorHoras, DadosHoras, NomeNaoMapeado, calcularHorasEOrdensApontadas, colaboradoresOperacaoEmManutencao,
   mapearHorasDisponiveisPonto, mapearHorasProgramadasParaMatricula,
 } from '../../../utils/relatorio-apontamentos';
 import { calcularGraficoHoras } from '../../../utils/relatorio-horas-grafico';
@@ -76,6 +76,7 @@ export class RelatorioMensalPcmComponent {
   linhaTempo = signal<LinhaTempoGeometria | null>(null);
   dadosHoras = signal<DadosHoras | null>(null);
   nomesNaoMapeados = signal<NomeNaoMapeado[]>([]);
+  colaboradoresOperacao = signal<ColaboradorHoras[]>([]);
   geradoEm = signal<Date | null>(null);
 
   arquivoProgramacaoNomes = computed(() => this.arquivoProgramacao().map(f => f.name).join(', '));
@@ -83,10 +84,6 @@ export class RelatorioMensalPcmComponent {
   graficoHoras = computed(() => {
     const dh = this.dadosHoras();
     return dh ? calcularGraficoHoras(dh.horasPorColaborador) : null;
-  });
-  colaboradoresOperacao = computed(() => {
-    const dh = this.dadosHoras();
-    return dh ? colaboradoresOperacaoEmManutencao(dh.horasPorColaborador) : [];
   });
 
   imprimindoSomenteOperacao = signal(false);
@@ -285,9 +282,11 @@ export class RelatorioMensalPcmComponent {
         });
         this.dadosHoras.set(dados);
         this.nomesNaoMapeados.set(naoMapeados);
+        this.colaboradoresOperacao.set(colaboradoresOperacaoEmManutencao(dados.horasPorColaborador, matriculas));
       } else {
         this.dadosHoras.set(null);
         this.nomesNaoMapeados.set([]);
+        this.colaboradoresOperacao.set([]);
       }
 
       this.geradoEm.set(new Date());
@@ -307,6 +306,7 @@ export class RelatorioMensalPcmComponent {
     this.linhaTempo.set(null);
     this.dadosHoras.set(null);
     this.nomesNaoMapeados.set([]);
+    this.colaboradoresOperacao.set([]);
     this.geradoEm.set(null);
     this.errorMessage.set('');
     this.arquivo.set(null);

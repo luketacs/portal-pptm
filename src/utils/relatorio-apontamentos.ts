@@ -66,12 +66,31 @@ function normalizarAscii(texto: string): string {
   return String(texto ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
 }
 
-// Colaboradores cadastrados como Operação que apareceram no Fechamento Semanal com
-// apontamentos (ou seja, estão temporariamente atuando em manutenção) — usado no
-// relatório separado pro gestor da Operação acompanhar quanto essas pessoas
-// "emprestadas" estão trabalhando.
-export function colaboradoresOperacaoEmManutencao(colaboradores: ColaboradorHoras[]): ColaboradorHoras[] {
-  return colaboradores.filter(c => normalizarAscii(c.area).includes('OPERACAO'));
+// Colaboradores da Operação atualmente emprestados pra manutenção — lista mantida
+// manualmente (igual MATRICULAS_EXCLUIDAS_RELATORIO), porque não dá pra inferir
+// isso só pelos dados: um colaborador de Operação pode aparecer no Fechamento
+// Semanal por outros motivos, e um que está emprestado pode não ter apontado nada
+// numa semana específica (e mesmo assim precisa aparecer, com 0h).
+export const MATRICULAS_OPERACAO_EM_MANUTENCAO = new Set([
+  '20005480', // Alexandre Gomes
+  '20006309', // Mauro Teixeira
+  '20005985', // Joaquim Neto
+  '710624',   // William
+]);
+
+// Monta a linha de cada colaborador da lista acima — usa os dados de horas/ordens
+// se ele apontou algo no período, ou zera se não apontou nada (ainda assim aparece,
+// pro gestor da Operação ver que não trabalhou em manutenção naquele período).
+export function colaboradoresOperacaoEmManutencao(
+  colaboradores: ColaboradorHoras[], matriculas: RegistroMatricula[],
+): ColaboradorHoras[] {
+  return matriculas
+    .filter(m => MATRICULAS_OPERACAO_EM_MANUTENCAO.has(m.matricula))
+    .map(m => colaboradores.find(c => c.matricula === m.matricula) ?? {
+      matricula: m.matricula, funcionario: m.funcionario, area: m.area,
+      horasApontadas: 0, horasProgramadas: null, horasDisponiveis: null,
+      qtdOrdens: 0, ordensLista: [],
+    });
 }
 
 function areaEOperacao(area: string): boolean {

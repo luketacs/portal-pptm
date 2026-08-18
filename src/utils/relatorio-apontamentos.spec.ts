@@ -212,25 +212,44 @@ describe('calcularHorasEOrdensApontadas', () => {
 describe('colaboradoresOperacaoEmManutencao', () => {
   function colaborador(overrides: Partial<ColaboradorHoras>): ColaboradorHoras {
     return {
-      matricula: '1', funcionario: 'Fulano', area: 'Mecânica',
+      matricula: '20005480', funcionario: 'Alexandre Gomes', area: 'Operação',
       horasApontadas: 50, horasProgramadas: null, horasDisponiveis: null,
       qtdOrdens: 3, ordensLista: [],
       ...overrides,
     };
   }
 
-  it('filtra so quem tem area Operacao (cadastrado como emprestado pra manutencao)', () => {
-    const lista = [
-      colaborador({ matricula: '1', area: 'Mecânica' }),
-      colaborador({ matricula: '2', area: 'Operação' }),
-      colaborador({ matricula: '3', area: 'Elétrica' }),
-      colaborador({ matricula: '4', area: 'OPERAÇÃO' }),
+  function matriculasOperacao(): RegistroMatricula[] {
+    return [
+      { matricula: '20005480', funcionario: 'Alexandre Gomes', area: 'Operação' },
+      { matricula: '20006309', funcionario: 'Mauro Teixeira', area: 'Operação' },
+      { matricula: '20005985', funcionario: 'Joaquim Neto', area: 'Operação' },
+      { matricula: '710624', funcionario: 'William', area: 'Operação' },
+      { matricula: '20004578', funcionario: 'Antonio Narcelio', area: 'Operação' }, // Operação, mas NÃO está na manutenção
     ];
-    expect(colaboradoresOperacaoEmManutencao(lista).map(c => c.matricula)).toEqual(['2', '4']);
+  }
+
+  it('so traz quem esta na lista fixa de emprestados pra manutencao, mesmo sendo todos da Operacao', () => {
+    const r = colaboradoresOperacaoEmManutencao([colaborador({})], matriculasOperacao());
+    expect(r.map(c => c.matricula).sort()).toEqual(['20005480', '20005985', '20006309', '710624']);
   });
 
-  it('retorna vazio quando ninguem da Operacao apontou horas no periodo', () => {
-    expect(colaboradoresOperacaoEmManutencao([colaborador({ area: 'Mecânica' })])).toEqual([]);
+  it('usa os dados de horas/ordens de quem apontou algo no periodo', () => {
+    const r = colaboradoresOperacaoEmManutencao(
+      [colaborador({ matricula: '20005480', horasApontadas: 42, qtdOrdens: 5 })], matriculasOperacao(),
+    );
+    const alexandre = r.find(c => c.matricula === '20005480')!;
+    expect(alexandre.horasApontadas).toBe(42);
+    expect(alexandre.qtdOrdens).toBe(5);
+  });
+
+  it('zera quem esta na lista mas nao apontou nada no periodo (continua aparecendo)', () => {
+    const r = colaboradoresOperacaoEmManutencao([], matriculasOperacao());
+    expect(r).toHaveLength(4);
+    const mauro = r.find(c => c.matricula === '20006309')!;
+    expect(mauro.funcionario).toBe('Mauro Teixeira');
+    expect(mauro.horasApontadas).toBe(0);
+    expect(mauro.qtdOrdens).toBe(0);
   });
 });
 
