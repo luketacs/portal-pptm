@@ -15,7 +15,7 @@ import {
   ColaboradorHoras, DadosHoras, NomeNaoMapeado, calcularHorasEOrdensApontadas, colaboradoresOperacaoEmManutencao,
   mapearHorasDisponiveisPonto, mapearHorasProgramadasParaMatricula,
 } from '../../../utils/relatorio-apontamentos';
-import { calcularGraficoHoras } from '../../../utils/relatorio-horas-grafico';
+import { calcularGraficoHorasPorArea } from '../../../utils/relatorio-horas-grafico';
 import { carregarLocal, removerLocal, salvarLocal } from '../../../utils/relatorio-persistencia-local';
 
 const CHAVE_STORAGE = 'pcm-relatorio-mensal-ultimo';
@@ -97,9 +97,9 @@ export class RelatorioMensalPcmComponent {
 
   arquivoProgramacaoNomes = computed(() => this.arquivoProgramacao().map(f => f.name).join(', '));
   areasVisiveis = computed(() => areasComMovimento(this.dadosMensal()?.detalhesAreas ?? []));
-  graficoHoras = computed(() => {
+  graficoHorasPorArea = computed(() => {
     const dh = this.dadosHoras();
-    return dh ? calcularGraficoHoras(dh.horasPorColaborador) : null;
+    return dh ? calcularGraficoHorasPorArea(dh.horasPorColaborador) : [];
   });
 
   imprimindoSomenteOperacao = signal(false);

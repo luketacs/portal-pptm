@@ -408,11 +408,31 @@
 }
 
 /* ── Gráfico de Horas (apontadas x programadas x disponíveis) ────────────── */
+.pcm-horas-grafico-area {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #eef1f6;
+}
+
+.pcm-horas-grafico-area:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.pcm-horas-grafico-area-titulo {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1a3a8f;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0 0 8px;
+}
+
 .pcm-horas-grafico {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  margin: 12px 0 20px;
+  margin: 0 0 8px;
 }
 
 .pcm-horas-grafico-linha {

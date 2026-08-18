@@ -24,9 +24,22 @@ export interface GraficoHorasDados {
   escalaMaxima: number; // valor, em horas, que corresponde a 100% de largura
 }
 
+export interface GraficoHorasPorArea {
+  area: string;
+  grafico: GraficoHorasDados;
+}
+
 function round1(valor: number): number {
   return Math.round(valor * 10) / 10;
 }
+
+function normalizarArea(area: string): string {
+  return area.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase();
+}
+
+// Ordem de exibição das áreas conhecidas — qualquer área fora dessa lista aparece
+// depois, em ordem alfabética.
+const ORDEM_AREAS = ['MECANICA', 'ELETRICA', 'OPERACAO'];
 
 export function calcularGraficoHoras(colaboradores: ColaboradorHoras[]): GraficoHorasDados {
   const valores = colaboradores.flatMap(c => [c.horasApontadas, c.horasProgramadas ?? 0, c.horasDisponiveis ?? 0]);
@@ -51,4 +64,28 @@ export function calcularGraficoHoras(colaboradores: ColaboradorHoras[]): Grafico
     .sort((a, b) => b.horasApontadas - a.horasApontadas);
 
   return { barras, escalaMaxima: round1(escalaMaxima) };
+}
+
+// Separa por área (Mecânica, Elétrica, Operação, ...) antes de montar o gráfico de
+// cada uma — evita misturar todo mundo numa lista só, difícil de escanear quando
+// tem gente de várias equipes. Cada área usa a própria escala (não uma escala
+// global), já que agora o objetivo é comparar dentro do time, não entre times.
+export function calcularGraficoHorasPorArea(colaboradores: ColaboradorHoras[]): GraficoHorasPorArea[] {
+  const grupos = new Map<string, ColaboradorHoras[]>();
+  for (const c of colaboradores) {
+    const chave = c.area.trim() || 'Outras';
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave)!.push(c);
+  }
+
+  const areasOrdenadas = [...grupos.keys()].sort((a, b) => {
+    const ia = ORDEM_AREAS.indexOf(normalizarArea(a));
+    const ib = ORDEM_AREAS.indexOf(normalizarArea(b));
+    if (ia === -1 && ib === -1) return a.localeCompare(b);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+
+  return areasOrdenadas.map(area => ({ area, grafico: calcularGraficoHoras(grupos.get(area)!) }));
 }
