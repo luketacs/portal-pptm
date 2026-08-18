@@ -431,19 +431,20 @@
 .pcm-horas-grafico {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 12px;
   margin: 0 0 8px;
 }
 
-.pcm-horas-grafico-linha {
+.pcm-horas-grafico-pessoa {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .pcm-horas-grafico-nome {
   flex: 0 0 170px;
   font-size: 11px;
+  font-weight: 600;
   color: #333;
   text-align: right;
   white-space: nowrap;
@@ -451,39 +452,42 @@
   text-overflow: ellipsis;
 }
 
-.pcm-horas-grafico-track {
-  position: relative;
+.pcm-horas-grafico-barras {
   flex: 1 1 auto;
-  height: 14px;
-  background-color: #eef1f6;
-  border-radius: 0 4px 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.pcm-horas-grafico-fill {
+.pcm-horas-grafico-barra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pcm-horas-grafico-barra-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 9px;
+  background-color: #f3f4f6;
+  border-radius: 0 3px 3px 0;
+}
+
+.pcm-horas-grafico-barra-fill {
   position: absolute;
   top: 0;
   left: 0;
   height: 100%;
-  background-color: #2196F3;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 3px 3px 0;
 }
 
-.pcm-horas-grafico-fill--estourou { background-color: #F44336; }
+.pcm-horas-grafico-barra-fill--apontada   { background-color: #2196F3; }
+.pcm-horas-grafico-barra-fill--programada { background-color: #FF9800; }
+.pcm-horas-grafico-barra-fill--disponivel { background-color: #009688; }
 
-.pcm-horas-grafico-tick {
-  position: absolute;
-  top: -3px;
-  width: 2px;
-  height: 20px;
-  border-radius: 1px;
-}
-
-.pcm-horas-grafico-tick--programada { background-color: #1a3a8f; }
-.pcm-horas-grafico-tick--disponivel { background-color: #94a3b8; }
-
-.pcm-horas-grafico-valor {
+.pcm-horas-grafico-barra-valor {
   flex: 0 0 auto;
-  min-width: 150px;
+  min-width: 55px;
   font-size: 10px;
   color: #666;
   white-space: nowrap;
@@ -491,40 +495,30 @@
 
 .pcm-horas-grafico-legenda {
   display: flex;
-  gap: 18px;
+  gap: 24px;
   flex-wrap: wrap;
-  font-size: 0.75rem;
-  color: #555;
-  margin-top: 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #333;
+  margin: 4px 0 16px;
 }
 
 .pcm-horas-grafico-legenda span {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .pcm-horas-grafico-legenda-marca {
   display: inline-block;
-  width: 14px;
-  height: 10px;
+  width: 20px;
+  height: 13px;
   border-radius: 3px;
 }
 
-.pcm-horas-grafico-legenda-marca--apontada  { background-color: #2196F3; }
-.pcm-horas-grafico-legenda-marca--disponivel {
-  width: 2px;
-  height: 14px;
-  background-color: #94a3b8;
-  border-radius: 1px;
-}
-.pcm-horas-grafico-legenda-marca--programada {
-  width: 2px;
-  height: 14px;
-  background-color: #1a3a8f;
-  border-radius: 1px;
-}
-.pcm-horas-grafico-legenda-marca--estourou { background-color: #F44336; }
+.pcm-horas-grafico-legenda-marca--apontada   { background-color: #2196F3; }
+.pcm-horas-grafico-legenda-marca--programada { background-color: #FF9800; }
+.pcm-horas-grafico-legenda-marca--disponivel { background-color: #009688; }
 
 /* ── Rodapé ────────────────────────────────────────────────────────────── */
 .pcm-footer {

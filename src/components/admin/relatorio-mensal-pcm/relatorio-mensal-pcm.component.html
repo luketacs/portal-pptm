@@ -308,38 +308,47 @@
 
         @if (graficoHorasPorArea().length > 0) {
           <h3 class="pcm-section-title" style="font-size: 0.95rem; margin-top: 20px;">Horas Apontadas x Programadas x Disponíveis</h3>
+          <div class="pcm-horas-grafico-legenda">
+            <span><span class="pcm-horas-grafico-legenda-marca pcm-horas-grafico-legenda-marca--apontada"></span>Horas Apontadas</span>
+            <span><span class="pcm-horas-grafico-legenda-marca pcm-horas-grafico-legenda-marca--programada"></span>Horas Programadas</span>
+            <span><span class="pcm-horas-grafico-legenda-marca pcm-horas-grafico-legenda-marca--disponivel"></span>Horas Disponíveis</span>
+          </div>
           @for (grupo of graficoHorasPorArea(); track grupo.area) {
             <div class="pcm-horas-grafico-area">
               <h4 class="pcm-horas-grafico-area-titulo">{{ grupo.area }}</h4>
               <div class="pcm-horas-grafico">
                 @for (b of grupo.grafico.barras; track b.matricula) {
-                  <div class="pcm-horas-grafico-linha">
+                  <div class="pcm-horas-grafico-pessoa">
                     <span class="pcm-horas-grafico-nome" [title]="b.funcionario">{{ b.funcionario }}</span>
-                    <div class="pcm-horas-grafico-track">
-                      <div class="pcm-horas-grafico-fill" [class.pcm-horas-grafico-fill--estourou]="b.estourou" [style.width.%]="b.percApontada"></div>
-                      @if (b.percDisponivel !== null) {
-                        <div class="pcm-horas-grafico-tick pcm-horas-grafico-tick--disponivel" [style.left.%]="b.percDisponivel"></div>
-                      }
-                      @if (b.percProgramada !== null) {
-                        <div class="pcm-horas-grafico-tick pcm-horas-grafico-tick--programada" [style.left.%]="b.percProgramada"></div>
-                      }
+                    <div class="pcm-horas-grafico-barras">
+                      <div class="pcm-horas-grafico-barra">
+                        <div class="pcm-horas-grafico-barra-track">
+                          <div class="pcm-horas-grafico-barra-fill pcm-horas-grafico-barra-fill--apontada" [style.width.%]="b.percApontada"></div>
+                        </div>
+                        <span class="pcm-horas-grafico-barra-valor">{{ b.horasApontadas }}h</span>
+                      </div>
+                      <div class="pcm-horas-grafico-barra">
+                        <div class="pcm-horas-grafico-barra-track">
+                          @if (b.percProgramada !== null) {
+                            <div class="pcm-horas-grafico-barra-fill pcm-horas-grafico-barra-fill--programada" [style.width.%]="b.percProgramada"></div>
+                          }
+                        </div>
+                        <span class="pcm-horas-grafico-barra-valor">{{ b.horasProgramadas !== null ? (b.horasProgramadas + 'h') : '—' }}</span>
+                      </div>
+                      <div class="pcm-horas-grafico-barra">
+                        <div class="pcm-horas-grafico-barra-track">
+                          @if (b.percDisponivel !== null) {
+                            <div class="pcm-horas-grafico-barra-fill pcm-horas-grafico-barra-fill--disponivel" [style.width.%]="b.percDisponivel"></div>
+                          }
+                        </div>
+                        <span class="pcm-horas-grafico-barra-valor">{{ b.horasDisponiveis !== null ? (b.horasDisponiveis + 'h') : '—' }}</span>
+                      </div>
                     </div>
-                    <span class="pcm-horas-grafico-valor">
-                      {{ b.horasApontadas }}h apontadas
-                      @if (b.horasProgramadas !== null) { · {{ b.horasProgramadas }}h prog. }
-                      @if (b.horasDisponiveis !== null) { · {{ b.horasDisponiveis }}h disp. }
-                    </span>
                   </div>
                 }
               </div>
             </div>
           }
-          <div class="pcm-horas-grafico-legenda">
-            <span><span class="pcm-horas-grafico-legenda-marca pcm-horas-grafico-legenda-marca--apontada"></span>Horas apontadas</span>
-            <span><span class="pcm-horas-grafico-legenda-marca pcm-horas-grafico-legenda-marca--disponivel"></span>Horas disponíveis (capacidade)</span>
-            <span><span class="pcm-horas-grafico-legenda-marca pcm-horas-grafico-legenda-marca--programada"></span>Horas programadas (meta)</span>
-            <span><span class="pcm-horas-grafico-legenda-marca pcm-horas-grafico-legenda-marca--estourou"></span>Apontadas acima da disponível</span>
-          </div>
         }
 
         <div class="pcm-table-container" style="margin-top: 16px;">
