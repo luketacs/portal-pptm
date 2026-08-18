@@ -54,6 +54,7 @@ export interface DadosMensal {
   diasPeriodo: number;
   atendimentoGeral: number;
   cumprimentoGeral: number;
+  percentualForaProgramacao: number;
   totalProgramadas: number;
   totalExecutadas: number;
   totalNaoExecutadas: number;
@@ -207,7 +208,17 @@ export function parseIndicadoresMensais(
   const cumprimentoGeral = round2(programadasPlano > 0 ? (executadasPlano / programadasPlano) * 100 : (indicePlano > 0 ? indicePlano * 100 : 0));
   const atendimentoAcum = round2(programadasAcum > 0 ? (executadasAcum / programadasAcum) * 100 : (indiceAcum > 0 ? indiceAcum * 100 : 0));
   const cumprimentoAcum = round2(programadasPlanoAcum > 0 ? (executadasPlanoAcum / programadasPlanoAcum) * 100 : (indicePlanoAcum > 0 ? indicePlanoAcum * 100 : 0));
-  const percentualForaProgramacaoAcum = round2(programadasAcum > 0 ? (foraProgramacaoAcum / programadasAcum) * 100 : 0);
+  // % de ordens fora da programação sobre o TOTAL de ordens realmente executadas no
+  // período (dentro do plano + fora dele) — não sobre "programadas", já que ordens
+  // fora da programação por definição não fazem parte do universo "programadas"
+  // (dividir por programadas podia passar de 100% e não representava "fração do
+  // trabalho total que foi fora do plano").
+  const percentualForaProgramacao = round2(
+    (executadas + foraProgramacao) > 0 ? (foraProgramacao / (executadas + foraProgramacao)) * 100 : 0,
+  );
+  const percentualForaProgramacaoAcum = round2(
+    (executadasAcum + foraProgramacaoAcum) > 0 ? (foraProgramacaoAcum / (executadasAcum + foraProgramacaoAcum)) * 100 : 0,
+  );
 
   // O status geral do acumulado reaproveita o do mês — assim o original também fazia
   // (não é recalculado separadamente a partir dos números acumulados).
@@ -248,7 +259,7 @@ export function parseIndicadoresMensais(
   const dadosMensal: DadosMensal = {
     mes, mesCompleto: MESES_COMPLETO[mes], ano, periodoMes,
     dataInicio: formatarDataBr(dataInicio), dataFim: formatarDataBr(dataFim), diasPeriodo,
-    atendimentoGeral, cumprimentoGeral,
+    atendimentoGeral, cumprimentoGeral, percentualForaProgramacao,
     totalProgramadas: Math.trunc(programadas),
     totalExecutadas: Math.trunc(executadas),
     totalNaoExecutadas: Math.trunc(naoExecutadas),

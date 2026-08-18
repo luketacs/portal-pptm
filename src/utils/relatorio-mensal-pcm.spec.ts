@@ -140,6 +140,19 @@ describe('parseIndicadoresMensais', () => {
     expect(dadosAcumulado.totalExecutadasPlano).toBe(95);
   });
 
+  it('calcula o percentual fora da programacao sobre executadas+foraProgramacao, nao sobre programadas', () => {
+    // planilha nao tem percentual pronto, so a contagem bruta de ordens fora da
+    // programacao (linha "Geral"+4) -- o percentual e derivado daqui, usando o
+    // total de ordens REALMENTE realizadas (executadas + fora) como base, nao
+    // "programadas" (que por definicao nao inclui as ordens fora do plano).
+    const rows = montarPlanilha();
+    const { dadosMensal, dadosAcumulado } = parseIndicadoresMensais(rows, 'JAN', 2026);
+    // mes: executadas=90, foraProgramacao=2 -> 2/(90+2)*100
+    expect(dadosMensal.percentualForaProgramacao).toBeCloseTo((2 / 92) * 100, 2);
+    // acumulado: executadasAcum=180, foraProgramacaoAcum=3 -> 3/(180+3)*100
+    expect(dadosAcumulado.percentualForaProgramacao).toBeCloseTo((3 / 183) * 100, 2);
+  });
+
   it('usa o indice de cumprimento pre-calculado quando nao ha programadas (evita divisao por zero)', () => {
     const rows = montarPlanilha();
     // zera programadas do mes, mas mantem um indice pre-calculado de 75%
@@ -183,7 +196,7 @@ function dadosMensalBase(overrides: Partial<DadosMensal> = {}): DadosMensal {
   return {
     mes: 'JAN', mesCompleto: 'Janeiro', ano: 2026, periodoMes: '01/01/2026 a 31/01/2026',
     dataInicio: '01/01/2026', dataFim: '31/01/2026', diasPeriodo: 31,
-    atendimentoGeral: 95, cumprimentoGeral: 95,
+    atendimentoGeral: 95, cumprimentoGeral: 95, percentualForaProgramacao: 0,
     totalProgramadas: 100, totalExecutadas: 95, totalNaoExecutadas: 5, totalForaProgramacao: 0,
     totalPlanejadasPlano: 100, totalExecutadasPlano: 95, totalNaoExecutadasPlano: 5,
     detalhesAreas: [], statusGeral: 'Dentro da Meta', metaAtendimento: 91, metaCumprimento: 93,
