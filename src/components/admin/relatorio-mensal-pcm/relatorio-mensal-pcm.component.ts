@@ -9,7 +9,7 @@ import {
 } from '../../../utils/relatorio-mensal-pcm';
 import { LinhaTempoGeometria, calcularLinhaTempo } from '../../../utils/relatorio-linha-tempo';
 import { OrigemPrograma, RegistroMatricula, parseMatriculas } from '../../../utils/relatorio-colaboradores';
-import { HorasProgramadasPorColaborador, extrairHorasProgramadasSemana } from '../../../utils/relatorio-programacao-semanal';
+import { HorasProgramadasPorColaborador, extrairHorasProgramadasSemana, extrairPeriodoAba } from '../../../utils/relatorio-programacao-semanal';
 import { agregarHorasPonto } from '../../../utils/relatorio-ponto';
 import {
   ColaboradorHoras, DadosHoras, NomeNaoMapeado, calcularHorasEOrdensApontadas, colaboradoresOperacaoEmManutencao,
@@ -217,10 +217,14 @@ export class RelatorioMensalPcmComponent {
     return { inicio, fim };
   }
 
-  // Cada arquivo é a Programação de UMA semana — soma as horas de todos os arquivos
-  // enviados (todas as semanas do mês) antes de mapear pra matrícula.
+  // A programação tem dois jeitos de vir organizada: um arquivo por semana (abas
+  // ELÉTRICA/MECÂNICA/APOIO — a área identifica a aba) ou um arquivo por mês/área
+  // com uma aba por semana (S19..S31 — aí a área só dá pra saber pelo nome do
+  // arquivo, e o arquivo cobre um intervalo bem maior que o período do relatório,
+  // então cada aba de semana só entra se o período dela (lido do título, ex.:
+  // "S27 2026 (29/06 À 05/07)") cruzar com o período do relatório).
   private async extrairOrigensProgramacao(
-    files: File[], XLSX: typeof import('xlsx'),
+    files: File[], XLSX: typeof import('xlsx'), periodo: { inicio: Date; fim: Date },
   ): Promise<{ origem: OrigemPrograma; totais: HorasProgramadasPorColaborador }[]> {
     const abasEletrica: unknown[][][] = [];
     const abasMecanica: unknown[][][] = [];
@@ -229,13 +233,24 @@ export class RelatorioMensalPcmComponent {
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: 'array', cellDates: false });
 
+      const nomeArquivoNorm = normalizarNomeAba(file.name);
+      const origemArquivo: OrigemPrograma | null = nomeArquivoNorm.includes('ELETR')
+        ? 'ELETRICA' : nomeArquivoNorm.includes('MECAN') ? 'MECANICA' : null;
+
       for (const nomeAba of wb.SheetNames) {
-        const normalizado = normalizarNomeAba(nomeAba);
-        const origem: OrigemPrograma | null = normalizado.includes('ELETR')
-          ? 'ELETRICA' : normalizado.includes('MECAN') ? 'MECANICA' : null;
+        const normalizadoAba = normalizarNomeAba(nomeAba);
+        const origemAba: OrigemPrograma | null = normalizadoAba.includes('ELETR')
+          ? 'ELETRICA' : normalizadoAba.includes('MECAN') ? 'MECANICA' : null;
+        const origem = origemAba ?? origemArquivo;
         if (!origem) continue;
 
-        const rows = XLSX.utils.sheet_to_json(wb.Sheets[nomeAba], { header: 1, defval: '', raw: true }) as unknown[][];
+        const ws = wb.Sheets[nomeAba];
+        this.limitarRangeSheet(ws, XLSX);
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true }) as unknown[][];
+
+        const periodoAba = extrairPeriodoAba(rows);
+        if (periodoAba && (periodoAba.fim < periodo.inicio || periodoAba.inicio > periodo.fim)) continue;
+
         (origem === 'ELETRICA' ? abasEletrica : abasMecanica).push(rows);
       }
     }
@@ -244,6 +259,19 @@ export class RelatorioMensalPcmComponent {
     if (abasEletrica.length > 0) origens.push({ origem: 'ELETRICA', totais: extrairHorasProgramadasSemana(abasEletrica) });
     if (abasMecanica.length > 0) origens.push({ origem: 'MECANICA', totais: extrairHorasProgramadasSemana(abasMecanica) });
     return origens;
+  }
+
+  // Algumas abas declaram um range de milhões de linhas fantasma (formatação
+  // aplicada na coluna inteira), o que deixa o sheet_to_json bem lento — trunca
+  // antes de converter (dados reais dessas planilhas nunca passam de ~100 linhas).
+  private limitarRangeSheet(ws: import('xlsx').WorkSheet, XLSX: typeof import('xlsx'), maxLinhas = 3000): void {
+    const ref = ws['!ref'];
+    if (!ref) return;
+    const range = XLSX.utils.decode_range(ref);
+    if (range.e.r > maxLinhas) {
+      range.e.r = maxLinhas;
+      ws['!ref'] = XLSX.utils.encode_range(range);
+    }
   }
 
   private async parseMatriculasArquivo(file: File, XLSX: typeof import('xlsx')): Promise<RegistroMatricula[]> {
@@ -311,7 +339,7 @@ export class RelatorioMensalPcmComponent {
         let origensProgramadas: { origem: OrigemPrograma; totais: HorasProgramadasPorColaborador }[] = [];
         const arqsProgramacao = this.arquivoProgramacao();
         if (arqsProgramacao.length > 0) {
-          origensProgramadas = await this.extrairOrigensProgramacao(arqsProgramacao, XLSX);
+          origensProgramadas = await this.extrairOrigensProgramacao(arqsProgramacao, XLSX, periodo);
         }
         const { horasPorMatricula: horasProgramadas, naoMapeados } =
           mapearHorasProgramadasParaMatricula(origensProgramadas, matriculas);
