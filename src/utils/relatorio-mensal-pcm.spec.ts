@@ -1,6 +1,6 @@
 import {
-  AREAS_PCM_MENSAL, DadosAcumulado, DadosMensal, analisarPontosAtencaoEAcoesMensal,
-  extrairHistoricoMeses, gerarDestaquesMensal, localizarCabecalhoMeses, localizarLinhaRotulo, parseIndicadoresMensais,
+  AREAS_PCM_MENSAL, AreaMensal, DadosAcumulado, DadosMensal, analisarPontosAtencaoEAcoesMensal,
+  areasComMovimento, extrairHistoricoMeses, gerarDestaquesMensal, localizarCabecalhoMeses, localizarLinhaRotulo, parseIndicadoresMensais,
 } from './relatorio-mensal-pcm';
 
 // Monta uma planilha sintetica no mesmo layout REAL validado contra o arquivo de
@@ -201,6 +201,33 @@ function dadosAcumuladoBase(overrides: Partial<DadosAcumulado> = {}): DadosAcumu
     ...overrides,
   };
 }
+
+function areaZerada(area: string): AreaMensal {
+  return {
+    area, programadas: 0, executadas: 0, naoExecutadas: 0, foraProgramacao: 0,
+    planejadasPlano: 0, executadasPlano: 0, naoExecutadasPlano: 0, atendimento: 0, cumprimento: 0,
+  };
+}
+
+describe('areasComMovimento', () => {
+  it('remove areas totalmente zeradas (nem programacao nem plano)', () => {
+    const areas = [
+      areaZerada('OPERAÇÃO'), areaZerada('LUBRIFICAÇÃO'),
+      { ...areaZerada('MECÂNICA'), programadas: 10, executadas: 9 },
+    ];
+    const r = areasComMovimento(areas);
+    expect(r.map(a => a.area)).toEqual(['MECÂNICA']);
+  });
+
+  it('mantem area que so tem movimento no plano (nao na programacao)', () => {
+    const areas = [{ ...areaZerada('SPCI'), planejadasPlano: 5, executadasPlano: 5 }];
+    expect(areasComMovimento(areas)).toHaveLength(1);
+  });
+
+  it('retorna lista vazia quando todas as areas estao zeradas', () => {
+    expect(areasComMovimento([areaZerada('OPERAÇÃO'), areaZerada('LUBRIFICAÇÃO')])).toHaveLength(0);
+  });
+});
 
 describe('analisarPontosAtencaoEAcoesMensal', () => {
   it('abre com alerta critico quando o status do mes e CRITICO', () => {

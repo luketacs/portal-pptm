@@ -310,6 +310,17 @@ export function extrairHistoricoMeses(rows: unknown[][], mesAte: MesAbrev): Pont
   return pontos;
 }
 
+// Some áreas (ex.: Operação, Lubrificação) não são usadas em todo período — a
+// planilha traz a linha mesmo assim, zerada. Não faz sentido mostrar essas linhas
+// na tabela "Desempenho por Área", então filtra qualquer área sem nenhum movimento
+// (nem programação nem plano) no período.
+export function areasComMovimento(areas: AreaMensal[]): AreaMensal[] {
+  return areas.filter(a =>
+    a.programadas > 0 || a.executadas > 0 || a.naoExecutadas > 0 ||
+    a.planejadasPlano > 0 || a.executadasPlano > 0 || a.naoExecutadasPlano > 0,
+  );
+}
+
 export function analisarPontosAtencaoEAcoesMensal(
   dadosMensal: DadosMensal, dadosAcumulado: DadosAcumulado | null,
 ): { pontosAtencao: PontoAtencao[]; acoesPrioritarias: AcaoPrioritaria[] } {

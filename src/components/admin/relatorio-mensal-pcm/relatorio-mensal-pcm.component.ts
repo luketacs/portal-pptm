@@ -1,11 +1,11 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../../services/auth.service';
 import { AcaoPrioritaria, Destaque, PontoAtencao } from '../../../utils/relatorio-semanal-pcm';
 import {
   DadosAcumulado, DadosMensal, MESES_ABREV, MESES_COMPLETO, MesAbrev,
-  analisarPontosAtencaoEAcoesMensal, extrairHistoricoMeses, gerarDestaquesMensal, parseIndicadoresMensais,
+  analisarPontosAtencaoEAcoesMensal, areasComMovimento, extrairHistoricoMeses, gerarDestaquesMensal, parseIndicadoresMensais,
 } from '../../../utils/relatorio-mensal-pcm';
 import { LinhaTempoGeometria, calcularLinhaTempo } from '../../../utils/relatorio-linha-tempo';
 import { OrigemPrograma, RegistroMatricula, parseMatriculas } from '../../../utils/relatorio-colaboradores';
@@ -14,6 +14,7 @@ import { agregarHorasPonto } from '../../../utils/relatorio-ponto';
 import {
   DadosHoras, NomeNaoMapeado, calcularHorasEOrdensApontadas, mapearHorasDisponiveisPonto, mapearHorasProgramadasParaMatricula,
 } from '../../../utils/relatorio-apontamentos';
+import { calcularGraficoHoras } from '../../../utils/relatorio-horas-grafico';
 
 function mesAtualAbrev(): MesAbrev {
   return MESES_ABREV[new Date().getMonth()];
@@ -54,7 +55,7 @@ export class RelatorioMensalPcmComponent {
   currentUser = this.authService.currentUser;
 
   arquivo = signal<File | null>(null);
-  arquivoProgramacao = signal<File | null>(null);
+  arquivoProgramacao = signal<File[]>([]);
   arquivoPonto = signal<File | null>(null);
   arquivoMatriculas = signal<File | null>(null);
   arquivoFechamento = signal<File | null>(null);
@@ -76,6 +77,13 @@ export class RelatorioMensalPcmComponent {
   nomesNaoMapeados = signal<NomeNaoMapeado[]>([]);
   geradoEm = signal<Date | null>(null);
 
+  arquivoProgramacaoNomes = computed(() => this.arquivoProgramacao().map(f => f.name).join(', '));
+  areasVisiveis = computed(() => areasComMovimento(this.dadosMensal()?.detalhesAreas ?? []));
+  graficoHoras = computed(() => {
+    const dh = this.dadosHoras();
+    return dh ? calcularGraficoHoras(dh.horasPorColaborador) : null;
+  });
+
   constructor(private authService: AuthService) {}
 
   onFileSelected(event: Event): void {
@@ -84,8 +92,17 @@ export class RelatorioMensalPcmComponent {
   }
 
   onProgramacaoSelected(event: Event): void {
-    const file = this.selecionarArquivo(event.target as HTMLInputElement, ['.xlsx']);
-    if (file) this.arquivoProgramacao.set(file);
+    const input = event.target as HTMLInputElement;
+    this.errorMessage.set('');
+    const files = Array.from(input.files ?? []);
+    if (files.length === 0) return;
+
+    if (files.some(f => !f.name.toLowerCase().endsWith('.xlsx'))) {
+      this.errorMessage.set('Selecione apenas arquivos .xlsx.');
+      input.value = '';
+      return;
+    }
+    this.arquivoProgramacao.set(files);
   }
 
   onPontoSelected(event: Event): void {
@@ -130,22 +147,32 @@ export class RelatorioMensalPcmComponent {
     return { inicio, fim };
   }
 
+  // Cada arquivo é a Programação de UMA semana — soma as horas de todos os arquivos
+  // enviados (todas as semanas do mês) antes de mapear pra matrícula.
   private async extrairOrigensProgramacao(
-    file: File, XLSX: typeof import('xlsx'),
+    files: File[], XLSX: typeof import('xlsx'),
   ): Promise<{ origem: OrigemPrograma; totais: HorasProgramadasPorColaborador }[]> {
-    const buffer = await file.arrayBuffer();
-    const wb = XLSX.read(buffer, { type: 'array', cellDates: false });
-    const origens: { origem: OrigemPrograma; totais: HorasProgramadasPorColaborador }[] = [];
+    const abasEletrica: unknown[][][] = [];
+    const abasMecanica: unknown[][][] = [];
 
-    for (const nomeAba of wb.SheetNames) {
-      const normalizado = normalizarNomeAba(nomeAba);
-      const origem: OrigemPrograma | null = normalizado.includes('ELETR')
-        ? 'ELETRICA' : normalizado.includes('MECAN') ? 'MECANICA' : null;
-      if (!origem) continue;
+    for (const file of files) {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array', cellDates: false });
 
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[nomeAba], { header: 1, defval: '', raw: true }) as unknown[][];
-      origens.push({ origem, totais: extrairHorasProgramadasSemana([rows]) });
+      for (const nomeAba of wb.SheetNames) {
+        const normalizado = normalizarNomeAba(nomeAba);
+        const origem: OrigemPrograma | null = normalizado.includes('ELETR')
+          ? 'ELETRICA' : normalizado.includes('MECAN') ? 'MECANICA' : null;
+        if (!origem) continue;
+
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[nomeAba], { header: 1, defval: '', raw: true }) as unknown[][];
+        (origem === 'ELETRICA' ? abasEletrica : abasMecanica).push(rows);
+      }
     }
+
+    const origens: { origem: OrigemPrograma; totais: HorasProgramadasPorColaborador }[] = [];
+    if (abasEletrica.length > 0) origens.push({ origem: 'ELETRICA', totais: extrairHorasProgramadasSemana(abasEletrica) });
+    if (abasMecanica.length > 0) origens.push({ origem: 'MECANICA', totais: extrairHorasProgramadasSemana(abasMecanica) });
     return origens;
   }
 
@@ -212,9 +239,9 @@ export class RelatorioMensalPcmComponent {
         const matriculas = await this.parseMatriculasArquivo(arqMatriculas, XLSX);
 
         let origensProgramadas: { origem: OrigemPrograma; totais: HorasProgramadasPorColaborador }[] = [];
-        const arqProgramacao = this.arquivoProgramacao();
-        if (arqProgramacao) {
-          origensProgramadas = await this.extrairOrigensProgramacao(arqProgramacao, XLSX);
+        const arqsProgramacao = this.arquivoProgramacao();
+        if (arqsProgramacao.length > 0) {
+          origensProgramadas = await this.extrairOrigensProgramacao(arqsProgramacao, XLSX);
         }
         const { horasPorMatricula: horasProgramadas, naoMapeados } =
           mapearHorasProgramadasParaMatricula(origensProgramadas, matriculas);
@@ -265,6 +292,11 @@ export class RelatorioMensalPcmComponent {
     this.nomesNaoMapeados.set([]);
     this.geradoEm.set(null);
     this.errorMessage.set('');
+    this.arquivo.set(null);
+    this.arquivoProgramacao.set([]);
+    this.arquivoPonto.set(null);
+    this.arquivoMatriculas.set(null);
+    this.arquivoFechamento.set(null);
   }
 
   imprimir(): void {

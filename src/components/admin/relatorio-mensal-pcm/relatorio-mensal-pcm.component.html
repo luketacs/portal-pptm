@@ -68,14 +68,14 @@
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label class="block text-xs font-medium text-slate-600 mb-1">Programação (Elétrica/Mecânica, .xlsx)</label>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Programação (Elétrica/Mecânica, .xlsx) — uma por semana, selecione todas</label>
               <div class="flex items-center gap-2">
                 <label class="cursor-pointer inline-block">
-                  <input type="file" accept=".xlsx" class="hidden" (change)="onProgramacaoSelected($event)" />
+                  <input type="file" accept=".xlsx" multiple class="hidden" (change)="onProgramacaoSelected($event)" />
                   <span class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">Selecionar</span>
                 </label>
-                @if (arquivoProgramacao()) {
-                  <span class="text-xs text-gray-600 truncate max-w-[140px]">{{ arquivoProgramacao()!.name }}</span>
+                @if (arquivoProgramacao().length > 0) {
+                  <span class="text-xs text-gray-600 truncate max-w-[220px]">{{ arquivoProgramacao().length }} arquivo(s): {{ arquivoProgramacaoNomes() }}</span>
                 }
               </div>
             </div>
@@ -251,7 +251,7 @@
             </tr>
           </thead>
           <tbody>
-            @for (area of dadosMensal()!.detalhesAreas; track area.area; let i = $index) {
+            @for (area of areasVisiveis(); track area.area; let i = $index) {
               <tr [class]="i % 2 === 0 ? 'pcm-even-row' : 'pcm-odd-row'">
                 <td class="pcm-area-name">{{ area.area }}</td>
                 <td>{{ area.programadas }}</td>
@@ -304,6 +304,37 @@
             <div class="pcm-card-sec-value">{{ dh.diasPeriodo }}</div>
           </div>
         </div>
+
+        @if (graficoHoras(); as gh) {
+          <h3 class="pcm-section-title" style="font-size: 0.95rem; margin-top: 20px;">Horas Apontadas x Programadas x Disponíveis</h3>
+          <div class="pcm-horas-grafico">
+            @for (b of gh.barras; track b.matricula) {
+              <div class="pcm-horas-grafico-linha">
+                <span class="pcm-horas-grafico-nome" [title]="b.funcionario">{{ b.funcionario }}</span>
+                <div class="pcm-horas-grafico-track">
+                  <div class="pcm-horas-grafico-fill" [class.pcm-horas-grafico-fill--estourou]="b.estourou" [style.width.%]="b.percApontada"></div>
+                  @if (b.percDisponivel !== null) {
+                    <div class="pcm-horas-grafico-tick pcm-horas-grafico-tick--disponivel" [style.left.%]="b.percDisponivel"></div>
+                  }
+                  @if (b.percProgramada !== null) {
+                    <div class="pcm-horas-grafico-tick pcm-horas-grafico-tick--programada" [style.left.%]="b.percProgramada"></div>
+                  }
+                </div>
+                <span class="pcm-horas-grafico-valor">
+                  {{ b.horasApontadas }}h apontadas
+                  @if (b.horasProgramadas !== null) { · {{ b.horasProgramadas }}h prog. }
+                  @if (b.horasDisponiveis !== null) { · {{ b.horasDisponiveis }}h disp. }
+                </span>
+              </div>
+            }
+          </div>
+          <div class="pcm-horas-grafico-legenda">
+            <span><span class="pcm-horas-grafico-legenda-marca pcm-horas-grafico-legenda-marca--apontada"></span>Horas apontadas</span>
+            <span><span class="pcm-horas-grafico-legenda-marca pcm-horas-grafico-legenda-marca--disponivel"></span>Horas disponíveis (capacidade)</span>
+            <span><span class="pcm-horas-grafico-legenda-marca pcm-horas-grafico-legenda-marca--programada"></span>Horas programadas (meta)</span>
+            <span><span class="pcm-horas-grafico-legenda-marca pcm-horas-grafico-legenda-marca--estourou"></span>Apontadas acima da disponível</span>
+          </div>
+        }
 
         <div class="pcm-table-container" style="margin-top: 16px;">
           <table class="pcm-table">
