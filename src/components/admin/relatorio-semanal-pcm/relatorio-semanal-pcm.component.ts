@@ -4,9 +4,16 @@ import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../../services/auth.service';
 import {
   AcaoPrioritaria, DadosSemana, Destaque, ModoCalendarioSemana, PontoAtencao,
-  analisarPontosAtencaoEAcoes, extrairHistoricoSemanas, gerarDestaques, parseIndicadoresSemanais,
+  analisarPontosAtencaoEAcoes, calcularPeriodoSemana, extrairHistoricoSemanas, gerarDestaques, parseIndicadoresSemanais,
 } from '../../../utils/relatorio-semanal-pcm';
 import { LinhaTempoGeometria, calcularLinhaTempo } from '../../../utils/relatorio-linha-tempo';
+import { parseMatriculas } from '../../../utils/relatorio-colaboradores';
+import { ColaboradorHoras, calcularHorasEOrdensApontadas, colaboradoresOperacaoEmManutencao } from '../../../utils/relatorio-apontamentos';
+
+function parseDataBr(str: string): Date {
+  const [d, m, y] = str.split('/').map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
 
 function semanaIsoAtual(): number {
   const hoje = new Date();
@@ -43,6 +50,8 @@ export class RelatorioSemanalPcmComponent {
   currentUser = this.authService.currentUser;
 
   arquivo = signal<File | null>(null);
+  arquivoMatriculas = signal<File | null>(null);
+  arquivoFechamento = signal<File | null>(null);
   semana = signal(semanaIsoAtual());
   ano = signal(new Date().getFullYear());
   modoCalendario = signal<ModoCalendarioSemana>('ISO');
@@ -55,22 +64,49 @@ export class RelatorioSemanalPcmComponent {
   acoesPrioritarias = signal<AcaoPrioritaria[]>([]);
   destaques = signal<Destaque[]>([]);
   linhaTempo = signal<LinhaTempoGeometria | null>(null);
+  colaboradoresOperacao = signal<ColaboradorHoras[]>([]);
   geradoEm = signal<Date | null>(null);
+
+  imprimindoSomenteOperacao = signal(false);
+
+  imprimirSecaoOperacao(): void {
+    this.imprimindoSomenteOperacao.set(true);
+    const limpar = () => {
+      this.imprimindoSomenteOperacao.set(false);
+      window.removeEventListener('afterprint', limpar);
+    };
+    window.addEventListener('afterprint', limpar);
+    setTimeout(() => window.print(), 50);
+  }
 
   constructor(private authService: AuthService) {}
 
   onFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
+    const file = this.selecionarArquivo(event.target as HTMLInputElement, ['.xlsx']);
+    if (file) this.arquivo.set(file);
+  }
+
+  onMatriculasSelected(event: Event): void {
+    const file = this.selecionarArquivo(event.target as HTMLInputElement, ['.xlsx']);
+    if (file) this.arquivoMatriculas.set(file);
+  }
+
+  onFechamentoSelected(event: Event): void {
+    const file = this.selecionarArquivo(event.target as HTMLInputElement, ['.xlsx']);
+    if (file) this.arquivoFechamento.set(file);
+  }
+
+  private selecionarArquivo(input: HTMLInputElement, extensoes: string[]): File | null {
     const file = input.files?.[0] ?? null;
     this.errorMessage.set('');
-    if (!file) return;
+    if (!file) return null;
 
-    if (!file.name.toLowerCase().endsWith('.xlsx')) {
-      this.errorMessage.set('Selecione um arquivo .xlsx.');
+    if (!extensoes.some(ext => file.name.toLowerCase().endsWith(ext))) {
+      this.errorMessage.set(`Selecione um arquivo ${extensoes.join(' ou ')}.`);
       input.value = '';
-      return;
+      return null;
     }
-    this.arquivo.set(file);
+    return file;
   }
 
   canGerar(): boolean {
@@ -105,6 +141,36 @@ export class RelatorioSemanalPcmComponent {
       this.acoesPrioritarias.set(acoesPrioritarias);
       this.destaques.set(destaques);
       this.linhaTempo.set(calcularLinhaTempo(historico));
+
+      const arqMatriculas = this.arquivoMatriculas();
+      const arqFechamento = this.arquivoFechamento();
+      if (arqMatriculas && arqFechamento) {
+        const bufferMatriculas = await arqMatriculas.arrayBuffer();
+        const wbMatriculas = XLSX.read(bufferMatriculas, { type: 'array', cellDates: false });
+        const rowsMatriculas = XLSX.utils.sheet_to_json(
+          wbMatriculas.Sheets[wbMatriculas.SheetNames[0]], { header: 1, defval: '', raw: true },
+        ) as unknown[][];
+        const matriculas = parseMatriculas(rowsMatriculas);
+
+        const { inicio, fim } = calcularPeriodoSemana(this.semana(), this.ano(), this.modoCalendario());
+
+        const bufferFechamento = await arqFechamento.arrayBuffer();
+        const wbFechamento = XLSX.read(bufferFechamento, { type: 'array', cellDates: false });
+        const nomeAbaApontamentos = wbFechamento.SheetNames.find(n => n.trim().toLowerCase() === 'apontamentos');
+        if (!nomeAbaApontamentos) throw new Error('Aba "Apontamentos" não encontrada no arquivo de Fechamento Semanal.');
+        const rowsApontamentos = XLSX.utils.sheet_to_json(
+          wbFechamento.Sheets[nomeAbaApontamentos], { header: 1, defval: '', raw: true },
+        ) as unknown[][];
+
+        const dadosHoras = calcularHorasEOrdensApontadas(rowsApontamentos, {
+          dataInicio: parseDataBr(inicio), dataFim: parseDataBr(fim), matriculas,
+          horasProgramadasPorMatricula: {}, horasDisponiveisPorMatricula: {},
+        });
+        this.colaboradoresOperacao.set(colaboradoresOperacaoEmManutencao(dadosHoras.horasPorColaborador, matriculas));
+      } else {
+        this.colaboradoresOperacao.set([]);
+      }
+
       this.geradoEm.set(new Date());
     } catch (err: unknown) {
       this.errorMessage.set(err instanceof Error ? err.message : 'Erro ao processar a planilha.');
@@ -119,8 +185,12 @@ export class RelatorioSemanalPcmComponent {
     this.acoesPrioritarias.set([]);
     this.destaques.set([]);
     this.linhaTempo.set(null);
+    this.colaboradoresOperacao.set([]);
     this.geradoEm.set(null);
     this.errorMessage.set('');
+    this.arquivo.set(null);
+    this.arquivoMatriculas.set(null);
+    this.arquivoFechamento.set(null);
   }
 
   imprimir(): void {
