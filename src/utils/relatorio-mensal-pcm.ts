@@ -197,7 +197,14 @@ export function parseIndicadoresMensais(
   const executadasAcum = cell(linhaGeral + 1, colAcumulado);
   const naoExecutadasAcum = cell(linhaGeral + 2, colAcumulado);
   const indiceAcum = normalizarIndice(cell(linhaGeral + 3, colAcumulado));
-  const foraProgramacaoAcum = cell(linhaGeral + 4, colAcumulado);
+  // A coluna acumulada de "Ordens Fora da Programação" às vezes vem zerada/em
+  // branco na planilha (parece não ter fórmula de soma nessa linha específica),
+  // mesmo com os meses individuais preenchidos — soma JAN..mês atual manualmente
+  // em vez de confiar na célula acumulada pronta, igual às outras linhas fazem.
+  let foraProgramacaoAcum = 0;
+  for (let i = 0; i <= mesIdx; i++) {
+    foraProgramacaoAcum += cell(linhaGeral + 4, cab.colAtendimentoJan + i);
+  }
 
   const programadasPlanoAcum = cell(linhaGeral, colAcumuladoPlano);
   const executadasPlanoAcum = cell(linhaGeral + 1, colAcumuladoPlano);

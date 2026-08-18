@@ -43,8 +43,13 @@ function montarPlanilha(): unknown[][] {
   rows[40][6] = 100; rows[41] = []; rows[41][6] = 90; rows[42] = []; rows[42][6] = 10;
   rows[43] = []; rows[43][6] = 1; rows[44] = []; rows[44][6] = 2;
   rows[40][26] = 50; rows[41][26] = 50; rows[42][26] = 0; rows[43][26] = 1;
-  // Acumulado (coluna 18 / 38)
-  rows[40][18] = 200; rows[41][18] = 180; rows[42][18] = 20; rows[43][18] = 0.9; rows[44][18] = 3;
+  // FEV e MAR também têm ordens fora da programação (usado no teste que confere
+  // que o acumulado soma os meses em vez de confiar na célula acumulada pronta).
+  rows[44][7] = 3; rows[44][8] = 1;
+  // Acumulado (coluna 18 / 38) -- a célula acumulada de "fora da programação"
+  // (rows[44][18]) fica de propósito zerada/ausente, simulando o caso real onde
+  // essa linha não tem fórmula de soma na planilha, mesmo com os meses preenchidos.
+  rows[40][18] = 200; rows[41][18] = 180; rows[42][18] = 20; rows[43][18] = 0.9;
   rows[40][38] = 100; rows[41][38] = 95; rows[42][38] = 5; rows[43][38] = 0.95;
 
   return rows;
@@ -149,8 +154,19 @@ describe('parseIndicadoresMensais', () => {
     const { dadosMensal, dadosAcumulado } = parseIndicadoresMensais(rows, 'JAN', 2026);
     // mes: executadas=90, foraProgramacao=2 -> 2/(90+2)*100
     expect(dadosMensal.percentualForaProgramacao).toBeCloseTo((2 / 92) * 100, 2);
-    // acumulado: executadasAcum=180, foraProgramacaoAcum=3 -> 3/(180+3)*100
-    expect(dadosAcumulado.percentualForaProgramacao).toBeCloseTo((3 / 183) * 100, 2);
+    // acumulado (so JAN ate agora): executadasAcum=180, foraProgramacaoAcum=2 -> 2/(180+2)*100
+    expect(dadosAcumulado.percentualForaProgramacao).toBeCloseTo((2 / 182) * 100, 2);
+  });
+
+  it('soma o fora da programacao mes a mes no acumulado, em vez de confiar na celula acumulada pronta', () => {
+    // a planilha real as vezes tem a linha "Ordens Fora da Programação" sem
+    // formula de soma na coluna acumulada (fica 0/vazia), mesmo com os meses
+    // individuais preenchidos -- essa planilha de teste reproduz isso de
+    // proposito (rows[44][18] nunca é setado). JAN=2, FEV=3, MAR=1 -> soma=6.
+    const rows = montarPlanilha();
+    const { dadosAcumulado } = parseIndicadoresMensais(rows, 'MAR', 2026);
+    expect(dadosAcumulado.percentualForaProgramacao).toBeCloseTo((6 / 186) * 100, 2); // 6/(180+6)*100
+    expect(dadosAcumulado.percentualForaProgramacao).toBeGreaterThan(0);
   });
 
   it('usa o indice de cumprimento pre-calculado quando nao ha programadas (evita divisao por zero)', () => {
