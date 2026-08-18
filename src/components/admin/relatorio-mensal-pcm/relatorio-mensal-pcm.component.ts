@@ -16,6 +16,22 @@ import {
   mapearHorasDisponiveisPonto, mapearHorasProgramadasParaMatricula,
 } from '../../../utils/relatorio-apontamentos';
 import { calcularGraficoHoras } from '../../../utils/relatorio-horas-grafico';
+import { carregarLocal, removerLocal, salvarLocal } from '../../../utils/relatorio-persistencia-local';
+
+const CHAVE_STORAGE = 'pcm-relatorio-mensal-ultimo';
+
+interface RelatorioMensalSnapshot {
+  dadosMensal: DadosMensal;
+  dadosAcumulado: DadosAcumulado;
+  pontosAtencao: PontoAtencao[];
+  acoesPrioritarias: AcaoPrioritaria[];
+  destaques: Destaque[];
+  linhaTempo: LinhaTempoGeometria | null;
+  dadosHoras: DadosHoras | null;
+  nomesNaoMapeados: NomeNaoMapeado[];
+  colaboradoresOperacao: ColaboradorHoras[];
+  geradoEm: string; // ISO
+}
 
 function mesAtualAbrev(): MesAbrev {
   return MESES_ABREV[new Date().getMonth()];
@@ -98,7 +114,47 @@ export class RelatorioMensalPcmComponent {
     setTimeout(() => window.print(), 50);
   }
 
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService) {
+    this.restaurarSnapshot();
+  }
+
+  // O último relatório gerado fica salvo no navegador (localStorage), pra não
+  // sumir da tela quando o usuário sai da página e volta ou atualiza o navegador.
+  // Só o resultado já calculado é salvo, não os arquivos enviados.
+  private salvarSnapshot(): void {
+    const dadosMensal = this.dadosMensal();
+    const dadosAcumulado = this.dadosAcumulado();
+    if (!dadosMensal || !dadosAcumulado) return;
+
+    const snapshot: RelatorioMensalSnapshot = {
+      dadosMensal, dadosAcumulado,
+      pontosAtencao: this.pontosAtencao(),
+      acoesPrioritarias: this.acoesPrioritarias(),
+      destaques: this.destaques(),
+      linhaTempo: this.linhaTempo(),
+      dadosHoras: this.dadosHoras(),
+      nomesNaoMapeados: this.nomesNaoMapeados(),
+      colaboradoresOperacao: this.colaboradoresOperacao(),
+      geradoEm: (this.geradoEm() ?? new Date()).toISOString(),
+    };
+    salvarLocal(CHAVE_STORAGE, snapshot);
+  }
+
+  private restaurarSnapshot(): void {
+    const snapshot = carregarLocal<RelatorioMensalSnapshot>(CHAVE_STORAGE);
+    if (!snapshot) return;
+
+    this.dadosMensal.set(snapshot.dadosMensal);
+    this.dadosAcumulado.set(snapshot.dadosAcumulado);
+    this.pontosAtencao.set(snapshot.pontosAtencao);
+    this.acoesPrioritarias.set(snapshot.acoesPrioritarias);
+    this.destaques.set(snapshot.destaques);
+    this.linhaTempo.set(snapshot.linhaTempo);
+    this.dadosHoras.set(snapshot.dadosHoras);
+    this.nomesNaoMapeados.set(snapshot.nomesNaoMapeados);
+    this.colaboradoresOperacao.set(snapshot.colaboradoresOperacao);
+    this.geradoEm.set(new Date(snapshot.geradoEm));
+  }
 
   onFileSelected(event: Event): void {
     const file = this.selecionarArquivo(event.target as HTMLInputElement, ['.xlsx']);
@@ -290,6 +346,7 @@ export class RelatorioMensalPcmComponent {
       }
 
       this.geradoEm.set(new Date());
+      this.salvarSnapshot();
     } catch (err: unknown) {
       this.errorMessage.set(err instanceof Error ? err.message : 'Erro ao processar a planilha.');
     } finally {
@@ -314,6 +371,7 @@ export class RelatorioMensalPcmComponent {
     this.arquivoPonto.set(null);
     this.arquivoMatriculas.set(null);
     this.arquivoFechamento.set(null);
+    removerLocal(CHAVE_STORAGE);
   }
 
   imprimir(): void {
