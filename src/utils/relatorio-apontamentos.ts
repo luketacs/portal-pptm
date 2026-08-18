@@ -66,6 +66,14 @@ function normalizarAscii(texto: string): string {
   return String(texto ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
 }
 
+// Colaboradores cadastrados como Operação que apareceram no Fechamento Semanal com
+// apontamentos (ou seja, estão temporariamente atuando em manutenção) — usado no
+// relatório separado pro gestor da Operação acompanhar quanto essas pessoas
+// "emprestadas" estão trabalhando.
+export function colaboradoresOperacaoEmManutencao(colaboradores: ColaboradorHoras[]): ColaboradorHoras[] {
+  return colaboradores.filter(c => normalizarAscii(c.area).includes('OPERACAO'));
+}
+
 function areaEOperacao(area: string): boolean {
   return normalizarAscii(area).includes('OPERACAO');
 }

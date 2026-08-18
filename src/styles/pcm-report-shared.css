@@ -544,4 +544,10 @@
   .pcm-table {
     min-width: 100%;
   }
+
+  /* Imprimir só a seção "Operação em Manutenção" (botão dedicado) — esconde tudo
+     dentro do relatório, exceto cabeçalho, rodapé e essa seção. */
+  .pcm-report.pcm-print-somente-operacao > *:not(.pcm-header):not(.pcm-footer):not(.pcm-secao-operacao-manutencao) {
+    display: none !important;
+  }
 }

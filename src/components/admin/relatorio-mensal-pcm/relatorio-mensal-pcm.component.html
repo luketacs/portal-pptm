@@ -145,7 +145,7 @@
     </button>
   </div>
 
-  <div class="pcm-report">
+  <div class="pcm-report" [class.pcm-print-somente-operacao]="imprimindoSomenteOperacao()">
     <!-- Cabeçalho -->
     <header class="pcm-header">
       <div class="pcm-logos">
@@ -402,6 +402,42 @@
             </div>
           </div>
         }
+      </section>
+    }
+
+    <!-- Operação em Manutenção (colaboradores emprestados) — seção isolável pra impressão -->
+    @if (colaboradoresOperacao().length > 0) {
+      <section class="pcm-section pcm-secao-operacao-manutencao">
+        <div class="flex items-center justify-between no-print" style="margin-bottom: 8px;">
+          <h2 class="pcm-section-title" style="margin: 0; border: none;">Operação em Manutenção — {{ dadosMensal()!.mesCompleto }}</h2>
+          <button (click)="imprimirSecaoOperacao()" class="text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg">
+            Imprimir só esta seção
+          </button>
+        </div>
+        <h2 class="pcm-section-title print-only">Operação em Manutenção — {{ dadosMensal()!.mesCompleto }}</h2>
+        <p class="pcm-empty" style="text-align: left; margin-bottom: 12px;">Colaboradores cadastrados como Operação que apontaram horas em manutenção neste período — para acompanhamento do gestor da Operação.</p>
+        <div class="pcm-table-container">
+          <table class="pcm-table">
+            <thead>
+              <tr>
+                <th>Colaborador</th>
+                <th>H. Apontadas</th>
+                <th>H. Programadas</th>
+                <th>Ordens</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (c of colaboradoresOperacao(); track c.matricula; let i = $index) {
+                <tr [class]="i % 2 === 0 ? 'pcm-even-row' : 'pcm-odd-row'">
+                  <td class="pcm-area-name">{{ c.funcionario }}</td>
+                  <td>{{ c.horasApontadas }}h</td>
+                  <td>{{ c.horasProgramadas !== null ? (c.horasProgramadas + 'h') : '—' }}</td>
+                  <td>{{ c.qtdOrdens }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
       </section>
     }
 

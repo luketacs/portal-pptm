@@ -12,7 +12,8 @@ import { OrigemPrograma, RegistroMatricula, parseMatriculas } from '../../../uti
 import { HorasProgramadasPorColaborador, extrairHorasProgramadasSemana } from '../../../utils/relatorio-programacao-semanal';
 import { agregarHorasPonto } from '../../../utils/relatorio-ponto';
 import {
-  DadosHoras, NomeNaoMapeado, calcularHorasEOrdensApontadas, mapearHorasDisponiveisPonto, mapearHorasProgramadasParaMatricula,
+  DadosHoras, NomeNaoMapeado, calcularHorasEOrdensApontadas, colaboradoresOperacaoEmManutencao,
+  mapearHorasDisponiveisPonto, mapearHorasProgramadasParaMatricula,
 } from '../../../utils/relatorio-apontamentos';
 import { calcularGraficoHoras } from '../../../utils/relatorio-horas-grafico';
 
@@ -83,6 +84,22 @@ export class RelatorioMensalPcmComponent {
     const dh = this.dadosHoras();
     return dh ? calcularGraficoHoras(dh.horasPorColaborador) : null;
   });
+  colaboradoresOperacao = computed(() => {
+    const dh = this.dadosHoras();
+    return dh ? colaboradoresOperacaoEmManutencao(dh.horasPorColaborador) : [];
+  });
+
+  imprimindoSomenteOperacao = signal(false);
+
+  imprimirSecaoOperacao(): void {
+    this.imprimindoSomenteOperacao.set(true);
+    const limpar = () => {
+      this.imprimindoSomenteOperacao.set(false);
+      window.removeEventListener('afterprint', limpar);
+    };
+    window.addEventListener('afterprint', limpar);
+    setTimeout(() => window.print(), 50);
+  }
 
   constructor(private authService: AuthService) {}
 

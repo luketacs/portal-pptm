@@ -1,7 +1,8 @@
 import { RegistroMatricula } from './relatorio-colaboradores';
 import { HorasPontoPagina } from './relatorio-ponto';
 import {
-  calcularHorasEOrdensApontadas, mapearHorasDisponiveisPonto, mapearHorasProgramadasParaMatricula,
+  ColaboradorHoras, calcularHorasEOrdensApontadas, colaboradoresOperacaoEmManutencao,
+  mapearHorasDisponiveisPonto, mapearHorasProgramadasParaMatricula,
 } from './relatorio-apontamentos';
 
 // Cabeçalho no mesmo formato real da aba "Apontamentos" (Fechamento Semanal.2.xlsx) --
@@ -205,6 +206,31 @@ describe('calcularHorasEOrdensApontadas', () => {
       matriculas: [], horasProgramadasPorMatricula: {}, horasDisponiveisPorMatricula: {},
     });
     expect(r.diasPeriodo).toBe(30);
+  });
+});
+
+describe('colaboradoresOperacaoEmManutencao', () => {
+  function colaborador(overrides: Partial<ColaboradorHoras>): ColaboradorHoras {
+    return {
+      matricula: '1', funcionario: 'Fulano', area: 'Mecânica',
+      horasApontadas: 50, horasProgramadas: null, horasDisponiveis: null,
+      qtdOrdens: 3, ordensLista: [],
+      ...overrides,
+    };
+  }
+
+  it('filtra so quem tem area Operacao (cadastrado como emprestado pra manutencao)', () => {
+    const lista = [
+      colaborador({ matricula: '1', area: 'Mecânica' }),
+      colaborador({ matricula: '2', area: 'Operação' }),
+      colaborador({ matricula: '3', area: 'Elétrica' }),
+      colaborador({ matricula: '4', area: 'OPERAÇÃO' }),
+    ];
+    expect(colaboradoresOperacaoEmManutencao(lista).map(c => c.matricula)).toEqual(['2', '4']);
+  });
+
+  it('retorna vazio quando ninguem da Operacao apontou horas no periodo', () => {
+    expect(colaboradoresOperacaoEmManutencao([colaborador({ area: 'Mecânica' })])).toEqual([]);
   });
 });
 
