@@ -419,16 +419,16 @@
       </section>
     }
 
-    <!-- Operação em Manutenção (colaboradores emprestados) — seção isolável pra impressão -->
+    <!-- Operadores na Manutenção (colaboradores emprestados) — seção isolável pra impressão -->
     @if (colaboradoresOperacao().length > 0) {
       <section class="pcm-section pcm-secao-operacao-manutencao">
         <div class="flex items-center justify-between no-print" style="margin-bottom: 8px;">
-          <h2 class="pcm-section-title" style="margin: 0; border: none;">Operação em Manutenção — {{ dadosMensal()!.mesCompleto }}</h2>
+          <h2 class="pcm-section-title" style="margin: 0; border: none;">Operadores na Manutenção — {{ dadosMensal()!.mesCompleto }}</h2>
           <button (click)="imprimirSecaoOperacao()" class="text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg">
             Imprimir só esta seção
           </button>
         </div>
-        <h2 class="pcm-section-title print-only">Operação em Manutenção — {{ dadosMensal()!.mesCompleto }}</h2>
+        <h2 class="pcm-section-title print-only">Operadores na Manutenção — {{ dadosMensal()!.mesCompleto }}</h2>
         <p class="pcm-empty" style="text-align: left; margin-bottom: 12px;">Colaboradores cadastrados como Operação que apontaram horas em manutenção neste período — para acompanhamento do gestor da Operação.</p>
         <div class="pcm-table-container">
           <table class="pcm-table">
