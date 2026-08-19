@@ -13,7 +13,7 @@ import { HorasProgramadasPorColaborador, extrairHorasProgramadasSemana, extrairP
 import { agregarHorasPonto } from '../../../utils/relatorio-ponto';
 import {
   ColaboradorHoras, DadosHoras, NomeNaoMapeado, calcularHorasEOrdensApontadas, colaboradoresOperacaoEmManutencao,
-  mapearHorasDisponiveisPonto, mapearHorasProgramadasParaMatricula,
+  descricaoCurtaOrdem, mapearHorasDisponiveisPonto, mapearHorasProgramadasParaMatricula,
 } from '../../../utils/relatorio-apontamentos';
 import { calcularGraficoHorasPorArea } from '../../../utils/relatorio-horas-grafico';
 import { carregarLocal, removerLocal, salvarLocal } from '../../../utils/relatorio-persistencia-local';
@@ -408,6 +408,10 @@ export class RelatorioMensalPcmComponent {
 
   statusCor(status: string): string {
     return STATUS_COR[status] ?? '#757575';
+  }
+
+  descricaoOrdem(numero: string): string {
+    return descricaoCurtaOrdem(this.dadosHoras()?.descricoesOrdens ?? {}, numero);
   }
 
   severidadeIconClasse(sev: PontoAtencao['severidade']): string {

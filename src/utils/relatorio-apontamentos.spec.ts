@@ -1,7 +1,7 @@
 import { RegistroMatricula } from './relatorio-colaboradores';
 import { HorasPontoPagina } from './relatorio-ponto';
 import {
-  ColaboradorHoras, calcularHorasEOrdensApontadas, colaboradoresOperacaoEmManutencao,
+  ColaboradorHoras, calcularHorasEOrdensApontadas, colaboradoresOperacaoEmManutencao, descricaoCurtaOrdem,
   mapearHorasDisponiveisPonto, mapearHorasProgramadasParaMatricula,
 } from './relatorio-apontamentos';
 
@@ -20,7 +20,7 @@ function header(): unknown[] {
 // Monta uma linha no mesmo layout de header(), preenchendo só o que os testes usam.
 function linha(opts: {
   executante: unknown; data: unknown; horaInicial: unknown; horaFinal: unknown;
-  almoco?: unknown; osProtheus?: unknown; areaManutencao?: unknown;
+  almoco?: unknown; osProtheus?: unknown; areaManutencao?: unknown; descricao?: unknown;
 }): unknown[] {
   const row = new Array(22).fill('');
   row[4] = opts.executante;
@@ -29,6 +29,7 @@ function linha(opts: {
   row[10] = opts.horaInicial;
   row[11] = opts.horaFinal;
   row[12] = opts.almoco ?? 0;
+  row[13] = opts.descricao ?? '';
   row[20] = opts.osProtheus ?? '';
   return row;
 }
@@ -150,6 +151,33 @@ describe('calcularHorasEOrdensApontadas', () => {
     expect(r.horasPorColaborador[0].ordensLista).toEqual(['100', '200']);
     expect(r.ordensUnicasPeriodo).toBe(2);
     expect(r.colaboradoresComOrdens).toBe(1);
+  });
+
+  it('coleta a descricao de cada OS (coluna Feedback), usando a primeira encontrada', () => {
+    const rows = [
+      header(),
+      linha({
+        executante: 708125, data: SERIAL_04_11, horaInicial: 0, horaFinal: 4 / 24,
+        osProtheus: 100, descricao: 'Trocar rolamento da esteira',
+      }),
+      // mesma OS num outro dia, com um texto diferente -- fica a primeira descricao
+      linha({
+        executante: 708125, data: SERIAL_05_11, horaInicial: 0, horaFinal: 4 / 24,
+        osProtheus: 100, descricao: 'Concluir troca do rolamento',
+      }),
+    ];
+    const r = calcularHorasEOrdensApontadas(rows, {
+      ...PERIODO_NOV_2024, matriculas: matriculasFixture(), horasProgramadasPorMatricula: {}, horasDisponiveisPorMatricula: {},
+    });
+    expect(r.descricoesOrdens['100']).toBe('Trocar rolamento da esteira');
+  });
+
+  it('OS sem descricao preenchida nao aparece em descricoesOrdens', () => {
+    const rows = [header(), linha({ executante: 708125, data: SERIAL_04_11, horaInicial: 0, horaFinal: 4 / 24, osProtheus: 100 })];
+    const r = calcularHorasEOrdensApontadas(rows, {
+      ...PERIODO_NOV_2024, matriculas: matriculasFixture(), horasProgramadasPorMatricula: {}, horasDisponiveisPorMatricula: {},
+    });
+    expect(r.descricoesOrdens['100']).toBeUndefined();
   });
 
   it('traduz as abreviacoes MEC/MECA e ELE/ELET pra Mecanica/Eletrica', () => {
@@ -320,5 +348,22 @@ describe('mapearHorasDisponiveisPonto', () => {
     ]);
     const r = mapearHorasDisponiveisPonto(totaisPonto, matriculasFixture());
     expect(Object.keys(r)).toHaveLength(0);
+  });
+});
+
+describe('descricaoCurtaOrdem', () => {
+  it('retorna a descricao completa quando cabe no tamanho maximo', () => {
+    const r = descricaoCurtaOrdem({ '100': 'Trocar rolamento' }, '100');
+    expect(r).toBe('Trocar rolamento');
+  });
+
+  it('trunca e adiciona reticencias quando passa do tamanho maximo', () => {
+    const descricao = 'RETIRA TAMPAS DE PASAGEM DA LIMHA 01,05 PARA ISPEÇÃO RETIRADA DE CANHÕES DA LINHA 03 PARA MANUTENÇÃO';
+    const r = descricaoCurtaOrdem({ '100': descricao }, '100', 40);
+    expect(r).toBe('RETIRA TAMPAS DE PASAGEM DA LIMHA 01,05…');
+  });
+
+  it('retorna string vazia quando a OS nao tem descricao', () => {
+    expect(descricaoCurtaOrdem({}, '100')).toBe('');
   });
 });

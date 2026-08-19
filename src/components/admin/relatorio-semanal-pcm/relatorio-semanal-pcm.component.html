@@ -264,7 +264,17 @@
                   <td>{{ c.areasAtuacao.length > 0 ? c.areasAtuacao.join(', ') : '—' }}</td>
                   <td>{{ c.horasApontadas }}h</td>
                   <td>{{ c.qtdOrdens }}</td>
-                  <td class="pcm-horas-grafico-ordens-lista"><span class="pcm-horas-grafico-ordens-lista-conteudo">{{ c.ordensLista.length > 0 ? c.ordensLista.join(', ') : '—' }}</span></td>
+                  <td class="pcm-horas-grafico-ordens-lista">
+                    @if (c.ordensLista.length === 0) {
+                      <span class="pcm-horas-grafico-ordens-lista-conteudo">—</span>
+                    } @else {
+                      <div class="pcm-horas-grafico-ordens-lista-conteudo">
+                        @for (os of c.ordensLista; track os) {
+                          <div>{{ os }}{{ descricaoOrdem(os) ? ' — ' + descricaoOrdem(os) : '' }}</div>
+                        }
+                      </div>
+                    }
+                  </td>
                 </tr>
               }
             </tbody>

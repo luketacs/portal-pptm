@@ -51,6 +51,7 @@ export interface DadosHoras {
   totalColaboradores: number;
   colaboradoresComOrdens: number;
   ocorrenciasNaoContabilizadas: OcorrenciaNaoContabilizada[];
+  descricoesOrdens: Record<string, string>; // nº da OS -> descrição (coluna "Feedback" do Apontamentos)
 }
 
 // Marcio Gleyson (supervisor) — nunca aparece no relatório de horas, mesmo que tenha
@@ -92,6 +93,17 @@ export function colaboradoresOperacaoEmManutencao(
       horasApontadas: 0, horasProgramadas: null, horasDisponiveis: null,
       qtdOrdens: 0, ordensLista: [], areasAtuacao: [],
     });
+}
+
+// Descrição resumida de uma OS pra caber numa linha da coluna "Ordens (OS)" sem
+// poluir a tabela — o texto completo não é descartado (fica em descricoesOrdens),
+// só a exibição é encurtada.
+export function descricaoCurtaOrdem(
+  descricoesOrdens: Record<string, string>, numero: string, tamanhoMaximo = 60,
+): string {
+  const descricao = descricoesOrdens[numero];
+  if (!descricao) return '';
+  return descricao.length > tamanhoMaximo ? `${descricao.slice(0, tamanhoMaximo).trim()}…` : descricao;
 }
 
 function areaEOperacao(area: string): boolean {
@@ -151,12 +163,13 @@ interface ColunasApontamentos {
   colData: number;
   colHoraInicio: number;
   colHoraFim: number;
-  colAlmoco: number; // -1 = coluna não existe, assume sem almoço
-  colOrdem: number;  // -1 = coluna não existe, assume sem ordem
-  colArea: number;   // -1 = coluna não existe, assume sem área de atuação
+  colAlmoco: number;    // -1 = coluna não existe, assume sem almoço
+  colOrdem: number;     // -1 = coluna não existe, assume sem ordem
+  colArea: number;      // -1 = coluna não existe, assume sem área de atuação
+  colDescricao: number; // -1 = coluna não existe, assume sem descrição
 }
 
-const ALIASES: Record<keyof Omit<ColunasApontamentos, 'colAlmoco' | 'colOrdem' | 'colArea'>, string[]> = {
+const ALIASES: Record<keyof Omit<ColunasApontamentos, 'colAlmoco' | 'colOrdem' | 'colArea' | 'colDescricao'>, string[]> = {
   colExecutante: ['EXECUTANTE', 'FUNCIONARIO', 'FUNCIONARIO(A)'],
   colData: ['DATA'],
   colHoraInicio: ['HORA INICIAL', 'HORARIO INICIAL', 'HORA INICIO', 'INICIO'],
@@ -165,6 +178,8 @@ const ALIASES: Record<keyof Omit<ColunasApontamentos, 'colAlmoco' | 'colOrdem' |
 const ALIASES_ALMOCO = ['INTERVALO ALMOCO', 'INTERCALO ALMOCO', 'ALMOCO'];
 const ALIASES_ORDEM = ['OS PROTHEUS', 'ORDEM PROTHEUS', 'OS', 'ORDEM', 'ORDEM DE SERVICO'];
 const ALIASES_AREA = ['AREA MANUTENCAO', 'AREA DE MANUTENCAO', 'AREA'];
+// A descrição do que foi feito na OS fica na coluna "Feedback" na planilha real.
+const ALIASES_DESCRICAO = ['FEEDBACK', 'DESCRICAO', 'DESCRICAO DA ORDEM', 'DESCRICAO DA OS'];
 
 function acharColuna(header: unknown[], aliases: string[]): number {
   for (let c = 0; c < header.length; c++) {
@@ -182,6 +197,7 @@ function localizarColunasApontamentos(header: unknown[]): ColunasApontamentos {
   const colAlmoco = acharColuna(header, ALIASES_ALMOCO);
   const colOrdem = acharColuna(header, ALIASES_ORDEM);
   const colArea = acharColuna(header, ALIASES_AREA);
+  const colDescricao = acharColuna(header, ALIASES_DESCRICAO);
 
   const faltando: string[] = [];
   if (colExecutante === -1) faltando.push('Executante');
@@ -192,7 +208,7 @@ function localizarColunasApontamentos(header: unknown[]): ColunasApontamentos {
     throw new Error(`Não foi possível localizar as colunas ${faltando.join(', ')} na planilha de Apontamentos.`);
   }
 
-  return { colExecutante, colData, colHoraInicio, colHoraFim, colAlmoco, colOrdem, colArea };
+  return { colExecutante, colData, colHoraInicio, colHoraFim, colAlmoco, colOrdem, colArea, colDescricao };
 }
 
 // A coluna "Área Manutenção" vem com abreviações bem inconsistentes na planilha
@@ -280,6 +296,7 @@ interface ApontamentoLinha {
   horasApontadas: number;
   ordemRaw: unknown;
   areaRaw: unknown;
+  descricaoRaw: unknown;
 }
 
 export function calcularHorasEOrdensApontadas(
@@ -318,8 +335,9 @@ export function calcularHorasEOrdensApontadas(
     const horasApontadas = Math.max(almoco ? horasBrutas - 1 : horasBrutas, 0);
     const ordemRaw = colunas.colOrdem >= 0 ? row[colunas.colOrdem] : 'N/A';
     const areaRaw = colunas.colArea >= 0 ? row[colunas.colArea] : undefined;
+    const descricaoRaw = colunas.colDescricao >= 0 ? row[colunas.colDescricao] : undefined;
 
-    todasLinhas.push({ matricula, data, horaInicioDecimal: hInicio, horaFimDecimal: hFim, horasApontadas, ordemRaw, areaRaw });
+    todasLinhas.push({ matricula, data, horaInicioDecimal: hInicio, horaFimDecimal: hFim, horasApontadas, ordemRaw, areaRaw, descricaoRaw });
   }
 
   // 2) Filtra pelo período do fechamento.
@@ -401,13 +419,21 @@ export function calcularHorasEOrdensApontadas(
   const totalApontamentos = linhasPeriodo.length;
 
   // 4) Ordens únicas por colaborador (sobre todo o período, antes da exclusão de
-  //    matrículas/áreas -- mesma ordem de cálculo do original).
+  //    matrículas/áreas -- mesma ordem de cálculo do original). Guarda também a
+  //    descrição de cada OS (primeira encontrada — a descrição é da ordem em si,
+  //    não muda entre apontamentos diferentes da mesma OS).
   const ordensPorColaborador = new Map<string, Set<string>>();
+  const descricoesPorOrdem = new Map<string, string>();
   for (const linha of linhasPeriodo) {
     const ordemLimpa = limparOrdemProtheus(linha.ordemRaw);
     if (!ordemLimpa) continue;
     if (!ordensPorColaborador.has(linha.matricula)) ordensPorColaborador.set(linha.matricula, new Set());
     ordensPorColaborador.get(linha.matricula)!.add(ordemLimpa);
+
+    if (!descricoesPorOrdem.has(ordemLimpa)) {
+      const descricao = String(linha.descricaoRaw ?? '').trim();
+      if (descricao) descricoesPorOrdem.set(ordemLimpa, descricao);
+    }
   }
   const todasOrdensUnicas = new Set<string>();
   for (const ordens of ordensPorColaborador.values()) {
@@ -479,5 +505,6 @@ export function calcularHorasEOrdensApontadas(
     totalColaboradores: horasPorColaborador.length,
     colaboradoresComOrdens,
     ocorrenciasNaoContabilizadas: ocorrencias,
+    descricoesOrdens: Object.fromEntries(descricoesPorOrdem),
   };
 }

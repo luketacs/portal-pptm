@@ -8,7 +8,9 @@ import {
 } from '../../../utils/relatorio-semanal-pcm';
 import { LinhaTempoGeometria, calcularLinhaTempo } from '../../../utils/relatorio-linha-tempo';
 import { parseMatriculas } from '../../../utils/relatorio-colaboradores';
-import { ColaboradorHoras, calcularHorasEOrdensApontadas, colaboradoresOperacaoEmManutencao } from '../../../utils/relatorio-apontamentos';
+import {
+  ColaboradorHoras, calcularHorasEOrdensApontadas, colaboradoresOperacaoEmManutencao, descricaoCurtaOrdem,
+} from '../../../utils/relatorio-apontamentos';
 import { carregarLocal, removerLocal, salvarLocal } from '../../../utils/relatorio-persistencia-local';
 
 const CHAVE_STORAGE = 'pcm-relatorio-semanal-ultimo';
@@ -20,6 +22,7 @@ interface RelatorioSemanalSnapshot {
   destaques: Destaque[];
   linhaTempo: LinhaTempoGeometria | null;
   colaboradoresOperacao: ColaboradorHoras[];
+  descricoesOrdens: Record<string, string>;
   geradoEm: string; // ISO
 }
 
@@ -78,6 +81,7 @@ export class RelatorioSemanalPcmComponent {
   destaques = signal<Destaque[]>([]);
   linhaTempo = signal<LinhaTempoGeometria | null>(null);
   colaboradoresOperacao = signal<ColaboradorHoras[]>([]);
+  descricoesOrdens = signal<Record<string, string>>({});
   geradoEm = signal<Date | null>(null);
 
   imprimindoSomenteOperacao = signal(false);
@@ -110,6 +114,7 @@ export class RelatorioSemanalPcmComponent {
       destaques: this.destaques(),
       linhaTempo: this.linhaTempo(),
       colaboradoresOperacao: this.colaboradoresOperacao(),
+      descricoesOrdens: this.descricoesOrdens(),
       geradoEm: (this.geradoEm() ?? new Date()).toISOString(),
     };
     salvarLocal(CHAVE_STORAGE, snapshot);
@@ -125,6 +130,7 @@ export class RelatorioSemanalPcmComponent {
     this.destaques.set(snapshot.destaques);
     this.linhaTempo.set(snapshot.linhaTempo);
     this.colaboradoresOperacao.set(snapshot.colaboradoresOperacao);
+    this.descricoesOrdens.set(snapshot.descricoesOrdens ?? {});
     this.geradoEm.set(new Date(snapshot.geradoEm));
   }
 
@@ -214,8 +220,10 @@ export class RelatorioSemanalPcmComponent {
           horasProgramadasPorMatricula: {}, horasDisponiveisPorMatricula: {},
         });
         this.colaboradoresOperacao.set(colaboradoresOperacaoEmManutencao(dadosHoras.horasPorColaborador, matriculas));
+        this.descricoesOrdens.set(dadosHoras.descricoesOrdens);
       } else {
         this.colaboradoresOperacao.set([]);
+        this.descricoesOrdens.set({});
       }
 
       this.geradoEm.set(new Date());
@@ -234,6 +242,7 @@ export class RelatorioSemanalPcmComponent {
     this.destaques.set([]);
     this.linhaTempo.set(null);
     this.colaboradoresOperacao.set([]);
+    this.descricoesOrdens.set({});
     this.geradoEm.set(null);
     this.errorMessage.set('');
     this.arquivo.set(null);
@@ -248,6 +257,10 @@ export class RelatorioSemanalPcmComponent {
 
   statusCor(status: string): string {
     return STATUS_COR[status] ?? '#757575';
+  }
+
+  descricaoOrdem(numero: string): string {
+    return descricaoCurtaOrdem(this.descricoesOrdens(), numero);
   }
 
   severidadeIconClasse(sev: PontoAtencao['severidade']): string {
