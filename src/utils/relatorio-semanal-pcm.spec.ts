@@ -160,6 +160,17 @@ describe('extrairHistoricoSemanas', () => {
     const rows = montarPlanilhaMultiSemanas({});
     expect(extrairHistoricoSemanas(rows, 5)).toEqual([]);
   });
+
+  it('pula semana com ordens programadas mas sem nenhum dado de plano (nao mostra cumprimento 0% falso)', () => {
+    // semana 2 tem atendimento de verdade (10 programadas, 8 executadas) mas
+    // planejadasPlano=0 -- sem dado de plano naquela semana, nao "cumprimento zero".
+    const rows = montarPlanilhaMultiSemanas({
+      1: [10, 10, 10, 10],
+      2: [10, 8, 0, 0],
+    });
+    const pontos = extrairHistoricoSemanas(rows, 2);
+    expect(pontos.map(p => p.label)).toEqual(['S1']);
+  });
 });
 
 // Igual montarPlanilhaMultiSemanas, mas permite escolher a área (pra provar que
@@ -207,6 +218,17 @@ describe('extrairHistoricoSemanasPorArea', () => {
 
   it('retorna lista vazia quando o nome da area nao existe', () => {
     expect(extrairHistoricoSemanasPorArea([], 5, 'AREA INEXISTENTE')).toEqual([]);
+  });
+
+  it('pula semana com atendimento real mas sem dado de plano (nao mostra cumprimento 0% falso)', () => {
+    // reproduz o bug relatado: SPCI com atendimento perto de 100% em varias semanas,
+    // mas cumprimento despencando pra 0% em semanas sem planejadasPlano preenchido.
+    const rows = montarPlanilhaMultiSemanasArea('SPCI', {
+      1: [10, 10, 10, 10], // com plano: fica na linha
+      2: [10, 9, 0, 0],    // atendimento real (90%), sem dado de plano: nao deveria aparecer
+    });
+    const pontos = extrairHistoricoSemanasPorArea(rows, 2, 'SPCI');
+    expect(pontos.map(p => p.label)).toEqual(['S1']);
   });
 });
 

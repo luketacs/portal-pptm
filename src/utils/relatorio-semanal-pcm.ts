@@ -248,7 +248,9 @@ export function parseIndicadoresSemanais(
 // Atendimento/cumprimento gerais de uma única semana (soma das áreas), sem montar o
 // detalhamento por área — usado só pela linha do tempo, que precisa disso pra cada
 // semana do período, não só pra semana selecionada no relatório.
-function calcularTotaisSemana(rows: unknown[][], coluna: number): { atendimento: number; cumprimento: number; totalProgramadas: number } {
+function calcularTotaisSemana(
+  rows: unknown[][], coluna: number,
+): { atendimento: number; cumprimento: number; totalProgramadas: number; totalPlanejadasPlano: number } {
   let totalProgramadas = 0, totalExecutadas = 0, totalPlanejadasPlano = 0, totalExecutadasPlano = 0;
   for (const { linhaBase } of AREAS_PCM) {
     const programadas = safeNumericCell(rows, linhaBase, coluna);
@@ -259,14 +261,17 @@ function calcularTotaisSemana(rows: unknown[][], coluna: number): { atendimento:
     totalExecutadasPlano += safeNumericCell(rows, linhaBase + 4, coluna);
   }
   return {
-    totalProgramadas,
+    totalProgramadas, totalPlanejadasPlano,
     atendimento: totalProgramadas > 0 ? round2((totalExecutadas / totalProgramadas) * 100) : 0,
     cumprimento: totalPlanejadasPlano > 0 ? round2((totalExecutadasPlano / totalPlanejadasPlano) * 100) : 0,
   };
 }
 
 // Histórico semana a semana (1..semanaAte) pra linha do tempo do acumulado — pula
-// semanas sem nenhuma ordem programada (ainda não chegaram / planilha não preenchida).
+// semanas sem nenhuma ordem programada (ainda não chegaram / planilha não preenchida)
+// e também semanas sem nenhum dado de "plano" (planejadasPlano=0): sem isso, a
+// fórmula de cumprimento cai no fallback e mostra 0% como se fosse um resultado
+// real, quando na verdade é só ausência de dado — criava quedas falsas na linha.
 export function extrairHistoricoSemanas(rows: unknown[][], semanaAte: number): PontoLinhaTempo[] {
   const linhaSemanas = rows[LINHA_SEMANAS] ?? [];
   const pontos: PontoLinhaTempo[] = [];
@@ -274,7 +279,7 @@ export function extrairHistoricoSemanas(rows: unknown[][], semanaAte: number): P
     const coluna = encontrarColunaSemana(linhaSemanas, semana);
     if (coluna === null) continue;
     const totais = calcularTotaisSemana(rows, coluna);
-    if (totais.totalProgramadas === 0) continue;
+    if (totais.totalProgramadas === 0 || totais.totalPlanejadasPlano === 0) continue;
     pontos.push({ label: `S${semana}`, atendimento: totais.atendimento, cumprimento: totais.cumprimento });
   }
   return pontos;
@@ -286,13 +291,13 @@ export const AREAS_LINHA_TEMPO_SEPARADA = ['MECÂNICA', 'ELÉTRICA', 'LIMP OPERA
 
 function calcularAtendimentoCumprimentoArea(
   rows: unknown[][], linhaBase: number, coluna: number,
-): { atendimento: number; cumprimento: number; programadas: number } {
+): { atendimento: number; cumprimento: number; programadas: number; planejadasPlano: number } {
   const programadas = safeNumericCell(rows, linhaBase, coluna);
   const executadas = safeNumericCell(rows, linhaBase + 1, coluna);
   const planejadasPlano = safeNumericCell(rows, linhaBase + 3, coluna);
   const executadasPlano = safeNumericCell(rows, linhaBase + 4, coluna);
   return {
-    programadas,
+    programadas, planejadasPlano,
     atendimento: programadas > 0 ? round2((executadas / programadas) * 100) : 0,
     cumprimento: planejadasPlano > 0 ? round2((executadasPlano / planejadasPlano) * 100) : 0,
   };
@@ -300,6 +305,8 @@ function calcularAtendimentoCumprimentoArea(
 
 // Mesma ideia de extrairHistoricoSemanas, mas pra uma única área (não a soma de
 // todas) — usado pelas linhas do tempo separadas de AREAS_LINHA_TEMPO_SEPARADA.
+// Pula semanas sem "plano" pra essa área (planejadasPlano=0), pelo mesmo motivo:
+// sem isso o cumprimento cai no fallback de 0% e cria quedas falsas na linha.
 export function extrairHistoricoSemanasPorArea(rows: unknown[][], semanaAte: number, nomeArea: string): PontoLinhaTempo[] {
   const areaInfo = AREAS_PCM.find(a => a.nome === nomeArea);
   if (!areaInfo) return [];
@@ -310,7 +317,7 @@ export function extrairHistoricoSemanasPorArea(rows: unknown[][], semanaAte: num
     const coluna = encontrarColunaSemana(linhaSemanas, semana);
     if (coluna === null) continue;
     const totais = calcularAtendimentoCumprimentoArea(rows, areaInfo.linhaBase, coluna);
-    if (totais.programadas === 0) continue;
+    if (totais.programadas === 0 || totais.planejadasPlano === 0) continue;
     pontos.push({ label: `S${semana}`, atendimento: totais.atendimento, cumprimento: totais.cumprimento });
   }
   return pontos;
