@@ -576,13 +576,32 @@
     border-radius: 0;
   }
 
-  .pcm-section,
-  .pcm-highlights {
+  /* "avoid" na seção inteira faz cada seção pular pra uma página nova sempre que
+     não sobra espaço suficiente pra ela toda — com o relatório maior (mais seções,
+     os gráficos por área), isso deixava cada seção numa página própria, com um
+     espaço em branco enorme sobrando embaixo. Protege só os pedaços atômicos (não
+     pode cortar um card ou um gráfico ao meio), deixando a seção fluir e continuar
+     na página seguinte quando precisar — sem desperdiçar espaço.
+  */
+  .pcm-card,
+  .pcm-card-sec,
+  .pcm-panel,
+  .pcm-linha-tempo-area,
+  .pcm-horas-grafico-pessoa,
+  tr {
     page-break-inside: avoid;
+  }
+
+  .pcm-section-title {
+    page-break-after: avoid;
   }
 
   .pcm-table {
     min-width: 100%;
+  }
+
+  .pcm-table thead {
+    display: table-header-group; /* repete o cabeçalho da tabela em cada página */
   }
 
   /* Imprimir só a seção "Operadores na Manutenção" (botão dedicado) — esconde tudo
