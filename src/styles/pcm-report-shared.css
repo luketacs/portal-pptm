@@ -493,6 +493,20 @@
   white-space: nowrap;
 }
 
+.pcm-horas-grafico-ordens-lista {
+  text-align: left !important;
+}
+
+.pcm-horas-grafico-ordens-lista-conteudo {
+  display: block;
+  width: 320px;
+  font-size: 10px;
+  color: #666;
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: 1.5;
+}
+
 .pcm-horas-grafico-legenda {
   display: flex;
   gap: 24px;

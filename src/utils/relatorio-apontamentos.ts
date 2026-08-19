@@ -38,6 +38,7 @@ export interface ColaboradorHoras {
   horasDisponiveis: number | null;
   qtdOrdens: number;
   ordensLista: string[];
+  areasAtuacao: string[]; // áreas de manutenção (coluna "Área Manutenção" do Fechamento) em que apontou horas no período
 }
 
 export interface DadosHoras {
@@ -89,7 +90,7 @@ export function colaboradoresOperacaoEmManutencao(
     .map(m => colaboradores.find(c => c.matricula === m.matricula) ?? {
       matricula: m.matricula, funcionario: m.funcionario, area: m.area,
       horasApontadas: 0, horasProgramadas: null, horasDisponiveis: null,
-      qtdOrdens: 0, ordensLista: [],
+      qtdOrdens: 0, ordensLista: [], areasAtuacao: [],
     });
 }
 
@@ -152,9 +153,10 @@ interface ColunasApontamentos {
   colHoraFim: number;
   colAlmoco: number; // -1 = coluna não existe, assume sem almoço
   colOrdem: number;  // -1 = coluna não existe, assume sem ordem
+  colArea: number;   // -1 = coluna não existe, assume sem área de atuação
 }
 
-const ALIASES: Record<keyof Omit<ColunasApontamentos, 'colAlmoco' | 'colOrdem'>, string[]> = {
+const ALIASES: Record<keyof Omit<ColunasApontamentos, 'colAlmoco' | 'colOrdem' | 'colArea'>, string[]> = {
   colExecutante: ['EXECUTANTE', 'FUNCIONARIO', 'FUNCIONARIO(A)'],
   colData: ['DATA'],
   colHoraInicio: ['HORA INICIAL', 'HORARIO INICIAL', 'HORA INICIO', 'INICIO'],
@@ -162,6 +164,7 @@ const ALIASES: Record<keyof Omit<ColunasApontamentos, 'colAlmoco' | 'colOrdem'>,
 };
 const ALIASES_ALMOCO = ['INTERVALO ALMOCO', 'INTERCALO ALMOCO', 'ALMOCO'];
 const ALIASES_ORDEM = ['OS PROTHEUS', 'ORDEM PROTHEUS', 'OS', 'ORDEM', 'ORDEM DE SERVICO'];
+const ALIASES_AREA = ['AREA MANUTENCAO', 'AREA DE MANUTENCAO', 'AREA'];
 
 function acharColuna(header: unknown[], aliases: string[]): number {
   for (let c = 0; c < header.length; c++) {
@@ -178,6 +181,7 @@ function localizarColunasApontamentos(header: unknown[]): ColunasApontamentos {
   const colHoraFim = acharColuna(header, ALIASES.colHoraFim);
   const colAlmoco = acharColuna(header, ALIASES_ALMOCO);
   const colOrdem = acharColuna(header, ALIASES_ORDEM);
+  const colArea = acharColuna(header, ALIASES_AREA);
 
   const faltando: string[] = [];
   if (colExecutante === -1) faltando.push('Executante');
@@ -188,7 +192,19 @@ function localizarColunasApontamentos(header: unknown[]): ColunasApontamentos {
     throw new Error(`Não foi possível localizar as colunas ${faltando.join(', ')} na planilha de Apontamentos.`);
   }
 
-  return { colExecutante, colData, colHoraInicio, colHoraFim, colAlmoco, colOrdem };
+  return { colExecutante, colData, colHoraInicio, colHoraFim, colAlmoco, colOrdem, colArea };
+}
+
+// A coluna "Área Manutenção" vem com abreviações bem inconsistentes na planilha
+// real (MEC/MECA, ELE/ELET, além de várias outras menos comuns). Só traduz as
+// duas que interessam pro relatório de Operadores na Manutenção (de onde vieram
+// -- Mecânica ou Elétrica); qualquer outra abreviação aparece como veio, sem
+// arriscar uma tradução errada.
+function normalizarAreaManutencao(valor: string): string {
+  const v = normalizarAscii(valor).trim();
+  if (v.startsWith('MEC')) return 'Mecânica';
+  if (v.startsWith('ELE')) return 'Elétrica';
+  return valor.trim();
 }
 
 function normalizarMatricula(valor: unknown): string {
@@ -263,6 +279,7 @@ interface ApontamentoLinha {
   horaFimDecimal: number;
   horasApontadas: number;
   ordemRaw: unknown;
+  areaRaw: unknown;
 }
 
 export function calcularHorasEOrdensApontadas(
@@ -300,8 +317,9 @@ export function calcularHorasEOrdensApontadas(
     const almoco = colunas.colAlmoco >= 0 ? temAlmoco(row[colunas.colAlmoco]) : false;
     const horasApontadas = Math.max(almoco ? horasBrutas - 1 : horasBrutas, 0);
     const ordemRaw = colunas.colOrdem >= 0 ? row[colunas.colOrdem] : 'N/A';
+    const areaRaw = colunas.colArea >= 0 ? row[colunas.colArea] : undefined;
 
-    todasLinhas.push({ matricula, data, horaInicioDecimal: hInicio, horaFimDecimal: hFim, horasApontadas, ordemRaw });
+    todasLinhas.push({ matricula, data, horaInicioDecimal: hInicio, horaFimDecimal: hFim, horasApontadas, ordemRaw, areaRaw });
   }
 
   // 2) Filtra pelo período do fechamento.
@@ -396,6 +414,17 @@ export function calcularHorasEOrdensApontadas(
     for (const o of ordens) todasOrdensUnicas.add(o);
   }
 
+  // Áreas de manutenção em que cada colaborador atuou no período (ex.: alguém da
+  // Operação emprestado pode aparecer tanto em Mecânica quanto em Elétrica).
+  const areasPorColaborador = new Map<string, Set<string>>();
+  for (const linha of linhasPeriodo) {
+    const areaTexto = String(linha.areaRaw ?? '').trim();
+    if (!areaTexto) continue;
+    const area = normalizarAreaManutencao(areaTexto);
+    if (!areasPorColaborador.has(linha.matricula)) areasPorColaborador.set(linha.matricula, new Set());
+    areasPorColaborador.get(linha.matricula)!.add(area);
+  }
+
   // 5) Agrega horas por colaborador e junta com Matrículas (nome/área).
   const horasPorMatricula = new Map<string, number>();
   for (const linha of linhasPeriodo) {
@@ -429,10 +458,12 @@ export function calcularHorasEOrdensApontadas(
     horasPorArea[area] = round2((horasPorArea[area] ?? 0) + horasApontadas);
     horasGeral = round2(horasGeral + horasApontadas);
 
+    const areasAtuacao = [...(areasPorColaborador.get(matricula) ?? new Set<string>())].sort();
+
     horasPorColaborador.push({
       matricula, funcionario, area, horasApontadas,
       horasProgramadas, horasDisponiveis,
-      qtdOrdens: ordensLista.length, ordensLista,
+      qtdOrdens: ordensLista.length, ordensLista, areasAtuacao,
     });
   }
 

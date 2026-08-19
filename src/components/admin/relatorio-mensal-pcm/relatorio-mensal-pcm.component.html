@@ -435,18 +435,22 @@
             <thead>
               <tr>
                 <th>Colaborador</th>
+                <th>Área</th>
                 <th>H. Apontadas</th>
                 <th>H. Programadas</th>
-                <th>Ordens</th>
+                <th>Qtd. Ordens</th>
+                <th>Ordens (OS)</th>
               </tr>
             </thead>
             <tbody>
               @for (c of colaboradoresOperacao(); track c.matricula; let i = $index) {
                 <tr [class]="i % 2 === 0 ? 'pcm-even-row' : 'pcm-odd-row'">
                   <td class="pcm-area-name">{{ c.funcionario }}</td>
+                  <td>{{ c.areasAtuacao.length > 0 ? c.areasAtuacao.join(', ') : '—' }}</td>
                   <td>{{ c.horasApontadas }}h</td>
                   <td>{{ c.horasProgramadas !== null ? (c.horasProgramadas + 'h') : '—' }}</td>
                   <td>{{ c.qtdOrdens }}</td>
+                  <td class="pcm-horas-grafico-ordens-lista"><span class="pcm-horas-grafico-ordens-lista-conteudo">{{ c.ordensLista.length > 0 ? c.ordensLista.join(', ') : '—' }}</span></td>
                 </tr>
               }
             </tbody>

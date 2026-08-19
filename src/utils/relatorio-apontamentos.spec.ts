@@ -20,10 +20,11 @@ function header(): unknown[] {
 // Monta uma linha no mesmo layout de header(), preenchendo só o que os testes usam.
 function linha(opts: {
   executante: unknown; data: unknown; horaInicial: unknown; horaFinal: unknown;
-  almoco?: unknown; osProtheus?: unknown;
+  almoco?: unknown; osProtheus?: unknown; areaManutencao?: unknown;
 }): unknown[] {
   const row = new Array(22).fill('');
   row[4] = opts.executante;
+  row[6] = opts.areaManutencao ?? '';
   row[9] = opts.data;
   row[10] = opts.horaInicial;
   row[11] = opts.horaFinal;
@@ -151,6 +152,34 @@ describe('calcularHorasEOrdensApontadas', () => {
     expect(r.colaboradoresComOrdens).toBe(1);
   });
 
+  it('traduz as abreviacoes MEC/MECA e ELE/ELET pra Mecanica/Eletrica', () => {
+    const rows = [
+      header(),
+      linha({ executante: 708125, data: SERIAL_04_11, horaInicial: 0, horaFinal: 4 / 24, areaManutencao: 'MEC' }),
+      linha({ executante: 708125, data: SERIAL_05_11, horaInicial: 0, horaFinal: 4 / 24, areaManutencao: 'ELET' }),
+    ];
+    const r = calcularHorasEOrdensApontadas(rows, {
+      ...PERIODO_NOV_2024, matriculas: matriculasFixture(), horasProgramadasPorMatricula: {}, horasDisponiveisPorMatricula: {},
+    });
+    expect(r.horasPorColaborador[0].areasAtuacao).toEqual(['Elétrica', 'Mecânica']);
+  });
+
+  it('mantem abreviacoes desconhecidas como vieram, sem arriscar uma traducao errada', () => {
+    const rows = [header(), linha({ executante: 708125, data: SERIAL_04_11, horaInicial: 0, horaFinal: 4 / 24, areaManutencao: 'OFI' })];
+    const r = calcularHorasEOrdensApontadas(rows, {
+      ...PERIODO_NOV_2024, matriculas: matriculasFixture(), horasProgramadasPorMatricula: {}, horasDisponiveisPorMatricula: {},
+    });
+    expect(r.horasPorColaborador[0].areasAtuacao).toEqual(['OFI']);
+  });
+
+  it('areasAtuacao fica vazia quando a coluna Área Manutenção não está preenchida', () => {
+    const rows = [header(), linha({ executante: 708125, data: SERIAL_04_11, horaInicial: 0, horaFinal: 4 / 24 })];
+    const r = calcularHorasEOrdensApontadas(rows, {
+      ...PERIODO_NOV_2024, matriculas: matriculasFixture(), horasProgramadasPorMatricula: {}, horasDisponiveisPorMatricula: {},
+    });
+    expect(r.horasPorColaborador[0].areasAtuacao).toEqual([]);
+  });
+
   it('exclui matrícula da lista de exclusão do relatório (ex.: supervisor)', () => {
     const rows = [header(), linha({ executante: '20006139', data: SERIAL_04_11, horaInicial: 0, horaFinal: 4 / 24 })];
     const r = calcularHorasEOrdensApontadas(rows, {
@@ -214,7 +243,7 @@ describe('colaboradoresOperacaoEmManutencao', () => {
     return {
       matricula: '20005480', funcionario: 'Alexandre Gomes', area: 'Operação',
       horasApontadas: 50, horasProgramadas: null, horasDisponiveis: null,
-      qtdOrdens: 3, ordensLista: [],
+      qtdOrdens: 3, ordensLista: [], areasAtuacao: [],
       ...overrides,
     };
   }

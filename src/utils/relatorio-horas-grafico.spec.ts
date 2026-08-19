@@ -5,7 +5,7 @@ function colaborador(overrides: Partial<ColaboradorHoras>): ColaboradorHoras {
   return {
     matricula: '1', funcionario: 'Fulano', area: 'Mecânica',
     horasApontadas: 100, horasProgramadas: 100, horasDisponiveis: 150,
-    qtdOrdens: 5, ordensLista: [],
+    qtdOrdens: 5, ordensLista: [], areasAtuacao: [],
     ...overrides,
   };
 }
