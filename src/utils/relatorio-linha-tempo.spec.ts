@@ -45,9 +45,28 @@ describe('calcularLinhaTempo', () => {
     expect(partes[0]).toBe(`${geo.pontosAtendimento[0].x},${geo.pontosAtendimento[0].y}`);
   });
 
-  it('gera 5 linhas guia no eixo Y (0/25/50/75/100%)', () => {
+  it('gera 5 linhas guia no eixo Y, com piso ajustado ao menor valor da serie', () => {
+    // menor valor 50 -> piso arredondado pra baixo de 10 em 10 com folga de 5 = 40
     const geo = calcularLinhaTempo([{ label: 'S1', atendimento: 50, cumprimento: 50 }])!;
-    expect(geo.eixoY.map(g => g.label)).toEqual(['0%', '25%', '50%', '75%', '100%']);
+    expect(geo.eixoY.map(g => g.label)).toEqual(['40%', '55%', '70%', '85%', '100%']);
+  });
+
+  it('da zoom no eixo Y quando os valores ficam sempre proximos de 100%, pra nao achatar a linha', () => {
+    const geo = calcularLinhaTempo([
+      { label: 'S1', atendimento: 92, cumprimento: 96 },
+      { label: 'S2', atendimento: 100, cumprimento: 100 },
+      { label: 'S3', atendimento: 88, cumprimento: 95 },
+    ])!;
+    expect(geo.eixoY[0].label).toBe('80%');
+    expect(geo.eixoY[geo.eixoY.length - 1].label).toBe('100%');
+  });
+
+  it('mantem a escala cheia (piso 0%) quando algum valor cai bem abaixo', () => {
+    const geo = calcularLinhaTempo([
+      { label: 'S1', atendimento: 100, cumprimento: 100 },
+      { label: 'S2', atendimento: 10, cumprimento: 90 },
+    ])!;
+    expect(geo.eixoY[0].label).toBe('0%');
   });
 
   it('mantem os rotulos do eixo X na mesma ordem e texto dos pontos de entrada', () => {

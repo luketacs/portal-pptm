@@ -246,10 +246,12 @@
   overflow: visible;
 }
 
-/* Linhas do tempo separadas por área (Semanal) — grade responsiva, 3 por linha */
+/* Linhas do tempo separadas por área (Semanal) — 2 por linha. Com 3 por linha o
+   gráfico ficava estreito demais pra ler rótulo nenhum; com 2, cada um ganha
+   bastante mais largura/altura físicas na página impressa. */
 .pcm-linha-tempo-grid-areas {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px 24px;
   margin-bottom: 12px;
 }
@@ -592,7 +594,8 @@
     page-break-inside: avoid;
   }
 
-  .pcm-section-title {
+  .pcm-section-title,
+  .pcm-secao-operacao-manutencao .pcm-empty {
     page-break-after: avoid;
   }
 
@@ -602,6 +605,37 @@
 
   .pcm-table thead {
     display: table-header-group; /* repete o cabeçalho da tabela em cada página */
+  }
+
+  /* Cabeçalho + Resumo Executivo + Desempenho por Área precisam caber numa só
+     página. Os 6 cards do resumo só cabiam ~4 por linha na largura impressa e
+     quebravam pra uma 2ª linha, o que sozinho já empurrava a tabela de área
+     inteira pra página seguinte com a página 1 quase em branco. Força 1 linha
+     só e aperta os respiros de todas as seções pra sobrar espaço de verdade. */
+  .pcm-section {
+    padding: 14px 24px;
+  }
+
+  .pcm-section-title {
+    margin-bottom: 10px;
+  }
+
+  .pcm-cards {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 10px;
+  }
+
+  .pcm-card {
+    padding: 10px 12px;
+  }
+
+  .pcm-card-value {
+    font-size: 1.5rem;
+  }
+
+  .pcm-table th,
+  .pcm-table td {
+    padding: 6px 8px;
   }
 
   /* Imprimir só a seção "Operadores na Manutenção" (botão dedicado) — esconde tudo

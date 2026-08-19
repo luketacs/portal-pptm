@@ -52,10 +52,21 @@ export function calcularLinhaTempo(
   const escalaX = (i: number): number =>
     n <= 1 ? margem.esquerda + areaLargura / 2 : margem.esquerda + (i / (n - 1)) * areaLargura;
 
-  // 100% fica no topo do gráfico, 0% embaixo.
+  // Indicadores de PCM costumam ficar sempre entre ~85-100% — numa escala fixa
+  // 0-100%, toda a variação real fica espremida numa faixinha no topo do gráfico e
+  // a linha vira um risco quase reto (ilegível). Em vez disso, "dá zoom": o piso do
+  // eixo Y acompanha o menor valor da série (arredondado pra baixo, de 10 em 10,
+  // com uma folga de 5 pontos), sempre com o teto fixo em 100%. Quando os valores
+  // caem bem abaixo (ex: uma semana ruim), o piso volta pra 0% naturalmente.
+  const valores = pontos.flatMap(p => [p.atendimento, p.cumprimento]);
+  const menorValor = Math.min(100, ...valores);
+  const eixoYMinimo = Math.max(0, Math.floor((menorValor - 5) / 10) * 10);
+  const faixaY = 100 - eixoYMinimo;
+
+  // 100% fica no topo do gráfico, eixoYMinimo embaixo.
   const escalaY = (valor: number): number => {
-    const limitado = Math.max(0, Math.min(100, valor));
-    return margem.topo + (1 - limitado / 100) * areaAltura;
+    const limitado = Math.max(eixoYMinimo, Math.min(100, valor));
+    return margem.topo + (1 - (limitado - eixoYMinimo) / faixaY) * areaAltura;
   };
 
   const pontosAtendimento = pontos.map((p, i) => ({ x: escalaX(i), y: escalaY(p.atendimento) }));
@@ -83,6 +94,9 @@ export function calcularLinhaTempo(
     linhaAtendimento: paraAtributoPoints(pontosAtendimento),
     linhaCumprimento: paraAtributoPoints(pontosCumprimento),
     eixoX,
-    eixoY: [0, 25, 50, 75, 100].map(v => ({ posicao: escalaY(v), label: `${v}%` })),
+    eixoY: [0, 1, 2, 3, 4].map(i => {
+      const valor = eixoYMinimo + (faixaY * i) / 4;
+      return { posicao: escalaY(valor), label: `${Math.round(valor)}%` };
+    }),
   };
 }
