@@ -644,4 +644,24 @@
   .pcm-report.pcm-print-somente-operacao > *:not(.pcm-header):not(.pcm-footer):not(.pcm-secao-operacao-manutencao) {
     display: none !important;
   }
+
+  /* Seção "Horas e Ordens de Serviço" — no PDF enviado à gerência só interessam os
+     gráficos; cards de resumo, tabela detalhada e os painéis de nomes não mapeados /
+     ocorrências não contabilizadas ficam só na tela (relatório aberto no navegador). */
+  .pcm-secao-horas .pcm-cards-secundario,
+  .pcm-secao-horas > .pcm-table-container,
+  .pcm-secao-horas .pcm-panel {
+    display: none;
+  }
+
+  /* "Operadores na Manutenção" fica só na tela — não faz parte do PDF geral do
+     relatório enviado à gerência (continua imprimível sozinha via botão dedicado,
+     que reaproveita essa mesma seção e precisa da regra abaixo pra reexibi-la). */
+  .pcm-secao-operacao-manutencao {
+    display: none;
+  }
+
+  .pcm-report.pcm-print-somente-operacao .pcm-secao-operacao-manutencao {
+    display: block;
+  }
 }
