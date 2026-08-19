@@ -161,15 +161,19 @@ describe('extrairHistoricoSemanas', () => {
     expect(extrairHistoricoSemanas(rows, 5)).toEqual([]);
   });
 
-  it('pula semana com ordens programadas mas sem nenhum dado de plano (nao mostra cumprimento 0% falso)', () => {
+  it('semana com ordens programadas mas sem nenhum dado de plano fica com cumprimento 100% (nao 0% nem pulada)', () => {
     // semana 2 tem atendimento de verdade (10 programadas, 8 executadas) mas
-    // planejadasPlano=0 -- sem dado de plano naquela semana, nao "cumprimento zero".
+    // planejadasPlano=0 -- sem dado de plano naquela semana, nao pode "comprometer
+    // a meta" (nao tinha o que cumprir), entao fica 100%, nao 0%.
     const rows = montarPlanilhaMultiSemanas({
       1: [10, 10, 10, 10],
       2: [10, 8, 0, 0],
     });
     const pontos = extrairHistoricoSemanas(rows, 2);
-    expect(pontos.map(p => p.label)).toEqual(['S1']);
+    expect(pontos).toEqual([
+      { label: 'S1', atendimento: 100, cumprimento: 100 },
+      { label: 'S2', atendimento: 80, cumprimento: 100 },
+    ]);
   });
 });
 
@@ -220,15 +224,19 @@ describe('extrairHistoricoSemanasPorArea', () => {
     expect(extrairHistoricoSemanasPorArea([], 5, 'AREA INEXISTENTE')).toEqual([]);
   });
 
-  it('pula semana com atendimento real mas sem dado de plano (nao mostra cumprimento 0% falso)', () => {
+  it('semana com atendimento real mas sem dado de plano fica com cumprimento 100% (nao 0% nem pulada)', () => {
     // reproduz o bug relatado: SPCI com atendimento perto de 100% em varias semanas,
-    // mas cumprimento despencando pra 0% em semanas sem planejadasPlano preenchido.
+    // mas cumprimento despencando pra 0% em semanas sem planejadasPlano preenchido --
+    // deveria ficar 100% (sem plano pra cumprir, nao "compromete a meta"), nao pular.
     const rows = montarPlanilhaMultiSemanasArea('SPCI', {
-      1: [10, 10, 10, 10], // com plano: fica na linha
-      2: [10, 9, 0, 0],    // atendimento real (90%), sem dado de plano: nao deveria aparecer
+      1: [10, 10, 10, 10],
+      2: [10, 9, 0, 0], // atendimento real (90%), sem dado de plano
     });
     const pontos = extrairHistoricoSemanasPorArea(rows, 2, 'SPCI');
-    expect(pontos.map(p => p.label)).toEqual(['S1']);
+    expect(pontos).toEqual([
+      { label: 'S1', atendimento: 100, cumprimento: 100 },
+      { label: 'S2', atendimento: 90, cumprimento: 100 },
+    ]);
   });
 });
 

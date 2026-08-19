@@ -263,15 +263,17 @@ function calcularTotaisSemana(
   return {
     totalProgramadas, totalPlanejadasPlano,
     atendimento: totalProgramadas > 0 ? round2((totalExecutadas / totalProgramadas) * 100) : 0,
-    cumprimento: totalPlanejadasPlano > 0 ? round2((totalExecutadasPlano / totalPlanejadasPlano) * 100) : 0,
+    // Sem nenhum "plano" pra semana (planejadasPlano=0), mas com ordens programadas
+    // de verdade: fica em 100%, não 0% — uma semana sem nada planejado no plano não
+    // pode contar como se tivesse comprometido a meta (não tinha o que cumprir).
+    cumprimento: totalPlanejadasPlano > 0 ? round2((totalExecutadasPlano / totalPlanejadasPlano) * 100) : 100,
   };
 }
 
 // Histórico semana a semana (1..semanaAte) pra linha do tempo do acumulado — pula
-// semanas sem nenhuma ordem programada (ainda não chegaram / planilha não preenchida)
-// e também semanas sem nenhum dado de "plano" (planejadasPlano=0): sem isso, a
-// fórmula de cumprimento cai no fallback e mostra 0% como se fosse um resultado
-// real, quando na verdade é só ausência de dado — criava quedas falsas na linha.
+// semanas sem nenhuma ordem programada (ainda não chegaram / planilha não preenchida).
+// Semanas com ordens programadas mas sem dado de plano entram com cumprimento 100%
+// (ver calcularTotaisSemana), não são puladas.
 export function extrairHistoricoSemanas(rows: unknown[][], semanaAte: number): PontoLinhaTempo[] {
   const linhaSemanas = rows[LINHA_SEMANAS] ?? [];
   const pontos: PontoLinhaTempo[] = [];
@@ -279,7 +281,7 @@ export function extrairHistoricoSemanas(rows: unknown[][], semanaAte: number): P
     const coluna = encontrarColunaSemana(linhaSemanas, semana);
     if (coluna === null) continue;
     const totais = calcularTotaisSemana(rows, coluna);
-    if (totais.totalProgramadas === 0 || totais.totalPlanejadasPlano === 0) continue;
+    if (totais.totalProgramadas === 0) continue;
     pontos.push({ label: `S${semana}`, atendimento: totais.atendimento, cumprimento: totais.cumprimento });
   }
   return pontos;
@@ -299,14 +301,17 @@ function calcularAtendimentoCumprimentoArea(
   return {
     programadas, planejadasPlano,
     atendimento: programadas > 0 ? round2((executadas / programadas) * 100) : 0,
-    cumprimento: planejadasPlano > 0 ? round2((executadasPlano / planejadasPlano) * 100) : 0,
+    // Mesma regra de calcularTotaisSemana: sem plano pra essa área naquela semana,
+    // mas com ordens programadas de verdade, fica em 100% (não compromete a meta
+    // por falta de algo que nem existia pra cumprir).
+    cumprimento: planejadasPlano > 0 ? round2((executadasPlano / planejadasPlano) * 100) : 100,
   };
 }
 
 // Mesma ideia de extrairHistoricoSemanas, mas pra uma única área (não a soma de
 // todas) — usado pelas linhas do tempo separadas de AREAS_LINHA_TEMPO_SEPARADA.
-// Pula semanas sem "plano" pra essa área (planejadasPlano=0), pelo mesmo motivo:
-// sem isso o cumprimento cai no fallback de 0% e cria quedas falsas na linha.
+// Semanas com ordens programadas mas sem dado de plano entram com cumprimento
+// 100% (ver calcularAtendimentoCumprimentoArea), não são puladas.
 export function extrairHistoricoSemanasPorArea(rows: unknown[][], semanaAte: number, nomeArea: string): PontoLinhaTempo[] {
   const areaInfo = AREAS_PCM.find(a => a.nome === nomeArea);
   if (!areaInfo) return [];
@@ -317,7 +322,7 @@ export function extrairHistoricoSemanasPorArea(rows: unknown[][], semanaAte: num
     const coluna = encontrarColunaSemana(linhaSemanas, semana);
     if (coluna === null) continue;
     const totais = calcularAtendimentoCumprimentoArea(rows, areaInfo.linhaBase, coluna);
-    if (totais.programadas === 0 || totais.planejadasPlano === 0) continue;
+    if (totais.programadas === 0) continue;
     pontos.push({ label: `S${semana}`, atendimento: totais.atendimento, cumprimento: totais.cumprimento });
   }
   return pontos;
