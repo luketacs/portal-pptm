@@ -206,7 +206,9 @@ export class RelatorioSemanalPcmComponent {
       this.linhaTempo.set(calcularLinhaTempo(historico));
       this.linhaTempoPorArea.set(AREAS_LINHA_TEMPO_SEPARADA.map(area => ({
         area,
-        geometria: calcularLinhaTempo(extrairHistoricoSemanasPorArea(rows, this.semana(), area), { largura: 340, altura: 170 }),
+        geometria: calcularLinhaTempo(
+          extrairHistoricoSemanasPorArea(rows, this.semana(), area), { largura: 340, altura: 170, maxRotulosEixoX: 8 },
+        ),
       })));
 
       const arqMatriculas = this.arquivoMatriculas();

@@ -57,4 +57,29 @@ describe('calcularLinhaTempo', () => {
     ])!;
     expect(geo.eixoX.map(e => e.label)).toEqual(['JAN', 'FEV']);
   });
+
+  function pontosSemanas(qtd: number) {
+    return Array.from({ length: qtd }, (_, i) => ({ label: `S${i + 1}`, atendimento: 90, cumprimento: 90 }));
+  }
+
+  it('nao afina o eixo X quando os pontos cabem dentro do maximo (comportamento igual a antes)', () => {
+    const geo = calcularLinhaTempo(pontosSemanas(10))!;
+    expect(geo.eixoX).toHaveLength(10);
+  });
+
+  it('afina o eixo X quando ha mais pontos que o maximo, mas mantem a linha inteira (todos os pontos do grafico)', () => {
+    const geo = calcularLinhaTempo(pontosSemanas(33), { maxRotulosEixoX: 10 })!;
+    expect(geo.eixoX.length).toBeLessThanOrEqual(10 + 1); // +1 porque sempre inclui o ultimo
+    expect(geo.pontosAtendimento).toHaveLength(33); // a linha em si nao perde nenhum ponto
+  });
+
+  it('sempre mantem o rotulo do ultimo periodo, mesmo afinado', () => {
+    const geo = calcularLinhaTempo(pontosSemanas(33), { maxRotulosEixoX: 10 })!;
+    expect(geo.eixoX[geo.eixoX.length - 1].label).toBe('S33');
+  });
+
+  it('respeita um maxRotulosEixoX customizado (grafico menor precisa de menos rotulos)', () => {
+    const geo = calcularLinhaTempo(pontosSemanas(20), { maxRotulosEixoX: 5 })!;
+    expect(geo.eixoX.length).toBeLessThanOrEqual(6);
+  });
 });
