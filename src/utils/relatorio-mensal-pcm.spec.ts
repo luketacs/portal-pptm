@@ -194,10 +194,10 @@ describe('parseIndicadoresMensais', () => {
     expect(semData.dadosMensal.periodoMes).toBe('01/01/2026 a 31/01/2026');
   });
 
-  it('classifica o status geral usando as mesmas metas do semanal (91% / 93%)', () => {
+  it('classifica o status geral usando a meta de 95% / 95%', () => {
     const rows = montarPlanilha();
     const { dadosMensal, dadosAcumulado } = parseIndicadoresMensais(rows, 'JAN', 2026);
-    expect(dadosMensal.statusGeral).toBe('Próximo da Meta'); // 90% atendimento < 91%, mas >= 91*0.9
+    expect(dadosMensal.statusGeral).toBe('Próximo da Meta'); // 90% atendimento < 95%, mas >= 95*0.9
     // o acumulado reaproveita o status do mes, igual ao original (nao recalcula)
     expect(dadosAcumulado.statusGeral).toBe(dadosMensal.statusGeral);
   });
@@ -215,7 +215,7 @@ function dadosMensalBase(overrides: Partial<DadosMensal> = {}): DadosMensal {
     atendimentoGeral: 95, cumprimentoGeral: 95, percentualForaProgramacao: 0,
     totalProgramadas: 100, totalExecutadas: 95, totalNaoExecutadas: 5, totalForaProgramacao: 0,
     totalPlanejadasPlano: 100, totalExecutadasPlano: 95, totalNaoExecutadasPlano: 5,
-    detalhesAreas: [], statusGeral: 'Dentro da Meta', metaAtendimento: 91, metaCumprimento: 93,
+    detalhesAreas: [], statusGeral: 'Dentro da Meta', metaAtendimento: 95, metaCumprimento: 95,
     ...overrides,
   };
 }
@@ -226,7 +226,7 @@ function dadosAcumuladoBase(overrides: Partial<DadosAcumulado> = {}): DadosAcumu
     atendimentoGeral: 90, cumprimentoGeral: 90, percentualForaProgramacao: 5,
     totalProgramadas: 100, totalExecutadas: 90, totalNaoExecutadas: 10, totalForaProgramacao: 5,
     totalPlanejadasPlano: 100, totalExecutadasPlano: 90, totalNaoExecutadasPlano: 10,
-    detalhesAreas: [], statusGeral: 'Dentro da Meta', metaAtendimento: 91, metaCumprimento: 93, qtdMeses: 1,
+    detalhesAreas: [], statusGeral: 'Dentro da Meta', metaAtendimento: 95, metaCumprimento: 95, qtdMeses: 1,
     ...overrides,
   };
 }

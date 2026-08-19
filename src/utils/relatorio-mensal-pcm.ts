@@ -14,8 +14,8 @@
 import { AcaoPrioritaria, Destaque, PontoAtencao } from './relatorio-semanal-pcm';
 import { PontoLinhaTempo } from './relatorio-linha-tempo';
 
-export const META_ATENDIMENTO_MENSAL = 91.0;
-export const META_CUMPRIMENTO_MENSAL = 93.0;
+export const META_ATENDIMENTO_MENSAL = 95.0;
+export const META_CUMPRIMENTO_MENSAL = 95.0;
 
 export const MESES_ABREV = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'] as const;
 export type MesAbrev = typeof MESES_ABREV[number];
