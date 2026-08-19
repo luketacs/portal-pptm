@@ -313,6 +313,43 @@
       }
     </section>
 
+    <!-- Evolução ao longo do ano, separada por área -->
+    <section class="pcm-section">
+      <h2 class="pcm-section-title">Evolução ao Longo do Ano — por Área</h2>
+      <div class="pcm-linha-tempo-grid-areas">
+        @for (item of linhaTempoPorArea(); track item.area) {
+          <div class="pcm-linha-tempo-area">
+            <h4 class="pcm-horas-grafico-area-titulo">{{ item.area }}</h4>
+            @if (item.geometria; as lt) {
+              <svg [attr.viewBox]="'0 0 ' + lt.largura + ' ' + lt.altura" class="pcm-linha-tempo-svg">
+                @for (g of lt.eixoY; track g.label) {
+                  <line [attr.x1]="lt.margem.esquerda" [attr.x2]="lt.largura - lt.margem.direita" [attr.y1]="g.posicao" [attr.y2]="g.posicao" class="pcm-linha-tempo-grid" />
+                  <text [attr.x]="lt.margem.esquerda - 6" [attr.y]="g.posicao" class="pcm-linha-tempo-eixo-y">{{ g.label }}</text>
+                }
+                @for (l of lt.eixoX; track l.label) {
+                  <text [attr.x]="l.posicao" [attr.y]="lt.altura - 8" class="pcm-linha-tempo-eixo-x">{{ l.label }}</text>
+                }
+                <polyline [attr.points]="lt.linhaCumprimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
+                <polyline [attr.points]="lt.linhaAtendimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
+                @for (p of lt.pontosCumprimento; track $index) {
+                  <circle [attr.cx]="p.x" [attr.cy]="p.y" r="2.5" class="pcm-linha-tempo-ponto--cumprimento" />
+                }
+                @for (p of lt.pontosAtendimento; track $index) {
+                  <circle [attr.cx]="p.x" [attr.cy]="p.y" r="2.5" class="pcm-linha-tempo-ponto--atendimento" />
+                }
+              </svg>
+            } @else {
+              <p class="pcm-empty">Sem dados suficientes.</p>
+            }
+          </div>
+        }
+      </div>
+      <div class="pcm-linha-tempo-legenda">
+        <span><span class="pcm-legenda-cor pcm-legenda-cor--atendimento"></span>Atendimento à Programação</span>
+        <span><span class="pcm-legenda-cor pcm-legenda-cor--cumprimento"></span>Cumprimento do Plano</span>
+      </div>
+    </section>
+
     <!-- Destaques, pontos de atenção e ações -->
     <section class="pcm-highlights">
       <div class="pcm-panel pcm-panel--green">

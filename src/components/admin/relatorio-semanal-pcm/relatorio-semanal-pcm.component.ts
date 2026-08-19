@@ -3,8 +3,9 @@ import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../../services/auth.service';
 import {
-  AcaoPrioritaria, DadosSemana, Destaque, ModoCalendarioSemana, PontoAtencao,
-  analisarPontosAtencaoEAcoes, calcularPeriodoSemana, extrairHistoricoSemanas, gerarDestaques, parseIndicadoresSemanais,
+  AREAS_LINHA_TEMPO_SEPARADA, AcaoPrioritaria, DadosSemana, Destaque, ModoCalendarioSemana, PontoAtencao,
+  analisarPontosAtencaoEAcoes, calcularPeriodoSemana, extrairHistoricoSemanas, extrairHistoricoSemanasPorArea,
+  gerarDestaques, parseIndicadoresSemanais,
 } from '../../../utils/relatorio-semanal-pcm';
 import { LinhaTempoGeometria, calcularLinhaTempo } from '../../../utils/relatorio-linha-tempo';
 import { parseMatriculas } from '../../../utils/relatorio-colaboradores';
@@ -15,12 +16,18 @@ import { carregarLocal, removerLocal, salvarLocal } from '../../../utils/relator
 
 const CHAVE_STORAGE = 'pcm-relatorio-semanal-ultimo';
 
+interface LinhaTempoArea {
+  area: string;
+  geometria: LinhaTempoGeometria | null;
+}
+
 interface RelatorioSemanalSnapshot {
   dados: DadosSemana;
   pontosAtencao: PontoAtencao[];
   acoesPrioritarias: AcaoPrioritaria[];
   destaques: Destaque[];
   linhaTempo: LinhaTempoGeometria | null;
+  linhaTempoPorArea: LinhaTempoArea[];
   colaboradoresOperacao: ColaboradorHoras[];
   descricoesOrdens: Record<string, string>;
   geradoEm: string; // ISO
@@ -80,6 +87,7 @@ export class RelatorioSemanalPcmComponent {
   acoesPrioritarias = signal<AcaoPrioritaria[]>([]);
   destaques = signal<Destaque[]>([]);
   linhaTempo = signal<LinhaTempoGeometria | null>(null);
+  linhaTempoPorArea = signal<LinhaTempoArea[]>([]);
   colaboradoresOperacao = signal<ColaboradorHoras[]>([]);
   descricoesOrdens = signal<Record<string, string>>({});
   geradoEm = signal<Date | null>(null);
@@ -113,6 +121,7 @@ export class RelatorioSemanalPcmComponent {
       acoesPrioritarias: this.acoesPrioritarias(),
       destaques: this.destaques(),
       linhaTempo: this.linhaTempo(),
+      linhaTempoPorArea: this.linhaTempoPorArea(),
       colaboradoresOperacao: this.colaboradoresOperacao(),
       descricoesOrdens: this.descricoesOrdens(),
       geradoEm: (this.geradoEm() ?? new Date()).toISOString(),
@@ -129,6 +138,7 @@ export class RelatorioSemanalPcmComponent {
     this.acoesPrioritarias.set(snapshot.acoesPrioritarias);
     this.destaques.set(snapshot.destaques);
     this.linhaTempo.set(snapshot.linhaTempo);
+    this.linhaTempoPorArea.set(snapshot.linhaTempoPorArea ?? []);
     this.colaboradoresOperacao.set(snapshot.colaboradoresOperacao);
     this.descricoesOrdens.set(snapshot.descricoesOrdens ?? {});
     this.geradoEm.set(new Date(snapshot.geradoEm));
@@ -194,6 +204,10 @@ export class RelatorioSemanalPcmComponent {
       this.acoesPrioritarias.set(acoesPrioritarias);
       this.destaques.set(destaques);
       this.linhaTempo.set(calcularLinhaTempo(historico));
+      this.linhaTempoPorArea.set(AREAS_LINHA_TEMPO_SEPARADA.map(area => ({
+        area,
+        geometria: calcularLinhaTempo(extrairHistoricoSemanasPorArea(rows, this.semana(), area), { largura: 340, altura: 170 }),
+      })));
 
       const arqMatriculas = this.arquivoMatriculas();
       const arqFechamento = this.arquivoFechamento();
@@ -241,6 +255,7 @@ export class RelatorioSemanalPcmComponent {
     this.acoesPrioritarias.set([]);
     this.destaques.set([]);
     this.linhaTempo.set(null);
+    this.linhaTempoPorArea.set([]);
     this.colaboradoresOperacao.set([]);
     this.descricoesOrdens.set({});
     this.geradoEm.set(null);

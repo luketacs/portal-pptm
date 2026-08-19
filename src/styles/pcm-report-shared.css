@@ -246,6 +246,18 @@
   overflow: visible;
 }
 
+/* Linhas do tempo separadas por área (Semanal) — grade responsiva, 3 por linha */
+.pcm-linha-tempo-grid-areas {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px 24px;
+  margin-bottom: 12px;
+}
+
+.pcm-linha-tempo-area .pcm-horas-grafico-area-titulo {
+  text-align: center;
+}
+
 .pcm-linha-tempo-grid {
   stroke: #eef1f6;
   stroke-width: 1;

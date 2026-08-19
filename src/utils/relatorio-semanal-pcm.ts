@@ -280,6 +280,42 @@ export function extrairHistoricoSemanas(rows: unknown[][], semanaAte: number): P
   return pontos;
 }
 
+// Áreas com linha do tempo própria, além da geral — pedido do usuário pra ver a
+// evolução de cada uma separadamente, não só a soma de todas.
+export const AREAS_LINHA_TEMPO_SEPARADA = ['MECÂNICA', 'ELÉTRICA', 'LIMP OPERACIONAL', 'SPCI', 'REFRIGERAÇÃO'];
+
+function calcularAtendimentoCumprimentoArea(
+  rows: unknown[][], linhaBase: number, coluna: number,
+): { atendimento: number; cumprimento: number; programadas: number } {
+  const programadas = safeNumericCell(rows, linhaBase, coluna);
+  const executadas = safeNumericCell(rows, linhaBase + 1, coluna);
+  const planejadasPlano = safeNumericCell(rows, linhaBase + 3, coluna);
+  const executadasPlano = safeNumericCell(rows, linhaBase + 4, coluna);
+  return {
+    programadas,
+    atendimento: programadas > 0 ? round2((executadas / programadas) * 100) : 0,
+    cumprimento: planejadasPlano > 0 ? round2((executadasPlano / planejadasPlano) * 100) : 0,
+  };
+}
+
+// Mesma ideia de extrairHistoricoSemanas, mas pra uma única área (não a soma de
+// todas) — usado pelas linhas do tempo separadas de AREAS_LINHA_TEMPO_SEPARADA.
+export function extrairHistoricoSemanasPorArea(rows: unknown[][], semanaAte: number, nomeArea: string): PontoLinhaTempo[] {
+  const areaInfo = AREAS_PCM.find(a => a.nome === nomeArea);
+  if (!areaInfo) return [];
+
+  const linhaSemanas = rows[LINHA_SEMANAS] ?? [];
+  const pontos: PontoLinhaTempo[] = [];
+  for (let semana = 1; semana <= semanaAte; semana++) {
+    const coluna = encontrarColunaSemana(linhaSemanas, semana);
+    if (coluna === null) continue;
+    const totais = calcularAtendimentoCumprimentoArea(rows, areaInfo.linhaBase, coluna);
+    if (totais.programadas === 0) continue;
+    pontos.push({ label: `S${semana}`, atendimento: totais.atendimento, cumprimento: totais.cumprimento });
+  }
+  return pontos;
+}
+
 export function analisarPontosAtencaoEAcoes(
   dados: DadosSemana,
 ): { pontosAtencao: PontoAtencao[]; acoesPrioritarias: AcaoPrioritaria[] } {

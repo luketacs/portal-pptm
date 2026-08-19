@@ -1,6 +1,6 @@
 import {
   AREAS_PCM, DadosSemana, analisarPontosAtencaoEAcoes, calcularPeriodoSemana,
-  encontrarColunaSemana, extrairHistoricoSemanas, gerarDestaques, parseIndicadoresSemanais,
+  encontrarColunaSemana, extrairHistoricoSemanas, extrairHistoricoSemanasPorArea, gerarDestaques, parseIndicadoresSemanais,
 } from './relatorio-semanal-pcm';
 
 describe('calcularPeriodoSemana', () => {
@@ -159,6 +159,54 @@ describe('extrairHistoricoSemanas', () => {
   it('retorna lista vazia quando nenhuma semana tem dados', () => {
     const rows = montarPlanilhaMultiSemanas({});
     expect(extrairHistoricoSemanas(rows, 5)).toEqual([]);
+  });
+});
+
+// Igual montarPlanilhaMultiSemanas, mas permite escolher a área (pra provar que
+// extrairHistoricoSemanasPorArea lê o bloco certo, não sempre a primeira área).
+function montarPlanilhaMultiSemanasArea(nomeArea: string, porSemana: Record<number, [number, number, number, number]>): unknown[][] {
+  const rows: unknown[][] = [];
+  rows[5] = [];
+  const linhaBase = AREAS_PCM.find(a => a.nome === nomeArea)!.linhaBase;
+  for (const [semanaStr, [prog, exec, planPlano, execPlano]] of Object.entries(porSemana)) {
+    const semana = Number(semanaStr);
+    const col = 5 + semana;
+    rows[5][col] = semana;
+    rows[linhaBase] = rows[linhaBase] ?? []; rows[linhaBase][col] = prog;
+    rows[linhaBase + 1] = rows[linhaBase + 1] ?? []; rows[linhaBase + 1][col] = exec;
+    rows[linhaBase + 3] = rows[linhaBase + 3] ?? []; rows[linhaBase + 3][col] = planPlano;
+    rows[linhaBase + 4] = rows[linhaBase + 4] ?? []; rows[linhaBase + 4][col] = execPlano;
+  }
+  return rows;
+}
+
+describe('extrairHistoricoSemanasPorArea', () => {
+  it('extrai o historico de uma area especifica (nao a soma geral)', () => {
+    const rows = montarPlanilhaMultiSemanasArea('ELÉTRICA', {
+      1: [10, 9, 10, 10], // 90% / 100%
+      2: [20, 10, 20, 15], // 50% / 75%
+    });
+    const pontos = extrairHistoricoSemanasPorArea(rows, 2, 'ELÉTRICA');
+    expect(pontos).toEqual([
+      { label: 'S1', atendimento: 90, cumprimento: 100 },
+      { label: 'S2', atendimento: 50, cumprimento: 75 },
+    ]);
+  });
+
+  it('nao mistura os dados de duas areas diferentes', () => {
+    const rows = montarPlanilhaMultiSemanasArea('SPCI', { 1: [10, 10, 10, 10] });
+    expect(extrairHistoricoSemanasPorArea(rows, 1, 'MECÂNICA')).toEqual([]);
+    expect(extrairHistoricoSemanasPorArea(rows, 1, 'SPCI')).toEqual([{ label: 'S1', atendimento: 100, cumprimento: 100 }]);
+  });
+
+  it('pula semanas sem ordem programada naquela area', () => {
+    const rows = montarPlanilhaMultiSemanasArea('REFRIGERAÇÃO', { 1: [10, 10, 10, 10] });
+    const pontos = extrairHistoricoSemanasPorArea(rows, 3, 'REFRIGERAÇÃO');
+    expect(pontos.map(p => p.label)).toEqual(['S1']);
+  });
+
+  it('retorna lista vazia quando o nome da area nao existe', () => {
+    expect(extrairHistoricoSemanasPorArea([], 5, 'AREA INEXISTENTE')).toEqual([]);
   });
 });
 
