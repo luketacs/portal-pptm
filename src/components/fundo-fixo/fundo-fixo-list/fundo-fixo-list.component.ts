@@ -84,7 +84,7 @@ export class FundoFixoListComponent implements OnInit {
   comprarFormaPagamento = signal<FundoFixoFormaPagamento>('cartao');
   formaPagamentoAlvo = signal<FundoFixoSolicitacao | null>(null);
   formaPagamentoEscolhida = signal<FundoFixoFormaPagamento>('cartao');
-  comprarNotaFiscal = signal<File | null>(null);
+  comprarNotasFiscais = signal<File[]>([]);
   isProcessando = signal(false);
 
   // Modal: ver detalhes completos da solicitação (material/observações sem corte)
@@ -303,7 +303,7 @@ export class FundoFixoListComponent implements OnInit {
     this.comprarValorFinal.set(s.valorEstimado);
     this.comprarFornecedor.set(s.fornecedor ?? '');
     this.comprarFormaPagamento.set('cartao');
-    this.comprarNotaFiscal.set(null);
+    this.comprarNotasFiscais.set([]);
   }
 
   fecharComprar(): void {
@@ -312,22 +312,30 @@ export class FundoFixoListComponent implements OnInit {
 
   onNotaFiscalSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
-    this.comprarNotaFiscal.set(input.files?.[0] ?? null);
+    const novos = Array.from(input.files ?? []);
+    if (novos.length > 0) {
+      this.comprarNotasFiscais.update(atual => [...atual, ...novos]);
+    }
+    input.value = ''; // permite selecionar o mesmo arquivo de novo (ex.: depois de remover)
+  }
+
+  removerNotaFiscal(index: number): void {
+    this.comprarNotasFiscais.update(atual => atual.filter((_, i) => i !== index));
   }
 
   canConfirmarCompra(): boolean {
     const valor = this.comprarValorFinal() ?? 0;
-    return !!this.comprarNotaFiscal() && valor > 0 && valor <= this.limitePorCompra && !this.isProcessando();
+    return this.comprarNotasFiscais().length > 0 && valor > 0 && valor <= this.limitePorCompra && !this.isProcessando();
   }
 
   async confirmarCompra(): Promise<void> {
     const alvo = this.comprarAlvo();
-    const nota = this.comprarNotaFiscal();
-    if (!alvo || !nota || !this.canConfirmarCompra()) return;
+    const notas = this.comprarNotasFiscais();
+    if (!alvo || notas.length === 0 || !this.canConfirmarCompra()) return;
     this.isProcessando.set(true);
     try {
       await this.fundoFixoService.marcarComprado(
-        alvo.id, nota, this.comprarValorFinal() ?? alvo.valorEstimado, this.comprarFormaPagamento(), this.comprarFornecedor(),
+        alvo.id, notas, this.comprarValorFinal() ?? alvo.valorEstimado, this.comprarFormaPagamento(), this.comprarFornecedor(),
       );
       this.notificationService.showSuccess('Compra registrada com sucesso!');
       this.fecharComprar();
@@ -709,18 +717,19 @@ export class FundoFixoListComponent implements OnInit {
   }
 
   private async baixarNotasFiscaisZip(itens: FundoFixoSolicitacao[], mesLabel: string): Promise<void> {
-    const comNota = itens.filter(s => !!s.notaFiscalUrl);
+    const comNota = itens.flatMap(s => s.notasFiscaisUrls.map((url, idx) => ({ s, url, idx })));
     if (comNota.length === 0) return;
 
     const zip = new JSZip();
     const resultados = await Promise.allSettled(
-      comNota.map(async (s, i) => {
-        const res = await fetch(s.notaFiscalUrl!);
+      comNota.map(async ({ s, url, idx }, i) => {
+        const res = await fetch(url);
         if (!res.ok) throw new Error(`Falha ao baixar nota fiscal de ${s.fornecedor ?? s.material}`);
         const blob = await res.blob();
-        const ext = s.notaFiscalUrl!.split('.').pop()?.split('?')[0] || 'pdf';
+        const ext = url.split('.').pop()?.split('?')[0] || 'pdf';
         const nomeBase = `${s.fornecedor ?? s.material}`.replace(/[^\w\sÀ-ÿ-]/g, '').trim().slice(0, 40) || 'nota';
-        zip.file(`${String(i + 1).padStart(2, '0')}_${nomeBase}.${ext}`, blob);
+        const sufixo = s.notasFiscaisUrls.length > 1 ? `_${idx + 1}` : '';
+        zip.file(`${String(i + 1).padStart(2, '0')}_${nomeBase}${sufixo}.${ext}`, blob);
       }),
     );
 

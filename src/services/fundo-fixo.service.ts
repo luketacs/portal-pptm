@@ -27,7 +27,7 @@ interface FundoFixoRow {
   valor_final: number | null;
   forma_pagamento: string;
   orcamento_url: string | null;
-  nota_fiscal_url: string | null;
+  nota_fiscal_urls: string[] | null;
   observacoes: string | null;
   status: string;
   aprovador_id: string | null;
@@ -75,7 +75,7 @@ function mapRow(r: FundoFixoRow): FundoFixoSolicitacao {
     valorFinal: r.valor_final !== null ? Number(r.valor_final) : null,
     formaPagamento: (r.forma_pagamento as FundoFixoFormaPagamento) || 'cartao',
     orcamentoUrl: r.orcamento_url,
-    notaFiscalUrl: r.nota_fiscal_url,
+    notasFiscaisUrls: r.nota_fiscal_urls ?? [],
     observacoes: r.observacoes,
     status: r.status as FundoFixoStatus,
     aprovadorId: r.aprovador_id,
@@ -460,17 +460,17 @@ export class FundoFixoService {
   }
 
   async marcarComprado(
-    id: string, notaFiscal: File, valorFinal: number, formaPagamento: FundoFixoFormaPagamento, fornecedor?: string,
+    id: string, notasFiscais: File[], valorFinal: number, formaPagamento: FundoFixoFormaPagamento, fornecedor?: string,
   ): Promise<void> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
 
-    const notaFiscalUrl = await this.uploadAnexo(notaFiscal, 'notas-fiscais');
-    if (!notaFiscalUrl) throw new Error('Falha ao enviar a nota fiscal. Tente novamente.');
+    const notasFiscaisUrls = await Promise.all(notasFiscais.map(f => this.uploadAnexo(f, 'notas-fiscais')));
+    if (notasFiscaisUrls.some(url => !url)) throw new Error('Falha ao enviar uma ou mais notas fiscais. Tente novamente.');
 
     const payload: Record<string, unknown> = {
       status: 'comprado',
-      nota_fiscal_url: notaFiscalUrl,
+      nota_fiscal_urls: notasFiscaisUrls,
       valor_final: valorFinal,
       forma_pagamento: formaPagamento,
       data_compra: new Date().toISOString(),

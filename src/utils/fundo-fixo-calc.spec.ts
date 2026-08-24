@@ -30,7 +30,7 @@ function solicitacao(overrides: Partial<FundoFixoSolicitacao> = {}): FundoFixoSo
     valorFinal: null,
     formaPagamento: 'cartao',
     orcamentoUrl: null,
-    notaFiscalUrl: null,
+    notasFiscaisUrls: [],
     observacoes: null,
     status: 'pendente',
     aprovadorId: null,

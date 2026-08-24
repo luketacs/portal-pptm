@@ -333,10 +333,10 @@
                     @if (s.orcamentoUrl) {
                       <a [href]="s.orcamentoUrl" target="_blank" rel="noopener" class="text-blue-600 hover:text-blue-800 hover:underline">Orçamento</a>
                     }
-                    @if (s.notaFiscalUrl) {
-                      <a [href]="s.notaFiscalUrl" target="_blank" rel="noopener" class="text-green-600 hover:text-green-800 hover:underline">Nota fiscal</a>
+                    @for (url of s.notasFiscaisUrls; track url; let i = $index) {
+                      <a [href]="url" target="_blank" rel="noopener" class="text-green-600 hover:text-green-800 hover:underline">Nota fiscal{{ s.notasFiscaisUrls.length > 1 ? ' ' + (i + 1) : '' }}</a>
                     }
-                    @if (!s.orcamentoUrl && !s.notaFiscalUrl) {
+                    @if (!s.orcamentoUrl && s.notasFiscaisUrls.length === 0) {
                       <span class="text-gray-300">—</span>
                     }
                   </div>
@@ -468,15 +468,15 @@
           </div>
         }
 
-        @if (d.orcamentoUrl || d.notaFiscalUrl) {
+        @if (d.orcamentoUrl || d.notasFiscaisUrls.length > 0) {
           <div>
             <dt class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Anexos</dt>
-            <dd class="flex gap-4">
+            <dd class="flex flex-wrap gap-4">
               @if (d.orcamentoUrl) {
                 <a [href]="d.orcamentoUrl" target="_blank" rel="noopener" class="text-blue-600 hover:text-blue-800 hover:underline">Orçamento</a>
               }
-              @if (d.notaFiscalUrl) {
-                <a [href]="d.notaFiscalUrl" target="_blank" rel="noopener" class="text-green-600 hover:text-green-800 hover:underline">Nota fiscal</a>
+              @for (url of d.notasFiscaisUrls; track url; let i = $index) {
+                <a [href]="url" target="_blank" rel="noopener" class="text-green-600 hover:text-green-800 hover:underline">Nota fiscal{{ d.notasFiscaisUrls.length > 1 ? ' ' + (i + 1) : '' }}</a>
               }
             </dd>
           </div>
@@ -685,17 +685,23 @@
         <div class="mb-4"></div>
       }
 
-      <label class="block text-sm font-medium text-slate-700 mb-1">Nota fiscal <span class="text-red-500">*</span></label>
-      @if (!comprarNotaFiscal()) {
-        <label class="cursor-pointer inline-block mb-4">
-          <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="hidden" (change)="onNotaFiscalSelected($event)" />
-          <span class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
-            Selecionar arquivo
-          </span>
-        </label>
-      } @else {
-        <p class="text-sm text-gray-600 mb-4">{{ comprarNotaFiscal()!.name }}</p>
+      <label class="block text-sm font-medium text-slate-700 mb-1">Nota(s) fiscal(is) <span class="text-red-500">*</span></label>
+      @if (comprarNotasFiscais().length > 0) {
+        <ul class="mb-2 space-y-1">
+          @for (f of comprarNotasFiscais(); track f.name + '-' + $index; let i = $index) {
+            <li class="flex items-center justify-between gap-2 text-sm text-gray-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+              <span class="truncate">{{ f.name }}</span>
+              <button type="button" (click)="removerNotaFiscal(i)" class="text-red-500 hover:text-red-700 text-xs font-semibold flex-shrink-0">Remover</button>
+            </li>
+          }
+        </ul>
       }
+      <label class="cursor-pointer inline-block mb-4">
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple class="hidden" (change)="onNotaFiscalSelected($event)" />
+        <span class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
+          {{ comprarNotasFiscais().length > 0 ? 'Adicionar mais um arquivo' : 'Selecionar arquivo(s)' }}
+        </span>
+      </label>
 
       <div class="flex justify-end gap-3">
         <button (click)="fecharComprar()" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Cancelar</button>

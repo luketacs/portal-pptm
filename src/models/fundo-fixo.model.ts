@@ -14,7 +14,7 @@ export interface FundoFixoSolicitacao {
   valorFinal: number | null;
   formaPagamento: FundoFixoFormaPagamento;
   orcamentoUrl: string | null;
-  notaFiscalUrl: string | null;
+  notasFiscaisUrls: string[];
   observacoes: string | null;
   status: FundoFixoStatus;
   aprovadorId: string | null;
