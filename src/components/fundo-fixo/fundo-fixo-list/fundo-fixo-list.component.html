@@ -339,6 +339,9 @@
                     @if (!s.orcamentoUrl && s.notasFiscaisUrls.length === 0) {
                       <span class="text-gray-300">—</span>
                     }
+                    @if (podeAdicionarMaisNotas(s)) {
+                      <button (click)="abrirAdicionarNota(s)" class="text-gray-400 hover:text-blue-600 hover:underline">+ Adicionar nota</button>
+                    }
                   </div>
                 </td>
                 <td class="px-3 py-2 text-center whitespace-nowrap">
@@ -708,6 +711,41 @@
         <button (click)="confirmarCompra()" [disabled]="!canConfirmarCompra()"
           class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
           Confirmar compra
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Modal: Anexar mais notas fiscais numa compra já registrada -->
+@if (adicionarNotaAlvo(); as alvo) {
+  <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" (click)="fecharAdicionarNota()">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md" (click)="$event.stopPropagation()">
+      <h3 class="text-lg font-bold text-gray-800 mb-1">Anexar nota fiscal</h3>
+      <p class="text-sm text-gray-500 mb-4">{{ alvo.material }} — {{ alvo.notasFiscaisUrls.length }} nota(s) já anexada(s)</p>
+
+      @if (adicionarNotasNovas().length > 0) {
+        <ul class="mb-2 space-y-1">
+          @for (f of adicionarNotasNovas(); track f.name + '-' + $index; let i = $index) {
+            <li class="flex items-center justify-between gap-2 text-sm text-gray-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+              <span class="truncate">{{ f.name }}</span>
+              <button type="button" (click)="removerNovaNota(i)" class="text-red-500 hover:text-red-700 text-xs font-semibold flex-shrink-0">Remover</button>
+            </li>
+          }
+        </ul>
+      }
+      <label class="cursor-pointer inline-block mb-4">
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple class="hidden" (change)="onNovaNotaSelected($event)" />
+        <span class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
+          {{ adicionarNotasNovas().length > 0 ? 'Adicionar mais um arquivo' : 'Selecionar arquivo(s)' }}
+        </span>
+      </label>
+
+      <div class="flex justify-end gap-3">
+        <button (click)="fecharAdicionarNota()" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Cancelar</button>
+        <button (click)="confirmarAdicionarNota()" [disabled]="adicionarNotasNovas().length === 0 || isProcessando()"
+          class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
+          Anexar
         </button>
       </div>
     </div>

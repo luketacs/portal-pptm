@@ -85,6 +85,8 @@ export class FundoFixoListComponent implements OnInit {
   formaPagamentoAlvo = signal<FundoFixoSolicitacao | null>(null);
   formaPagamentoEscolhida = signal<FundoFixoFormaPagamento>('cartao');
   comprarNotasFiscais = signal<File[]>([]);
+  adicionarNotaAlvo = signal<FundoFixoSolicitacao | null>(null);
+  adicionarNotasNovas = signal<File[]>([]);
   isProcessando = signal(false);
 
   // Modal: ver detalhes completos da solicitação (material/observações sem corte)
@@ -245,6 +247,14 @@ export class FundoFixoListComponent implements OnInit {
     return s.status === 'aprovado' && (this.isAdmin() || s.solicitanteId === user.id);
   }
 
+  // Depois que a compra já foi registrada, ainda dá pra anexar mais notas fiscais
+  // (ex.: a compra saiu em mais de uma nota, ou faltou anexar uma na hora).
+  podeAdicionarMaisNotas(s: FundoFixoSolicitacao): boolean {
+    const user = this.currentUser();
+    if (!user) return false;
+    return s.status === 'comprado' && (this.isAdmin() || s.solicitanteId === user.id);
+  }
+
   // ── Aprovar ────────────────────────────────────────────────────────────
   abrirAprovar(s: FundoFixoSolicitacao): void {
     this.aprovarAlvo.set(s);
@@ -341,6 +351,45 @@ export class FundoFixoListComponent implements OnInit {
       this.fecharComprar();
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao registrar compra.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  // ── Anexar nota(s) fiscal(is) extra numa compra já registrada ─────────
+  abrirAdicionarNota(s: FundoFixoSolicitacao): void {
+    this.adicionarNotaAlvo.set(s);
+    this.adicionarNotasNovas.set([]);
+  }
+
+  fecharAdicionarNota(): void {
+    this.adicionarNotaAlvo.set(null);
+  }
+
+  onNovaNotaSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const novos = Array.from(input.files ?? []);
+    if (novos.length > 0) {
+      this.adicionarNotasNovas.update(atual => [...atual, ...novos]);
+    }
+    input.value = '';
+  }
+
+  removerNovaNota(index: number): void {
+    this.adicionarNotasNovas.update(atual => atual.filter((_, i) => i !== index));
+  }
+
+  async confirmarAdicionarNota(): Promise<void> {
+    const alvo = this.adicionarNotaAlvo();
+    const notas = this.adicionarNotasNovas();
+    if (!alvo || notas.length === 0 || this.isProcessando()) return;
+    this.isProcessando.set(true);
+    try {
+      await this.fundoFixoService.adicionarNotasFiscais(alvo.id, notas);
+      this.notificationService.showSuccess('Nota(s) fiscal(is) anexada(s) com sucesso!');
+      this.fecharAdicionarNota();
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao anexar nota fiscal.');
     } finally {
       this.isProcessando.set(false);
     }

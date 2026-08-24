@@ -496,6 +496,38 @@ export class FundoFixoService {
     await this.load();
   }
 
+  // Anexa nota(s) fiscal(is) extra a uma compra que já foi registrada (ex.: a compra
+  // saiu em mais de uma nota, ou uma nota ficou de fora na hora de registrar a compra).
+  async adicionarNotasFiscais(id: string, notasFiscais: File[]): Promise<void> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+
+    const item = this.getById(id);
+    if (!item) throw new Error('Solicitação não encontrada.');
+
+    const novasUrls = await Promise.all(notasFiscais.map(f => this.uploadAnexo(f, 'notas-fiscais')));
+    if (novasUrls.some(url => !url)) throw new Error('Falha ao enviar uma ou mais notas fiscais. Tente novamente.');
+
+    const urlsFinal = [...item.notasFiscaisUrls, ...(novasUrls as string[])];
+
+    const { error } = await this.supabaseService.client
+      .from('fundo_fixo_solicitacoes')
+      .update({ nota_fiscal_urls: urlsFinal })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'fundo_fixo_nota_adicionada',
+      resource_type: 'fundo_fixo',
+      resource_id: id,
+      description: `${user.name} anexou ${notasFiscais.length} nota(s) fiscal(is) adicional(is) a: ${item.material}`,
+    });
+
+    await this.load();
+  }
+
   // Admin pode corrigir a forma de pagamento mesmo depois da nota fiscal já anexada
   // (ex.: registrou como cartão por engano, mas foi pago em dinheiro do caixa).
   async atualizarFormaPagamento(id: string, formaPagamento: FundoFixoFormaPagamento): Promise<void> {
