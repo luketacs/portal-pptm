@@ -121,20 +121,21 @@ function formatarResposta(codigo, data) {
     ? 'Sem dados de estoque para esse código\\.'
     : estoques.map(e => formatarLinhaEstoque(e, data.unidade || '')).join('\n');
 
-  const linhas = [
+  // TODO: hoje não há fonte de dado acessível pra este valor por PPTM/EP
+  // (só existe nas planilhas locais do bot de WhatsApp) — sempre ❌ por enquanto.
+  const estoqueSegurancaTexto = ['🏭 *PPTM:* ❌', '🏭 *EP:* ❌'].join('\n');
+
+  // Linha em branco entre cada bloco (mais respiro na leitura), mas cada lista
+  // (localizações / estoque de segurança) fica compacta dentro do seu próprio bloco.
+  const blocos = [
     '📦 *Produto Encontrado\\!*',
     `📌 *Código:* ${escapeMarkdown(codigo)}`,
     `📃 *Texto breve:* ${escapeMarkdown(data.texto_breve || '—')}`,
     `📝 *Descrição completa:* ${escapeMarkdown(data.texto_completo || data.texto_breve || '—')}`,
-    '📍 *Estoque por Localização:*',
-    estoqueTexto,
-    '⚠️ *Estoque de Segurança:*',
-    // TODO: hoje não há fonte de dado acessível pra este valor por PPTM/EP
-    // (só existe nas planilhas locais do bot de WhatsApp) — sempre ❌ por enquanto.
-    '🏭 *PPTM:* ❌',
-    '🏭 *EP:* ❌',
+    `📍 *Estoque por Localização:*\n${estoqueTexto}`,
+    `⚠️ *Estoque de Segurança:*\n${estoqueSegurancaTexto}`,
   ];
-  return linhas.join('\n');
+  return blocos.join('\n\n');
 }
 
 // parseMode: 'MarkdownV2' só pra formatarResposta(), que escapa tudo que é dado
