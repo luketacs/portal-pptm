@@ -13,7 +13,6 @@
 //      https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<dominio>/api/telegram-material-bot&secret_token=<TELEGRAM_WEBHOOK_SECRET>
 
 const REQUEST_TIMEOUT_MS = 12000;
-const LOCALIZACAO_ESTOQUE = '4922'; // mesmo local usado em request-list.component.ts (checkStockBalance)
 
 // Rate limit em memória por chat — reseta a cada cold start da função, então é só uma
 // proteção leve contra abuso (mesmo padrão de api/fundo-fixo-public-request.js).
@@ -100,32 +99,41 @@ function escapeMarkdown(text) {
   return String(text ?? '').replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
 }
 
+// Lista cada localização retornada pela API (não só uma) — cada linha mostra
+// quantidade+unidade quando há saldo, ou ❌ quando não há.
+function formatarLinhaEstoque(estoque, unidade) {
+  const atual = Number(estoque.qAtual || 0);
+  const empenhada = Number(estoque.qEmpenhada || 0);
+  let valor;
+  if (atual <= 0) {
+    valor = '❌';
+  } else if (empenhada > 0) {
+    valor = `${estoque.qAtual} ${unidade} \\(${empenhada} comprometido\\)`.trim();
+  } else {
+    valor = `${estoque.qAtual} ${unidade}`.trim();
+  }
+  return `🏭 ${escapeMarkdown(estoque.empresa)} \\- ${escapeMarkdown(estoque.localizacao)}: ${valor}`;
+}
+
 function formatarResposta(codigo, data) {
   const estoques = Array.isArray(data.estoques) ? data.estoques : [];
-  const local = estoques.filter(e => e.localizacao === LOCALIZACAO_ESTOQUE);
-
-  let estoqueTexto;
-  if (local.length === 0) {
-    estoqueTexto = 'Sem dados de estoque para esse código.';
-  } else {
-    estoqueTexto = local.map(e => {
-      const atual = e.qAtual ?? '0';
-      const empenhada = Number(e.qEmpenhada || 0);
-      const unidade = data.unidade || '';
-      return empenhada > 0
-        ? `${atual} ${unidade} (${empenhada} comprometido)`.trim()
-        : `${atual} ${unidade}`.trim();
-    }).join('\n');
-  }
+  const estoqueTexto = estoques.length === 0
+    ? 'Sem dados de estoque para esse código\\.'
+    : estoques.map(e => formatarLinhaEstoque(e, data.unidade || '')).join('\n');
 
   const linhas = [
-    `📦 *Código:* ${escapeMarkdown(codigo)}`,
-    `*Descrição:* ${escapeMarkdown(data.texto_breve || '—')}`,
+    '📦 *Produto Encontrado\\!*',
+    `📌 *Código:* ${escapeMarkdown(codigo)}`,
+    `📃 *Texto breve:* ${escapeMarkdown(data.texto_breve || '—')}`,
+    `📝 *Descrição completa:* ${escapeMarkdown(data.texto_completo || data.texto_breve || '—')}`,
+    '📍 *Estoque por Localização:*',
+    estoqueTexto,
+    '⚠️ *Estoque de Segurança:*',
+    // TODO: hoje não há fonte de dado acessível pra este valor por PPTM/EP
+    // (só existe nas planilhas locais do bot de WhatsApp) — sempre ❌ por enquanto.
+    '🏭 *PPTM:* ❌',
+    '🏭 *EP:* ❌',
   ];
-  if (data.texto_completo && data.texto_completo !== data.texto_breve) {
-    linhas.push(`*Detalhada:* ${escapeMarkdown(data.texto_completo)}`);
-  }
-  linhas.push(`*Estoque:* ${escapeMarkdown(estoqueTexto)}`);
   return linhas.join('\n');
 }
 
