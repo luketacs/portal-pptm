@@ -158,7 +158,8 @@ async function sendTelegramMessage(chatId, text, parseMode) {
   }
 }
 
-const MENSAGEM_AJUDA = 'Olá! Manda o código de um material (ex.: 5900010) que eu respondo com a descrição e o saldo em estoque.';
+const TAMANHO_CODIGO = 8;
+const MENSAGEM_AJUDA = 'Olá! Manda o código de um material (ex.: 59093681, 8 caracteres) que eu respondo com a descrição e o saldo em estoque.';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(200).json({ ok: true });
@@ -191,8 +192,8 @@ export default async function handler(req, res) {
     }
 
     const codigo = text.replace(/[^a-zA-Z0-9\-_.]/g, '');
-    if (!codigo) {
-      await sendTelegramMessage(chatId, 'Manda só o código do material (ex.: 5900010).');
+    if (codigo.length !== TAMANHO_CODIGO) {
+      await sendTelegramMessage(chatId, `O código do material deve ter exatamente ${TAMANHO_CODIGO} caracteres (ex.: 59093681).`);
       return res.status(200).json({ ok: true });
     }
 
