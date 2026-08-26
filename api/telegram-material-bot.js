@@ -12,23 +12,50 @@
 //   3. Depois do deploy, registrar o webhook chamando uma vez:
 //      https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<dominio>/api/telegram-material-bot&secret_token=<TELEGRAM_WEBHOOK_SECRET>
 
-const REQUEST_TIMEOUT_MS = 12000;
+// Orçamento pensado pra caber com folga num maxDuration de 15s (ver vercel.json):
+// pior caso é REQUEST_TIMEOUT_MS (consulta ao SIGMA) + até 2x TELEGRAM_SEND_TIMEOUT_MS
+// (envio original + 1 retry em texto puro se o MarkdownV2 falhar).
+const REQUEST_TIMEOUT_MS = 8000;
+const TELEGRAM_SEND_TIMEOUT_MS = 8000;
 
-// Rate limit em memória por chat — reseta a cada cold start da função, então é só uma
-// proteção leve contra abuso (mesmo padrão de api/fundo-fixo-public-request.js).
+// Rate limit em memória por chat — reseta a cada cold start da função (e não é
+// compartilhado entre instâncias concorrentes), então é só uma proteção leve contra
+// abuso (mesmo padrão de api/fundo-fixo-public-request.js).
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 15;
 const rateLimitMap = new Map();
+const MAX_RATE_LIMIT_ENTRIES = 1000; // limite pra não crescer sem fim numa instância de longa duração
 
 function checkRateLimit(chatId) {
   const now = Date.now();
   const entry = rateLimitMap.get(chatId);
   if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
     rateLimitMap.set(chatId, { windowStart: now, count: 1 });
+    if (rateLimitMap.size > MAX_RATE_LIMIT_ENTRIES) {
+      rateLimitMap.delete(rateLimitMap.keys().next().value);
+    }
     return true;
   }
   entry.count += 1;
   return entry.count <= RATE_LIMIT_MAX;
+}
+
+// Dedup de update_id — o Telegram reenvia o mesmo update se não receber 200 rápido
+// (ex.: função demorou demais e a Vercel matou a execução no meio). Sem isso, um
+// reenvio processa tudo de novo e manda a resposta duplicada pro usuário. Só protege
+// contra reenvio pousando na MESMA instância (memória não é compartilhada entre
+// instâncias concorrentes), mas cobre o caso mais comum.
+const MAX_PROCESSED_UPDATES = 500;
+const processedUpdateIds = new Set();
+
+function jaProcessado(updateId) {
+  if (updateId === undefined || updateId === null) return false; // sem update_id, não dá pra deduplicar
+  if (processedUpdateIds.has(updateId)) return true;
+  processedUpdateIds.add(updateId);
+  if (processedUpdateIds.size > MAX_PROCESSED_UPDATES) {
+    processedUpdateIds.delete(processedUpdateIds.values().next().value);
+  }
+  return false;
 }
 
 async function fetchWithTimeout(url, options, timeoutMs) {
@@ -138,28 +165,64 @@ function formatarResposta(codigo, data) {
   return blocos.join('\n\n');
 }
 
+const TELEGRAM_MAX_MESSAGE_LENGTH = 4096;
+
+// Corta mensagens longas demais pro limite do Telegram (ex.: material com descrição
+// extensa + muitas localizações de estoque). O aviso não usa nenhum caractere
+// reservado do MarkdownV2 (sem colchetes/parênteses/pontuação), pra funcionar igual
+// em texto puro e não precisar escapar nada. Remove uma barra de escape solta que
+// possa sobrar bem no corte, pra não quebrar o MarkdownV2 (\ sem o caractere escapado).
+function truncarParaTelegram(text) {
+  if (text.length <= TELEGRAM_MAX_MESSAGE_LENGTH) return text;
+  const aviso = '\n\n⚠️ Mensagem truncada — resposta muito longa';
+  let cortado = text.slice(0, TELEGRAM_MAX_MESSAGE_LENGTH - aviso.length);
+  if (cortado.endsWith('\\')) cortado = cortado.slice(0, -1);
+  return cortado + aviso;
+}
+
 // parseMode: 'MarkdownV2' só pra formatarResposta(), que escapa tudo que é dado
 // dinâmico via escapeMarkdown() — as demais mensagens (texto fixo, sem formatação)
 // vão em texto puro, pra não depender de escapar tudo à mão certinho.
+//
+// Sempre confere a resposta do Telegram: se a API recusar (texto grande demais,
+// entidade MarkdownV2 mal formada etc.), o fetch NÃO lança exceção — sem checar
+// `ok` explicitamente, o bot fica mudo sem deixar rastro nenhum do motivo. Se a
+// falha foi por causa do parse_mode, tenta reenviar uma vez em texto puro, pra o
+// usuário receber alguma resposta mesmo com um bug de escaping.
 async function sendTelegramMessage(chatId, text, parseMode, replyMarkup) {
   const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
   if (!BOT_TOKEN) {
     console.error('[telegram-material-bot] TELEGRAM_BOT_TOKEN não configurado.');
     return;
   }
+
+  const safeText = truncarParaTelegram(text);
+  const payload = {
+    chat_id: chatId,
+    text: safeText,
+    ...(parseMode ? { parse_mode: parseMode } : {}),
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+  };
+
+  let result;
   try {
-    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    const response = await fetchWithTimeout(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        ...(parseMode ? { parse_mode: parseMode } : {}),
-        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-      }),
-    });
+      body: JSON.stringify(payload),
+    }, TELEGRAM_SEND_TIMEOUT_MS);
+    result = await response.json().catch(() => null);
   } catch (error) {
-    console.error('[telegram-material-bot] Falha ao enviar mensagem:', error);
+    console.error('[telegram-material-bot] Falha ao enviar mensagem:', error?.message || error);
+    return;
+  }
+
+  if (result?.ok) return;
+
+  console.error('[telegram-material-bot] Telegram recusou a mensagem:', result?.description || 'sem descrição na resposta');
+
+  if (parseMode) {
+    await sendTelegramMessage(chatId, text, undefined, replyMarkup);
   }
 }
 
@@ -183,9 +246,15 @@ export default async function handler(req, res) {
   }
 
   // O Telegram reenvia o update se não receber 200 rápido — por isso sempre respondemos
-  // 200 no final, mesmo quando algo dá errado internamente, pra não entrar em loop.
+  // 200 no final, mesmo quando algo dá errado internamente, pra não entrar em loop. E
+  // ignoramos update_id já visto, caso o reenvio aconteça mesmo assim (função lenta,
+  // hiccup de rede), pra não mandar a mesma resposta duplicada.
   try {
     const update = req.body || {};
+    if (jaProcessado(update.update_id)) {
+      return res.status(200).json({ ok: true });
+    }
+
     const message = update.message;
     const chatId = message?.chat?.id;
     if (!chatId) return res.status(200).json({ ok: true });
