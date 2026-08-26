@@ -141,7 +141,7 @@ function formatarResposta(codigo, data) {
 // parseMode: 'MarkdownV2' só pra formatarResposta(), que escapa tudo que é dado
 // dinâmico via escapeMarkdown() — as demais mensagens (texto fixo, sem formatação)
 // vão em texto puro, pra não depender de escapar tudo à mão certinho.
-async function sendTelegramMessage(chatId, text, parseMode) {
+async function sendTelegramMessage(chatId, text, parseMode, replyMarkup) {
   const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
   if (!BOT_TOKEN) {
     console.error('[telegram-material-bot] TELEGRAM_BOT_TOKEN não configurado.');
@@ -151,11 +151,22 @@ async function sendTelegramMessage(chatId, text, parseMode) {
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, ...(parseMode ? { parse_mode: parseMode } : {}) }),
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        ...(parseMode ? { parse_mode: parseMode } : {}),
+        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+      }),
     });
   } catch (error) {
     console.error('[telegram-material-bot] Falha ao enviar mensagem:', error);
   }
+}
+
+// Botão "copiar código" (copy_text) embaixo da mensagem de material encontrado —
+// copia o código pro clipboard sem precisar selecionar o texto na mão.
+function tecladoCopiarCodigo(codigo) {
+  return { inline_keyboard: [[{ text: '📋 Copiar código', copy_text: { text: codigo } }]] };
 }
 
 const TAMANHO_CODIGO = 8;
@@ -203,7 +214,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    await sendTelegramMessage(chatId, formatarResposta(codigo, result.data), 'MarkdownV2');
+    await sendTelegramMessage(chatId, formatarResposta(codigo, result.data), 'MarkdownV2', tecladoCopiarCodigo(codigo));
     return res.status(200).json({ ok: true });
   } catch (error) {
     console.error('[telegram-material-bot] Erro:', error);
