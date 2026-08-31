@@ -30,3 +30,11 @@ export function calcularTotalComprometidoMes(
     .reduce((sum, s) => sum + s.valor + (s.taxa ?? 0), 0);
   return totalSolicitacoes + totalSaques;
 }
+
+// Mês seguinte a partir de um 'YYYY-MM' — usado quando uma compra é feita depois que a
+// fatura do cartão já tinha fechado no mês, então só vai aparecer na fatura seguinte.
+export function proximoMes(mes: string): string {
+  const [ano, mesNum] = mes.split('-').map(Number);
+  const d = new Date(ano, mesNum, 1); // mesNum já é o índice do mês seguinte (1-indexed = mês atual em base 0)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}

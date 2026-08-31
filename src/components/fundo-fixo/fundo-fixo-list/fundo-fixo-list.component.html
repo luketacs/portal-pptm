@@ -356,6 +356,12 @@
                         Editar
                       </button>
                     }
+                    @if (podeMoverProximoMes(s)) {
+                      <button (click)="moverParaProximoMes(s)" [disabled]="isProcessando()" title="A fatura do cartão já tinha fechado quando essa compra foi feita — mover pro mês seguinte"
+                        class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition disabled:opacity-50">
+                        Mover p/ próximo mês
+                      </button>
+                    }
                     @if (mode === 'gestao' && s.status === 'pendente' && isAdmin()) {
                       <button (click)="abrirAprovar(s)" [disabled]="isProcessando()"
                         class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition disabled:opacity-50">

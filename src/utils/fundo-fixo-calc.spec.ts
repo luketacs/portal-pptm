@@ -1,4 +1,4 @@
-import { calcularSaldoCaixa, calcularTotalComprometidoMes } from './fundo-fixo-calc';
+import { calcularSaldoCaixa, calcularTotalComprometidoMes, proximoMes } from './fundo-fixo-calc';
 import { FundoFixoSaque, FundoFixoSolicitacao } from '../models/fundo-fixo.model';
 
 function saque(overrides: Partial<FundoFixoSaque> = {}): FundoFixoSaque {
@@ -160,5 +160,20 @@ describe('calcularTotalComprometidoMes', () => {
     ];
     const saques = [saque({ valor: 200, taxa: 10, mesReferencia: MES })];
     expect(calcularTotalComprometidoMes(solicitacoes, saques, MES)).toBe(100 + 50 + 210);
+  });
+});
+
+describe('proximoMes', () => {
+  it('avança pro mês seguinte dentro do mesmo ano', () => {
+    expect(proximoMes('2026-07')).toBe('2026-08');
+  });
+
+  it('vira o ano quando o mês atual é dezembro', () => {
+    expect(proximoMes('2026-12')).toBe('2027-01');
+  });
+
+  it('preserva o zero à esquerda do mês', () => {
+    expect(proximoMes('2026-01')).toBe('2026-02');
+    expect(proximoMes('2026-09')).toBe('2026-10');
   });
 });

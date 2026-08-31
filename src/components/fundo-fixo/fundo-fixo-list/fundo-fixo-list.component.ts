@@ -9,6 +9,7 @@ import { NotificationService } from '../../../services/toast.service';
 import { UserService } from '../../../services/user.service';
 import { ExcelExportService, FechamentoFundoFixoLinha } from '../../../services/excel-export.service';
 import { FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSetor, FundoFixoSolicitacao, FundoFixoStatus } from '../../../models/fundo-fixo.model';
+import { proximoMes } from '../../../utils/fundo-fixo-calc';
 
 type StatusFiltro = 'todos' | FundoFixoStatus;
 
@@ -61,10 +62,13 @@ export class FundoFixoListComponent implements OnInit {
   setorFiltro = signal<'todos' | string>('todos');
   searchTerm = signal('');
 
+  // Inclui o mês seguinte ao atual (i = -1) mesmo que ele ainda não tenha começado —
+  // é pra onde "Mover p/ próximo mês" manda uma compra, então precisa aparecer aqui
+  // pro admin conseguir filtrar e ver o fechamento antes do mês virar de verdade.
   readonly meses = (() => {
     const result: { value: string; label: string }[] = [];
     const hoje = new Date();
-    for (let i = 0; i < 12; i++) {
+    for (let i = -1; i < 12; i++) {
       const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
       const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
@@ -671,6 +675,36 @@ export class FundoFixoListComponent implements OnInit {
       this.fecharEditarFormaPagamento();
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao atualizar forma de pagamento.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  // ── Mover compra pro próximo mês (fatura do cartão já tinha fechado) ──
+  formatMesLabel(mes: string): string {
+    const [ano, m] = mes.split('-').map(Number);
+    const label = new Date(ano, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
+
+  podeMoverProximoMes(s: FundoFixoSolicitacao): boolean {
+    return this.isAdmin() && s.status === 'comprado';
+  }
+
+  async moverParaProximoMes(s: FundoFixoSolicitacao): Promise<void> {
+    if (this.isProcessando()) return;
+    const novoMes = this.formatMesLabel(proximoMes(s.mesReferencia));
+    const confirmado = confirm(
+      `Mover "${s.material}" para ${novoMes}?\n\nEla vai sair do fechamento de ${this.formatMesLabel(s.mesReferencia)} e passar a contar no fechamento de ${novoMes}.`,
+    );
+    if (!confirmado) return;
+
+    this.isProcessando.set(true);
+    try {
+      await this.fundoFixoService.moverParaProximoMes(s.id);
+      this.notificationService.showSuccess(`Compra movida para ${novoMes}.`);
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao mover a compra de mês.');
     } finally {
       this.isProcessando.set(false);
     }

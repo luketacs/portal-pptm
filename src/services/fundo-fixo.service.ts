@@ -6,7 +6,7 @@ import {
   CreateFundoFixoRequest, CreateFundoFixoSaque, FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSaqueTipo,
   FundoFixoSetor, FundoFixoSolicitacao, FundoFixoStatus,
 } from '../models/fundo-fixo.model';
-import { calcularSaldoCaixa, calcularTotalComprometidoMes } from '../utils/fundo-fixo-calc';
+import { calcularSaldoCaixa, calcularTotalComprometidoMes, proximoMes } from '../utils/fundo-fixo-calc';
 
 export const FUNDO_FIXO_LIMITE_MENSAL = 3000;
 export const FUNDO_FIXO_LIMITE_POR_COMPRA = 500;
@@ -523,6 +523,38 @@ export class FundoFixoService {
       resource_type: 'fundo_fixo',
       resource_id: id,
       description: `${user.name} anexou ${notasFiscais.length} nota(s) fiscal(is) adicional(is) a: ${item.material}`,
+    });
+
+    await this.load();
+  }
+
+  // Compra foi feita depois que a fatura do cartão daquele mês já tinha fechado — só vai
+  // aparecer na fatura seguinte, então precisa contar no mês seguinte pro fechamento bater
+  // com a fatura de verdade, não no mês em que a solicitação foi originalmente feita.
+  async moverParaProximoMes(id: string): Promise<void> {
+    const admin = this.authService.currentUser();
+    if (!admin) throw new Error('Sessão expirada.');
+
+    const item = this.getById(id);
+    if (!item) throw new Error('Solicitação não encontrada.');
+
+    const mesAnterior = item.mesReferencia;
+    const novoMes = proximoMes(mesAnterior);
+
+    const { error } = await this.supabaseService.client
+      .from('fundo_fixo_solicitacoes')
+      .update({ mes_referencia: novoMes })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+
+    this.auditLogService.log({
+      user_id: admin.id,
+      user_name: admin.name,
+      event_type: 'fundo_fixo_editado',
+      resource_type: 'fundo_fixo',
+      resource_id: id,
+      description: `${admin.name} moveu a compra "${item.material}" de ${mesAnterior} para ${novoMes} (fatura do cartão já tinha fechado)`,
+      metadata: { mes_anterior: mesAnterior, mes_novo: novoMes },
     });
 
     await this.load();
