@@ -274,6 +274,25 @@ function formatarProgresso(buffer) {
   return `Código: ${buffer.padEnd(TAMANHO_CODIGO, '_').split('').join(' ')}`;
 }
 
+// A mensagem de "material encontrado" usa o botão inline (copy_text) — Telegram não
+// deixa combinar inline_keyboard com o ReplyKeyboardMarkup numérico na mesma mensagem.
+// Por isso, pra quem manda o código completo de primeira (sem passar por nenhuma das
+// mensagens que já levam o teclado numérico junto), garante que o teclado apareça pelo
+// menos uma vez mandando uma mensagem à parte antes do resultado. Só faz isso na
+// primeira vez por chat (nesta instância) — o teclado, uma vez mandado, fica visível no
+// cliente do Telegram até o bot trocar por outro, não precisa reenviar toda hora.
+const MAX_TECLADO_ENVIADO = 1000;
+const tecladoJaEnviadoPara = new Set();
+
+async function garantirTecladoNumerico(chatId) {
+  if (tecladoJaEnviadoPara.has(chatId)) return;
+  tecladoJaEnviadoPara.add(chatId);
+  if (tecladoJaEnviadoPara.size > MAX_TECLADO_ENVIADO) {
+    tecladoJaEnviadoPara.delete(tecladoJaEnviadoPara.values().next().value);
+  }
+  await sendTelegramMessage(chatId, '⌨️ Teclado numérico ativado — pode usar ele ou continuar digitando o código direto.', undefined, tecladoNumerico());
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(200).json({ ok: true });
 
@@ -351,6 +370,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    await garantirTecladoNumerico(chatId);
     await sendTelegramMessage(chatId, formatarResposta(codigo, result.data), 'MarkdownV2', tecladoCopiarCodigo(codigo));
     return res.status(200).json({ ok: true });
   } catch (error) {
