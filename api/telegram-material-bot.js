@@ -235,6 +235,12 @@ function tecladoCopiarCodigo(codigo) {
 const TAMANHO_CODIGO = 8;
 const MENSAGEM_AJUDA = 'Olá! Manda o código de um material (ex.: 59093681, 8 caracteres) que eu respondo com a descrição e o saldo em estoque.';
 
+// Limpa o teclado numérico de uma versão anterior do bot (ReplyKeyboardMarkup) que
+// ainda pode estar preso na tela de quem já conversou com o bot nesse meio tempo — o
+// Telegram só troca/remove esse tipo de teclado quando o bot manda essa instrução
+// explícita; simplesmente parar de enviar não é suficiente pra sumir com ele.
+const REMOVER_TECLADO_ANTIGO = { remove_keyboard: true };
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(200).json({ ok: true });
 
@@ -262,24 +268,24 @@ export default async function handler(req, res) {
     const text = String(message?.text || '').trim();
 
     if (!checkRateLimit(chatId)) {
-      await sendTelegramMessage(chatId, 'Muitas consultas em pouco tempo. Aguarde um minuto e tente de novo.');
+      await sendTelegramMessage(chatId, 'Muitas consultas em pouco tempo. Aguarde um minuto e tente de novo.', undefined, REMOVER_TECLADO_ANTIGO);
       return res.status(200).json({ ok: true });
     }
 
     if (!text || text === '/start' || text === '/ajuda' || text === '/help') {
-      await sendTelegramMessage(chatId, MENSAGEM_AJUDA);
+      await sendTelegramMessage(chatId, MENSAGEM_AJUDA, undefined, REMOVER_TECLADO_ANTIGO);
       return res.status(200).json({ ok: true });
     }
 
     const codigo = text.replace(/[^a-zA-Z0-9\-_.]/g, '');
     if (codigo.length !== TAMANHO_CODIGO) {
-      await sendTelegramMessage(chatId, `O código do material deve ter exatamente ${TAMANHO_CODIGO} caracteres (ex.: 59093681).`);
+      await sendTelegramMessage(chatId, `O código do material deve ter exatamente ${TAMANHO_CODIGO} caracteres (ex.: 59093681).`, undefined, REMOVER_TECLADO_ANTIGO);
       return res.status(200).json({ ok: true });
     }
 
     const result = await consultarMaterial(codigo);
     if (!result.success || !result.data) {
-      await sendTelegramMessage(chatId, `❌ ${result.error || `Material não encontrado para o código ${codigo}.`}`);
+      await sendTelegramMessage(chatId, `❌ ${result.error || `Material não encontrado para o código ${codigo}.`}`, undefined, REMOVER_TECLADO_ANTIGO);
       return res.status(200).json({ ok: true });
     }
 
