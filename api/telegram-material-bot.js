@@ -226,186 +226,14 @@ async function sendTelegramMessage(chatId, text, parseMode, replyMarkup) {
   }
 }
 
-// Edita uma mensagem já enviada (usado pelo teclado numérico inline, pra atualizar o
-// progresso do código e depois mostrar o resultado sem criar mensagem nova a cada
-// toque). Mesmo padrão de fallback de sendTelegramMessage: se falhar por causa do
-// parse_mode, tenta de novo em texto puro.
-async function editTelegramMessage(chatId, messageId, text, parseMode, replyMarkup) {
-  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-  if (!BOT_TOKEN) {
-    console.error('[telegram-material-bot] TELEGRAM_BOT_TOKEN não configurado.');
-    return;
-  }
-
-  const safeText = truncarParaTelegram(text);
-  const payload = {
-    chat_id: chatId,
-    message_id: messageId,
-    text: safeText,
-    ...(parseMode ? { parse_mode: parseMode } : {}),
-    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-  };
-
-  let result;
-  try {
-    const response = await fetchWithTimeout(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }, TELEGRAM_SEND_TIMEOUT_MS);
-    result = await response.json().catch(() => null);
-  } catch (error) {
-    console.error('[telegram-material-bot] Falha ao editar mensagem:', error?.message || error);
-    return;
-  }
-
-  if (result?.ok) return;
-
-  console.error('[telegram-material-bot] Telegram recusou a edição:', result?.description || 'sem descrição na resposta');
-
-  if (parseMode) {
-    await editTelegramMessage(chatId, messageId, text, undefined, replyMarkup);
-  }
-}
-
-// Fecha o "carregando" do botão tocado — obrigatório responder todo callback_query,
-// senão o cliente do Telegram fica com o spinner do botão girando até dar timeout.
-async function answerCallbackQuery(callbackQueryId, text) {
-  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-  if (!BOT_TOKEN) return;
-  try {
-    await fetchWithTimeout(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ callback_query_id: callbackQueryId, ...(text ? { text } : {}) }),
-    }, TELEGRAM_SEND_TIMEOUT_MS);
-  } catch (error) {
-    console.error('[telegram-material-bot] Falha ao responder callback_query:', error?.message || error);
-  }
-}
-
-// Botões embaixo da mensagem de material encontrado: copiar código (copy_text) e
-// começar uma nova busca (volta a mostrar o teclado numérico na mesma mensagem).
-function tecladoResultado(codigo) {
-  return {
-    inline_keyboard: [
-      [{ text: '📋 Copiar código', copy_text: { text: codigo } }],
-      [{ text: '🔎 Nova busca', callback_data: 'nova' }],
-    ],
-  };
+// Botão "copiar código" (copy_text) embaixo da mensagem de material encontrado —
+// copia o código pro clipboard sem precisar selecionar o texto na mão.
+function tecladoCopiarCodigo(codigo) {
+  return { inline_keyboard: [[{ text: '📋 Copiar código', copy_text: { text: codigo } }]] };
 }
 
 const TAMANHO_CODIGO = 8;
-const MENSAGEM_AJUDA = 'Olá! Toque nos números abaixo pra digitar o código do material (8 dígitos) — ou digite/cole o código direto. Eu respondo com a descrição e o saldo em estoque.';
-
-// Teclado numérico via INLINE keyboard (botões presos a UMA mensagem, diferente do
-// ReplyKeyboardMarkup que fica solto na tela). Cada toque dispara um callback_query —
-// não manda nenhuma mensagem nova pro chat — e o bot só edita essa mesma mensagem pra
-// mostrar o progresso, então nada aparece até o código completar os 8 dígitos de fato.
-function tecladoNumericoInline() {
-  const num = d => ({ text: d, callback_data: `num:${d}` });
-  return {
-    inline_keyboard: [
-      [num('1'), num('2'), num('3')],
-      [num('4'), num('5'), num('6')],
-      [num('7'), num('8'), num('9')],
-      [{ text: '⌫ Apagar', callback_data: 'apagar' }, num('0'), { text: '🔄 Limpar', callback_data: 'limpar' }],
-    ],
-  };
-}
-
-function textoPrompt(buffer) {
-  return `Toque nos números pra digitar o código do material:\n\nCódigo: ${buffer.padEnd(TAMANHO_CODIGO, '_').split('').join(' ')}`;
-}
-
-// Código sendo digitado por chat via teclado numérico — um dígito por toque, até
-// completar TAMANHO_CODIGO. Mesma limitação de memória por instância que
-// rateLimitMap/processedUpdateIds (reseta a cada cold start, não é compartilhado entre
-// instâncias concorrentes): pior caso é o usuário ter que digitar de novo, sem problema.
-const MAX_CODIGO_BUFFERS = 500;
-const codigoBuffers = new Map();
-
-function getCodigoBuffer(chatId) {
-  return codigoBuffers.get(chatId) || '';
-}
-
-function setCodigoBuffer(chatId, valor) {
-  codigoBuffers.set(chatId, valor);
-  if (codigoBuffers.size > MAX_CODIGO_BUFFERS) {
-    codigoBuffers.delete(codigoBuffers.keys().next().value);
-  }
-}
-
-// Trata um toque no teclado numérico inline. Não manda mensagem nova nenhuma — só edita
-// a própria mensagem do teclado pra refletir o progresso, e só quando o código completa
-// os 8 dígitos é que a edição vira o resultado da busca.
-async function tratarCallbackQuery(callbackQuery) {
-  const chatId = callbackQuery.message?.chat?.id;
-  const messageId = callbackQuery.message?.message_id;
-  const data = callbackQuery.data || '';
-
-  if (!chatId || !messageId) {
-    await answerCallbackQuery(callbackQuery.id);
-    return;
-  }
-
-  if (!checkRateLimit(chatId)) {
-    await answerCallbackQuery(callbackQuery.id, 'Muitas consultas em pouco tempo. Aguarde um minuto.');
-    return;
-  }
-
-  if (data === 'nova') {
-    setCodigoBuffer(chatId, '');
-    await answerCallbackQuery(callbackQuery.id);
-    await editTelegramMessage(chatId, messageId, textoPrompt(''), undefined, tecladoNumericoInline());
-    return;
-  }
-
-  if (data === 'limpar') {
-    setCodigoBuffer(chatId, '');
-    await answerCallbackQuery(callbackQuery.id);
-    await editTelegramMessage(chatId, messageId, textoPrompt(''), undefined, tecladoNumericoInline());
-    return;
-  }
-
-  if (data === 'apagar') {
-    const buffer = getCodigoBuffer(chatId).slice(0, -1);
-    setCodigoBuffer(chatId, buffer);
-    await answerCallbackQuery(callbackQuery.id);
-    await editTelegramMessage(chatId, messageId, textoPrompt(buffer), undefined, tecladoNumericoInline());
-    return;
-  }
-
-  const digito = /^num:([0-9])$/.exec(data)?.[1];
-  if (!digito) {
-    await answerCallbackQuery(callbackQuery.id);
-    return;
-  }
-
-  const buffer = getCodigoBuffer(chatId) + digito;
-  if (buffer.length < TAMANHO_CODIGO) {
-    setCodigoBuffer(chatId, buffer);
-    await answerCallbackQuery(callbackQuery.id);
-    await editTelegramMessage(chatId, messageId, textoPrompt(buffer), undefined, tecladoNumericoInline());
-    return;
-  }
-
-  // Completou os 8 dígitos — busca e edita a mensagem pra mostrar o resultado.
-  setCodigoBuffer(chatId, '');
-  await answerCallbackQuery(callbackQuery.id);
-
-  const codigo = buffer;
-  const result = await consultarMaterial(codigo);
-  if (!result.success || !result.data) {
-    await editTelegramMessage(
-      chatId, messageId, `❌ ${result.error || `Material não encontrado para o código ${codigo}.`}`,
-      undefined, { inline_keyboard: [[{ text: '🔎 Tentar de novo', callback_data: 'nova' }]] },
-    );
-    return;
-  }
-
-  await editTelegramMessage(chatId, messageId, formatarResposta(codigo, result.data), 'MarkdownV2', tecladoResultado(codigo));
-}
+const MENSAGEM_AJUDA = 'Olá! Manda o código de um material (ex.: 59093681, 8 caracteres) que eu respondo com a descrição e o saldo em estoque.';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(200).json({ ok: true });
@@ -427,11 +255,6 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    if (update.callback_query) {
-      await tratarCallbackQuery(update.callback_query);
-      return res.status(200).json({ ok: true });
-    }
-
     const message = update.message;
     const chatId = message?.chat?.id;
     if (!chatId) return res.status(200).json({ ok: true });
@@ -444,25 +267,23 @@ export default async function handler(req, res) {
     }
 
     if (!text || text === '/start' || text === '/ajuda' || text === '/help') {
-      setCodigoBuffer(chatId, '');
-      await sendTelegramMessage(chatId, MENSAGEM_AJUDA, undefined, tecladoNumericoInline());
+      await sendTelegramMessage(chatId, MENSAGEM_AJUDA);
       return res.status(200).json({ ok: true });
     }
 
-    // Código completo digitado/colado de uma vez, sem usar o teclado numérico.
     const codigo = text.replace(/[^a-zA-Z0-9\-_.]/g, '');
     if (codigo.length !== TAMANHO_CODIGO) {
-      await sendTelegramMessage(chatId, `O código do material deve ter exatamente ${TAMANHO_CODIGO} caracteres (ex.: 59093681).`, undefined, tecladoNumericoInline());
+      await sendTelegramMessage(chatId, `O código do material deve ter exatamente ${TAMANHO_CODIGO} caracteres (ex.: 59093681).`);
       return res.status(200).json({ ok: true });
     }
 
     const result = await consultarMaterial(codigo);
     if (!result.success || !result.data) {
-      await sendTelegramMessage(chatId, `❌ ${result.error || `Material não encontrado para o código ${codigo}.`}`, undefined, tecladoNumericoInline());
+      await sendTelegramMessage(chatId, `❌ ${result.error || `Material não encontrado para o código ${codigo}.`}`);
       return res.status(200).json({ ok: true });
     }
 
-    await sendTelegramMessage(chatId, formatarResposta(codigo, result.data), 'MarkdownV2', tecladoResultado(codigo));
+    await sendTelegramMessage(chatId, formatarResposta(codigo, result.data), 'MarkdownV2', tecladoCopiarCodigo(codigo));
     return res.status(200).json({ ok: true });
   } catch (error) {
     console.error('[telegram-material-bot] Erro:', error);
