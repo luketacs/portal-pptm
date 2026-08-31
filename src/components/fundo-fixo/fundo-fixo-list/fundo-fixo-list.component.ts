@@ -9,7 +9,7 @@ import { NotificationService } from '../../../services/toast.service';
 import { UserService } from '../../../services/user.service';
 import { ExcelExportService, FechamentoFundoFixoLinha } from '../../../services/excel-export.service';
 import { FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSetor, FundoFixoSolicitacao, FundoFixoStatus } from '../../../models/fundo-fixo.model';
-import { proximoMes } from '../../../utils/fundo-fixo-calc';
+import { proximoMes, valorPagoNaForma } from '../../../utils/fundo-fixo-calc';
 
 type StatusFiltro = 'todos' | FundoFixoStatus;
 
@@ -89,6 +89,11 @@ export class FundoFixoListComponent implements OnInit {
   formaPagamentoAlvo = signal<FundoFixoSolicitacao | null>(null);
   formaPagamentoEscolhida = signal<FundoFixoFormaPagamento>('cartao');
   comprarNotasFiscais = signal<File[]>([]);
+  // Pagamento dividido entre cartão e dinheiro do caixa (ex.: parte no cartão, parte em
+  // dinheiro) — comprarValorFinal vira a parte de comprarFormaPagamento, e essa aqui é a
+  // parte da outra forma (a única outra opção existente, já que só há duas no seletor).
+  comprarPagamentoDividido = signal(false);
+  comprarValorSecundario = signal<number | null>(null);
   adicionarNotaAlvo = signal<FundoFixoSolicitacao | null>(null);
   adicionarNotasNovas = signal<File[]>([]);
   isProcessando = signal(false);
@@ -165,23 +170,27 @@ export class FundoFixoListComponent implements OnInit {
   // Compras já finalizadas no mês, separadas por origem do dinheiro: no cartão
   // (compras no cartão + saques, que aparecem direto na fatura) vs reembolso/caixa
   // (já saiu como saque antes — não aparece de novo na fatura quando a compra é registrada).
+  // Compra dividida entre as duas formas entra nos dois totais, cada um com sua parte.
   totalCartao = computed(() =>
     this.solicitacoesDoMes()
-      .filter(s => s.status === 'comprado' && s.formaPagamento === 'cartao')
-      .reduce((sum, s) => sum + (s.valorFinal ?? 0), 0)
+      .filter(s => s.status === 'comprado')
+      .reduce((sum, s) => sum + valorPagoNaForma(s, 'cartao'), 0)
     + this.totalSaquesFaturaMes()
   );
   totalReembolsoCaixa = computed(() =>
     this.solicitacoesDoMes()
-      .filter(s => s.status === 'comprado' && (s.formaPagamento === 'dinheiro_caixa' || s.formaPagamento === 'reembolso'))
-      .reduce((sum, s) => sum + (s.valorFinal ?? 0), 0)
+      .filter(s => s.status === 'comprado')
+      .reduce((sum, s) => sum + valorPagoNaForma(s, 'dinheiro_caixa') + valorPagoNaForma(s, 'reembolso'), 0)
   );
   countPendentes = computed(() => this.solicitacoesDoMes().filter(s => s.status === 'pendente').length);
   countAguardandoNota = computed(() => this.solicitacoesDoMes().filter(s => s.status === 'aprovado').length);
 
   // ── Fechamento do mês (relatório para os gestores) ────────────────────
-  itensCartaoDoMes = computed(() => this.solicitacoesDoMes().filter(s => s.status === 'comprado' && s.formaPagamento === 'cartao'));
-  itensReembolsoDoMes = computed(() => this.solicitacoesDoMes().filter(s => s.status === 'comprado' && (s.formaPagamento === 'dinheiro_caixa' || s.formaPagamento === 'reembolso')));
+  // Compra dividida aparece nas duas listas — cada uma soma só a parte correspondente
+  // (ver fecharMes/valorPagoNaForma), pra fatura/planilha de fechamento baterem certinho.
+  itensCartaoDoMes = computed(() => this.solicitacoesDoMes().filter(s => s.status === 'comprado' && (s.formaPagamento === 'cartao' || s.formaPagamentoSecundaria === 'cartao')));
+  itensReembolsoDoMes = computed(() => this.solicitacoesDoMes().filter(s => s.status === 'comprado' &&
+    (s.formaPagamento === 'dinheiro_caixa' || s.formaPagamento === 'reembolso' || s.formaPagamentoSecundaria === 'dinheiro_caixa' || s.formaPagamentoSecundaria === 'reembolso')));
 
   // Quem pagou do próprio bolso e ainda não recebeu de volta — de propósito NÃO filtra
   // pelo mês selecionado (mesFiltro), senão some da tela assim que o mês vira e ninguém
@@ -318,6 +327,8 @@ export class FundoFixoListComponent implements OnInit {
     this.comprarFornecedor.set(s.fornecedor ?? '');
     this.comprarFormaPagamento.set('cartao');
     this.comprarNotasFiscais.set([]);
+    this.comprarPagamentoDividido.set(false);
+    this.comprarValorSecundario.set(null);
   }
 
   fecharComprar(): void {
@@ -337,9 +348,21 @@ export class FundoFixoListComponent implements OnInit {
     this.comprarNotasFiscais.update(atual => atual.filter((_, i) => i !== index));
   }
 
+  // Só existem duas formas de pagamento no seletor (cartão / dinheiro do caixa), então
+  // "dividir o pagamento" não precisa de um segundo seletor — a forma secundária é
+  // sempre a outra opção que não a escolhida como principal.
+  outraFormaPagamento(forma: FundoFixoFormaPagamento): FundoFixoFormaPagamento {
+    return forma === 'cartao' ? 'dinheiro_caixa' : 'cartao';
+  }
+
+  comprarFormaPagamentoSecundaria = computed(() => this.outraFormaPagamento(this.comprarFormaPagamento()));
+  comprarValorTotal = computed(() => (this.comprarValorFinal() ?? 0) + (this.comprarPagamentoDividido() ? (this.comprarValorSecundario() ?? 0) : 0));
+
   canConfirmarCompra(): boolean {
-    const valor = this.comprarValorFinal() ?? 0;
-    return this.comprarNotasFiscais().length > 0 && valor > 0 && valor <= this.limitePorCompra && !this.isProcessando();
+    const valorPrincipal = this.comprarValorFinal() ?? 0;
+    if (this.comprarNotasFiscais().length === 0 || this.isProcessando() || valorPrincipal <= 0) return false;
+    if (this.comprarPagamentoDividido() && (this.comprarValorSecundario() ?? 0) <= 0) return false;
+    return this.comprarValorTotal() <= this.limitePorCompra;
   }
 
   async confirmarCompra(): Promise<void> {
@@ -348,8 +371,12 @@ export class FundoFixoListComponent implements OnInit {
     if (!alvo || notas.length === 0 || !this.canConfirmarCompra()) return;
     this.isProcessando.set(true);
     try {
+      const pagamentoSecundario = this.comprarPagamentoDividido()
+        ? { formaPagamento: this.comprarFormaPagamentoSecundaria(), valorFinal: this.comprarValorSecundario() ?? 0 }
+        : null;
       await this.fundoFixoService.marcarComprado(
         alvo.id, notas, this.comprarValorFinal() ?? alvo.valorEstimado, this.comprarFormaPagamento(), this.comprarFornecedor(),
+        pagamentoSecundario,
       );
       this.notificationService.showSuccess('Compra registrada com sucesso!');
       this.fecharComprar();
@@ -409,6 +436,12 @@ export class FundoFixoListComponent implements OnInit {
   formatDate(d: Date | null): string {
     if (!d) return '—';
     return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+  }
+
+  // Valor total de uma compra já registrada — soma as duas partes quando o pagamento
+  // foi dividido entre cartão e dinheiro (valorFinal sozinho só teria a parte principal).
+  valorTotalCompra(s: FundoFixoSolicitacao): number {
+    return (s.valorFinal ?? s.valorEstimado) + (s.valorFinalSecundario ?? 0);
   }
 
   // ── Excluir ────────────────────────────────────────────────────────────
@@ -765,8 +798,8 @@ export class FundoFixoListComponent implements OnInit {
             fornecedor: s.fornecedor ?? '—',
             solicitante: s.solicitanteNome,
             setor: s.setor,
-            material: s.material,
-            valor: s.valorFinal ?? s.valorEstimado,
+            material: s.formaPagamentoSecundaria ? `${s.material} (pagamento dividido)` : s.material,
+            valor: valorPagoNaForma(s, 'cartao'),
             aprovador: s.gestorAprovador ?? '—',
           })),
           ...linhasSaque,
@@ -775,8 +808,8 @@ export class FundoFixoListComponent implements OnInit {
           fornecedor: s.fornecedor ?? '—',
           solicitante: s.solicitanteNome,
           setor: s.setor,
-          material: s.material,
-          valor: s.valorFinal ?? s.valorEstimado,
+          material: s.formaPagamentoSecundaria ? `${s.material} (pagamento dividido)` : s.material,
+          valor: valorPagoNaForma(s, 'dinheiro_caixa') + valorPagoNaForma(s, 'reembolso'),
           aprovador: s.gestorAprovador ?? '—',
         })),
         limiteMensal: this.limiteMensal,

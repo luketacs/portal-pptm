@@ -306,12 +306,17 @@
                 </td>
                 <td class="px-3 py-2 text-center text-gray-600">{{ s.fornecedor || '—' }}</td>
                 <td class="px-3 py-2 text-center font-semibold text-gray-800">
-                  {{ (s.valorFinal ?? s.valorEstimado) | currency:'BRL' }}
-                  @if (s.status === 'comprado' && s.valorFinal !== s.valorEstimado) {
+                  {{ valorTotalCompra(s) | currency:'BRL' }}
+                  @if (s.status === 'comprado' && valorTotalCompra(s) !== s.valorEstimado) {
                     <div class="text-xs text-gray-400 font-normal">orç: {{ s.valorEstimado | currency:'BRL' }}</div>
                   }
                   @if (s.status === 'comprado' && isAdmin()) {
-                    @if (mode === 'gestao') {
+                    @if (s.formaPagamentoSecundaria) {
+                      <div class="text-xs text-gray-400 font-normal">
+                        {{ formaPagamentoLabel[s.formaPagamento] }}: {{ s.valorFinal | currency:'BRL' }}<br>
+                        {{ formaPagamentoLabel[s.formaPagamentoSecundaria] }}: {{ s.valorFinalSecundario | currency:'BRL' }}
+                      </div>
+                    } @else if (mode === 'gestao') {
                       <button (click)="abrirEditarFormaPagamento(s)" class="block w-full text-center text-xs font-normal text-gray-400 hover:text-blue-600 hover:underline">
                         {{ formaPagamentoLabel[s.formaPagamento] }}
                       </button>
@@ -432,7 +437,13 @@
           </div>
           <div>
             <dt class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Valor</dt>
-            <dd class="text-gray-800">{{ (d.valorFinal ?? d.valorEstimado) | currency:'BRL' }}</dd>
+            <dd class="text-gray-800">{{ valorTotalCompra(d) | currency:'BRL' }}</dd>
+            @if (d.formaPagamentoSecundaria) {
+              <dd class="text-xs text-gray-400">
+                {{ formaPagamentoLabel[d.formaPagamento] }}: {{ d.valorFinal | currency:'BRL' }} +
+                {{ formaPagamentoLabel[d.formaPagamentoSecundaria] }}: {{ d.valorFinalSecundario | currency:'BRL' }}
+              </dd>
+            }
           </div>
         </div>
 
@@ -671,14 +682,12 @@
       <input type="text" [ngModel]="comprarFornecedor()" (ngModelChange)="comprarFornecedor.set($event)"
         class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
 
-      <label class="block text-sm font-medium text-slate-700 mb-1">Valor final (R$) <span class="text-red-500">*</span></label>
+      <label class="block text-sm font-medium text-slate-700 mb-1">
+        {{ comprarPagamentoDividido() ? 'Valor pago no ' + formaPagamentoLabel[comprarFormaPagamento()] + ' (R$)' : 'Valor final (R$)' }}
+        <span class="text-red-500">*</span>
+      </label>
       <input type="number" step="0.01" min="0" [max]="limitePorCompra" [ngModel]="comprarValorFinal()" (ngModelChange)="comprarValorFinal.set($event)"
-        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      @if ((comprarValorFinal() ?? 0) > limitePorCompra) {
-        <p class="text-xs text-red-600 mb-4">Cada compra do Fundo Fixo tem limite de {{ limitePorCompra | currency:'BRL' }}.</p>
-      } @else {
-        <p class="text-xs text-gray-400 mb-4">Limite por compra: {{ limitePorCompra | currency:'BRL' }}.</p>
-      }
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
 
       <label class="block text-sm font-medium text-slate-700 mb-1">Forma de pagamento</label>
       <select [ngModel]="comprarFormaPagamento()" (ngModelChange)="comprarFormaPagamento.set($event)"
@@ -686,12 +695,30 @@
         <option value="cartao">Cartão (na hora)</option>
         <option value="dinheiro_caixa">Dinheiro do caixa (inclui reembolso)</option>
       </select>
-      @if (isAdmin() && comprarFormaPagamento() !== 'cartao') {
-        <p class="text-xs mb-4" [class]="saldoCaixa() < (comprarValorFinal() ?? 0) ? 'text-amber-600' : 'text-gray-400'">
+      @if (isAdmin() && (comprarFormaPagamento() !== 'cartao' || comprarPagamentoDividido())) {
+        <p class="text-xs mb-1" [class]="saldoCaixa() < (comprarFormaPagamento() !== 'cartao' ? (comprarValorFinal() ?? 0) : (comprarValorSecundario() ?? 0)) ? 'text-amber-600' : 'text-gray-400'">
           Saldo em caixa atual: {{ saldoCaixa() | currency:'BRL' }}
         </p>
+      }
+
+      <label class="flex items-center gap-2 mt-2 mb-1 text-sm text-slate-700 cursor-pointer">
+        <input type="checkbox" [ngModel]="comprarPagamentoDividido()" (ngModelChange)="comprarPagamentoDividido.set($event)" class="rounded" />
+        Dividir entre cartão e dinheiro (parte em cada forma)
+      </label>
+
+      @if (comprarPagamentoDividido()) {
+        <label class="block text-sm font-medium text-slate-700 mb-1">
+          Valor pago em {{ formaPagamentoLabel[comprarFormaPagamentoSecundaria()] }} (R$) <span class="text-red-500">*</span>
+        </label>
+        <input type="number" step="0.01" min="0" [ngModel]="comprarValorSecundario()" (ngModelChange)="comprarValorSecundario.set($event)"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-1" />
+        <p class="text-xs text-gray-400 mb-4">Total da compra: {{ comprarValorTotal() | currency:'BRL' }}</p>
+      }
+
+      @if (comprarValorTotal() > limitePorCompra) {
+        <p class="text-xs text-red-600 mb-4">Cada compra do Fundo Fixo tem limite de {{ limitePorCompra | currency:'BRL' }}.</p>
       } @else {
-        <div class="mb-4"></div>
+        <p class="text-xs text-gray-400 mb-4">Limite por compra: {{ limitePorCompra | currency:'BRL' }}.</p>
       }
 
       <label class="block text-sm font-medium text-slate-700 mb-1">Nota(s) fiscal(is) <span class="text-red-500">*</span></label>

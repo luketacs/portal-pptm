@@ -1,4 +1,4 @@
-import { calcularSaldoCaixa, calcularTotalComprometidoMes, proximoMes } from './fundo-fixo-calc';
+import { calcularSaldoCaixa, calcularTotalComprometidoMes, proximoMes, valorPagoNaForma } from './fundo-fixo-calc';
 import { FundoFixoSaque, FundoFixoSolicitacao } from '../models/fundo-fixo.model';
 
 function saque(overrides: Partial<FundoFixoSaque> = {}): FundoFixoSaque {
@@ -29,6 +29,8 @@ function solicitacao(overrides: Partial<FundoFixoSolicitacao> = {}): FundoFixoSo
     valorEstimado: 100,
     valorFinal: null,
     formaPagamento: 'cartao',
+    formaPagamentoSecundaria: null,
+    valorFinalSecundario: null,
     orcamentoUrl: null,
     notasFiscaisUrls: [],
     observacoes: null,
@@ -48,6 +50,29 @@ function solicitacao(overrides: Partial<FundoFixoSolicitacao> = {}): FundoFixoSo
     ...overrides,
   };
 }
+
+describe('valorPagoNaForma', () => {
+  it('conta o valor final quando a forma principal bate, compra não dividida', () => {
+    const s = solicitacao({ status: 'comprado', formaPagamento: 'cartao', valorFinal: 200 });
+    expect(valorPagoNaForma(s, 'cartao')).toBe(200);
+    expect(valorPagoNaForma(s, 'dinheiro_caixa')).toBe(0);
+  });
+
+  it('soma as duas partes quando a forma pedida bate com principal e secundária ao mesmo tempo (caso hipotético)', () => {
+    const s = solicitacao({ status: 'comprado', formaPagamento: 'cartao', valorFinal: 100, formaPagamentoSecundaria: 'cartao', valorFinalSecundario: 50 });
+    expect(valorPagoNaForma(s, 'cartao')).toBe(150);
+  });
+
+  it('divide entre cartão e dinheiro — cada forma conta só a sua parte', () => {
+    const s = solicitacao({
+      status: 'comprado', formaPagamento: 'cartao', valorFinal: 150,
+      formaPagamentoSecundaria: 'dinheiro_caixa', valorFinalSecundario: 150,
+    });
+    expect(valorPagoNaForma(s, 'cartao')).toBe(150);
+    expect(valorPagoNaForma(s, 'dinheiro_caixa')).toBe(150);
+    expect(valorPagoNaForma(s, 'reembolso')).toBe(0);
+  });
+});
 
 describe('calcularSaldoCaixa', () => {
   it('soma o valor sacado quando não há nenhuma compra em dinheiro/reembolso ainda', () => {
@@ -98,6 +123,15 @@ describe('calcularSaldoCaixa', () => {
     const saques = [saque({ valor: 100 })];
     const solicitacoes = [solicitacao({ status: 'comprado', formaPagamento: 'dinheiro_caixa', valorFinal: 136.59 })];
     expect(calcularSaldoCaixa(saques, solicitacoes)).toBeCloseTo(-36.59);
+  });
+
+  it('compra dividida entre cartão e dinheiro só desconta do caixa a parte paga em dinheiro', () => {
+    const saques = [saque({ valor: 1000 })];
+    const solicitacoes = [solicitacao({
+      status: 'comprado', formaPagamento: 'cartao', valorFinal: 150,
+      formaPagamentoSecundaria: 'dinheiro_caixa', valorFinalSecundario: 150,
+    })];
+    expect(calcularSaldoCaixa(saques, solicitacoes)).toBe(850);
   });
 });
 
@@ -160,6 +194,14 @@ describe('calcularTotalComprometidoMes', () => {
     ];
     const saques = [saque({ valor: 200, taxa: 10, mesReferencia: MES })];
     expect(calcularTotalComprometidoMes(solicitacoes, saques, MES)).toBe(100 + 50 + 210);
+  });
+
+  it('compra dividida entre cartão e dinheiro só conta no total do cartão a parte paga no cartão', () => {
+    const solicitacoes = [solicitacao({
+      status: 'comprado', formaPagamento: 'cartao', valorFinal: 150,
+      formaPagamentoSecundaria: 'dinheiro_caixa', valorFinalSecundario: 150,
+    })];
+    expect(calcularTotalComprometidoMes(solicitacoes, [], MES)).toBe(150);
   });
 });
 

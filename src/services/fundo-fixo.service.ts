@@ -26,6 +26,8 @@ interface FundoFixoRow {
   valor_estimado: number;
   valor_final: number | null;
   forma_pagamento: string;
+  forma_pagamento_secundaria: string | null;
+  valor_final_secundario: number | null;
   orcamento_url: string | null;
   nota_fiscal_urls: string[] | null;
   observacoes: string | null;
@@ -74,6 +76,8 @@ function mapRow(r: FundoFixoRow): FundoFixoSolicitacao {
     valorEstimado: Number(r.valor_estimado) || 0,
     valorFinal: r.valor_final !== null ? Number(r.valor_final) : null,
     formaPagamento: (r.forma_pagamento as FundoFixoFormaPagamento) || 'cartao',
+    formaPagamentoSecundaria: (r.forma_pagamento_secundaria as FundoFixoFormaPagamento) || null,
+    valorFinalSecundario: r.valor_final_secundario !== null ? Number(r.valor_final_secundario) : null,
     orcamentoUrl: r.orcamento_url,
     notasFiscaisUrls: r.nota_fiscal_urls ?? [],
     observacoes: r.observacoes,
@@ -461,6 +465,10 @@ export class FundoFixoService {
 
   async marcarComprado(
     id: string, notasFiscais: File[], valorFinal: number, formaPagamento: FundoFixoFormaPagamento, fornecedor?: string,
+    // Preenchido só quando a compra saiu em duas formas de pagamento (ex.: parte no
+    // cartão, parte em dinheiro) — valorFinal é a parte de formaPagamento, isso aqui é a
+    // outra parte.
+    pagamentoSecundario?: { formaPagamento: FundoFixoFormaPagamento; valorFinal: number } | null,
   ): Promise<void> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
@@ -473,6 +481,8 @@ export class FundoFixoService {
       nota_fiscal_urls: notasFiscaisUrls,
       valor_final: valorFinal,
       forma_pagamento: formaPagamento,
+      forma_pagamento_secundaria: pagamentoSecundario?.formaPagamento ?? null,
+      valor_final_secundario: pagamentoSecundario?.valorFinal ?? null,
       data_compra: new Date().toISOString(),
     };
     if (fornecedor?.trim()) payload['fornecedor'] = fornecedor.trim();
@@ -484,13 +494,17 @@ export class FundoFixoService {
     if (error) throw new Error(error.message);
 
     const item = this.getById(id);
+    const valorTotal = valorFinal + (pagamentoSecundario?.valorFinal ?? 0);
+    const descricaoValor = pagamentoSecundario
+      ? `R$ ${valorFinal.toFixed(2)} em ${formaPagamento} + R$ ${pagamentoSecundario.valorFinal.toFixed(2)} em ${pagamentoSecundario.formaPagamento}`
+      : `R$ ${valorTotal.toFixed(2)}`;
     this.auditLogService.log({
       user_id: user.id,
       user_name: user.name,
       event_type: 'fundo_fixo_comprado',
       resource_type: 'fundo_fixo',
       resource_id: id,
-      description: `${user.name} registrou compra via Fundo Fixo: ${item?.material ?? ''} (R$ ${valorFinal.toFixed(2)})`,
+      description: `${user.name} registrou compra via Fundo Fixo: ${item?.material ?? ''} (${descricaoValor})`,
     });
 
     await this.load();

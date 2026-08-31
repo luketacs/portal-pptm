@@ -13,6 +13,10 @@ export interface FundoFixoSolicitacao {
   valorEstimado: number;
   valorFinal: number | null;
   formaPagamento: FundoFixoFormaPagamento;
+  // Preenchidos só quando a compra é paga em duas formas (ex.: parte no cartão,
+  // parte em dinheiro) -- valorFinal + valorFinalSecundario = valor total pago.
+  formaPagamentoSecundaria: FundoFixoFormaPagamento | null;
+  valorFinalSecundario: number | null;
   orcamentoUrl: string | null;
   notasFiscaisUrls: string[];
   observacoes: string | null;
