@@ -269,11 +269,6 @@ function setCodigoBuffer(chatId, valor) {
   }
 }
 
-// Mostra o progresso enquanto o código ainda não completou 8 dígitos — ex.: "5 9 0 _ _ _ _ _".
-function formatarProgresso(buffer) {
-  return `Código: ${buffer.padEnd(TAMANHO_CODIGO, '_').split('').join(' ')}`;
-}
-
 // A mensagem de "material encontrado" usa o botão inline (copy_text) — Telegram não
 // deixa combinar inline_keyboard com o ReplyKeyboardMarkup numérico na mesma mensagem.
 // Por isso, pra quem manda o código completo de primeira (sem passar por nenhuma das
@@ -332,24 +327,22 @@ export default async function handler(req, res) {
 
     if (text === '🔄 Limpar') {
       setCodigoBuffer(chatId, '');
-      await sendTelegramMessage(chatId, 'Código limpo. Toque nos números pra digitar de novo.', undefined, tecladoNumerico());
       return res.status(200).json({ ok: true });
     }
 
     if (text === '⌫ Apagar') {
-      const buffer = getCodigoBuffer(chatId).slice(0, -1);
-      setCodigoBuffer(chatId, buffer);
-      await sendTelegramMessage(chatId, formatarProgresso(buffer), undefined, tecladoNumerico());
+      setCodigoBuffer(chatId, getCodigoBuffer(chatId).slice(0, -1));
       return res.status(200).json({ ok: true });
     }
 
     let codigo;
     if (/^[0-9]$/.test(text)) {
-      // Dígito tocado no teclado numérico — acumula até completar o código.
+      // Dígito tocado no teclado numérico — acumula em silêncio, sem o bot responder a
+      // cada toque (os dígitos já aparecem como mensagens do próprio usuário no chat).
+      // Só segue com a busca quando completar os 8 dígitos.
       const buffer = getCodigoBuffer(chatId) + text;
       if (buffer.length < TAMANHO_CODIGO) {
         setCodigoBuffer(chatId, buffer);
-        await sendTelegramMessage(chatId, formatarProgresso(buffer), undefined, tecladoNumerico());
         return res.status(200).json({ ok: true });
       }
       codigo = buffer;
