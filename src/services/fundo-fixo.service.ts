@@ -528,9 +528,9 @@ export class FundoFixoService {
     await this.load();
   }
 
-  // Compra foi feita depois que a fatura do cartão daquele mês já tinha fechado — só vai
-  // aparecer na fatura seguinte, então precisa contar no mês seguinte pro fechamento bater
-  // com a fatura de verdade, não no mês em que a solicitação foi originalmente feita.
+  // Não vai dar tempo de entrar na fatura do cartão deste mês — seja porque a compra já foi
+  // feita depois que a fatura tinha fechado, ou porque ainda está pendente/aprovada e não vai
+  // sair a tempo. Move pro mês seguinte pra contar no limite e no fechamento certos.
   async moverParaProximoMes(id: string): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
@@ -553,7 +553,7 @@ export class FundoFixoService {
       event_type: 'fundo_fixo_editado',
       resource_type: 'fundo_fixo',
       resource_id: id,
-      description: `${admin.name} moveu a compra "${item.material}" de ${mesAnterior} para ${novoMes} (fatura do cartão já tinha fechado)`,
+      description: `${admin.name} moveu a compra "${item.material}" de ${mesAnterior} para ${novoMes} (não vai entrar na fatura deste mês)`,
       metadata: { mes_anterior: mesAnterior, mes_novo: novoMes },
     });
 

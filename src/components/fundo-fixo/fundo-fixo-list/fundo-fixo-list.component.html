@@ -357,7 +357,7 @@
                       </button>
                     }
                     @if (podeMoverProximoMes(s)) {
-                      <button (click)="moverParaProximoMes(s)" [disabled]="isProcessando()" title="A fatura do cartão já tinha fechado quando essa compra foi feita — mover pro mês seguinte"
+                      <button (click)="moverParaProximoMes(s)" [disabled]="isProcessando()" title="Não vai dar tempo de entrar na fatura deste mês — mover pra contar no mês seguinte"
                         class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition disabled:opacity-50">
                         Mover p/ próximo mês
                       </button>

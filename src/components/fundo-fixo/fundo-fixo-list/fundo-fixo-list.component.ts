@@ -680,22 +680,24 @@ export class FundoFixoListComponent implements OnInit {
     }
   }
 
-  // ── Mover compra pro próximo mês (fatura do cartão já tinha fechado) ──
+  // ── Mover solicitação pro próximo mês (não vai dar tempo de entrar na fatura deste mês) ──
   formatMesLabel(mes: string): string {
     const [ano, m] = mes.split('-').map(Number);
     const label = new Date(ano, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
     return label.charAt(0).toUpperCase() + label.slice(1);
   }
 
+  // Vale pra pendente/aprovado (não vai dar tempo de comprar antes da fatura fechar) e
+  // pra já comprado (a compra saiu depois que a fatura do mês já tinha fechado).
   podeMoverProximoMes(s: FundoFixoSolicitacao): boolean {
-    return this.isAdmin() && s.status === 'comprado';
+    return this.isAdmin() && (s.status === 'pendente' || s.status === 'aprovado' || s.status === 'comprado');
   }
 
   async moverParaProximoMes(s: FundoFixoSolicitacao): Promise<void> {
     if (this.isProcessando()) return;
     const novoMes = this.formatMesLabel(proximoMes(s.mesReferencia));
     const confirmado = confirm(
-      `Mover "${s.material}" para ${novoMes}?\n\nEla vai sair do fechamento de ${this.formatMesLabel(s.mesReferencia)} e passar a contar no fechamento de ${novoMes}.`,
+      `Mover "${s.material}" para ${novoMes}?\n\nEla vai sair do total de ${this.formatMesLabel(s.mesReferencia)} e passar a contar no total de ${novoMes}.`,
     );
     if (!confirmado) return;
 
