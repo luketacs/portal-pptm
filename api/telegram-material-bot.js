@@ -233,7 +233,46 @@ function tecladoCopiarCodigo(codigo) {
 }
 
 const TAMANHO_CODIGO = 8;
-const MENSAGEM_AJUDA = 'Olá! Manda o código de um material (ex.: 59093681, 8 caracteres) que eu respondo com a descrição e o saldo em estoque.';
+const MENSAGEM_AJUDA = 'Olá! Toque nos números do teclado abaixo pra digitar o código do material (8 dígitos) — ou digite/cole o código direto. Eu respondo com a descrição e o saldo em estoque.';
+
+// Teclado numérico que substitui o teclado padrão do Telegram (ReplyKeyboardMarkup —
+// diferente do inline de cima, esse fica sempre visível embaixo da conversa, até o bot
+// trocar por outro). Cada dígito tocado manda o próprio número como mensagem de texto;
+// o código vai sendo acumulado por chat (ver codigoBuffers) até completar 8 dígitos.
+function tecladoNumerico() {
+  return {
+    keyboard: [
+      ['1', '2', '3'],
+      ['4', '5', '6'],
+      ['7', '8', '9'],
+      ['⌫ Apagar', '0', '🔄 Limpar'],
+    ],
+    resize_keyboard: true,
+  };
+}
+
+// Código sendo digitado por chat via teclado numérico — um dígito por toque, até
+// completar TAMANHO_CODIGO. Mesma limitação de memória por instância que
+// rateLimitMap/processedUpdateIds (reseta a cada cold start, não é compartilhado entre
+// instâncias concorrentes): pior caso é o usuário ter que digitar de novo, sem problema.
+const MAX_CODIGO_BUFFERS = 500;
+const codigoBuffers = new Map();
+
+function getCodigoBuffer(chatId) {
+  return codigoBuffers.get(chatId) || '';
+}
+
+function setCodigoBuffer(chatId, valor) {
+  codigoBuffers.set(chatId, valor);
+  if (codigoBuffers.size > MAX_CODIGO_BUFFERS) {
+    codigoBuffers.delete(codigoBuffers.keys().next().value);
+  }
+}
+
+// Mostra o progresso enquanto o código ainda não completou 8 dígitos — ex.: "5 9 0 _ _ _ _ _".
+function formatarProgresso(buffer) {
+  return `Código: ${buffer.padEnd(TAMANHO_CODIGO, '_').split('').join(' ')}`;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(200).json({ ok: true });
@@ -262,24 +301,53 @@ export default async function handler(req, res) {
     const text = String(message?.text || '').trim();
 
     if (!checkRateLimit(chatId)) {
-      await sendTelegramMessage(chatId, 'Muitas consultas em pouco tempo. Aguarde um minuto e tente de novo.');
+      await sendTelegramMessage(chatId, 'Muitas consultas em pouco tempo. Aguarde um minuto e tente de novo.', undefined, tecladoNumerico());
       return res.status(200).json({ ok: true });
     }
 
     if (!text || text === '/start' || text === '/ajuda' || text === '/help') {
-      await sendTelegramMessage(chatId, MENSAGEM_AJUDA);
+      setCodigoBuffer(chatId, '');
+      await sendTelegramMessage(chatId, MENSAGEM_AJUDA, undefined, tecladoNumerico());
       return res.status(200).json({ ok: true });
     }
 
-    const codigo = text.replace(/[^a-zA-Z0-9\-_.]/g, '');
+    if (text === '🔄 Limpar') {
+      setCodigoBuffer(chatId, '');
+      await sendTelegramMessage(chatId, 'Código limpo. Toque nos números pra digitar de novo.', undefined, tecladoNumerico());
+      return res.status(200).json({ ok: true });
+    }
+
+    if (text === '⌫ Apagar') {
+      const buffer = getCodigoBuffer(chatId).slice(0, -1);
+      setCodigoBuffer(chatId, buffer);
+      await sendTelegramMessage(chatId, formatarProgresso(buffer), undefined, tecladoNumerico());
+      return res.status(200).json({ ok: true });
+    }
+
+    let codigo;
+    if (/^[0-9]$/.test(text)) {
+      // Dígito tocado no teclado numérico — acumula até completar o código.
+      const buffer = getCodigoBuffer(chatId) + text;
+      if (buffer.length < TAMANHO_CODIGO) {
+        setCodigoBuffer(chatId, buffer);
+        await sendTelegramMessage(chatId, formatarProgresso(buffer), undefined, tecladoNumerico());
+        return res.status(200).json({ ok: true });
+      }
+      codigo = buffer;
+    } else {
+      // Código completo digitado/colado de uma vez, sem usar o teclado numérico.
+      codigo = text.replace(/[^a-zA-Z0-9\-_.]/g, '');
+    }
+    setCodigoBuffer(chatId, '');
+
     if (codigo.length !== TAMANHO_CODIGO) {
-      await sendTelegramMessage(chatId, `O código do material deve ter exatamente ${TAMANHO_CODIGO} caracteres (ex.: 59093681).`);
+      await sendTelegramMessage(chatId, `O código do material deve ter exatamente ${TAMANHO_CODIGO} caracteres (ex.: 59093681).`, undefined, tecladoNumerico());
       return res.status(200).json({ ok: true });
     }
 
     const result = await consultarMaterial(codigo);
     if (!result.success || !result.data) {
-      await sendTelegramMessage(chatId, `❌ ${result.error || `Material não encontrado para o código ${codigo}.`}`);
+      await sendTelegramMessage(chatId, `❌ ${result.error || `Material não encontrado para o código ${codigo}.`}`, undefined, tecladoNumerico());
       return res.status(200).json({ ok: true });
     }
 
