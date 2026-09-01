@@ -7,7 +7,10 @@ import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/toast.service';
 import { ApontamentosService } from '../../../services/apontamentos.service';
 import { ExcelExportService, ProgramacaoSemanalGrupo } from '../../../services/excel-export.service';
-import { ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, SigmaBacklogItem } from '../../../models/manutencao-programacao.model';
+import {
+  ConsultaSigmaResultado, EquipeApoioItem, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo,
+  OperadorEscalaApoio, SigmaBacklogItem,
+} from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, TURNO_LABEL, turnoNoDia } from '../../../utils/escala-apoio';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
@@ -19,12 +22,7 @@ const AREA_LABEL: Record<ManutencaoArea, string> = {
 };
 
 // Apoio programa por empresa/equipe (OPERAÇÃO, TOP ANDAIMES, SERVPLEX...), não por
-// técnico individual — catálogo fixo carregado de public/equipes-apoio.json, mesmo
-// padrão do catálogo de equipamentos.
-interface OperadorEscala {
-  nome: string;
-  equipe: EquipeApoio;
-}
+// técnico individual — cadastro editável por Admin (ver "Gerenciar Apoio").
 
 const TIPO_LABEL: Record<ManutencaoTipo, string> = {
   ordem: 'Ordem de Serviço',
@@ -369,21 +367,18 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   equipamentos = this.manutencaoService.equipamentos;
 
-  // Catálogo fixo de equipes/empresas do Apoio (public/equipes-apoio.json) e a escala
-  // de turno fixa da Operação (public/escala-apoio.json) — mesmo padrão estático já
-  // usado pra equipamentos.json/matriculas.json.
-  equipesApoio = signal<string[]>([]);
-  escalaApoio = signal<OperadorEscala[]>([]);
+  // Cadastro de equipes/empresas do Apoio e da escala de turno — no banco, editável
+  // por Admin (ver "Gerenciar Apoio" mais abaixo). O rodízio D/N/F em si continua
+  // calculado, só o registro de quem está em qual equipe é que é editável.
+  equipesApoio = this.manutencaoService.equipesApoio;
+  escalaApoio = this.manutencaoService.escalaApoio;
   readonly turnoLabel = TURNO_LABEL;
 
   private async carregarDadosApoio(): Promise<void> {
-    if (this.equipesApoio().length > 0 && this.escalaApoio().length > 0) return;
     try {
-      const [respEquipes, respEscala] = await Promise.all([fetch('/equipes-apoio.json'), fetch('/escala-apoio.json')]);
-      this.equipesApoio.set(await respEquipes.json());
-      this.escalaApoio.set(await respEscala.json());
+      await this.manutencaoService.loadApoioCadastros();
     } catch (err) {
-      console.error('[ManutencaoProgramacaoComponent] Falha ao carregar dados do Apoio:', err);
+      console.error('[ManutencaoProgramacaoComponent] Falha ao carregar cadastros do Apoio:', err);
     }
   }
 
@@ -391,7 +386,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // não editada manualmente (o rodízio de 8 dias é fixo, ver src/utils/escala-apoio.ts).
   escalaDaSemana = computed(() => {
     const dias = this.diasDaSemanaAtual();
-    const porEquipe = new Map<EquipeApoio, OperadorEscala[]>();
+    const porEquipe = new Map<EquipeApoio, OperadorEscalaApoio[]>();
     for (const op of this.escalaApoio()) {
       const lista = porEquipe.get(op.equipe) ?? [];
       lista.push(op);
@@ -405,6 +400,63 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         turnos: dias.map(d => ({ data: d.data, label: d.label, turno: turnoNoDia(equipe, d.data) as Turno })),
       }));
   });
+
+  // ── Gerenciar Apoio (Admin): cadastro de equipes/empresas e da escala de turno ──
+  gerenciarApoioAberto = signal(false);
+  novaEquipeApoioNome = signal('');
+  novoOperadorNome = signal('');
+  novoOperadorEquipe = signal<EquipeApoio>('A');
+  readonly equipesApoioOpcoes: EquipeApoio[] = ['A', 'B', 'C', 'D'];
+
+  async adicionarEquipeApoio(): Promise<void> {
+    if (this.isProcessando()) return;
+    this.isProcessando.set(true);
+    try {
+      await this.manutencaoService.criarEquipeApoio(this.novaEquipeApoioNome());
+      this.novaEquipeApoioNome.set('');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao adicionar equipe/empresa.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  async removerEquipeApoio(item: EquipeApoioItem): Promise<void> {
+    if (this.isProcessando() || !confirm(`Remover "${item.nome}" do cadastro? Lançamentos já feitos com essa equipe não são afetados.`)) return;
+    this.isProcessando.set(true);
+    try {
+      await this.manutencaoService.excluirEquipeApoio(item.id);
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover equipe/empresa.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  async adicionarOperadorEscala(): Promise<void> {
+    if (this.isProcessando()) return;
+    this.isProcessando.set(true);
+    try {
+      await this.manutencaoService.criarOperadorEscala(this.novoOperadorNome(), this.novoOperadorEquipe());
+      this.novoOperadorNome.set('');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao adicionar operador.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  async removerOperadorEscala(item: OperadorEscalaApoio): Promise<void> {
+    if (this.isProcessando() || !confirm(`Remover "${item.nome}" da escala?`)) return;
+    this.isProcessando.set(true);
+    try {
+      await this.manutencaoService.excluirOperadorEscala(item.id);
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover operador.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
 
   // Backlog do SIGMA (OS abertas da área, ainda não lançadas aqui) — só faz sentido
   // nas telas de área única, porque o campo de área do SIGMA é por OS, não por semana.
@@ -633,7 +685,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   private tecnicosPorArea(area: ManutencaoArea): { nome: string; matricula: string | null }[] {
     if (area === 'APOIO') {
-      return this.equipesApoio().map(nome => ({ nome, matricula: null }));
+      return this.equipesApoio().map(e => ({ nome: e.nome, matricula: null }));
     }
     const termo = area === 'ELETRICA' ? 'ELETR' : 'MECAN';
     return this.apontamentosService.colaboradores()

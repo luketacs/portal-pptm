@@ -3,8 +3,8 @@ import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
 import {
-  ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest, ManutencaoArea,
-  ManutencaoOrdem, ManutencaoTipo, SigmaBacklogItem,
+  ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest, EquipeApoioItem, ManutencaoArea,
+  ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, SigmaBacklogItem,
 } from '../models/manutencao-programacao.model';
 
 interface ManutencaoOrdemRow {
@@ -72,6 +72,13 @@ export class ManutencaoProgramacaoService {
   // quadro de bloqueios (LOTO) por equipamento/dia.
   private _equipamentos = signal<string[]>([]);
   equipamentos = this._equipamentos.asReadonly();
+
+  // Cadastro de empresas/equipes do Apoio e da escala de turno — no banco (editável
+  // por Admin), diferente do catálogo de equipamentos acima (que continua estático).
+  private _equipesApoio = signal<EquipeApoioItem[]>([]);
+  equipesApoio = this._equipesApoio.asReadonly();
+  private _escalaApoio = signal<OperadorEscalaApoio[]>([]);
+  escalaApoio = this._escalaApoio.asReadonly();
 
   constructor(
     private supabaseService: SupabaseService,
@@ -310,5 +317,66 @@ export class ManutencaoProgramacaoService {
       throw new Error(body?.error || 'Falha ao consultar o backlog do SIGMA.');
     }
     return body.backlog as SigmaBacklogItem[];
+  }
+
+  // ── Cadastro de Apoio (equipes/empresas + escala de turno) ──────────────────
+
+  async loadApoioCadastros(): Promise<void> {
+    const [equipesRes, escalaRes] = await Promise.all([
+      this.supabaseService.client.from('manutencao_apoio_equipes').select('id, nome').order('nome'),
+      this.supabaseService.client.from('manutencao_apoio_escala').select('id, nome, equipe').order('equipe').order('nome'),
+    ]);
+    if (equipesRes.error) throw new Error(equipesRes.error.message);
+    if (escalaRes.error) throw new Error(escalaRes.error.message);
+    this._equipesApoio.set(equipesRes.data ?? []);
+    this._escalaApoio.set((escalaRes.data ?? []) as OperadorEscalaApoio[]);
+  }
+
+  async criarEquipeApoio(nome: string): Promise<void> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+    const nomeLimpo = nome.trim().toUpperCase();
+    if (!nomeLimpo) throw new Error('Informe o nome da equipe/empresa.');
+
+    const { error } = await this.supabaseService.client
+      .from('manutencao_apoio_equipes')
+      .insert({ nome: nomeLimpo, criado_por_id: user.id, criado_por_nome: user.name });
+    if (error) throw new Error(error.code === '23505' ? 'Essa equipe/empresa já está cadastrada.' : error.message);
+    await this.loadApoioCadastros();
+  }
+
+  async excluirEquipeApoio(id: string): Promise<void> {
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_apoio_equipes')
+      .delete()
+      .eq('id', id)
+      .select('id');
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) throw new Error('Não foi possível excluir (permissão do banco).');
+    await this.loadApoioCadastros();
+  }
+
+  async criarOperadorEscala(nome: string, equipe: 'A' | 'B' | 'C' | 'D'): Promise<void> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+    const nomeLimpo = nome.trim();
+    if (!nomeLimpo) throw new Error('Informe o nome do operador.');
+
+    const { error } = await this.supabaseService.client
+      .from('manutencao_apoio_escala')
+      .insert({ nome: nomeLimpo, equipe, criado_por_id: user.id, criado_por_nome: user.name });
+    if (error) throw new Error(error.message);
+    await this.loadApoioCadastros();
+  }
+
+  async excluirOperadorEscala(id: string): Promise<void> {
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_apoio_escala')
+      .delete()
+      .eq('id', id)
+      .select('id');
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) throw new Error('Não foi possível excluir (permissão do banco).');
+    await this.loadApoioCadastros();
   }
 }

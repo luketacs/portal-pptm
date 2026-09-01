@@ -79,6 +79,19 @@ export interface SigmaBacklogItem {
   tipoServico: string;
 }
 
+// Cadastro de empresas/equipes do Apoio e da escala de turno — editável só por Admin,
+// direto na tela de Programação do Apoio (antes vinham de arquivos fixos no código).
+export interface EquipeApoioItem {
+  id: string;
+  nome: string;
+}
+
+export interface OperadorEscalaApoio {
+  id: string;
+  nome: string;
+  equipe: 'A' | 'B' | 'C' | 'D';
+}
+
 export interface EditarManutencaoOrdemRequest {
   tipo: ManutencaoTipo;
   area: ManutencaoArea;
