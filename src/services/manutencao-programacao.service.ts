@@ -141,6 +141,67 @@ export class ManutencaoProgramacaoService {
     await this.load();
   }
 
+  // Lança folga (ex.: feriado) pra vários técnicos de uma vez, num único insert —
+  // evita N chamadas de criarOrdem() (cada uma recarregando a lista inteira) quando o
+  // dia vale pra toda a equipe, não só uma pessoa.
+  async criarFolgaEmLote(params: {
+    diasPrevistos: string[];
+    motivo: string;
+    tecnicos: { nome: string; matricula: string | null; area: ManutencaoArea }[];
+  }): Promise<void> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+    if (params.tecnicos.length === 0) throw new Error('Nenhum técnico encontrado.');
+
+    const semanaInicio = this.semanaDoDia(params.diasPrevistos[0]);
+    const descricao = params.motivo.trim() || 'Feriado';
+
+    const payload = params.tecnicos.map(t => ({
+      tipo: 'folga',
+      area: t.area,
+      semana_inicio: semanaInicio,
+      numero_os: null,
+      descricao,
+      equipamento: null,
+      recursos: null,
+      loto: null,
+      area_atuacao: null,
+      duracao_horas: null,
+      tecnico_nome: t.nome,
+      tecnico_matricula: t.matricula,
+      dias_previstos: params.diasPrevistos,
+      status: '',
+      observacoes: null,
+      criado_por_id: user.id,
+      criado_por_nome: user.name,
+    }));
+
+    const { error } = await this.supabaseService.client.from('manutencao_programacao').insert(payload);
+    if (error) throw new Error(error.message);
+
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'manutencao_programacao_criada',
+      resource_type: 'manutencao_programacao',
+      description: `${user.name} lançou "${descricao}" pra ${params.tecnicos.length} técnicos, em ${params.diasPrevistos.join(', ')}`,
+      metadata: { tipo: 'folga', dias: params.diasPrevistos, tecnicos: params.tecnicos.length },
+    });
+
+    await this.load();
+  }
+
+  // Segunda-feira da semana de uma data 'YYYY-MM-DD' — o backend guarda tudo por
+  // semana_inicio, então precisa disso mesmo recebendo datas já dentro da semana certa.
+  private semanaDoDia(dataIso: string): string {
+    const [ano, mes, dia] = dataIso.split('-').map(Number);
+    const d = new Date(ano, mes - 1, dia);
+    const dow = d.getDay();
+    const diff = dow === 0 ? -6 : 1 - dow;
+    d.setDate(d.getDate() + diff);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
   async editarOrdem(id: string, updates: EditarManutencaoOrdemRequest): Promise<void> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');

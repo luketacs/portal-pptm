@@ -456,6 +456,61 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       .sort((a, b) => a.nome.localeCompare(b.nome));
   }
 
+  // Todos os técnicos das duas áreas (Elétrica + Mecânica) — usado no lançamento de
+  // feriado, que vale pra equipe toda, independente de qual tela você está.
+  todosTecnicos = computed(() => [
+    ...this.tecnicosPorArea('ELETRICA').map(c => ({ nome: c.nome, matricula: c.matricula, area: 'ELETRICA' as ManutencaoArea })),
+    ...this.tecnicosPorArea('MECANICA').map(c => ({ nome: c.nome, matricula: c.matricula, area: 'MECANICA' as ManutencaoArea })),
+  ]);
+
+  // ── Feriado (folga em lote pra toda a equipe) ─────────────────────────
+  feriadoAberto = signal(false);
+  feriadoDiasSelecionados = signal<string[]>([]);
+  feriadoMotivo = signal('Feriado');
+
+  abrirFeriado(): void {
+    this.feriadoDiasSelecionados.set([]);
+    this.feriadoMotivo.set('Feriado');
+    this.feriadoAberto.set(true);
+  }
+
+  fecharFeriado(): void {
+    this.feriadoAberto.set(false);
+  }
+
+  toggleDiaFeriado(dataIso: string): void {
+    const atual = this.feriadoDiasSelecionados();
+    this.feriadoDiasSelecionados.set(
+      atual.includes(dataIso) ? atual.filter(d => d !== dataIso) : [...atual, dataIso].sort(),
+    );
+  }
+
+  canConfirmarFeriado(): boolean {
+    return this.feriadoDiasSelecionados().length > 0 && this.todosTecnicos().length > 0 && !this.isProcessando();
+  }
+
+  async confirmarFeriado(): Promise<void> {
+    if (!this.canConfirmarFeriado()) return;
+    const tecnicos = this.todosTecnicos();
+    const motivo = this.feriadoMotivo().trim() || 'Feriado';
+    if (!confirm(`Lançar "${motivo}" pra ${tecnicos.length} técnicos (Elétrica + Mecânica)?`)) return;
+
+    this.isProcessando.set(true);
+    try {
+      await this.manutencaoService.criarFolgaEmLote({
+        diasPrevistos: this.feriadoDiasSelecionados(),
+        motivo,
+        tecnicos,
+      });
+      this.notificationService.showSuccess(`"${motivo}" lançado pra ${tecnicos.length} técnicos.`);
+      this.fecharFeriado();
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao lançar feriado.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
   // ── Criar/Editar OS ────────────────────────────────────────────────────
   abrirCriar(): void {
     this.formIdEdicao.set(null);

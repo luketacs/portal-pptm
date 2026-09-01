@@ -11,11 +11,18 @@
       </p>
     </div>
     @if (isAdmin()) {
-      <button (click)="abrirCriar()"
-        class="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-semibold py-2.5 px-4 rounded-lg hover:bg-blue-700 transition flex-shrink-0">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
-        Novo lançamento
-      </button>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <button (click)="abrirFeriado()" title="Lança folga pra toda a equipe (Elétrica + Mecânica) de uma vez"
+          class="inline-flex items-center gap-2 bg-white text-slate-600 text-sm font-semibold py-2.5 px-4 rounded-lg border border-slate-300 hover:bg-slate-50 transition">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+          Feriado
+        </button>
+        <button (click)="abrirCriar()"
+          class="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-semibold py-2.5 px-4 rounded-lg hover:bg-blue-700 transition">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
+          Novo lançamento
+        </button>
+      </div>
     }
   </div>
 
@@ -532,6 +539,39 @@
         <button (click)="confirmarForm()" [disabled]="!canConfirmarForm()"
           class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
           {{ formIdEdicao() ? 'Salvar' : 'Adicionar' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Modal: Feriado (folga em lote pra toda a equipe) -->
+@if (feriadoAberto()) {
+  <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" (click)="fecharFeriado()">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm" (click)="$event.stopPropagation()">
+      <h3 class="text-lg font-bold text-gray-800 mb-1">Lançar feriado</h3>
+      <p class="text-sm text-gray-500 mb-4">Cria uma Folga pra {{ todosTecnicos().length }} técnicos (Elétrica + Mecânica) de uma vez, nos dias marcados.</p>
+
+      <label class="block text-sm font-medium text-slate-700 mb-1">Dia(s) <span class="text-red-500">*</span></label>
+      <div class="flex flex-wrap gap-2 mb-4">
+        @for (dia of diasDaSemanaAtual(); track dia.data) {
+          <label class="flex flex-col items-center gap-1 cursor-pointer">
+            <input type="checkbox" [checked]="feriadoDiasSelecionados().includes(dia.data)" (change)="toggleDiaFeriado(dia.data)" class="rounded" />
+            <span class="text-xs text-gray-500">{{ dia.label }}</span>
+          </label>
+        }
+      </div>
+
+      <label class="block text-sm font-medium text-slate-700 mb-1">Motivo</label>
+      <input type="text" [ngModel]="feriadoMotivo()" (ngModelChange)="feriadoMotivo.set($event)"
+        placeholder="Ex.: Independência do Brasil"
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+
+      <div class="flex justify-end gap-3">
+        <button (click)="fecharFeriado()" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Cancelar</button>
+        <button (click)="confirmarFeriado()" [disabled]="!canConfirmarFeriado()"
+          class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
+          Aplicar pra {{ todosTecnicos().length }} técnicos
         </button>
       </div>
     </div>
