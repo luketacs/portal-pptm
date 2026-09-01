@@ -54,9 +54,10 @@ function normalizarAreaManutencao(v) {
   return s;
 }
 
-// Status que significam "não é mais backlog" — já concluída ou cancelada. Qualquer
-// outro código (PEND, EXPA, etc.) ainda conta como pendência a programar.
-const STATUS_FORA_DO_BACKLOG = new Set(['CONC', 'CANC']);
+// Status que significam "não é mais backlog" — já concluída, cancelada ou já
+// executada (EXEC). Qualquer outro código (PEND, EXPA, etc.) ainda conta como
+// pendência a programar.
+const STATUS_FORA_DO_BACKLOG = new Set(['CONC', 'CANC', 'EXEC']);
 
 // Export "os": campos entre aspas, "" escapa uma aspa literal dentro do campo.
 function parseTsvComAspas(texto) {

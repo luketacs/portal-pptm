@@ -48,6 +48,7 @@ const STATUS_BADGE_CONHECIDOS: Record<string, string> = {
   PEND: 'bg-amber-100 text-amber-700',
   EXPA: 'bg-red-100 text-red-700',
   CONC: 'bg-green-100 text-green-700',
+  EXEC: 'bg-green-100 text-green-700',
   CANC: 'bg-gray-200 text-gray-500',
 };
 const STATUS_BADGE_PADRAO = 'bg-slate-100 text-slate-600';
@@ -460,11 +461,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   // Backlog do SIGMA (OS abertas da área, ainda não lançadas aqui) — só faz sentido
   // nas telas de área única, porque o campo de área do SIGMA é por OS, não por semana.
-  // Carrega sob demanda (painel fechado por padrão) pra não pagar o custo da primeira
-  // consulta ao SIGMA (cache de ~10min no proxy) toda vez que a tela abre.
+  // Não é tempo real: o proxy cacheia a exportação do SIGMA por até ~10min pra não
+  // rebaixar um arquivo de vários MB a cada clique — por isso busca de novo toda vez
+  // que o painel é aberto (não só na primeira vez) e mostra o horário da última busca.
   backlogAberto = signal(false);
   backlogCarregando = signal(false);
   backlogErro = signal('');
+  backlogAtualizadoEm = signal<number | null>(null);
   private backlogSigma = signal<SigmaBacklogItem[]>([]);
 
   private numerosOsJaProgramados = computed(() => {
@@ -482,10 +485,16 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return this.backlogSigma().filter(item => !jaProgramados.has(normalizarNumeroOs(item.numeroOs)));
   });
 
+  backlogAtualizadoEmLabel(): string {
+    const ts = this.backlogAtualizadoEm();
+    if (!ts) return '';
+    return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+
   async toggleBacklog(): Promise<void> {
     const abrir = !this.backlogAberto();
     this.backlogAberto.set(abrir);
-    if (abrir && this.backlogSigma().length === 0) {
+    if (abrir) {
       await this.carregarBacklog();
     }
   }
@@ -495,7 +504,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.backlogCarregando.set(true);
     this.backlogErro.set('');
     try {
-      this.backlogSigma.set(await this.manutencaoService.consultarBacklogSigma(this.areaFixa));
+      const { itens, atualizadoEm } = await this.manutencaoService.consultarBacklogSigma(this.areaFixa);
+      this.backlogSigma.set(itens);
+      this.backlogAtualizadoEm.set(atualizadoEm);
     } catch (err: unknown) {
       this.backlogErro.set(err instanceof Error ? err.message : 'Erro ao consultar o backlog do SIGMA.');
     } finally {
