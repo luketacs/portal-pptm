@@ -252,17 +252,18 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   currentUser = this.authService.currentUser;
   isAdmin = computed(() => this.authService.currentUser()?.role === 'Admin');
 
-  ordensDaSemana = computed(() =>
-    this.manutencaoService.ordens().filter(o => o.semanaInicio === this.semanaFiltro()),
-  );
+  private ordensDaSemanaCalc(semana: string): ManutencaoOrdem[] {
+    return this.manutencaoService.ordens().filter(o => o.semanaInicio === semana);
+  }
+  ordensDaSemana = computed(() => this.ordensDaSemanaCalc(this.semanaFiltro()));
 
-  listaFiltrada = computed(() => {
+  private listaFiltradaCalc(ordensDaSemana: ManutencaoOrdem[]): ManutencaoOrdem[] {
     const area = this.areaFiltro();
     const status = this.statusFiltro();
     const tecnico = this.tecnicoFiltro();
     const termo = this.searchTerm().trim().toLowerCase();
 
-    return this.ordensDaSemana().filter(o => {
+    return ordensDaSemana.filter(o => {
       if (area !== 'todos' && o.area !== area) return false;
       if (status !== 'todos' && o.status !== status) return false;
       if (tecnico !== 'todos' && o.tecnicoNome !== tecnico) return false;
@@ -272,33 +273,35 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       }
       return true;
     });
-  });
+  }
+  listaFiltrada = computed(() => this.listaFiltradaCalc(this.ordensDaSemana()));
 
   // Agrupada por técnico — usado nas telas de área única (mais perto do que a planilha
   // já mostra hoje, bloco por executante). Cada grupo já sai com a capacidade da semana
   // (Efetivo) calculada, pra comparar contra as horas já alocadas.
-  grupos = computed(() => {
+  private gruposCalc(lista: ManutencaoOrdem[], dias: { data: string; label: string }[]) {
     const porTecnico = new Map<string, ManutencaoOrdem[]>();
-    for (const o of this.listaFiltrada()) {
-      const lista = porTecnico.get(o.tecnicoNome) ?? [];
-      lista.push(o);
-      porTecnico.set(o.tecnicoNome, lista);
+    for (const o of lista) {
+      const lista2 = porTecnico.get(o.tecnicoNome) ?? [];
+      lista2.push(o);
+      porTecnico.set(o.tecnicoNome, lista2);
     }
     return Array.from(porTecnico.entries())
       .map(([tecnico, ordens]) => {
         const totalHoras = somaHoras(ordens);
-        const capacidade = this.capacidadeSemana(tecnico, ordens);
+        const capacidade = this.capacidadeSemana(tecnico, ordens, dias);
         const saldo = capacidade !== null ? parseFloat((capacidade - totalHoras).toFixed(2)) : null;
         return { tecnico, ordens, totalHoras, capacidade, saldo };
       })
       .sort((a, b) => a.tecnico.localeCompare(b.tecnico));
-  });
+  }
+  grupos = computed(() => this.gruposCalc(this.listaFiltrada(), this.diasDaSemanaAtual()));
 
   // Efetivo/capacidade: soma a disponibilidade cadastrada (matriculas.json, mesma fonte
   // do Relatório Mensal PCM) nos dias úteis da semana, descontando os dias em que o
   // técnico já tem folga/treinamento lançado. `null` quando o técnico não está no
   // matriculas.json (não dá pra saber a disponibilidade dele).
-  private capacidadeSemana(tecnicoNome: string, ordensDoTecnico: ManutencaoOrdem[]): number | null {
+  private capacidadeSemana(tecnicoNome: string, ordensDoTecnico: ManutencaoOrdem[], dias: { data: string; label: string }[]): number | null {
     const colaborador = this.apontamentosService.colaboradores().find(c => c.nome === tecnicoNome);
     if (!colaborador) return null;
 
@@ -307,7 +310,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     );
 
     let total = 0;
-    for (const dia of this.diasDaSemanaAtual()) {
+    for (const dia of dias) {
       if (diasIndisponiveis.has(dia.data)) continue;
       total += this.apontamentosService.disponibilidadeNoDia(colaborador, dia.data);
     }
@@ -317,17 +320,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Agrupada por dia — usado na tela geral (as duas áreas juntas), pra ver de cara
   // tudo que está programado pra cada dia da semana, cruzando Elétrica e Mecânica.
   // Uma OS com vários dias marcados aparece em cada um deles.
-  gruposPorDia = computed(() => {
+  private gruposPorDiaCalc(lista: ManutencaoOrdem[], dias: { data: string; label: string }[]) {
     const porDia = new Map<string, ManutencaoOrdem[]>();
-    for (const o of this.listaFiltrada()) {
+    for (const o of lista) {
       for (const dia of o.diasPrevistos) {
-        const lista = porDia.get(dia) ?? [];
-        lista.push(o);
-        porDia.set(dia, lista);
+        const lista2 = porDia.get(dia) ?? [];
+        lista2.push(o);
+        porDia.set(dia, lista2);
       }
     }
     const hojeIso = paraIso(new Date());
-    return this.diasDaSemanaAtual().map(d => {
+    return dias.map(d => {
       const ordens = (porDia.get(d.data) ?? []).sort((a, b) => a.tecnicoNome.localeCompare(b.tecnicoNome));
       return {
         data: d.data,
@@ -338,10 +341,44 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         hoje: d.data === hojeIso,
       };
     });
-  });
+  }
+  gruposPorDia = computed(() => this.gruposPorDiaCalc(this.listaFiltrada(), this.diasDaSemanaAtual()));
 
   // OS sem nenhum dia marcado — não some da tela geral, fica numa seção à parte.
   ordensSemDia = computed(() => this.listaFiltrada().filter(o => o.diasPrevistos.length === 0));
+
+  // ── Horizonte de 4 semanas (empilhado) ──────────────────────────────────────
+  // Repete o mesmo conteúdo da semana única (LOTO, técnicos/dias, escala) pras
+  // próximas 4 semanas a partir da selecionada, pra planejar sem trocar o filtro
+  // repetidamente. Cada bloco calcula tudo com as mesmas contas de sempre, só que
+  // parametrizadas pela semana dele em vez de ler semanaFiltro() direto.
+  horizonteAtivo = signal(false);
+
+  private semanaMaisIso(semanaBase: string, semanas: number): string {
+    const [ano, mes, dia] = semanaBase.split('-').map(Number);
+    return paraIso(new Date(ano, mes - 1, dia + semanas * 7));
+  }
+
+  horizonteSemanas = computed(() => {
+    const base = this.semanaFiltro();
+    return [0, 1, 2, 3].map(i => this.semanaMaisIso(base, i));
+  });
+
+  blocosHorizonte = computed(() => {
+    return this.horizonteSemanas().map(semana => {
+      const dias = diasDaSemana(semana);
+      const ordensDaSemana = this.ordensDaSemanaCalc(semana);
+      const lista = this.listaFiltradaCalc(ordensDaSemana);
+      const grupos = this.gruposCalc(lista, dias);
+      const gruposPorDia = this.gruposPorDiaCalc(lista, dias);
+      const ordensSemDia = lista.filter(o => o.diasPrevistos.length === 0);
+      const quadroLoto = this.quadroLotoCalc(ordensDaSemana, dias);
+      const escalaDaSemana = this.areaFixa === 'APOIO' ? this.escalaDaSemanaCalc(dias) : [];
+      const label = this.semanas.find(s => s.value === semana)?.label ?? semana;
+      const diasIso = dias.map(d => d.data);
+      return { semana, label, dias, diasIso, ordensDaSemana, grupos, gruposPorDia, ordensSemDia, quadroLoto, escalaDaSemana };
+    });
+  });
 
   // Chaves de todos os grupos visíveis agora (técnico ou dia, conforme a tela) —
   // usado pelos botões "Expandir todos"/"Recolher todos".
@@ -385,8 +422,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   // Escala de turno (D/N/F) por equipe, pros dias da semana selecionada — calculada,
   // não editada manualmente (o rodízio de 8 dias é fixo, ver src/utils/escala-apoio.ts).
-  escalaDaSemana = computed(() => {
-    const dias = this.diasDaSemanaAtual();
+  private escalaDaSemanaCalc(dias: { data: string; label: string }[]) {
     const porEquipe = new Map<EquipeApoio, OperadorEscalaApoio[]>();
     for (const op of this.escalaApoio()) {
       const lista = porEquipe.get(op.equipe) ?? [];
@@ -400,7 +436,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         integrantesLabel: porEquipe.get(equipe)!.map(i => i.nome).join(', '),
         turnos: dias.map(d => ({ data: d.data, label: d.label, turno: turnoNoDia(equipe, d.data) as Turno })),
       }));
-  });
+  }
+  escalaDaSemana = computed(() => this.escalaDaSemanaCalc(this.diasDaSemanaAtual()));
 
   // ── Gerenciar Apoio (Admin): cadastro de equipes/empresas e da escala de turno ──
   gerenciarApoioAberto = signal(false);
@@ -521,11 +558,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // o ponto é visibilidade cruzada entre equipes, não só o que o filtro atual mostra.
   // OS sem dia marcado é tratada como valendo a semana toda (mais seguro do que
   // simplesmente não aparecer no quadro).
-  quadroLoto = computed(() => {
-    const dias = this.diasDaSemanaAtual().map(d => d.data);
+  private quadroLotoCalc(ordensDaSemana: ManutencaoOrdem[], diasSemana: { data: string; label: string }[]) {
+    const dias = diasSemana.map(d => d.data);
     const porEquipamento = new Map<string, Map<string, { status: string; descricao: string; tecnico: string; area: ManutencaoArea }[]>>();
 
-    for (const o of this.ordensDaSemana()) {
+    for (const o of ordensDaSemana) {
       const equipamento = o.equipamento?.trim();
       const loto = o.loto?.trim();
       if (!equipamento || !loto) continue;
@@ -554,7 +591,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       // funcionando marcado, ou conflito entre equipes).
       .filter(linha => linha.dias.some(d => d.conflito || d.itens.some(i => i.status.toUpperCase() !== 'SEM LOTO')))
       .sort((a, b) => a.equipamento.localeCompare(b.equipamento));
-  });
+  }
+  quadroLoto = computed(() => this.quadroLotoCalc(this.ordensDaSemana(), this.diasDaSemanaAtual()));
 
   // ── Modal: criar/editar OS ─────────────────────────────────────────────
   formAberto = signal(false);
@@ -573,7 +611,6 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   formTecnicoNome = signal('');
   formTecnicoMatricula = signal('');
   formDiasSelecionados = signal<string[]>([]);
-  formStatus = signal('PEND');
   formObservacoes = signal('');
   buscandoOsNoSigma = signal(false);
 
@@ -586,9 +623,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // preenchimento/validação.
   sigmaPorOs = signal<Record<string, ConsultaSigmaResultado>>({});
 
-  private numerosOsVisiveis = computed(() =>
-    [...new Set(this.ordensDaSemana().map(o => o.numeroOs).filter((n): n is string => !!n?.trim()))],
-  );
+  private numerosOsVisiveis = computed(() => {
+    const ordens = this.horizonteAtivo()
+      ? this.blocosHorizonte().flatMap(b => b.ordensDaSemana)
+      : this.ordensDaSemana();
+    return [...new Set(ordens.map(o => o.numeroOs).filter((n): n is string => !!n?.trim()))];
+  });
 
   // Telas separadas por área (/manutencao/programacao/eletrica ou /mecanica) travam o
   // filtro nessa área e escondem o seletor; a rota combinada (/manutencao/programacao,
@@ -634,7 +674,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Selo de execução por OS, pra saber se ela já foi apontada (executada) dentro da
   // semana programada, ou fora dela, ou ainda nem apontada. `null` = ou não tem número
   // de OS pra checar, ou a consulta ao SIGMA ainda não voltou.
-  statusExecucao(o: ManutencaoOrdem): { label: string; class: string; title: string } | null {
+  statusExecucao(o: ManutencaoOrdem, diasSemanaOverride?: string[]): { label: string; class: string; title: string } | null {
     if (!o.numeroOs?.trim()) return null;
     const resultado = this.sigmaPorOs()[normalizarNumeroOs(o.numeroOs)];
     if (!resultado) return null;
@@ -643,7 +683,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       return { label: 'Não executada', class: 'bg-gray-100 text-gray-500', title: 'Nenhum apontamento encontrado no SIGMA pra essa OS.' };
     }
 
-    const diasDaSemana = o.diasPrevistos.length > 0 ? o.diasPrevistos : this.diasDaSemanaAtual().map(d => d.data);
+    const diasDaSemana = o.diasPrevistos.length > 0 ? o.diasPrevistos : (diasSemanaOverride ?? this.diasDaSemanaAtual().map(d => d.data));
     const dentroDaSemana = resultado.apontamentos.filter(a => diasDaSemana.includes(a.data));
     if (dentroDaSemana.length > 0) {
       return {
@@ -780,7 +820,6 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formTecnicoNome.set('');
     this.formTecnicoMatricula.set('');
     this.formDiasSelecionados.set([]);
-    this.formStatus.set('PEND');
     this.formObservacoes.set('');
     this.formAberto.set(true);
   }
@@ -812,13 +851,82 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formTecnicoNome.set(o.tecnicoNome);
     this.formTecnicoMatricula.set(o.tecnicoMatricula ?? '');
     this.formDiasSelecionados.set([...o.diasPrevistos]);
-    this.formStatus.set(o.status);
     this.formObservacoes.set(o.observacoes ?? '');
     this.formAberto.set(true);
   }
 
   fecharForm(): void {
     this.formAberto.set(false);
+  }
+
+  // ── Adicionar apoio (duplica a OS pra um segundo técnico) ─────────────────
+  // Cada técnico (principal e apoio) fica com seu próprio lançamento, editável
+  // separadamente (dias, duração, status) — assim a OS aparece na agenda e na
+  // capacidade dos dois, sem um único registro compartilhado entre eles.
+  apoioAberto = signal(false);
+  apoioOrigem = signal<ManutencaoOrdem | null>(null);
+  apoioTecnicoNome = signal('');
+  apoioTecnicoMatricula = signal('');
+
+  tecnicosParaApoio = computed(() => {
+    const origem = this.apoioOrigem();
+    if (!origem) return [];
+    return this.tecnicosPorArea(origem.area).filter(t => t.nome !== origem.tecnicoNome);
+  });
+
+  abrirApoio(o: ManutencaoOrdem): void {
+    this.apoioOrigem.set(o);
+    this.apoioTecnicoNome.set('');
+    this.apoioTecnicoMatricula.set('');
+    this.apoioAberto.set(true);
+  }
+
+  fecharApoio(): void {
+    this.apoioAberto.set(false);
+    this.apoioOrigem.set(null);
+  }
+
+  onApoioTecnicoSelected(nome: string): void {
+    this.apoioTecnicoNome.set(nome);
+    const colaborador = this.tecnicosParaApoio().find(c => c.nome === nome);
+    this.apoioTecnicoMatricula.set(colaborador?.matricula ?? '');
+  }
+
+  canConfirmarApoio(): boolean {
+    return !this.isProcessando() && !!this.apoioOrigem() && !!this.apoioTecnicoNome().trim();
+  }
+
+  async confirmarApoio(): Promise<void> {
+    const origem = this.apoioOrigem();
+    if (!this.canConfirmarApoio() || !origem) return;
+    this.isProcessando.set(true);
+    try {
+      await this.manutencaoService.criarOrdem({
+        tipo: 'ordem',
+        area: origem.area,
+        semanaInicio: origem.semanaInicio,
+        numeroOs: origem.numeroOs ?? undefined,
+        semOs: origem.semOs,
+        descricao: origem.descricao,
+        equipamento: origem.equipamento ?? undefined,
+        recursos: origem.recursos ?? undefined,
+        loto: origem.loto ?? undefined,
+        areaAtuacao: origem.areaAtuacao ?? undefined,
+        duracaoHoras: origem.duracaoHoras ?? undefined,
+        tipoServico: origem.tipoServico ?? undefined,
+        tecnicoNome: this.apoioTecnicoNome(),
+        tecnicoMatricula: this.apoioTecnicoMatricula() || undefined,
+        diasPrevistos: origem.diasPrevistos,
+        status: 'PEND',
+        observacoes: origem.observacoes ?? undefined,
+      });
+      this.notificationService.showSuccess(`OS adicionada também para ${this.apoioTecnicoNome()}.`);
+      this.fecharApoio();
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao adicionar apoio.');
+    } finally {
+      this.isProcessando.set(false);
+    }
   }
 
   onTecnicoSelected(nome: string): void {
@@ -872,7 +980,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           tecnicoNome: this.formTecnicoNome(),
           tecnicoMatricula: this.formTecnicoMatricula() || null,
           diasPrevistos: this.formDiasSelecionados(),
-          status: ehOrdem ? (this.formStatus().trim() || 'PEND') : '',
+          // Status é sempre PEND ao adicionar/editar — quem diz se já foi executada é
+          // o apontamento do SIGMA (ver statusExecucao()), não um campo digitado.
+          status: ehOrdem ? 'PEND' : '',
           observacoes: this.formObservacoes().trim() || null,
         });
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} atualizada.`);
@@ -893,7 +1003,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           tecnicoNome: this.formTecnicoNome(),
           tecnicoMatricula: this.formTecnicoMatricula() || undefined,
           diasPrevistos: this.formDiasSelecionados(),
-          status: ehOrdem ? (this.formStatus().trim() || undefined) : undefined,
+          status: ehOrdem ? 'PEND' : undefined,
           observacoes: this.formObservacoes().trim() || undefined,
         });
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} adicionada à programação.`);
