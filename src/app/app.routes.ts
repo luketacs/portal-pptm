@@ -194,6 +194,14 @@ export const APP_ROUTES: Routes = [
     data: { roles: ['Admin', 'Solicitante', 'Visualizador'], area: 'MECANICA' },
     title: 'Programação Mecânica',
   },
+  {
+    path: 'manutencao/programacao/apoio',
+    loadComponent: () =>
+      import('../components/manutencao/manutencao-programacao/manutencao-programacao.component').then(m => m.ManutencaoProgramacaoComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'], area: 'APOIO' },
+    title: 'Programação Apoio',
+  },
 
   {
     path: 'almoxarifado/aguardando',

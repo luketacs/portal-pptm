@@ -12,6 +12,25 @@ export interface FechamentoFundoFixoLinha {
   aprovador: string;
 }
 
+export interface ProgramacaoSemanalLinha {
+  numeroOs: string;
+  descricao: string;
+  equipamento: string;
+  area: string;
+  areaAtuacao: string;
+  loto: string;
+  tipoServico: string;
+  duracaoHoras: number | null;
+  dias: string;
+  status: string;
+}
+
+export interface ProgramacaoSemanalGrupo {
+  tecnico: string;
+  totalHoras: number;
+  linhas: ProgramacaoSemanalLinha[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class ExcelExportService {
 
@@ -595,5 +614,106 @@ export class ExcelExportService {
     wb.Props = { Title: `Fundo Fixo — Fechamento ${params.mesLabel}`, Company: 'Diamante Energia' };
     XLSX.utils.book_append_sheet(wb, ws, 'Fechamento');
     XLSX.writeFile(wb, `fundo_fixo_fechamento_${this.todayStr()}.xlsx`);
+  }
+
+  // ── Exportar Programação de Manutenção (semanal) ────────────────────────────
+
+  private tabelaTecnico(ws: WorkSheet, rowInicial: number, NC: number, grupo: ProgramacaoSemanalGrupo): number {
+    let row = rowInicial;
+
+    this.fillRow(ws, row, NC, this.sSecao());
+    ws[this.enc(row, 0)] = { v: `${grupo.tecnico} — ${grupo.totalHoras}h programadas`, t: 's', s: this.sSecao() };
+    const linhaBanner = row;
+    row++;
+
+    const headers: Array<[string, 'left' | 'center' | 'right']> = [
+      ['Nº OS',        'center'],
+      ['Descrição',    'left'  ],
+      ['Equipamento',  'left'  ],
+      ['Área',         'center'],
+      ['Área Atuação', 'left'  ],
+      ['LOTO',         'center'],
+      ['Tipo Serviço', 'center'],
+      ['Duração',      'right' ],
+      ['Dias',         'center'],
+      ['Status',       'center'],
+    ];
+    headers.forEach(([label, align], c) => {
+      ws[this.enc(row, c)] = { v: label, t: 's', s: this.sHeader(align) };
+    });
+    row++;
+
+    grupo.linhas.forEach((linha, i) => {
+      const even = i % 2 === 1;
+      this.s(ws, row, 0, linha.numeroOs,               this.sData('center', even));
+      this.s(ws, row, 1, linha.descricao,               this.sData('left', even));
+      this.s(ws, row, 2, linha.equipamento,             this.sData('left', even));
+      this.s(ws, row, 3, linha.area,                    this.sData('center', even));
+      this.s(ws, row, 4, linha.areaAtuacao,              this.sData('left', even));
+      this.s(ws, row, 5, linha.loto,                    this.sData('center', even));
+      this.s(ws, row, 6, linha.tipoServico,             this.sData('center', even));
+      if (linha.duracaoHoras !== null) {
+        this.n(ws, row, 7, linha.duracaoHoras, this.sData('right', even), '0.##"h"');
+      } else {
+        this.s(ws, row, 7, '—', this.sData('right', even));
+      }
+      this.s(ws, row, 8, linha.dias,                    this.sData('center', even));
+      this.s(ws, row, 9, linha.status,                  this.sData('center', even));
+      row++;
+    });
+
+    if (grupo.linhas.length === 0) {
+      for (let c = 0; c < NC; c++) this.s(ws, row, c, c === 0 ? 'Nenhum lançamento' : '', this.sData('left'));
+      row++;
+    }
+
+    ws['!merges'] = ws['!merges'] ?? [];
+    (ws['!merges'] as { s: { r: number; c: number }; e: { r: number; c: number } }[]).push(
+      { s: { r: linhaBanner, c: 0 }, e: { r: linhaBanner, c: NC - 1 } },
+    );
+
+    row++; // espaço
+    return row;
+  }
+
+  exportarProgramacaoSemanal(params: {
+    semanaLabel: string;
+    areaLabel: string;
+    grupos: ProgramacaoSemanalGrupo[];
+  }): void {
+    const NC = 10;
+    const ws: WorkSheet = {};
+    let row = 0;
+
+    this.fillRow(ws, row, NC, this.sTitle());
+    ws[this.enc(row, 0)] = { v: `PROGRAMAÇÃO DE MANUTENÇÃO — ${params.areaLabel.toUpperCase()} — SEMANA ${params.semanaLabel}`, t: 's', s: this.sTitle() };
+    const linhaTitulo = row;
+    row++;
+
+    this.fillRow(ws, row, NC, this.sSub());
+    ws[this.enc(row, 0)] = { v: `Gerado em ${this.nowStr()}`, t: 's', s: this.sSub() };
+    const linhaSub = row;
+    row++;
+    row++; // espaço
+
+    for (const grupo of params.grupos) {
+      row = this.tabelaTecnico(ws, row, NC, grupo);
+    }
+
+    ws['!ref']    = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(row - 1, linhaSub), c: NC - 1 } });
+    ws['!merges'] = [
+      ...(ws['!merges'] as { s: { r: number; c: number }; e: { r: number; c: number } }[] ?? []),
+      { s: { r: linhaTitulo, c: 0 }, e: { r: linhaTitulo, c: NC - 1 } },
+      { s: { r: linhaSub, c: 0 }, e: { r: linhaSub, c: NC - 1 } },
+    ];
+    ws['!cols'] = [
+      { wch: 10 }, { wch: 42 }, { wch: 16 }, { wch: 10 }, { wch: 18 },
+      { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 20 }, { wch: 12 },
+    ];
+
+    const wb: WorkBook = XLSX.utils.book_new();
+    wb.Props = { Title: `Programação de Manutenção — ${params.semanaLabel}`, Company: 'Diamante Energia' };
+    XLSX.utils.book_append_sheet(wb, ws, 'Programação');
+    XLSX.writeFile(wb, `programacao_manutencao_${this.todayStr()}.xlsx`);
   }
 }

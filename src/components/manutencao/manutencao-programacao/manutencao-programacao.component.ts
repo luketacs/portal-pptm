@@ -5,15 +5,26 @@ import { ActivatedRoute } from '@angular/router';
 import { ManutencaoProgramacaoService } from '../../../services/manutencao-programacao.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/toast.service';
-import { ApontamentosService, Colaborador } from '../../../services/apontamentos.service';
-import { ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo } from '../../../models/manutencao-programacao.model';
+import { ApontamentosService } from '../../../services/apontamentos.service';
+import { ExcelExportService, ProgramacaoSemanalGrupo } from '../../../services/excel-export.service';
+import { ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, SigmaBacklogItem } from '../../../models/manutencao-programacao.model';
+import { EquipeApoio, Turno, TURNO_LABEL, turnoNoDia } from '../../../utils/escala-apoio';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 
 const AREA_LABEL: Record<ManutencaoArea, string> = {
   ELETRICA: 'Elétrica',
   MECANICA: 'Mecânica',
+  APOIO: 'Apoio',
 };
+
+// Apoio programa por empresa/equipe (OPERAÇÃO, TOP ANDAIMES, SERVPLEX...), não por
+// técnico individual — catálogo fixo carregado de public/equipes-apoio.json, mesmo
+// padrão do catálogo de equipamentos.
+interface OperadorEscala {
+  nome: string;
+  equipe: EquipeApoio;
+}
 
 const TIPO_LABEL: Record<ManutencaoTipo, string> = {
   ordem: 'Ordem de Serviço',
@@ -42,6 +53,16 @@ const STATUS_BADGE_CONHECIDOS: Record<string, string> = {
   CANC: 'bg-gray-200 text-gray-500',
 };
 const STATUS_BADGE_PADRAO = 'bg-slate-100 text-slate-600';
+
+// "Natureza Manutenção" no SIGMA — as 3 opções que aparecem em toda versão da
+// planilha. Igual status/LOTO: texto livre no banco, mas seletor fechado no formulário.
+const TIPO_SERVICO_OPCOES = ['CORRETIVA', 'PREVENTIVA', 'MELHORIA'];
+const TIPO_SERVICO_BADGE: Record<string, string> = {
+  CORRETIVA: 'bg-red-50 text-red-600',
+  PREVENTIVA: 'bg-blue-50 text-blue-600',
+  MELHORIA: 'bg-purple-50 text-purple-600',
+};
+const TIPO_SERVICO_BADGE_PADRAO = 'bg-slate-50 text-slate-500';
 
 // LOTO (bloqueio do equipamento) tem só essas 3 opções — é o que evita duas equipes
 // baterem de frente (uma precisando do equipamento rodando, outra precisando parado).
@@ -110,8 +131,12 @@ function normalizarNumeroOs(v: string): string {
 export class ManutencaoProgramacaoComponent implements OnInit {
   readonly areaLabel = AREA_LABEL;
   readonly lotoOpcoes = LOTO_OPCOES;
+  readonly tipoServicoOpcoes = TIPO_SERVICO_OPCOES;
   readonly tipoLabel = TIPO_LABEL;
-  readonly tiposForm: ManutencaoTipo[] = ['ordem', 'folga', 'treinamento'];
+  private readonly tiposFormPadrao: ManutencaoTipo[] = ['ordem', 'folga', 'treinamento'];
+  // Apoio programa por empresa/equipe, não por pessoa — folga/treinamento não fazem
+  // sentido nesse contexto, só "ordem" fica disponível.
+  tiposForm = computed<ManutencaoTipo[]>(() => this.areaFixa === 'APOIO' ? ['ordem'] : this.tiposFormPadrao);
 
   statusBadgeClass(status: string): string {
     return STATUS_BADGE_CONHECIDOS[status.toUpperCase()] ?? STATUS_BADGE_PADRAO;
@@ -119,6 +144,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   lotoBadgeClass(loto: string): string {
     return LOTO_BADGE[loto.toUpperCase()] ?? LOTO_BADGE_PADRAO;
+  }
+
+  tipoServicoBadgeClass(tipoServico: string): string {
+    return TIPO_SERVICO_BADGE[tipoServico.toUpperCase()] ?? TIPO_SERVICO_BADGE_PADRAO;
   }
 
   tipoBadgeClass(tipo: ManutencaoTipo): string {
@@ -131,6 +160,45 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   conflitoLotoTitle(itens: { status: string; descricao: string; tecnico: string }[]): string {
     return `Conflito: ${itens.map(i => `${i.status} (${i.tecnico} — ${i.descricao})`).join(' vs. ')}`;
+  }
+
+  // Dias previstos formatados pro Excel (ex.: "SEG, QUA, SEX") — mesma lógica das
+  // pastilhas SEG–SEX da tela, só que como texto pra caber numa célula.
+  private diasFormatados(o: ManutencaoOrdem): string {
+    return this.diasDaSemanaAtual()
+      .filter(d => o.diasPrevistos.includes(d.data))
+      .map(d => d.label)
+      .join(', ');
+  }
+
+  exportarSemana(): void {
+    const grupos: ProgramacaoSemanalGrupo[] = this.grupos().map(g => ({
+      tecnico: g.tecnico,
+      totalHoras: g.totalHoras,
+      linhas: g.ordens.map(o => ({
+        numeroOs: o.tipo !== 'ordem' ? this.tipoLabel[o.tipo] : (o.numeroOs || 'CRIAR OS'),
+        descricao: o.descricao,
+        equipamento: o.equipamento || '—',
+        area: this.areaLabel[o.area],
+        areaAtuacao: o.areaAtuacao || '—',
+        loto: o.loto || '—',
+        tipoServico: o.tipoServico || '—',
+        duracaoHoras: o.duracaoHoras,
+        dias: this.diasFormatados(o) || '—',
+        status: o.tipo === 'ordem' ? o.status : '—',
+      })),
+    }));
+
+    if (grupos.length === 0) {
+      this.notificationService.showError('Nenhum lançamento na semana selecionada pra exportar.');
+      return;
+    }
+
+    this.excelExportService.exportarProgramacaoSemanal({
+      semanaLabel: this.semanaFiltroLabel(),
+      areaLabel: this.areaFixa ? this.areaLabel[this.areaFixa] : 'Elétrica + Mecânica',
+      grupos,
+    });
   }
 
   errorMessage = signal('');
@@ -208,7 +276,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   });
 
   // Agrupada por técnico — usado nas telas de área única (mais perto do que a planilha
-  // já mostra hoje, bloco por executante).
+  // já mostra hoje, bloco por executante). Cada grupo já sai com a capacidade da semana
+  // (Efetivo) calculada, pra comparar contra as horas já alocadas.
   grupos = computed(() => {
     const porTecnico = new Map<string, ManutencaoOrdem[]>();
     for (const o of this.listaFiltrada()) {
@@ -217,9 +286,34 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       porTecnico.set(o.tecnicoNome, lista);
     }
     return Array.from(porTecnico.entries())
-      .map(([tecnico, ordens]) => ({ tecnico, ordens, totalHoras: somaHoras(ordens) }))
+      .map(([tecnico, ordens]) => {
+        const totalHoras = somaHoras(ordens);
+        const capacidade = this.capacidadeSemana(tecnico, ordens);
+        const saldo = capacidade !== null ? parseFloat((capacidade - totalHoras).toFixed(2)) : null;
+        return { tecnico, ordens, totalHoras, capacidade, saldo };
+      })
       .sort((a, b) => a.tecnico.localeCompare(b.tecnico));
   });
+
+  // Efetivo/capacidade: soma a disponibilidade cadastrada (matriculas.json, mesma fonte
+  // do Relatório Mensal PCM) nos dias úteis da semana, descontando os dias em que o
+  // técnico já tem folga/treinamento lançado. `null` quando o técnico não está no
+  // matriculas.json (não dá pra saber a disponibilidade dele).
+  private capacidadeSemana(tecnicoNome: string, ordensDoTecnico: ManutencaoOrdem[]): number | null {
+    const colaborador = this.apontamentosService.colaboradores().find(c => c.nome === tecnicoNome);
+    if (!colaborador) return null;
+
+    const diasIndisponiveis = new Set(
+      ordensDoTecnico.filter(o => o.tipo !== 'ordem').flatMap(o => o.diasPrevistos),
+    );
+
+    let total = 0;
+    for (const dia of this.diasDaSemanaAtual()) {
+      if (diasIndisponiveis.has(dia.data)) continue;
+      total += this.apontamentosService.disponibilidadeNoDia(colaborador, dia.data);
+    }
+    return parseFloat(total.toFixed(2));
+  }
 
   // Agrupada por dia — usado na tela geral (as duas áreas juntas), pra ver de cara
   // tudo que está programado pra cada dia da semana, cruzando Elétrica e Mecânica.
@@ -275,6 +369,88 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   equipamentos = this.manutencaoService.equipamentos;
 
+  // Catálogo fixo de equipes/empresas do Apoio (public/equipes-apoio.json) e a escala
+  // de turno fixa da Operação (public/escala-apoio.json) — mesmo padrão estático já
+  // usado pra equipamentos.json/matriculas.json.
+  equipesApoio = signal<string[]>([]);
+  escalaApoio = signal<OperadorEscala[]>([]);
+  readonly turnoLabel = TURNO_LABEL;
+
+  private async carregarDadosApoio(): Promise<void> {
+    if (this.equipesApoio().length > 0 && this.escalaApoio().length > 0) return;
+    try {
+      const [respEquipes, respEscala] = await Promise.all([fetch('/equipes-apoio.json'), fetch('/escala-apoio.json')]);
+      this.equipesApoio.set(await respEquipes.json());
+      this.escalaApoio.set(await respEscala.json());
+    } catch (err) {
+      console.error('[ManutencaoProgramacaoComponent] Falha ao carregar dados do Apoio:', err);
+    }
+  }
+
+  // Escala de turno (D/N/F) por equipe, pros dias da semana selecionada — calculada,
+  // não editada manualmente (o rodízio de 8 dias é fixo, ver src/utils/escala-apoio.ts).
+  escalaDaSemana = computed(() => {
+    const dias = this.diasDaSemanaAtual();
+    const porEquipe = new Map<EquipeApoio, OperadorEscala[]>();
+    for (const op of this.escalaApoio()) {
+      const lista = porEquipe.get(op.equipe) ?? [];
+      lista.push(op);
+      porEquipe.set(op.equipe, lista);
+    }
+    return (['A', 'B', 'C', 'D'] as EquipeApoio[])
+      .filter(eq => porEquipe.has(eq))
+      .map(equipe => ({
+        equipe,
+        integrantesLabel: porEquipe.get(equipe)!.map(i => i.nome).join(', '),
+        turnos: dias.map(d => ({ data: d.data, label: d.label, turno: turnoNoDia(equipe, d.data) as Turno })),
+      }));
+  });
+
+  // Backlog do SIGMA (OS abertas da área, ainda não lançadas aqui) — só faz sentido
+  // nas telas de área única, porque o campo de área do SIGMA é por OS, não por semana.
+  // Carrega sob demanda (painel fechado por padrão) pra não pagar o custo da primeira
+  // consulta ao SIGMA (cache de ~10min no proxy) toda vez que a tela abre.
+  backlogAberto = signal(false);
+  backlogCarregando = signal(false);
+  backlogErro = signal('');
+  private backlogSigma = signal<SigmaBacklogItem[]>([]);
+
+  private numerosOsJaProgramados = computed(() => {
+    const area = this.areaFixa;
+    if (!area) return new Set<string>();
+    return new Set(
+      this.manutencaoService.ordens()
+        .filter(o => o.area === area && o.numeroOs?.trim())
+        .map(o => normalizarNumeroOs(o.numeroOs!)),
+    );
+  });
+
+  backlogFiltrado = computed(() => {
+    const jaProgramados = this.numerosOsJaProgramados();
+    return this.backlogSigma().filter(item => !jaProgramados.has(normalizarNumeroOs(item.numeroOs)));
+  });
+
+  async toggleBacklog(): Promise<void> {
+    const abrir = !this.backlogAberto();
+    this.backlogAberto.set(abrir);
+    if (abrir && this.backlogSigma().length === 0) {
+      await this.carregarBacklog();
+    }
+  }
+
+  async carregarBacklog(): Promise<void> {
+    if (!this.areaFixa || this.areaFixa === 'APOIO') return;
+    this.backlogCarregando.set(true);
+    this.backlogErro.set('');
+    try {
+      this.backlogSigma.set(await this.manutencaoService.consultarBacklogSigma(this.areaFixa));
+    } catch (err: unknown) {
+      this.backlogErro.set(err instanceof Error ? err.message : 'Erro ao consultar o backlog do SIGMA.');
+    } finally {
+      this.backlogCarregando.set(false);
+    }
+  }
+
   // Quadro de bloqueios (LOTO) por equipamento/dia — logo no topo da tela, pra
   // qualquer time ver antes de programar se o equipamento já está comprometido
   // num estado incompatível (ex.: uma equipe precisa dele rodando, outra parado).
@@ -329,6 +505,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   formLoto = signal('');
   formAreaAtuacao = signal('');
   formDuracaoHoras = signal<number | null>(null);
+  formTipoServico = signal('');
   formTecnicoNome = signal('');
   formTecnicoMatricula = signal('');
   formDiasSelecionados = signal<string[]>([]);
@@ -363,6 +540,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     private authService: AuthService,
     private notificationService: NotificationService,
     private apontamentosService: ApontamentosService,
+    private excelExportService: ExcelExportService,
   ) {
     const area = this.route.snapshot.data['area'] as ManutencaoArea | undefined;
     if (area) {
@@ -432,6 +610,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       if (!this.formEquipamento().trim() && this.equipamentos().includes(info.equipamento)) {
         this.formEquipamento.set(info.equipamento);
       }
+      if (!this.formTipoServico().trim() && this.tipoServicoOpcoes.includes(info.tipoServico)) {
+        this.formTipoServico.set(info.tipoServico);
+      }
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao consultar a OS no SIGMA.');
     } finally {
@@ -444,20 +625,26 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       await this.manutencaoService.load();
       await this.apontamentosService.loadColaboradores();
       await this.manutencaoService.loadEquipamentos();
+      if (this.areaFixa === 'APOIO') await this.carregarDadosApoio();
     } catch {
       this.errorMessage.set('Erro ao carregar a programação de manutenção.');
     }
   }
 
-  private tecnicosPorArea(area: ManutencaoArea): Colaborador[] {
+  private tecnicosPorArea(area: ManutencaoArea): { nome: string; matricula: string | null }[] {
+    if (area === 'APOIO') {
+      return this.equipesApoio().map(nome => ({ nome, matricula: null }));
+    }
     const termo = area === 'ELETRICA' ? 'ELETR' : 'MECAN';
     return this.apontamentosService.colaboradores()
       .filter(c => normalizarTexto(c.area).includes(termo))
+      .map(c => ({ nome: c.nome, matricula: c.matricula }))
       .sort((a, b) => a.nome.localeCompare(b.nome));
   }
 
   // Todos os técnicos das duas áreas (Elétrica + Mecânica) — usado no lançamento de
-  // feriado, que vale pra equipe toda, independente de qual tela você está.
+  // feriado, que vale pra equipe toda. Apoio fica de fora (folga é um conceito por
+  // pessoa, e lá quem aparece é empresa/equipe).
   todosTecnicos = computed(() => [
     ...this.tecnicosPorArea('ELETRICA').map(c => ({ nome: c.nome, matricula: c.matricula, area: 'ELETRICA' as ManutencaoArea })),
     ...this.tecnicosPorArea('MECANICA').map(c => ({ nome: c.nome, matricula: c.matricula, area: 'MECANICA' as ManutencaoArea })),
@@ -524,12 +711,24 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formLoto.set('');
     this.formAreaAtuacao.set('');
     this.formDuracaoHoras.set(null);
+    this.formTipoServico.set('');
     this.formTecnicoNome.set('');
     this.formTecnicoMatricula.set('');
     this.formDiasSelecionados.set([]);
     this.formStatus.set('PEND');
     this.formObservacoes.set('');
     this.formAberto.set(true);
+  }
+
+  // Abre "Novo lançamento" já preenchido a partir de um item do backlog do SIGMA —
+  // poupa digitar o número da OS e esperar a busca (blur) que abrirCriar() + digitação
+  // manual exigiriam.
+  programarDoBacklog(item: SigmaBacklogItem): void {
+    this.abrirCriar();
+    this.formNumeroOs.set(item.numeroOs);
+    this.formDescricao.set(item.descricao);
+    if (this.equipamentos().includes(item.equipamento)) this.formEquipamento.set(item.equipamento);
+    if (this.tipoServicoOpcoes.includes(item.tipoServico)) this.formTipoServico.set(item.tipoServico);
   }
 
   abrirEditar(o: ManutencaoOrdem): void {
@@ -541,6 +740,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formEquipamento.set(o.equipamento ?? '');
     this.formRecursos.set(o.recursos ?? '');
     this.formLoto.set(o.loto ?? '');
+    this.formTipoServico.set(o.tipoServico ?? '');
     this.formAreaAtuacao.set(o.areaAtuacao ?? '');
     this.formDuracaoHoras.set(o.duracaoHoras);
     this.formTecnicoNome.set(o.tecnicoNome);
@@ -601,6 +801,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           loto: ehOrdem ? (this.formLoto().trim() || null) : null,
           areaAtuacao: ehOrdem ? (this.formAreaAtuacao().trim() || null) : null,
           duracaoHoras: ehOrdem ? this.formDuracaoHoras() : null,
+          tipoServico: ehOrdem ? (this.formTipoServico().trim() || null) : null,
           tecnicoNome: this.formTecnicoNome(),
           tecnicoMatricula: this.formTecnicoMatricula() || null,
           diasPrevistos: this.formDiasSelecionados(),
@@ -620,6 +821,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           loto: ehOrdem ? (this.formLoto().trim() || undefined) : undefined,
           areaAtuacao: ehOrdem ? (this.formAreaAtuacao().trim() || undefined) : undefined,
           duracaoHoras: ehOrdem ? (this.formDuracaoHoras() ?? undefined) : undefined,
+          tipoServico: ehOrdem ? (this.formTipoServico().trim() || undefined) : undefined,
           tecnicoNome: this.formTecnicoNome(),
           tecnicoMatricula: this.formTecnicoMatricula() || undefined,
           diasPrevistos: this.formDiasSelecionados(),

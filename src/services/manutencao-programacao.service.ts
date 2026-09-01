@@ -4,7 +4,7 @@ import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
 import {
   ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest, ManutencaoArea,
-  ManutencaoOrdem, ManutencaoTipo,
+  ManutencaoOrdem, ManutencaoTipo, SigmaBacklogItem,
 } from '../models/manutencao-programacao.model';
 
 interface ManutencaoOrdemRow {
@@ -19,6 +19,7 @@ interface ManutencaoOrdemRow {
   loto: string | null;
   area_atuacao: string | null;
   duracao_horas: number | null;
+  tipo_servico: string | null;
   tecnico_nome: string;
   tecnico_matricula: string | null;
   dias_previstos: string[] | null;
@@ -28,6 +29,12 @@ interface ManutencaoOrdemRow {
   criado_por_nome: string;
   created_at: string;
 }
+
+const AREA_LABEL_LOG: Record<ManutencaoArea, string> = {
+  ELETRICA: 'Elétrica',
+  MECANICA: 'Mecânica',
+  APOIO: 'Apoio',
+};
 
 function mapRow(r: ManutencaoOrdemRow): ManutencaoOrdem {
   return {
@@ -42,6 +49,7 @@ function mapRow(r: ManutencaoOrdemRow): ManutencaoOrdem {
     loto: r.loto,
     areaAtuacao: r.area_atuacao,
     duracaoHoras: r.duracao_horas !== null ? Number(r.duracao_horas) : null,
+    tipoServico: r.tipo_servico,
     tecnicoNome: r.tecnico_nome,
     tecnicoMatricula: r.tecnico_matricula,
     diasPrevistos: r.dias_previstos ?? [],
@@ -115,6 +123,7 @@ export class ManutencaoProgramacaoService {
       loto: req.loto?.trim() || null,
       area_atuacao: req.areaAtuacao?.trim() || null,
       duracao_horas: req.duracaoHoras ?? null,
+      tipo_servico: req.tipoServico?.trim() || null,
       tecnico_nome: req.tecnicoNome,
       tecnico_matricula: req.tecnicoMatricula || null,
       dias_previstos: req.diasPrevistos,
@@ -134,7 +143,7 @@ export class ManutencaoProgramacaoService {
       user_name: user.name,
       event_type: 'manutencao_programacao_criada',
       resource_type: 'manutencao_programacao',
-      description: `${user.name} ${acaoLabel} na programação de ${req.area === 'ELETRICA' ? 'Elétrica' : 'Mecânica'}: ${req.descricao} (${req.tecnicoNome})`,
+      description: `${user.name} ${acaoLabel} na programação de ${AREA_LABEL_LOG[req.area]}: ${req.descricao} (${req.tecnicoNome})`,
       metadata: { tipo: req.tipo ?? 'ordem', area: req.area, semana_inicio: req.semanaInicio, tecnico: req.tecnicoNome },
     });
 
@@ -218,6 +227,7 @@ export class ManutencaoProgramacaoService {
         loto: updates.loto?.trim() || null,
         area_atuacao: updates.areaAtuacao?.trim() || null,
         duracao_horas: updates.duracaoHoras,
+        tipo_servico: updates.tipoServico?.trim() || null,
         tecnico_nome: updates.tecnicoNome,
         tecnico_matricula: updates.tecnicoMatricula || null,
         dias_previstos: updates.diasPrevistos,
@@ -286,5 +296,19 @@ export class ManutencaoProgramacaoService {
       throw new Error(body?.error || 'Falha ao consultar o SIGMA.');
     }
     return body.data as Record<string, ConsultaSigmaResultado>;
+  }
+
+  // Backlog do SIGMA: OS abertas de uma área, ainda não lançadas na nossa programação —
+  // ajuda a montar a semana a partir do que já existe no ERP.
+  async consultarBacklogSigma(area: ManutencaoArea): Promise<SigmaBacklogItem[]> {
+    const token = await this.authService.getValidAccessToken();
+    const resp = await fetch(`/api/sigma-ordens-proxy?backlog_area=${area}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const body = await resp.json().catch(() => null);
+    if (!resp.ok || !body?.success) {
+      throw new Error(body?.error || 'Falha ao consultar o backlog do SIGMA.');
+    }
+    return body.backlog as SigmaBacklogItem[];
   }
 }

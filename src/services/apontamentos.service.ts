@@ -114,6 +114,15 @@ export class ApontamentosService {
     return this._colaboradores;
   }
 
+  // Horas/dia contratadas de um colaborador numa data específica — considera o corte
+  // de 01/06/2026 (mesma regra usada no Relatório Mensal PCM). Reaproveitada pela
+  // Programação de Manutenção pra calcular capacidade semanal (Efetivo).
+  disponibilidadeNoDia(colaborador: Colaborador, dataIso: string): number {
+    return dataIso >= CUTOFF_DISPONIBILIDADE
+      ? (colaborador.disponibilidade_pos_corte ?? colaborador.disponibilidade)
+      : colaborador.disponibilidade;
+  }
+
   getColaboradoresPorEquipe(equipe: EquipeTab): Colaborador[] {
     const termos: Record<EquipeTab, string> = {
       eletrica: 'ELETRIC',

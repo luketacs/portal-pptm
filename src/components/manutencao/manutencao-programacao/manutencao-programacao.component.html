@@ -10,8 +10,23 @@
         }
       </p>
     </div>
-    @if (isAdmin()) {
-      <div class="flex items-center gap-2 flex-shrink-0">
+    <div class="flex items-center gap-2 flex-shrink-0">
+      @if (areaFixa && areaFixa !== 'APOIO') {
+        <button (click)="toggleBacklog()" title="OS abertas no SIGMA que ainda não foram lançadas na programação"
+          class="inline-flex items-center gap-2 bg-white text-slate-600 text-sm font-semibold py-2.5 px-4 rounded-lg border border-slate-300 hover:bg-slate-50 transition">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+          Backlog do SIGMA
+          @if (backlogFiltrado().length > 0) {
+            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">{{ backlogFiltrado().length }}</span>
+          }
+        </button>
+      }
+      <button (click)="exportarSemana()" title="Exportar/imprimir a programação da semana selecionada"
+        class="inline-flex items-center gap-2 bg-white text-slate-600 text-sm font-semibold py-2.5 px-4 rounded-lg border border-slate-300 hover:bg-slate-50 transition">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H8a2 2 0 01-2-2V5a2 2 0 012-2h6l6 6v9a2 2 0 01-2 2z" /></svg>
+        Exportar
+      </button>
+      @if (isAdmin()) {
         <button (click)="abrirFeriado()" title="Lança folga pra toda a equipe (Elétrica + Mecânica) de uma vez"
           class="inline-flex items-center gap-2 bg-white text-slate-600 text-sm font-semibold py-2.5 px-4 rounded-lg border border-slate-300 hover:bg-slate-50 transition">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
@@ -22,8 +37,8 @@
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
           Novo lançamento
         </button>
-      </div>
-    }
+      }
+    </div>
   </div>
 
   @if (errorMessage()) {
@@ -38,6 +53,66 @@
       </svg>
     </div>
   } @else {
+
+    @if (areaFixa && areaFixa !== 'APOIO' && backlogAberto()) {
+      <div class="app-card p-3">
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Backlog do SIGMA — OS abertas ainda não programadas</p>
+          @if (!backlogCarregando()) {
+            <button (click)="carregarBacklog()" title="Atualizar" class="text-xs text-blue-600 hover:text-blue-700 font-semibold">Atualizar</button>
+          }
+        </div>
+        @if (backlogCarregando()) {
+          <div class="flex justify-center py-6">
+            <svg class="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+          </div>
+        } @else if (backlogErro()) {
+          <p class="text-sm text-red-600 py-1">{{ backlogErro() }}</p>
+        } @else if (backlogFiltrado().length === 0) {
+          <p class="text-sm text-gray-400 py-1">Nenhuma OS aberta pendente de programação pra essa área.</p>
+        } @else {
+          <div class="overflow-x-auto max-h-64 overflow-y-auto">
+            <table class="min-w-full text-sm">
+              <thead class="sticky top-0 bg-white">
+                <tr class="text-left text-xs text-gray-500 uppercase">
+                  <th class="py-1 pr-3">OS</th>
+                  <th class="py-1 pr-3">Descrição</th>
+                  <th class="py-1 pr-3">Equipamento</th>
+                  <th class="py-1 pr-3">Tipo</th>
+                  <th class="py-1 pr-3">Status</th>
+                  <th class="py-1 pr-3"></th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                @for (item of backlogFiltrado(); track item.numeroOs) {
+                  <tr>
+                    <td class="py-1.5 pr-3 text-gray-600">{{ item.numeroOs }}</td>
+                    <td class="py-1.5 pr-3 text-gray-800 max-w-xs"><span class="block truncate" [title]="item.descricao">{{ item.descricao }}</span></td>
+                    <td class="py-1.5 pr-3 text-gray-600">{{ item.equipamento || '—' }}</td>
+                    <td class="py-1.5 pr-3">
+                      @if (item.tipoServico) {
+                        <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoServicoBadgeClass(item.tipoServico)">{{ item.tipoServico }}</span>
+                      }
+                    </td>
+                    <td class="py-1.5 pr-3">
+                      <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(item.statusCodigo)">{{ item.statusCodigo || '—' }}</span>
+                    </td>
+                    <td class="py-1.5 pr-3 whitespace-nowrap">
+                      @if (isAdmin()) {
+                        <button (click)="programarDoBacklog(item)" class="text-xs font-semibold px-2 py-1 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition">Programar</button>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    }
 
     <!-- Quadro de bloqueios (LOTO) + total da semana numa faixa só — sempre as duas
          áreas juntas, pra qualquer equipe ver antes de programar se o equipamento já
@@ -91,6 +166,47 @@
       }
     </div>
 
+    @if (areaFixa === 'APOIO') {
+      <!-- Escala de turno (D/N/F) da Operação — rodízio fixo de 8 dias, calculado, não
+           editado manualmente (ver src/utils/escala-apoio.ts). -->
+      <div class="app-card p-3">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Escala de turno — {{ semanaFiltroLabel() }}</p>
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-left text-xs text-gray-500 uppercase">
+                <th class="py-1 pr-3">Equipe</th>
+                @for (dia of diasDaSemanaAtual(); track dia.data) {
+                  <th class="py-1 px-1 text-center">{{ dia.label }}</th>
+                }
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              @for (linha of escalaDaSemana(); track linha.equipe) {
+                <tr>
+                  <td class="py-1.5 pr-3">
+                    <span class="font-semibold text-gray-700">Equipe {{ linha.equipe }}</span>
+                    <span class="block text-[11px] text-gray-400 max-w-56 truncate" [title]="linha.integrantesLabel">
+                      {{ linha.integrantesLabel }}
+                    </span>
+                  </td>
+                  @for (cel of linha.turnos; track cel.data) {
+                    <td class="py-1.5 px-1 text-center">
+                      <span class="inline-block w-7 h-7 leading-7 rounded text-xs font-bold"
+                        [class]="cel.turno === 'D' ? 'bg-blue-100 text-blue-700' : cel.turno === 'N' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-400'"
+                        [title]="turnoLabel[cel.turno]">
+                        {{ cel.turno }}
+                      </span>
+                    </td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+
     <!-- Filtros -->
     <div class="app-card p-3 space-y-2">
       <div class="flex flex-wrap gap-4">
@@ -111,11 +227,12 @@
               <option value="todos">Todas</option>
               <option value="ELETRICA">Elétrica</option>
               <option value="MECANICA">Mecânica</option>
+              <option value="APOIO">Apoio</option>
             </select>
           </div>
         }
         <div class="min-w-40">
-          <label class="block text-xs font-medium text-gray-600 mb-1">Técnico</label>
+          <label class="block text-xs font-medium text-gray-600 mb-1">{{ areaFixa === 'APOIO' ? 'Equipe' : 'Técnico' }}</label>
           <select [ngModel]="tecnicoFiltro()" (ngModelChange)="tecnicoFiltro.set($event)"
             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
             <option value="todos">Todos</option>
@@ -167,7 +284,16 @@
                   <svg class="h-4 w-4 text-gray-400 transition-transform flex-shrink-0" [class.rotate-90]="isGrupoExpandido('tec:' + grupo.tecnico)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
                   <h2 class="text-sm font-bold text-gray-800">{{ grupo.tecnico }}</h2>
                 </div>
-                <span class="text-xs text-gray-400 flex-shrink-0">{{ grupo.ordens.length }} OS @if (grupo.totalHoras > 0) { · {{ grupo.totalHoras }}h }</span>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                  @if (grupo.capacidade !== null) {
+                    <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                      [class]="grupo.saldo! < 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'"
+                      [title]="grupo.saldo! < 0 ? 'Alocado acima da capacidade da semana' : 'Alocado dentro da capacidade da semana'">
+                      {{ grupo.totalHoras }}h / {{ grupo.capacidade }}h
+                    </span>
+                  }
+                  <span class="text-xs text-gray-400">{{ grupo.ordens.length }} OS @if (grupo.totalHoras > 0 && grupo.capacidade === null) { · {{ grupo.totalHoras }}h }</span>
+                </div>
               </button>
               @if (isGrupoExpandido('tec:' + grupo.tecnico)) {
                 <div class="overflow-x-auto mt-2">
@@ -200,6 +326,9 @@
                           </td>
                           <td class="py-1.5 pr-3 text-gray-800 max-w-xs">
                             <span class="block truncate" [title]="o.descricao">{{ o.descricao }}</span>
+                            @if (o.tipoServico) {
+                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoServicoBadgeClass(o.tipoServico)">{{ o.tipoServico }}</span>
+                            }
                             @if (o.loto) {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="lotoBadgeClass(o.loto)">{{ o.loto }}</span>
                             }
@@ -295,6 +424,9 @@
                           </td>
                           <td class="py-1.5 pr-3 text-gray-800 max-w-xs">
                             <span class="block truncate" [title]="o.descricao">{{ o.descricao }}</span>
+                            @if (o.tipoServico) {
+                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoServicoBadgeClass(o.tipoServico)">{{ o.tipoServico }}</span>
+                            }
                             @if (o.loto) {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="lotoBadgeClass(o.loto)">{{ o.loto }}</span>
                             }
@@ -374,6 +506,9 @@
                         </td>
                         <td class="py-1.5 pr-3 text-gray-800 max-w-xs">
                           <span class="block truncate" [title]="o.descricao">{{ o.descricao }}</span>
+                          @if (o.tipoServico) {
+                            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoServicoBadgeClass(o.tipoServico)">{{ o.tipoServico }}</span>
+                          }
                         </td>
                         <td class="py-1.5 pr-3 text-gray-600">{{ areaLabel[o.area] }}</td>
                         <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
@@ -413,7 +548,7 @@
 
       <label class="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
       <div class="grid grid-cols-3 gap-2 mb-4">
-        @for (t of tiposForm; track t) {
+        @for (t of tiposForm(); track t) {
           <button type="button" (click)="formTipo.set(t)"
             class="text-sm font-semibold py-2 rounded-lg border transition"
             [class]="formTipo() === t ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-slate-300 hover:bg-slate-50'">
@@ -433,7 +568,7 @@
         </select>
       }
 
-      <label class="block text-sm font-medium text-slate-700 mb-1">Técnico <span class="text-red-500">*</span></label>
+      <label class="block text-sm font-medium text-slate-700 mb-1">{{ formArea() === 'APOIO' ? 'Equipe/Empresa' : 'Técnico' }} <span class="text-red-500">*</span></label>
       <select [ngModel]="formTecnicoNome()" (ngModelChange)="onTecnicoSelected($event)"
         class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-4">
         <option value="">Selecione...</option>
@@ -497,9 +632,23 @@
           </div>
         </div>
 
-        <label class="block text-sm font-medium text-slate-700 mb-1">Duração estimada (horas)</label>
-        <input type="number" step="0.5" min="0" [ngModel]="formDuracaoHoras()" (ngModelChange)="formDuracaoHoras.set($event)"
-          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Tipo de serviço</label>
+            <select [ngModel]="formTipoServico()" (ngModelChange)="formTipoServico.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <option value="">Selecione...</option>
+              @for (op of tipoServicoOpcoes; track op) {
+                <option [value]="op">{{ op }}</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Duração estimada (horas)</label>
+            <input type="number" step="0.5" min="0" [ngModel]="formDuracaoHoras()" (ngModelChange)="formDuracaoHoras.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
       } @else {
         <label class="block text-sm font-medium text-slate-700 mb-1">Motivo (opcional)</label>
         <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="2"

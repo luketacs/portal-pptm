@@ -234,6 +234,7 @@ export class SidebarComponent implements OnDestroy {
       links: [
         { path: '/manutencao/programacao/eletrica', label: 'Programação Elétrica', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
         { path: '/manutencao/programacao/mecanica', label: 'Programação Mecânica', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
+        { path: '/manutencao/programacao/apoio', label: 'Programação Apoio', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
         { path: '/manutencao/programacao', label: 'Programação (Elétrica + Mecânica)', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
       ],
     },

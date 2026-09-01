@@ -1,4 +1,4 @@
-export type ManutencaoArea = 'ELETRICA' | 'MECANICA';
+export type ManutencaoArea = 'ELETRICA' | 'MECANICA' | 'APOIO';
 // Vem direto do SIGMA (ex.: "PEND", "EXPA") — o Portal não controla essa transição, só
 // exibe/edita o que o SIGMA já informa. Texto livre, não uma lista fechada de valores.
 export type ManutencaoStatus = string;
@@ -18,6 +18,7 @@ export interface ManutencaoOrdem {
   loto: string | null;
   areaAtuacao: string | null;
   duracaoHoras: number | null;
+  tipoServico: string | null; // 'CORRETIVA' | 'PREVENTIVA' | 'MELHORIA' (texto livre, igual status)
   tecnicoNome: string;
   tecnicoMatricula: string | null;
   diasPrevistos: string[]; // ['YYYY-MM-DD', ...] dentro da semana
@@ -39,6 +40,7 @@ export interface CreateManutencaoOrdemRequest {
   loto?: string;
   areaAtuacao?: string;
   duracaoHoras?: number;
+  tipoServico?: string;
   tecnicoNome: string;
   tecnicoMatricula?: string;
   diasPrevistos: string[];
@@ -53,6 +55,7 @@ export interface SigmaOrdemInfo {
   equipamento: string;
   areaManutencao: string;
   statusCodigo: string;
+  tipoServico: string;
 }
 
 export interface SigmaApontamento {
@@ -65,6 +68,17 @@ export interface ConsultaSigmaResultado {
   apontamentos: SigmaApontamento[];
 }
 
+// Item do backlog do SIGMA — OS aberta (não concluída/cancelada) de uma área, que
+// ainda não foi lançada na nossa programação. Ajuda a montar a semana a partir do que
+// já existe no ERP em vez de digitar o número de cada OS manualmente.
+export interface SigmaBacklogItem {
+  numeroOs: string;
+  descricao: string;
+  equipamento: string;
+  statusCodigo: string;
+  tipoServico: string;
+}
+
 export interface EditarManutencaoOrdemRequest {
   tipo: ManutencaoTipo;
   area: ManutencaoArea;
@@ -75,6 +89,7 @@ export interface EditarManutencaoOrdemRequest {
   loto: string | null;
   areaAtuacao: string | null;
   duracaoHoras: number | null;
+  tipoServico: string | null;
   tecnicoNome: string;
   tecnicoMatricula: string | null;
   diasPrevistos: string[];

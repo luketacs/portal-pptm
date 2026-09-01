@@ -1,6 +1,8 @@
 // Proxy para as exportações do SIGMA usadas pela Programação de Manutenção:
 //   - Descrição automática ao digitar o número da OS
 //   - Validação se a OS foi apontada (executada) dentro da semana programada
+//   - Backlog: OS abertas (não concluídas/canceladas) de uma área, pra ajudar a montar
+//     a semana em vez de digitar OS uma a uma (?backlog_area=ELETRICA|MECANICA)
 //
 // As duas fontes são os mesmos links que a planilha "Fechamento Semanal.2.xlsx" usa
 // via Dados Externos (Power Query) — achados em xl/connections.xml + a query M em
@@ -16,7 +18,7 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 // em casar o texto do cabeçalho — ele vem em Windows-1252 e alguns nomes têm acento/º).
 // Export "os" (aspas por campo, resposta a exportação inteira do SIGMA):
 const OS_COL = {
-  numeroOs: 1, areaManutencao: 11, kks: 16, bem: 17, descricao: 18, statusCodigo: 33,
+  numeroOs: 1, areaManutencao: 11, naturezaManutencao: 14, kks: 16, bem: 17, descricao: 18, statusCodigo: 33,
 };
 // Export "apontamentos" (sem aspas):
 const APONT_COL = {
@@ -41,6 +43,20 @@ function normalizarNumeroOs(v) {
   if (/^\d+$/.test(s)) return s.padStart(6, '0');
   return s.toUpperCase();
 }
+
+// A "Área Manutenção" do SIGMA vem com abreviações inconsistentes (MEC/MECA, ELE/ELET,
+// e outras) — mesmo critério (prefixo) já validado contra dados reais em
+// src/utils/relatorio-apontamentos.ts pro relatório de Apontamentos.
+function normalizarAreaManutencao(v) {
+  const s = String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase();
+  if (s.startsWith('MEC')) return 'MECANICA';
+  if (s.startsWith('ELE')) return 'ELETRICA';
+  return s;
+}
+
+// Status que significam "não é mais backlog" — já concluída ou cancelada. Qualquer
+// outro código (PEND, EXPA, etc.) ainda conta como pendência a programar.
+const STATUS_FORA_DO_BACKLOG = new Set(['CONC', 'CANC']);
 
 // Export "os": campos entre aspas, "" escapa uma aspa literal dentro do campo.
 function parseTsvComAspas(texto) {
@@ -76,17 +92,30 @@ async function carregarDados() {
   const linhasApont = parseTsvSemAspas(textoApont);
 
   const osPorNumero = new Map();
+  const backlogPorArea = { ELETRICA: [], MECANICA: [] };
   for (let i = 1; i < linhasOs.length; i++) {
     const row = linhasOs[i];
     const numeroOs = normalizarNumeroOs(row[OS_COL.numeroOs]);
     if (!numeroOs) continue;
-    osPorNumero.set(numeroOs, {
+    const statusCodigo = (row[OS_COL.statusCodigo] || '').toUpperCase();
+    const info = {
       descricao: row[OS_COL.descricao] || '',
       equipamento: row[OS_COL.kks] || row[OS_COL.bem] || '',
       areaManutencao: row[OS_COL.areaManutencao] || '',
-      statusCodigo: row[OS_COL.statusCodigo] || '',
-    });
+      statusCodigo,
+      tipoServico: (row[OS_COL.naturezaManutencao] || '').toUpperCase(),
+    };
+    osPorNumero.set(numeroOs, info);
+
+    const area = normalizarAreaManutencao(info.areaManutencao);
+    if ((area === 'ELETRICA' || area === 'MECANICA') && !STATUS_FORA_DO_BACKLOG.has(statusCodigo)) {
+      backlogPorArea[area].push({ numeroOs, ...info });
+    }
   }
+  // Mais recente primeiro — número de OS do Protheus é sequencial, então ordenar por
+  // ele (desc) aproxima "mais recente" sem precisar de uma coluna de data específica.
+  backlogPorArea.ELETRICA.sort((a, b) => b.numeroOs.localeCompare(a.numeroOs));
+  backlogPorArea.MECANICA.sort((a, b) => b.numeroOs.localeCompare(a.numeroOs));
 
   const apontamentosPorOs = new Map();
   for (let i = 1; i < linhasApont.length; i++) {
@@ -100,7 +129,7 @@ async function carregarDados() {
     apontamentosPorOs.set(numeroOs, lista);
   }
 
-  return { ts: Date.now(), osPorNumero, apontamentosPorOs };
+  return { ts: Date.now(), osPorNumero, apontamentosPorOs, backlogPorArea };
 }
 
 async function obterCache() {
@@ -151,6 +180,16 @@ export default async function handler(req, res) {
   if (!caller.ok) return res.status(401).json({ success: false, error: 'Sessão inválida. Faça login novamente.' });
 
   try {
+    const backlogArea = String(req.query?.backlog_area || '').trim().toUpperCase();
+    if (backlogArea) {
+      if (backlogArea !== 'ELETRICA' && backlogArea !== 'MECANICA') {
+        return res.status(200).json({ success: false, error: 'backlog_area inválida.' });
+      }
+      const dados = await obterCache();
+      const backlog = dados.backlogPorArea[backlogArea].slice(0, 300);
+      return res.status(200).json({ success: true, backlog, atualizadoEm: dados.ts });
+    }
+
     const rawNumeros = String(req.query?.numeros_os || '').trim();
     if (!rawNumeros) {
       return res.status(200).json({ success: false, error: 'numeros_os não informado.' });
