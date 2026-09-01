@@ -2,9 +2,13 @@ export type ManutencaoArea = 'ELETRICA' | 'MECANICA';
 // Vem direto do SIGMA (ex.: "PEND", "EXPA") — o Portal não controla essa transição, só
 // exibe/edita o que o SIGMA já informa. Texto livre, não uma lista fechada de valores.
 export type ManutencaoStatus = string;
+// 'ordem' = OS de verdade (padrão). 'folga'/'treinamento' marcam o técnico indisponível
+// naqueles dias — usa os mesmos campos de técnico/semana/dias, sem OS/equipamento/LOTO.
+export type ManutencaoTipo = 'ordem' | 'folga' | 'treinamento';
 
 export interface ManutencaoOrdem {
   id: string;
+  tipo: ManutencaoTipo;
   area: ManutencaoArea;
   semanaInicio: string; // 'YYYY-MM-DD', segunda-feira da semana
   numeroOs: string | null;
@@ -25,6 +29,7 @@ export interface ManutencaoOrdem {
 }
 
 export interface CreateManutencaoOrdemRequest {
+  tipo?: ManutencaoTipo; // default 'ordem' no service se não informado
   area: ManutencaoArea;
   semanaInicio: string;
   numeroOs?: string;
@@ -61,6 +66,7 @@ export interface ConsultaSigmaResultado {
 }
 
 export interface EditarManutencaoOrdemRequest {
+  tipo: ManutencaoTipo;
   area: ManutencaoArea;
   numeroOs: string | null;
   descricao: string;

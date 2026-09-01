@@ -4,11 +4,12 @@ import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
 import {
   ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest, ManutencaoArea,
-  ManutencaoOrdem,
+  ManutencaoOrdem, ManutencaoTipo,
 } from '../models/manutencao-programacao.model';
 
 interface ManutencaoOrdemRow {
   id: string;
+  tipo: string;
   area: string;
   semana_inicio: string;
   numero_os: string | null;
@@ -31,6 +32,7 @@ interface ManutencaoOrdemRow {
 function mapRow(r: ManutencaoOrdemRow): ManutencaoOrdem {
   return {
     id: r.id,
+    tipo: (r.tipo as ManutencaoTipo) || 'ordem',
     area: r.area as ManutencaoArea,
     semanaInicio: r.semana_inicio,
     numeroOs: r.numero_os,
@@ -103,6 +105,7 @@ export class ManutencaoProgramacaoService {
     if (!user) throw new Error('Sessão expirada.');
 
     const payload = {
+      tipo: req.tipo ?? 'ordem',
       area: req.area,
       semana_inicio: req.semanaInicio,
       numero_os: req.numeroOs?.trim() || null,
@@ -115,7 +118,8 @@ export class ManutencaoProgramacaoService {
       tecnico_nome: req.tecnicoNome,
       tecnico_matricula: req.tecnicoMatricula || null,
       dias_previstos: req.diasPrevistos,
-      status: req.status?.trim() || 'PEND',
+      // Status do SIGMA só faz sentido pra OS de verdade — folga/treinamento não tem.
+      status: (req.tipo ?? 'ordem') === 'ordem' ? (req.status?.trim() || 'PEND') : '',
       observacoes: req.observacoes?.trim() || null,
       criado_por_id: user.id,
       criado_por_nome: user.name,
@@ -124,13 +128,14 @@ export class ManutencaoProgramacaoService {
     const { error } = await this.supabaseService.client.from('manutencao_programacao').insert(payload);
     if (error) throw new Error(error.message);
 
+    const acaoLabel = req.tipo === 'folga' ? 'lançou folga' : req.tipo === 'treinamento' ? 'lançou treinamento' : 'adicionou OS';
     this.auditLogService.log({
       user_id: user.id,
       user_name: user.name,
       event_type: 'manutencao_programacao_criada',
       resource_type: 'manutencao_programacao',
-      description: `${user.name} adicionou OS na programação de ${req.area === 'ELETRICA' ? 'Elétrica' : 'Mecânica'}: ${req.descricao} (${req.tecnicoNome})`,
-      metadata: { area: req.area, semana_inicio: req.semanaInicio, tecnico: req.tecnicoNome },
+      description: `${user.name} ${acaoLabel} na programação de ${req.area === 'ELETRICA' ? 'Elétrica' : 'Mecânica'}: ${req.descricao} (${req.tecnicoNome})`,
+      metadata: { tipo: req.tipo ?? 'ordem', area: req.area, semana_inicio: req.semanaInicio, tecnico: req.tecnicoNome },
     });
 
     await this.load();
@@ -143,6 +148,7 @@ export class ManutencaoProgramacaoService {
     const { error } = await this.supabaseService.client
       .from('manutencao_programacao')
       .update({
+        tipo: updates.tipo,
         area: updates.area,
         numero_os: updates.numeroOs?.trim() || null,
         descricao: updates.descricao.trim(),
@@ -154,7 +160,7 @@ export class ManutencaoProgramacaoService {
         tecnico_nome: updates.tecnicoNome,
         tecnico_matricula: updates.tecnicoMatricula || null,
         dias_previstos: updates.diasPrevistos,
-        status: updates.status.trim() || 'PEND',
+        status: updates.tipo === 'ordem' ? (updates.status.trim() || 'PEND') : '',
         observacoes: updates.observacoes?.trim() || null,
       })
       .eq('id', id);
@@ -166,7 +172,7 @@ export class ManutencaoProgramacaoService {
       event_type: 'manutencao_programacao_editada',
       resource_type: 'manutencao_programacao',
       resource_id: id,
-      description: `${user.name} editou a OS "${updates.descricao}" da programação (${updates.tecnicoNome})`,
+      description: `${user.name} editou "${updates.descricao}" da programação (${updates.tecnicoNome})`,
     });
 
     await this.load();

@@ -6,13 +6,31 @@ import { ManutencaoProgramacaoService } from '../../../services/manutencao-progr
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/toast.service';
 import { ApontamentosService, Colaborador } from '../../../services/apontamentos.service';
-import { ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
+import { ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo } from '../../../models/manutencao-programacao.model';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 
 const AREA_LABEL: Record<ManutencaoArea, string> = {
   ELETRICA: 'Elétrica',
   MECANICA: 'Mecânica',
+};
+
+const TIPO_LABEL: Record<ManutencaoTipo, string> = {
+  ordem: 'Ordem de Serviço',
+  folga: 'Folga',
+  treinamento: 'Treinamento',
+};
+const TIPO_BADGE: Record<ManutencaoTipo, string> = {
+  ordem: '',
+  folga: 'bg-purple-100 text-purple-700',
+  treinamento: 'bg-indigo-100 text-indigo-700',
+};
+// Linha inteira ganha um fundo leve pra folga/treinamento se destacarem das OS de
+// verdade sem precisar ler cada célula.
+const TIPO_LINHA_CLASSE: Record<ManutencaoTipo, string> = {
+  ordem: '',
+  folga: 'bg-purple-50/40',
+  treinamento: 'bg-indigo-50/40',
 };
 
 // Status vem do SIGMA (texto livre, ver ManutencaoStatus) — só uns poucos códigos
@@ -92,6 +110,8 @@ function normalizarNumeroOs(v: string): string {
 export class ManutencaoProgramacaoComponent implements OnInit {
   readonly areaLabel = AREA_LABEL;
   readonly lotoOpcoes = LOTO_OPCOES;
+  readonly tipoLabel = TIPO_LABEL;
+  readonly tiposForm: ManutencaoTipo[] = ['ordem', 'folga', 'treinamento'];
 
   statusBadgeClass(status: string): string {
     return STATUS_BADGE_CONHECIDOS[status.toUpperCase()] ?? STATUS_BADGE_PADRAO;
@@ -99,6 +119,14 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   lotoBadgeClass(loto: string): string {
     return LOTO_BADGE[loto.toUpperCase()] ?? LOTO_BADGE_PADRAO;
+  }
+
+  tipoBadgeClass(tipo: ManutencaoTipo): string {
+    return TIPO_BADGE[tipo];
+  }
+
+  linhaClasse(tipo: ManutencaoTipo): string {
+    return TIPO_LINHA_CLASSE[tipo];
   }
 
   conflitoLotoTitle(itens: { status: string; descricao: string; tecnico: string }[]): string {
@@ -282,12 +310,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           return { data: dia, itens, conflito: statusUnicos.size > 1 };
         }),
       }))
+      // "Sem LOTO" é o estado padrão/sem novidade — só vale a pena aparecer no
+      // quadro o equipamento que tem algo realmente pra observar (bloqueio,
+      // funcionando marcado, ou conflito entre equipes).
+      .filter(linha => linha.dias.some(d => d.conflito || d.itens.some(i => i.status.toUpperCase() !== 'SEM LOTO')))
       .sort((a, b) => a.equipamento.localeCompare(b.equipamento));
   });
 
   // ── Modal: criar/editar OS ─────────────────────────────────────────────
   formAberto = signal(false);
   formIdEdicao = signal<string | null>(null);
+  formTipo = signal<ManutencaoTipo>('ordem');
   formArea = signal<ManutencaoArea>('ELETRICA');
   formNumeroOs = signal('');
   formDescricao = signal('');
@@ -426,6 +459,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // ── Criar/Editar OS ────────────────────────────────────────────────────
   abrirCriar(): void {
     this.formIdEdicao.set(null);
+    this.formTipo.set('ordem');
     const area = this.areaFiltro();
     this.formArea.set(area !== 'todos' ? area : 'ELETRICA');
     this.formNumeroOs.set('');
@@ -445,6 +479,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   abrirEditar(o: ManutencaoOrdem): void {
     this.formIdEdicao.set(o.id);
+    this.formTipo.set(o.tipo);
     this.formArea.set(o.area);
     this.formNumeroOs.set(o.numeroOs ?? '');
     this.formDescricao.set(o.descricao);
@@ -478,50 +513,65 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     );
   }
 
+  // Descrição some pra folga/treinamento se a pessoa não digitar nada — usa o
+  // próprio nome do tipo ("Folga", "Treinamento") em vez de obrigar a preencher.
+  private descricaoParaEnvio(): string {
+    return this.formDescricao().trim() || TIPO_LABEL[this.formTipo()];
+  }
+
   canConfirmarForm(): boolean {
-    return !!this.formDescricao().trim() && !!this.formTecnicoNome().trim() && !!this.formLoto() && !this.isProcessando();
+    if (this.isProcessando() || !this.formTecnicoNome().trim()) return false;
+    if (this.formTipo() === 'ordem') {
+      return !!this.formDescricao().trim() && !!this.formLoto();
+    }
+    // Folga/treinamento: precisa de pelo menos um dia marcado, senão não diz nada.
+    return this.formDiasSelecionados().length > 0;
   }
 
   async confirmarForm(): Promise<void> {
     if (!this.canConfirmarForm()) return;
     this.isProcessando.set(true);
     try {
+      const tipo = this.formTipo();
+      const ehOrdem = tipo === 'ordem';
       const idEdicao = this.formIdEdicao();
       if (idEdicao) {
         await this.manutencaoService.editarOrdem(idEdicao, {
+          tipo,
           area: this.formArea(),
-          numeroOs: this.formNumeroOs().trim() || null,
-          descricao: this.formDescricao().trim(),
-          equipamento: this.formEquipamento().trim() || null,
-          recursos: this.formRecursos().trim() || null,
-          loto: this.formLoto().trim() || null,
-          areaAtuacao: this.formAreaAtuacao().trim() || null,
-          duracaoHoras: this.formDuracaoHoras(),
+          numeroOs: ehOrdem ? (this.formNumeroOs().trim() || null) : null,
+          descricao: this.descricaoParaEnvio(),
+          equipamento: ehOrdem ? (this.formEquipamento().trim() || null) : null,
+          recursos: ehOrdem ? (this.formRecursos().trim() || null) : null,
+          loto: ehOrdem ? (this.formLoto().trim() || null) : null,
+          areaAtuacao: ehOrdem ? (this.formAreaAtuacao().trim() || null) : null,
+          duracaoHoras: ehOrdem ? this.formDuracaoHoras() : null,
           tecnicoNome: this.formTecnicoNome(),
           tecnicoMatricula: this.formTecnicoMatricula() || null,
           diasPrevistos: this.formDiasSelecionados(),
-          status: this.formStatus().trim() || 'PEND',
+          status: ehOrdem ? (this.formStatus().trim() || 'PEND') : '',
           observacoes: this.formObservacoes().trim() || null,
         });
-        this.notificationService.showSuccess('OS atualizada.');
+        this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} atualizada.`);
       } else {
         await this.manutencaoService.criarOrdem({
+          tipo,
           area: this.formArea(),
           semanaInicio: this.semanaFiltro(),
-          numeroOs: this.formNumeroOs().trim() || undefined,
-          descricao: this.formDescricao().trim(),
-          equipamento: this.formEquipamento().trim() || undefined,
-          recursos: this.formRecursos().trim() || undefined,
-          loto: this.formLoto().trim() || undefined,
-          areaAtuacao: this.formAreaAtuacao().trim() || undefined,
-          duracaoHoras: this.formDuracaoHoras() ?? undefined,
+          numeroOs: ehOrdem ? (this.formNumeroOs().trim() || undefined) : undefined,
+          descricao: this.descricaoParaEnvio(),
+          equipamento: ehOrdem ? (this.formEquipamento().trim() || undefined) : undefined,
+          recursos: ehOrdem ? (this.formRecursos().trim() || undefined) : undefined,
+          loto: ehOrdem ? (this.formLoto().trim() || undefined) : undefined,
+          areaAtuacao: ehOrdem ? (this.formAreaAtuacao().trim() || undefined) : undefined,
+          duracaoHoras: ehOrdem ? (this.formDuracaoHoras() ?? undefined) : undefined,
           tecnicoNome: this.formTecnicoNome(),
           tecnicoMatricula: this.formTecnicoMatricula() || undefined,
           diasPrevistos: this.formDiasSelecionados(),
-          status: this.formStatus().trim() || undefined,
+          status: ehOrdem ? (this.formStatus().trim() || undefined) : undefined,
           observacoes: this.formObservacoes().trim() || undefined,
         });
-        this.notificationService.showSuccess('OS adicionada à programação.');
+        this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} adicionada à programação.`);
       }
       this.fecharForm();
     } catch (err: unknown) {
@@ -534,12 +584,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // ── Excluir ────────────────────────────────────────────────────────────
   async excluir(o: ManutencaoOrdem): Promise<void> {
     if (this.isProcessando()) return;
-    if (!confirm(`Excluir a OS "${o.descricao}" de ${o.tecnicoNome}?\n\nEsta ação não pode ser desfeita.`)) return;
+    if (!confirm(`Excluir "${o.descricao}" (${o.tecnicoNome})?\n\nEsta ação não pode ser desfeita.`)) return;
 
     this.isProcessando.set(true);
     try {
       await this.manutencaoService.excluir(o.id);
-      this.notificationService.showSuccess('OS excluída.');
+      this.notificationService.showSuccess('Excluído.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao excluir.');
     } finally {

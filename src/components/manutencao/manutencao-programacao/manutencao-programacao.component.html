@@ -14,7 +14,7 @@
       <button (click)="abrirCriar()"
         class="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-semibold py-2.5 px-4 rounded-lg hover:bg-blue-700 transition flex-shrink-0">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
-        Nova OS
+        Novo lançamento
       </button>
     }
   </div>
@@ -178,9 +178,11 @@
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                       @for (o of grupo.ordens; track o.id) {
-                        <tr>
+                        <tr [class]="linhaClasse(o.tipo)">
                           <td class="py-1.5 pr-3">
-                            @if (o.numeroOs) {
+                            @if (o.tipo !== 'ordem') {
+                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
+                            } @else if (o.numeroOs) {
                               <span class="text-gray-600">{{ o.numeroOs }}</span>
                             } @else {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700" title="Ainda não tem número de OS — precisa ser criada no ERP">CRIAR OS</span>
@@ -208,9 +210,11 @@
                             </div>
                           </td>
                           <td class="py-1.5 pr-3">
-                            <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">
-                              {{ o.status }}
-                            </span>
+                            @if (o.tipo === 'ordem') {
+                              <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">
+                                {{ o.status }}
+                              </span>
+                            }
                           </td>
                           <td class="py-1.5 pr-3 whitespace-nowrap">
                             @if (isAdmin()) {
@@ -269,9 +273,11 @@
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                       @for (o of dia.ordens; track o.id) {
-                        <tr>
+                        <tr [class]="linhaClasse(o.tipo)">
                           <td class="py-1.5 pr-3">
-                            @if (o.numeroOs) {
+                            @if (o.tipo !== 'ordem') {
+                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
+                            } @else if (o.numeroOs) {
                               <span class="text-gray-600">{{ o.numeroOs }}</span>
                             } @else {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700" title="Ainda não tem número de OS — precisa ser criada no ERP">CRIAR OS</span>
@@ -291,9 +297,11 @@
                           <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
                           <td class="py-1.5 pr-3 text-gray-600">{{ o.duracaoHoras ? (o.duracaoHoras + 'h') : '—' }}</td>
                           <td class="py-1.5 pr-3">
-                            <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">
-                              {{ o.status }}
-                            </span>
+                            @if (o.tipo === 'ordem') {
+                              <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">
+                                {{ o.status }}
+                              </span>
+                            }
                           </td>
                           <td class="py-1.5 pr-3 whitespace-nowrap">
                             @if (isAdmin()) {
@@ -344,9 +352,11 @@
                   </thead>
                   <tbody class="divide-y divide-slate-100">
                     @for (o of ordensSemDia(); track o.id) {
-                      <tr>
+                      <tr [class]="linhaClasse(o.tipo)">
                         <td class="py-1.5 pr-3">
-                          @if (o.numeroOs) {
+                          @if (o.tipo !== 'ordem') {
+                            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
+                          } @else if (o.numeroOs) {
                             <span class="text-gray-600">{{ o.numeroOs }}</span>
                           } @else {
                             <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">CRIAR OS</span>
@@ -361,7 +371,9 @@
                         <td class="py-1.5 pr-3 text-gray-600">{{ areaLabel[o.area] }}</td>
                         <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
                         <td class="py-1.5 pr-3">
-                          <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">{{ o.status }}</span>
+                          @if (o.tipo === 'ordem') {
+                            <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">{{ o.status }}</span>
+                          }
                         </td>
                         <td class="py-1.5 pr-3 whitespace-nowrap">
                           @if (isAdmin()) {
@@ -390,7 +402,18 @@
 @if (formAberto()) {
   <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" (click)="fecharForm()">
     <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" (click)="$event.stopPropagation()">
-      <h3 class="text-lg font-bold text-gray-800 mb-4">{{ formIdEdicao() ? 'Editar OS' : 'Nova OS' }}</h3>
+      <h3 class="text-lg font-bold text-gray-800 mb-4">{{ formIdEdicao() ? 'Editar ' + tipoLabel[formTipo()] : 'Novo lançamento' }}</h3>
+
+      <label class="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
+      <div class="grid grid-cols-3 gap-2 mb-4">
+        @for (t of tiposForm; track t) {
+          <button type="button" (click)="formTipo.set(t)"
+            class="text-sm font-semibold py-2 rounded-lg border transition"
+            [class]="formTipo() === t ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-slate-300 hover:bg-slate-50'">
+            {{ tipoLabel[t] }}
+          </button>
+        }
+      </div>
 
       @if (areaFixa) {
         <p class="text-sm font-medium text-slate-700 mb-4">Área: {{ areaLabel[areaFixa] }}</p>
@@ -412,65 +435,75 @@
         }
       </select>
 
-      <label class="block text-sm font-medium text-slate-700 mb-1">Número da OS</label>
-      <div class="flex items-center gap-2 mb-1">
-        <input type="text" [ngModel]="formNumeroOs()" (ngModelChange)="formNumeroOs.set($event)" (blur)="buscarDescricaoDaOs()"
-          placeholder="Ainda não tem? Deixe em branco (aparece como CRIAR OS)"
-          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        @if (buscandoOsNoSigma()) {
-          <svg class="animate-spin h-4 w-4 text-blue-600 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-          </svg>
-        }
-      </div>
-      <p class="text-xs text-gray-400 mb-4">A OS é criada no ERP (SIGMA) — informe o número e saia do campo pra puxar a descrição sozinha.</p>
-
-      <label class="block text-sm font-medium text-slate-700 mb-1">Descrição <span class="text-red-500">*</span></label>
-      <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="2"
-        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
-
-      <div class="grid grid-cols-2 gap-3 mb-4">
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Equipamento</label>
-          <select [ngModel]="formEquipamento()" (ngModelChange)="formEquipamento.set($event)"
-            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-            <option value="">Selecione...</option>
-            @for (eq of equipamentos(); track eq) {
-              <option [value]="eq">{{ eq }}</option>
-            }
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Área de atuação</label>
-          <input type="text" [ngModel]="formAreaAtuacao()" (ngModelChange)="formAreaAtuacao.set($event)"
+      @if (formTipo() === 'ordem') {
+        <label class="block text-sm font-medium text-slate-700 mb-1">Número da OS</label>
+        <div class="flex items-center gap-2 mb-1">
+          <input type="text" [ngModel]="formNumeroOs()" (ngModelChange)="formNumeroOs.set($event)" (blur)="buscarDescricaoDaOs()"
+            placeholder="Ainda não tem? Deixe em branco (aparece como CRIAR OS)"
             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          @if (buscandoOsNoSigma()) {
+            <svg class="animate-spin h-4 w-4 text-blue-600 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+          }
         </div>
-      </div>
+        <p class="text-xs text-gray-400 mb-4">A OS é criada no ERP (SIGMA) — informe o número e saia do campo pra puxar a descrição sozinha.</p>
 
-      <div class="grid grid-cols-2 gap-3 mb-4">
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Recursos (ajudante)</label>
-          <input type="text" [ngModel]="formRecursos()" (ngModelChange)="formRecursos.set($event)"
-            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <label class="block text-sm font-medium text-slate-700 mb-1">Descrição <span class="text-red-500">*</span></label>
+        <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="2"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
+
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Equipamento</label>
+            <select [ngModel]="formEquipamento()" (ngModelChange)="formEquipamento.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <option value="">Selecione...</option>
+              @for (eq of equipamentos(); track eq) {
+                <option [value]="eq">{{ eq }}</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Área de atuação</label>
+            <input type="text" [ngModel]="formAreaAtuacao()" (ngModelChange)="formAreaAtuacao.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
         </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">LOTO <span class="text-red-500">*</span></label>
-          <select [ngModel]="formLoto()" (ngModelChange)="formLoto.set($event)"
-            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-            <option value="">Selecione...</option>
-            @for (op of lotoOpcoes; track op) {
-              <option [value]="op">{{ op }}</option>
-            }
-          </select>
+
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Recursos (ajudante)</label>
+            <input type="text" [ngModel]="formRecursos()" (ngModelChange)="formRecursos.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">LOTO <span class="text-red-500">*</span></label>
+            <select [ngModel]="formLoto()" (ngModelChange)="formLoto.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <option value="">Selecione...</option>
+              @for (op of lotoOpcoes; track op) {
+                <option [value]="op">{{ op }}</option>
+              }
+            </select>
+          </div>
         </div>
-      </div>
 
-      <label class="block text-sm font-medium text-slate-700 mb-1">Duração estimada (horas)</label>
-      <input type="number" step="0.5" min="0" [ngModel]="formDuracaoHoras()" (ngModelChange)="formDuracaoHoras.set($event)"
-        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+        <label class="block text-sm font-medium text-slate-700 mb-1">Duração estimada (horas)</label>
+        <input type="number" step="0.5" min="0" [ngModel]="formDuracaoHoras()" (ngModelChange)="formDuracaoHoras.set($event)"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+      } @else {
+        <label class="block text-sm font-medium text-slate-700 mb-1">Motivo (opcional)</label>
+        <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="2"
+          [placeholder]="tipoLabel[formTipo()] + ' — ex.: Curso NR-10'"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
+      }
 
-      <label class="block text-sm font-medium text-slate-700 mb-1">Dias previstos na semana</label>
+      <label class="block text-sm font-medium text-slate-700 mb-1">
+        Dias previstos na semana
+        @if (formTipo() !== 'ordem') { <span class="text-red-500">*</span> }
+      </label>
       <div class="flex flex-wrap gap-2 mb-4">
         @for (dia of diasDaSemanaAtual(); track dia.data) {
           <label class="flex flex-col items-center gap-1 cursor-pointer">
@@ -480,21 +513,25 @@
         }
       </div>
 
-      <label class="block text-sm font-medium text-slate-700 mb-1">Status</label>
-      <input type="text" [ngModel]="formStatus()" (ngModelChange)="formStatus.set($event)"
-        placeholder="Ex.: PEND, EXPA, CONC..."
-        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+      @if (formTipo() === 'ordem') {
+        <label class="block text-sm font-medium text-slate-700 mb-1">Status</label>
+        <input type="text" [ngModel]="formStatus()" (ngModelChange)="formStatus.set($event)"
+          placeholder="Ex.: PEND, EXPA, CONC..."
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+      }
 
-      <label class="block text-sm font-medium text-slate-700 mb-1">Observações</label>
-      <textarea [ngModel]="formObservacoes()" (ngModelChange)="formObservacoes.set($event)" rows="2"
-        placeholder="Opcional"
-        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
+      @if (formTipo() === 'ordem') {
+        <label class="block text-sm font-medium text-slate-700 mb-1">Observações</label>
+        <textarea [ngModel]="formObservacoes()" (ngModelChange)="formObservacoes.set($event)" rows="2"
+          placeholder="Opcional"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
+      }
 
       <div class="flex justify-end gap-3">
         <button (click)="fecharForm()" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Cancelar</button>
         <button (click)="confirmarForm()" [disabled]="!canConfirmarForm()"
           class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
-          {{ formIdEdicao() ? 'Salvar' : 'Adicionar OS' }}
+          {{ formIdEdicao() ? 'Salvar' : 'Adicionar' }}
         </button>
       </div>
     </div>
