@@ -171,6 +171,31 @@ export const APP_ROUTES: Routes = [
   },
 
   {
+    path: 'manutencao/programacao',
+    loadComponent: () =>
+      import('../components/manutencao/manutencao-programacao/manutencao-programacao.component').then(m => m.ManutencaoProgramacaoComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Programação de Manutenção',
+  },
+  {
+    path: 'manutencao/programacao/eletrica',
+    loadComponent: () =>
+      import('../components/manutencao/manutencao-programacao/manutencao-programacao.component').then(m => m.ManutencaoProgramacaoComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'], area: 'ELETRICA' },
+    title: 'Programação Elétrica',
+  },
+  {
+    path: 'manutencao/programacao/mecanica',
+    loadComponent: () =>
+      import('../components/manutencao/manutencao-programacao/manutencao-programacao.component').then(m => m.ManutencaoProgramacaoComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'], area: 'MECANICA' },
+    title: 'Programação Mecânica',
+  },
+
+  {
     path: 'almoxarifado/aguardando',
     loadComponent: () => import('../components/almoxarifado/almox-aguardando/almox-aguardando.component').then(m => m.AlmoxAguardandoComponent),
     canActivate: [authGuard],

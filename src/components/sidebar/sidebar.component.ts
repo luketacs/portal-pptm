@@ -153,6 +153,7 @@ export class SidebarComponent implements OnDestroy {
     admin: false,
     fundoFixo: false,
     almoxarifado: false,
+    manutencao: false,
     profile: false,
   });
 
@@ -223,6 +224,17 @@ export class SidebarComponent implements OnDestroy {
         { path: '/almoxarifado/entradas',   label: 'Entradas por Período', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
         { path: '/almoxarifado/saidas',     label: 'Saídas por Período', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
         { path: '/almoxarifado/importar',   label: 'Importar Dados', icon: '', roles: ['Admin'] },
+      ],
+    },
+    {
+      id: 'manutencao',
+      label: 'Manutenção',
+      icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L10.828 16.828H8v-2.828l9.586-9.586z" /></svg>',
+      roles: ['Solicitante', 'Admin', 'Visualizador'],
+      links: [
+        { path: '/manutencao/programacao/eletrica', label: 'Programação Elétrica', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
+        { path: '/manutencao/programacao/mecanica', label: 'Programação Mecânica', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
+        { path: '/manutencao/programacao', label: 'Programação (Elétrica + Mecânica)', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
       ],
     },
     {

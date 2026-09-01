@@ -6,7 +6,8 @@
     "api/apontamentos.js": { "maxDuration": 30 },
     "api/export-materials.js": { "maxDuration": 30 },
     "api/export-requests.js": { "maxDuration": 30 },
-    "api/telegram-material-bot.js": { "maxDuration": 15 }
+    "api/telegram-material-bot.js": { "maxDuration": 15 },
+    "api/sigma-ordens-proxy.js": { "maxDuration": 30 }
   },
   "rewrites": [
     {

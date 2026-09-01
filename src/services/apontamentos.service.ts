@@ -80,6 +80,9 @@ export class ApontamentosService {
 
   private readonly _colaboradoresData = signal<Colaborador[]>([]);
   private get _colaboradores(): Colaborador[] { return this._colaboradoresData(); }
+  // Leitura pública da lista (nome/matrícula/área) — usada por outras telas que
+  // precisam de um seletor de técnico/colaborador (ex.: Programação de Manutenção).
+  colaboradores = this._colaboradoresData.asReadonly();
 
   constructor(
     private authService: AuthService,
