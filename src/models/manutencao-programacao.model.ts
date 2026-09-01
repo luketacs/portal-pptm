@@ -12,6 +12,10 @@ export interface ManutencaoOrdem {
   area: ManutencaoArea;
   semanaInicio: string; // 'YYYY-MM-DD', segunda-feira da semana
   numeroOs: string | null;
+  // true = esse serviço não tem (e nunca vai ter) OS no SIGMA — ex.: revisão de
+  // planos. Diferente de numeroOs vazio sem essa marca, que significa "OS existe mas
+  // ainda não foi criada no ERP" (aparece como "CRIAR OS").
+  semOs: boolean;
   descricao: string;
   equipamento: string | null;
   recursos: string | null;
@@ -34,6 +38,7 @@ export interface CreateManutencaoOrdemRequest {
   area: ManutencaoArea;
   semanaInicio: string;
   numeroOs?: string;
+  semOs?: boolean;
   descricao: string;
   equipamento?: string;
   recursos?: string;
@@ -96,6 +101,7 @@ export interface EditarManutencaoOrdemRequest {
   tipo: ManutencaoTipo;
   area: ManutencaoArea;
   numeroOs: string | null;
+  semOs: boolean;
   descricao: string;
   equipamento: string | null;
   recursos: string | null;

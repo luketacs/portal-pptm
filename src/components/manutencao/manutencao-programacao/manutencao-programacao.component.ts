@@ -175,7 +175,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       tecnico: g.tecnico,
       totalHoras: g.totalHoras,
       linhas: g.ordens.map(o => ({
-        numeroOs: o.tipo !== 'ordem' ? this.tipoLabel[o.tipo] : (o.numeroOs || 'CRIAR OS'),
+        numeroOs: o.tipo !== 'ordem' ? this.tipoLabel[o.tipo] : (o.numeroOs || (o.semOs ? 'SEM OS' : 'CRIAR OS')),
         descricao: o.descricao,
         equipamento: o.equipamento || '—',
         area: this.areaLabel[o.area],
@@ -562,6 +562,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   formTipo = signal<ManutencaoTipo>('ordem');
   formArea = signal<ManutencaoArea>('ELETRICA');
   formNumeroOs = signal('');
+  formSemOs = signal(false);
   formDescricao = signal('');
   formEquipamento = signal('');
   formRecursos = signal('');
@@ -768,6 +769,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const area = this.areaFiltro();
     this.formArea.set(area !== 'todos' ? area : 'ELETRICA');
     this.formNumeroOs.set('');
+    this.formSemOs.set(false);
     this.formDescricao.set('');
     this.formEquipamento.set('');
     this.formRecursos.set('');
@@ -799,6 +801,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formTipo.set(o.tipo);
     this.formArea.set(o.area);
     this.formNumeroOs.set(o.numeroOs ?? '');
+    this.formSemOs.set(o.semOs);
     this.formDescricao.set(o.descricao);
     this.formEquipamento.set(o.equipamento ?? '');
     this.formRecursos.set(o.recursos ?? '');
@@ -858,6 +861,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           tipo,
           area: this.formArea(),
           numeroOs: ehOrdem ? (this.formNumeroOs().trim() || null) : null,
+          semOs: ehOrdem && this.formSemOs(),
           descricao: this.descricaoParaEnvio(),
           equipamento: ehOrdem ? (this.formEquipamento().trim() || null) : null,
           recursos: ehOrdem ? (this.formRecursos().trim() || null) : null,
@@ -878,6 +882,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           area: this.formArea(),
           semanaInicio: this.semanaFiltro(),
           numeroOs: ehOrdem ? (this.formNumeroOs().trim() || undefined) : undefined,
+          semOs: ehOrdem && this.formSemOs(),
           descricao: this.descricaoParaEnvio(),
           equipamento: ehOrdem ? (this.formEquipamento().trim() || undefined) : undefined,
           recursos: ehOrdem ? (this.formRecursos().trim() || undefined) : undefined,

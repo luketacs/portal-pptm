@@ -13,6 +13,7 @@ interface ManutencaoOrdemRow {
   area: string;
   semana_inicio: string;
   numero_os: string | null;
+  sem_os: boolean;
   descricao: string;
   equipamento: string | null;
   recursos: string | null;
@@ -43,6 +44,7 @@ function mapRow(r: ManutencaoOrdemRow): ManutencaoOrdem {
     area: r.area as ManutencaoArea,
     semanaInicio: r.semana_inicio,
     numeroOs: r.numero_os,
+    semOs: r.sem_os,
     descricao: r.descricao,
     equipamento: r.equipamento,
     recursos: r.recursos,
@@ -123,7 +125,8 @@ export class ManutencaoProgramacaoService {
       tipo: req.tipo ?? 'ordem',
       area: req.area,
       semana_inicio: req.semanaInicio,
-      numero_os: req.numeroOs?.trim() || null,
+      numero_os: req.semOs ? null : (req.numeroOs?.trim() || null),
+      sem_os: req.semOs ?? false,
       descricao: req.descricao.trim(),
       equipamento: req.equipamento?.trim() || null,
       recursos: req.recursos?.trim() || null,
@@ -177,6 +180,7 @@ export class ManutencaoProgramacaoService {
       area: t.area,
       semana_inicio: semanaInicio,
       numero_os: null,
+      sem_os: false,
       descricao,
       equipamento: null,
       recursos: null,
@@ -227,7 +231,8 @@ export class ManutencaoProgramacaoService {
       .update({
         tipo: updates.tipo,
         area: updates.area,
-        numero_os: updates.numeroOs?.trim() || null,
+        numero_os: updates.semOs ? null : (updates.numeroOs?.trim() || null),
+        sem_os: updates.semOs,
         descricao: updates.descricao.trim(),
         equipamento: updates.equipamento?.trim() || null,
         recursos: updates.recursos?.trim() || null,

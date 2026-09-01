@@ -331,6 +331,8 @@
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
                             } @else if (o.numeroOs) {
                               <span class="text-gray-600">{{ o.numeroOs }}</span>
+                            } @else if (o.semOs) {
+                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500" title="Esse serviço não precisa de OS no SIGMA">SEM OS</span>
                             } @else {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700" title="Ainda não tem número de OS — precisa ser criada no ERP">CRIAR OS</span>
                             }
@@ -429,6 +431,8 @@
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
                             } @else if (o.numeroOs) {
                               <span class="text-gray-600">{{ o.numeroOs }}</span>
+                            } @else if (o.semOs) {
+                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500" title="Esse serviço não precisa de OS no SIGMA">SEM OS</span>
                             } @else {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700" title="Ainda não tem número de OS — precisa ser criada no ERP">CRIAR OS</span>
                             }
@@ -511,6 +515,8 @@
                             <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
                           } @else if (o.numeroOs) {
                             <span class="text-gray-600">{{ o.numeroOs }}</span>
+                          } @else if (o.semOs) {
+                            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">SEM OS</span>
                           } @else {
                             <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">CRIAR OS</span>
                           }
@@ -592,19 +598,26 @@
       </select>
 
       @if (formTipo() === 'ordem') {
-        <label class="block text-sm font-medium text-slate-700 mb-1">Número da OS</label>
-        <div class="flex items-center gap-2 mb-1">
-          <input type="text" [ngModel]="formNumeroOs()" (ngModelChange)="formNumeroOs.set($event)" (blur)="buscarDescricaoDaOs()"
-            placeholder="Ainda não tem? Deixe em branco (aparece como CRIAR OS)"
-            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          @if (buscandoOsNoSigma()) {
-            <svg class="animate-spin h-4 w-4 text-blue-600 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-            </svg>
-          }
-        </div>
-        <p class="text-xs text-gray-400 mb-4">A OS é criada no ERP (SIGMA) — informe o número e saia do campo pra puxar a descrição sozinha.</p>
+        <label class="flex items-center gap-2 mb-3 cursor-pointer">
+          <input type="checkbox" [checked]="formSemOs()" (change)="formSemOs.set(!formSemOs())" class="rounded" />
+          <span class="text-sm text-slate-700">Não precisa de OS (ex.: revisão de planos)</span>
+        </label>
+
+        @if (!formSemOs()) {
+          <label class="block text-sm font-medium text-slate-700 mb-1">Número da OS</label>
+          <div class="flex items-center gap-2 mb-1">
+            <input type="text" [ngModel]="formNumeroOs()" (ngModelChange)="formNumeroOs.set($event)" (blur)="buscarDescricaoDaOs()"
+              placeholder="Ainda não tem? Deixe em branco (aparece como CRIAR OS)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            @if (buscandoOsNoSigma()) {
+              <svg class="animate-spin h-4 w-4 text-blue-600 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+            }
+          </div>
+          <p class="text-xs text-gray-400 mb-4">A OS é criada no ERP (SIGMA) — informe o número e saia do campo pra puxar a descrição sozinha.</p>
+        }
 
         <label class="block text-sm font-medium text-slate-700 mb-1">Descrição <span class="text-red-500">*</span></label>
         <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="2"
