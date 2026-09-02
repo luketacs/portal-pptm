@@ -198,7 +198,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return `${dia}/${mes}`;
   }
 
-  exportarSemana(): void {
+  exportandoSemana = signal(false);
+
+  async exportarSemana(): Promise<void> {
     const grupos: ProgramacaoSemanalGrupo[] = this.grupos().map(g => ({
       tecnico: g.tecnico,
       linhas: g.ordens.map(o => ({
@@ -226,12 +228,19 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const dias = this.diasDaSemanaAtual();
     const semanaLabel = `S${this.numeroSemanaISO(semana)} ${ano} (${this.diaMesPadded(dias[0].data)} À ${this.diaMesPadded(dias[6].data)})`;
 
-    this.excelExportService.exportarProgramacaoSemanal({
-      semanaLabel,
-      areaLabel: this.areaFixa ? this.areaLabel[this.areaFixa] : 'Elétrica + Mecânica',
-      dias: dias.map(d => ({ data: d.data, diaMes: this.diaMesCompacto(d.data), label: d.label })),
-      grupos,
-    });
+    this.exportandoSemana.set(true);
+    try {
+      await this.excelExportService.exportarProgramacaoSemanal({
+        semanaLabel,
+        areaLabel: this.areaFixa ? this.areaLabel[this.areaFixa] : 'Elétrica + Mecânica',
+        dias: dias.map(d => ({ data: d.data, diaMes: this.diaMesCompacto(d.data), label: d.label })),
+        grupos,
+      });
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao gerar o Excel.');
+    } finally {
+      this.exportandoSemana.set(false);
+    }
   }
 
   errorMessage = signal('');

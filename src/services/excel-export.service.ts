@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import * as XLSX from 'xlsx-js-style';
 import type { CellStyle, WorkSheet, WorkBook } from 'xlsx-js-style';
+import * as ExcelJS from 'exceljs';
 import type { MaterialComSAs, Movimentacao, SaldoReal } from './almoxarifado.service';
 
 export interface FechamentoFundoFixoLinha {
@@ -165,52 +166,6 @@ export class ExcelExportService {
       font: { bold: true, sz: 10, color: { rgb: '7C3A00' } },
       fill: { fgColor: { rgb: 'FFE699' }, patternType: 'solid' },
       alignment: { horizontal: 'right', vertical: 'center' },
-    };
-  }
-
-  // ── Estilos — Programação de Manutenção (cores conferidas na planilha original) ──
-
-  private sProgHeader(): CellStyle {
-    return {
-      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 10 },
-      fill: { fgColor: { rgb: 'FF7E1D' }, patternType: 'solid' },
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-      border: { top: { style: 'thin', color: { rgb: 'FFFFFF' } }, bottom: { style: 'thin', color: { rgb: 'FFFFFF' } } },
-    };
-  }
-
-  private sProgSubHeader(): CellStyle {
-    return {
-      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 9 },
-      fill: { fgColor: { rgb: '0070C0' }, patternType: 'solid' },
-      alignment: { horizontal: 'center', vertical: 'center' },
-    };
-  }
-
-  private sProgTecnico(): CellStyle {
-    return {
-      font: { bold: true, sz: 10, color: { rgb: '1A1A1A' } },
-      alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
-      border: { top: { style: 'thin', color: { rgb: 'DDDDDD' } } },
-    };
-  }
-
-  private sProgDado(align: 'left' | 'center' | 'right' = 'left'): CellStyle {
-    return {
-      font: { sz: 9, color: { rgb: '333333' } },
-      alignment: { horizontal: align, vertical: 'center', wrapText: align === 'left' },
-    };
-  }
-
-  private sProgDiaOrdem(): CellStyle {
-    return { fill: { fgColor: { rgb: 'DCE6F1' }, patternType: 'solid' }, alignment: { horizontal: 'center', vertical: 'center' } };
-  }
-
-  private sProgDiaAusencia(): CellStyle {
-    return {
-      font: { bold: true, sz: 8, color: { rgb: 'FFFFFF' } },
-      fill: { fgColor: { rgb: 'FF0000' }, patternType: 'solid' },
-      alignment: { horizontal: 'center', vertical: 'center' },
     };
   }
 
@@ -675,41 +630,59 @@ export class ExcelExportService {
   }
 
   // ── Exportar Programação de Manutenção (semanal) ────────────────────────────
-  // Réplica do layout da planilha que o time já usava: cabeçalho ORDEM/DESCRIÇÃO/
-  // DURAÇÃO/EQUIPAMENTO/RECURSOS/LOTO/ÁREA DE ATUAÇÃO + 7 colunas de dia (datas
-  // reais + SEG..DOM) + STATUS, repetido por técnico, com o nome mesclado na
-  // lateral esquerda do bloco inteiro.
+  // Usa ExcelJS (não xlsx-js-style) porque precisa embutir a logo da empresa de
+  // verdade no arquivo — a outra biblioteca não suporta imagem. Cabeçalho de
+  // colunas aparece uma vez só (fixo no topo ao rolar); cada técnico vira um
+  // divisor leve, não um banner repetido — bem menos poluído que a réplica
+  // anterior, mas mantém a mesma informação da planilha que o time já usava.
 
-  private tabelaTecnicoOriginal(
-    ws: WorkSheet, rowInicial: number, NC: number, grupo: ProgramacaoSemanalGrupo, dias: ProgramacaoSemanalDia[],
+  private readonly PROG_NAVY = 'FF1F4E79';
+  private readonly PROG_NAVY_CLARO = 'FFEBF1F8';
+  private readonly PROG_BORDA = 'FFD9D9D9';
+  private readonly PROG_DIA_ORDEM = 'FFDCE6F1';
+  private readonly PROG_AUSENCIA_BG = 'FFFDE9D9';
+  private readonly PROG_AUSENCIA_TEXTO = 'FFC0392B';
+
+  // Best-effort: se a logo não carregar (rede, arquivo ausente), o export segue
+  // sem ela em vez de falhar.
+  private async carregarLogoBuffer(): Promise<ArrayBuffer | null> {
+    try {
+      const resp = await fetch('/company-logo.png');
+      if (!resp.ok) return null;
+      return await resp.arrayBuffer();
+    } catch {
+      return null;
+    }
+  }
+
+  private bordaFina(): Partial<ExcelJS.Borders> {
+    const estilo: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: this.PROG_BORDA } };
+    return { top: estilo, bottom: estilo, left: estilo, right: estilo };
+  }
+
+  private tabelaTecnicoExcelJs(
+    ws: ExcelJS.Worksheet, rowInicial: number, NC: number, grupo: ProgramacaoSemanalGrupo, dias: ProgramacaoSemanalDia[],
   ): number {
     let row = rowInicial;
 
-    // Cabeçalho de colunas (laranja) — igual ao original.
-    ws[this.enc(row, 0)] = { v: '', t: 's', s: this.sProgHeader() };
-    const headersFixos: Array<[string, number]> = [
-      ['ORDEM', 1], ['DESCRIÇÃO DA ATIVIDADE', 2], ['DURAÇÃO', 3], ['EQUIPAMENTO', 4],
-      ['RECURSOS', 5], ['LOTO', 6], ['ÁREA DE ATUAÇÃO', 7],
-    ];
-    headersFixos.forEach(([label, c]) => { ws[this.enc(row, c)] = { v: label, t: 's', s: this.sProgHeader() }; });
-    dias.forEach((dia, i) => { ws[this.enc(row, 8 + i)] = { v: dia.diaMes, t: 's', s: this.sProgHeader() }; });
-    ws[this.enc(row, 15)] = { v: 'STATUS', t: 's', s: this.sProgHeader() };
+    // Divisor do técnico — leve (fundo claro + nome em negrito), não repete o
+    // cabeçalho de colunas a cada bloco.
+    const totalHoras = grupo.linhas.reduce((soma, l) => soma + (l.duracaoHoras ?? 0), 0);
+    ws.getRow(row).height = 18;
+    ws.mergeCells(row, 1, row, NC);
+    const celDivisor = ws.getCell(row, 1);
+    celDivisor.value = totalHoras > 0 ? `${grupo.tecnico}   ·   ${totalHoras.toFixed(2)}h programadas` : grupo.tecnico;
+    celDivisor.font = { bold: true, size: 10, color: { argb: this.PROG_NAVY } };
+    celDivisor.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_NAVY_CLARO } };
+    celDivisor.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
     row++;
 
-    // Sub-cabeçalho (azul) com SEG..DOM sob as datas — igual ao original.
-    this.fillRow(ws, row, NC, this.sProgSubHeader());
-    dias.forEach((dia, i) => { ws[this.enc(row, 8 + i)] = { v: dia.label, t: 's', s: this.sProgSubHeader() }; });
-    row++;
-
-    const linhaBlocoInicio = row;
     const linhas = grupo.linhas.length > 0 ? grupo.linhas : null;
 
     if (!linhas) {
-      this.s(ws, row, 1, '', this.sProgDado('center'));
-      this.s(ws, row, 2, 'Nenhum lançamento na semana', this.sProgDado('left'));
-      for (let c = 3; c < 8; c++) this.s(ws, row, c, '', this.sProgDado('left'));
-      for (let c = 8; c < 15; c++) this.s(ws, row, c, '', this.sProgDado('center'));
-      this.s(ws, row, 15, '', this.sProgDado('center'));
+      const cel = ws.getCell(row, 2);
+      cel.value = 'Nenhum lançamento na semana';
+      cel.font = { italic: true, size: 9, color: { argb: 'FF999999' } };
       row++;
     } else {
       linhas.forEach(linha => {
@@ -719,84 +692,166 @@ export class ExcelExportService {
           : linha.numeroOs ? linha.numeroOs
           : linha.semOs ? 'SEM OS'
           : 'CRIAR OS';
-        this.s(ws, row, 1, numeroLabel, this.sProgDado('center'));
-        this.s(ws, row, 2, linha.descricao, this.sProgDado('left'));
+
+        const fonteBase: Partial<ExcelJS.Font> = { size: 9, color: { argb: 'FF333333' } };
+        ws.getRow(row).height = 15;
+
+        const cOs = ws.getCell(row, 1);
+        cOs.value = numeroLabel;
+        cOs.font = fonteBase;
+        cOs.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        const cDesc = ws.getCell(row, 2);
+        cDesc.value = linha.descricao;
+        cDesc.font = fonteBase;
+        cDesc.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+
+        const cDur = ws.getCell(row, 3);
         if (linha.duracaoHoras !== null) {
-          this.n(ws, row, 3, linha.duracaoHoras, this.sProgDado('center'), '0.00');
-        } else {
-          this.s(ws, row, 3, '', this.sProgDado('center'));
+          cDur.value = linha.duracaoHoras;
+          cDur.numFmt = '0.00';
         }
-        this.s(ws, row, 4, linha.equipamento, this.sProgDado('left'));
-        this.s(ws, row, 5, linha.recursos, this.sProgDado('left'));
-        this.s(ws, row, 6, linha.loto, this.sProgDado('center'));
-        this.s(ws, row, 7, linha.areaAtuacao, this.sProgDado('left'));
+        cDur.font = fonteBase;
+        cDur.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        const cEquip = ws.getCell(row, 4);
+        cEquip.value = linha.equipamento;
+        cEquip.font = fonteBase;
+        cEquip.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        const cRec = ws.getCell(row, 5);
+        cRec.value = linha.recursos;
+        cRec.font = fonteBase;
+        cRec.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        const cLoto = ws.getCell(row, 6);
+        cLoto.value = linha.loto;
+        cLoto.font = fonteBase;
+        cLoto.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        const cArea = ws.getCell(row, 7);
+        cArea.value = linha.areaAtuacao;
+        cArea.font = fonteBase;
+        cArea.alignment = { horizontal: 'left', vertical: 'middle' };
 
         dias.forEach((dia, i) => {
-          const c = 8 + i;
-          if (!linha.diasPrevistos.includes(dia.data)) {
-            this.s(ws, row, c, '', this.sProgDado('center'));
-          } else if (linha.tipo === 'ordem') {
-            ws[this.enc(row, c)] = { v: '', t: 's', s: this.sProgDiaOrdem() };
+          const cel = ws.getCell(row, 8 + i);
+          cel.alignment = { horizontal: 'center', vertical: 'middle' };
+          if (!linha.diasPrevistos.includes(dia.data)) return;
+          if (linha.tipo === 'ordem') {
+            cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_DIA_ORDEM } };
           } else {
-            const label = linha.tipo === 'folga' ? 'FOLGA' : linha.tipo === 'treinamento' ? 'TREINO' : 'ASO';
-            ws[this.enc(row, c)] = { v: label, t: 's', s: this.sProgDiaAusencia() };
+            cel.value = linha.tipo === 'folga' ? 'FOLGA' : linha.tipo === 'treinamento' ? 'TREINO' : 'ASO';
+            cel.font = { bold: true, size: 7, color: { argb: this.PROG_AUSENCIA_TEXTO } };
+            cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AUSENCIA_BG } };
           }
         });
 
-        this.s(ws, row, 15, linha.status, this.sProgDado('center'));
+        const cStatus = ws.getCell(row, 15);
+        cStatus.value = linha.status;
+        cStatus.font = fonteBase;
+        cStatus.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        for (let c = 1; c <= NC; c++) ws.getCell(row, c).border = this.bordaFina();
         row++;
       });
     }
-
-    // Nome do técnico mesclado por toda a altura do bloco.
-    ws[this.enc(linhaBlocoInicio, 0)] = { v: grupo.tecnico, t: 's', s: this.sProgTecnico() };
-    for (let r = linhaBlocoInicio + 1; r < row; r++) {
-      ws[this.enc(r, 0)] = { v: '', t: 's', s: this.sProgTecnico() };
-    }
-    ws['!merges'] = ws['!merges'] ?? [];
-    (ws['!merges'] as { s: { r: number; c: number }; e: { r: number; c: number } }[]).push(
-      { s: { r: linhaBlocoInicio, c: 0 }, e: { r: row - 1, c: 0 } },
-    );
 
     row++; // espaço entre blocos de técnico
     return row;
   }
 
-  exportarProgramacaoSemanal(params: {
+  async exportarProgramacaoSemanal(params: {
     semanaLabel: string;
     areaLabel: string;
     dias: ProgramacaoSemanalDia[];
     grupos: ProgramacaoSemanalGrupo[];
-  }): void {
-    const NC = 16;
-    const ws: WorkSheet = {};
-    ws['!merges'] = [];
-    let row = 0;
+  }): Promise<void> {
+    const NC = 15;
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Portal PPTM';
+    wb.created = new Date();
+    const ws = wb.addWorksheet('Programação', {
+      pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+      views: [{ state: 'frozen', ySplit: 5 }],
+    });
 
-    this.fillRow(ws, row, NC, this.sTitle());
-    ws[this.enc(row, 0)] = { v: `PROGRAMAÇÃO MANUTENÇÃO ${params.areaLabel.toUpperCase()} - ${params.semanaLabel}`, t: 's', s: this.sTitle() };
-    const linhaTitulo = row;
-    row++;
-    row++; // espaço
-
-    for (const grupo of params.grupos) {
-      row = this.tabelaTecnicoOriginal(ws, row, NC, grupo, params.dias);
-    }
-
-    ws['!ref']    = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: row - 1, c: NC - 1 } });
-    (ws['!merges'] as { s: { r: number; c: number }; e: { r: number; c: number } }[]).push(
-      { s: { r: linhaTitulo, c: 0 }, e: { r: linhaTitulo, c: NC - 1 } },
-    );
-    ws['!cols'] = [
-      { wch: 14 }, { wch: 10 }, { wch: 46 }, { wch: 9 }, { wch: 16 },
-      { wch: 12 }, { wch: 10 }, { wch: 20 },
-      { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 },
-      { wch: 10 },
+    ws.columns = [
+      { width: 10 }, { width: 46 }, { width: 9 }, { width: 16 }, { width: 12 },
+      { width: 10 }, { width: 20 },
+      { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 },
+      { width: 10 },
     ];
 
-    const wb: WorkBook = XLSX.utils.book_new();
-    wb.Props = { Title: `Programação ${params.areaLabel} — ${params.semanaLabel}`, Company: 'Diamante Energia' };
-    XLSX.utils.book_append_sheet(wb, ws, 'Programação');
-    XLSX.writeFile(wb, `programacao_${params.areaLabel.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_')}_${this.todayStr()}.xlsx`);
+    const logoBuffer = await this.carregarLogoBuffer();
+    if (logoBuffer) {
+      const logoId = wb.addImage({ buffer: logoBuffer, extension: 'png' });
+      ws.addImage(logoId, { tl: { col: 0.15, row: 0.15 }, ext: { width: 150, height: 45 } });
+    }
+
+    ws.getRow(1).height = 22;
+    ws.getRow(2).height = 16;
+    ws.getRow(3).height = 14;
+    ws.getRow(4).height = 8;
+
+    ws.mergeCells(1, 3, 1, NC);
+    const cTitulo = ws.getCell(1, 3);
+    cTitulo.value = `Programação de Manutenção — ${params.areaLabel}`;
+    cTitulo.font = { bold: true, size: 14, color: { argb: this.PROG_NAVY } };
+    cTitulo.alignment = { horizontal: 'left', vertical: 'middle' };
+
+    ws.mergeCells(2, 3, 2, NC);
+    const cSub = ws.getCell(2, 3);
+    cSub.value = params.semanaLabel;
+    cSub.font = { size: 10, color: { argb: 'FF555555' } };
+    cSub.alignment = { horizontal: 'left', vertical: 'middle' };
+
+    ws.mergeCells(3, 3, 3, NC);
+    const cGerado = ws.getCell(3, 3);
+    cGerado.value = `Gerado em ${this.nowStr()}`;
+    cGerado.font = { size: 8, italic: true, color: { argb: 'FF999999' } };
+    cGerado.alignment = { horizontal: 'left', vertical: 'middle' };
+
+    let row = 5;
+    const headerRow = ws.getRow(row);
+    headerRow.height = 26;
+    const headersFixos: Array<[string, number]> = [
+      ['OS', 1], ['Descrição', 2], ['Duração', 3], ['Equipamento', 4], ['Recursos', 5], ['LOTO', 6], ['Área Atuação', 7],
+    ];
+    const estiloHeader = (cel: ExcelJS.Cell) => {
+      cel.font = { bold: true, size: 9, color: { argb: 'FFFFFFFF' } };
+      cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_NAVY } };
+      cel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    };
+    headersFixos.forEach(([label, c]) => {
+      const cel = headerRow.getCell(c);
+      cel.value = label;
+      estiloHeader(cel);
+    });
+    params.dias.forEach((dia, i) => {
+      const cel = headerRow.getCell(8 + i);
+      cel.value = `${dia.label}\n${dia.diaMes}`;
+      estiloHeader(cel);
+      cel.font = { ...cel.font, size: 8 };
+    });
+    const cStatusHeader = headerRow.getCell(15);
+    cStatusHeader.value = 'Status';
+    estiloHeader(cStatusHeader);
+    row++;
+
+    for (const grupo of params.grupos) {
+      row = this.tabelaTecnicoExcelJs(ws, row, NC, grupo, params.dias);
+    }
+
+    ws.pageSetup.margins = { left: 0.3, right: 0.3, top: 0.5, bottom: 0.4, header: 0.2, footer: 0.2 };
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `programacao_${params.areaLabel.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_')}_${this.todayStr()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 }
