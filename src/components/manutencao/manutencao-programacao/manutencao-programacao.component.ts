@@ -313,6 +313,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Agrupada por técnico — usado nas telas de área única (mais perto do que a planilha
   // já mostra hoje, bloco por executante). Cada grupo já sai com a capacidade da semana
   // (Efetivo) calculada, pra comparar contra as horas já alocadas.
+  // Primeiro dia previsto de uma ordem (SEG antes de QUI, etc.) — usado só pra
+  // ordenar a exibição dentro do bloco do técnico. Sem dia marcado vai pro final.
+  private primeiroDia(o: ManutencaoOrdem): string {
+    return o.diasPrevistos.length > 0 ? [...o.diasPrevistos].sort()[0] : '9999-12-31';
+  }
+
   private gruposCalc(lista: ManutencaoOrdem[], dias: { data: string; label: string }[]) {
     const porTecnico = new Map<string, ManutencaoOrdem[]>();
     for (const o of lista) {
@@ -322,10 +328,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
     return Array.from(porTecnico.entries())
       .map(([tecnico, ordens]) => {
-        const totalHoras = somaHoras(ordens);
-        const capacidade = this.capacidadeSemana(tecnico, ordens, dias);
+        const ordensOrdenadas = [...ordens].sort((a, b) => this.primeiroDia(a).localeCompare(this.primeiroDia(b)));
+        const totalHoras = somaHoras(ordensOrdenadas);
+        const capacidade = this.capacidadeSemana(tecnico, ordensOrdenadas, dias);
         const saldo = capacidade !== null ? parseFloat((capacidade - totalHoras).toFixed(2)) : null;
-        return { tecnico, ordens, totalHoras, capacidade, saldo };
+        return { tecnico, ordens: ordensOrdenadas, totalHoras, capacidade, saldo };
       })
       .sort((a, b) => a.tecnico.localeCompare(b.tecnico));
   }
