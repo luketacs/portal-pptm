@@ -668,12 +668,32 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   menuAcoesAberto = signal(false);
 
   // Menu ⋯ de ações por linha (+ Apoio/Editar/Excluir) — só um aberto por vez,
-  // guardado pelo id da ordem.
+  // guardado pelo id da ordem. Posição calculada e usada com `fixed` (não
+  // `absolute`) porque as tabelas ficam dentro de containers com overflow-x-auto —
+  // um menu absolute ali fica cortado/empurra scroll horizontal em vez de flutuar.
   linhaMenuAberta = signal<string | null>(null);
+  linhaMenuPos = signal<{ top: number; left: number } | null>(null);
 
-  toggleLinhaMenu(id: string): void {
-    this.linhaMenuAberta.update(atual => atual === id ? null : id);
+  toggleLinhaMenu(id: string, event: MouseEvent): void {
+    if (this.linhaMenuAberta() === id) {
+      this.linhaMenuAberta.set(null);
+      return;
+    }
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const larguraMenu = 144; // w-36
+    this.linhaMenuPos.set({
+      top: rect.bottom + 4,
+      left: Math.max(8, Math.min(rect.right - larguraMenu, window.innerWidth - larguraMenu - 8)),
+    });
+    this.linhaMenuAberta.set(id);
   }
+
+  // A ordem do menu ⋯ aberto — o menu em si é um único elemento global (ver fim do
+  // template), não um por linha, então precisa buscar de novo pelo id.
+  linhaMenuOrdem = computed<ManutencaoOrdem | null>(() => {
+    const id = this.linhaMenuAberta();
+    return id ? this.manutencaoService.getById(id) ?? null : null;
+  });
 
   backlogAberto = signal(false);
   backlogCarregando = signal(false);

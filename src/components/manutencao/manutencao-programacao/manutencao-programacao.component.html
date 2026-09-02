@@ -400,21 +400,9 @@
                           </td>
                           <td class="py-1.5 pr-3 whitespace-nowrap text-right">
                             @if (isAdmin()) {
-                              <div class="relative inline-block">
-                                <button (click)="toggleLinhaMenu(o.id)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
-                                  <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
-                                </button>
-                                @if (linhaMenuAberta() === o.id) {
-                                  <div class="fixed inset-0 z-40" (click)="linhaMenuAberta.set(null)"></div>
-                                  <div class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 z-50 py-1">
-                                    @if (o.tipo === 'ordem') {
-                                      <button (click)="abrirApoio(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-slate-50">+ Apoio</button>
-                                    }
-                                    <button (click)="abrirEditar(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Editar</button>
-                                    <button (click)="excluir(o); linhaMenuAberta.set(null)" [disabled]="isProcessando()" class="w-full text-left px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-slate-50 disabled:opacity-50">Excluir</button>
-                                  </div>
-                                }
-                              </div>
+                              <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
+                                <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                              </button>
                             }
                           </td>
                         </tr>
@@ -503,21 +491,9 @@
                           </td>
                           <td class="py-1.5 pr-3 whitespace-nowrap text-right">
                             @if (isAdmin()) {
-                              <div class="relative inline-block">
-                                <button (click)="toggleLinhaMenu(o.id)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
-                                  <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
-                                </button>
-                                @if (linhaMenuAberta() === o.id) {
-                                  <div class="fixed inset-0 z-40" (click)="linhaMenuAberta.set(null)"></div>
-                                  <div class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 z-50 py-1">
-                                    @if (o.tipo === 'ordem') {
-                                      <button (click)="abrirApoio(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-slate-50">+ Apoio</button>
-                                    }
-                                    <button (click)="abrirEditar(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Editar</button>
-                                    <button (click)="excluir(o); linhaMenuAberta.set(null)" [disabled]="isProcessando()" class="w-full text-left px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-slate-50 disabled:opacity-50">Excluir</button>
-                                  </div>
-                                }
-                              </div>
+                              <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
+                                <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                              </button>
                             }
                           </td>
                         </tr>
@@ -591,21 +567,9 @@
                         </td>
                         <td class="py-1.5 pr-3 whitespace-nowrap text-right">
                           @if (isAdmin()) {
-                            <div class="relative inline-block">
-                              <button (click)="toggleLinhaMenu(o.id)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
-                                <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
-                              </button>
-                              @if (linhaMenuAberta() === o.id) {
-                                <div class="fixed inset-0 z-40" (click)="linhaMenuAberta.set(null)"></div>
-                                <div class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 z-50 py-1">
-                                  @if (o.tipo === 'ordem') {
-                                    <button (click)="abrirApoio(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-slate-50">+ Apoio</button>
-                                  }
-                                  <button (click)="abrirEditar(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Editar</button>
-                                  <button (click)="excluir(o); linhaMenuAberta.set(null)" [disabled]="isProcessando()" class="w-full text-left px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-slate-50 disabled:opacity-50">Excluir</button>
-                                </div>
-                              }
-                            </div>
+                            <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
+                              <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                            </button>
                           }
                         </td>
                       </tr>
@@ -774,21 +738,9 @@
                                   </td>
                                   <td class="py-1.5 pr-3 whitespace-nowrap text-right">
                                     @if (isAdmin()) {
-                                      <div class="relative inline-block">
-                                        <button (click)="toggleLinhaMenu(o.id)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
-                                          <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
-                                        </button>
-                                        @if (linhaMenuAberta() === o.id) {
-                                          <div class="fixed inset-0 z-40" (click)="linhaMenuAberta.set(null)"></div>
-                                          <div class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 z-50 py-1">
-                                            @if (o.tipo === 'ordem') {
-                                              <button (click)="abrirApoio(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-slate-50">+ Apoio</button>
-                                            }
-                                            <button (click)="abrirEditar(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Editar</button>
-                                            <button (click)="excluir(o); linhaMenuAberta.set(null)" [disabled]="isProcessando()" class="w-full text-left px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-slate-50 disabled:opacity-50">Excluir</button>
-                                          </div>
-                                        }
-                                      </div>
+                                      <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
+                                        <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                                      </button>
                                     }
                                   </td>
                                 </tr>
@@ -873,21 +825,9 @@
                                   </td>
                                   <td class="py-1.5 pr-3 whitespace-nowrap text-right">
                                     @if (isAdmin()) {
-                                      <div class="relative inline-block">
-                                        <button (click)="toggleLinhaMenu(o.id)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
-                                          <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
-                                        </button>
-                                        @if (linhaMenuAberta() === o.id) {
-                                          <div class="fixed inset-0 z-40" (click)="linhaMenuAberta.set(null)"></div>
-                                          <div class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 z-50 py-1">
-                                            @if (o.tipo === 'ordem') {
-                                              <button (click)="abrirApoio(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-slate-50">+ Apoio</button>
-                                            }
-                                            <button (click)="abrirEditar(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Editar</button>
-                                            <button (click)="excluir(o); linhaMenuAberta.set(null)" [disabled]="isProcessando()" class="w-full text-left px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-slate-50 disabled:opacity-50">Excluir</button>
-                                          </div>
-                                        }
-                                      </div>
+                                      <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
+                                        <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                                      </button>
                                     }
                                   </td>
                                 </tr>
@@ -941,18 +881,9 @@
                                 <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
                                 <td class="py-1.5 pr-3 whitespace-nowrap text-right">
                                   @if (isAdmin()) {
-                                    <div class="relative inline-block">
-                                      <button (click)="toggleLinhaMenu(o.id)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
-                                        <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
-                                      </button>
-                                      @if (linhaMenuAberta() === o.id) {
-                                        <div class="fixed inset-0 z-40" (click)="linhaMenuAberta.set(null)"></div>
-                                        <div class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 z-50 py-1">
-                                          <button (click)="abrirEditar(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Editar</button>
-                                          <button (click)="excluir(o); linhaMenuAberta.set(null)" [disabled]="isProcessando()" class="w-full text-left px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-slate-50 disabled:opacity-50">Excluir</button>
-                                        </div>
-                                      }
-                                    </div>
+                                    <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
+                                      <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                                    </button>
                                   }
                                 </td>
                               </tr>
@@ -1357,5 +1288,22 @@
         <button (click)="fecharFerias()" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Fechar</button>
       </div>
     </div>
+  </div>
+}
+
+<!-- Menu ⋯ de ações por linha (+ Apoio/Editar/Excluir) — um elemento global só,
+     posicionado com `fixed` a partir do clique, pra não ficar cortado pelo
+     overflow-x-auto das tabelas. -->
+@if (linhaMenuAberta() && linhaMenuPos(); as pos) {
+  <div class="fixed inset-0 z-40" (click)="linhaMenuAberta.set(null)"></div>
+  <div class="fixed w-36 bg-white rounded-lg shadow-lg border border-slate-200 z-50 py-1"
+    [style.top.px]="pos.top" [style.left.px]="pos.left">
+    @if (linhaMenuOrdem(); as o) {
+      @if (o.tipo === 'ordem') {
+        <button (click)="abrirApoio(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-slate-50">+ Apoio</button>
+      }
+      <button (click)="abrirEditar(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Editar</button>
+      <button (click)="excluir(o); linhaMenuAberta.set(null)" [disabled]="isProcessando()" class="w-full text-left px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-slate-50 disabled:opacity-50">Excluir</button>
+    }
   </div>
 }
