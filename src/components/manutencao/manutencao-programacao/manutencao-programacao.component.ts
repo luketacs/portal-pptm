@@ -28,18 +28,27 @@ const TIPO_LABEL: Record<ManutencaoTipo, string> = {
   ordem: 'Ordem de Serviço',
   folga: 'Folga',
   treinamento: 'Treinamento',
+  exame_medico: 'Exame Médico (ASO)',
 };
 const TIPO_BADGE: Record<ManutencaoTipo, string> = {
   ordem: '',
   folga: 'bg-purple-100 text-purple-700',
   treinamento: 'bg-indigo-100 text-indigo-700',
+  exame_medico: 'bg-teal-100 text-teal-700',
 };
-// Linha inteira ganha um fundo leve pra folga/treinamento se destacarem das OS de
-// verdade sem precisar ler cada célula.
+// Linha inteira ganha um fundo leve pra folga/treinamento/exame médico se destacarem
+// das OS de verdade sem precisar ler cada célula.
 const TIPO_LINHA_CLASSE: Record<ManutencaoTipo, string> = {
   ordem: '',
   folga: 'bg-purple-50/40',
   treinamento: 'bg-indigo-50/40',
+  exame_medico: 'bg-teal-50/40',
+};
+// Exemplo de descrição no placeholder do formulário, um pra cada tipo que não é OS.
+const TIPO_MOTIVO_EXEMPLO: Partial<Record<ManutencaoTipo, string>> = {
+  folga: 'ex.: Atestado médico',
+  treinamento: 'ex.: Curso NR-10',
+  exame_medico: 'ex.: ASO periódico',
 };
 
 // Status vem do SIGMA (texto livre, ver ManutencaoStatus) — só uns poucos códigos
@@ -132,10 +141,15 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   readonly lotoOpcoes = LOTO_OPCOES;
   readonly tipoServicoOpcoes = TIPO_SERVICO_OPCOES;
   readonly tipoLabel = TIPO_LABEL;
-  private readonly tiposFormPadrao: ManutencaoTipo[] = ['ordem', 'folga', 'treinamento'];
-  // Apoio programa por empresa/equipe, não por pessoa — folga/treinamento não fazem
-  // sentido nesse contexto, só "ordem" fica disponível.
+  private readonly tiposFormPadrao: ManutencaoTipo[] = ['ordem', 'folga', 'treinamento', 'exame_medico'];
+  // Apoio programa por empresa/equipe, não por pessoa — folga/treinamento/exame médico
+  // não fazem sentido nesse contexto, só "ordem" fica disponível.
   tiposForm = computed<ManutencaoTipo[]>(() => this.areaFixa === 'APOIO' ? ['ordem'] : this.tiposFormPadrao);
+
+  motivoPlaceholder(tipo: ManutencaoTipo): string {
+    const exemplo = TIPO_MOTIVO_EXEMPLO[tipo];
+    return exemplo ? `${TIPO_LABEL[tipo]} — ${exemplo}` : TIPO_LABEL[tipo];
+  }
 
   statusBadgeClass(status: string): string {
     return STATUS_BADGE_CONHECIDOS[status.toUpperCase()] ?? STATUS_BADGE_PADRAO;

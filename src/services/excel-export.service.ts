@@ -19,7 +19,7 @@ export interface FechamentoFundoFixoLinha {
 // original tinha (DSR, "trab", "BH") porque o Portal não rastreia esses códigos —
 // só marca os dias em que a linha está prevista.
 export interface ProgramacaoSemanalLinha {
-  tipo: 'ordem' | 'folga' | 'treinamento';
+  tipo: 'ordem' | 'folga' | 'treinamento' | 'exame_medico';
   numeroOs: string | null;
   semOs: boolean;
   descricao: string;
@@ -715,6 +715,7 @@ export class ExcelExportService {
       linhas.forEach(linha => {
         const numeroLabel = linha.tipo === 'folga' ? 'FOLGA'
           : linha.tipo === 'treinamento' ? 'TREINAMENTO'
+          : linha.tipo === 'exame_medico' ? 'EXAME MÉDICO'
           : linha.numeroOs ? linha.numeroOs
           : linha.semOs ? 'SEM OS'
           : 'CRIAR OS';
@@ -737,7 +738,8 @@ export class ExcelExportService {
           } else if (linha.tipo === 'ordem') {
             ws[this.enc(row, c)] = { v: '', t: 's', s: this.sProgDiaOrdem() };
           } else {
-            ws[this.enc(row, c)] = { v: linha.tipo === 'folga' ? 'FOLGA' : 'TREINO', t: 's', s: this.sProgDiaAusencia() };
+            const label = linha.tipo === 'folga' ? 'FOLGA' : linha.tipo === 'treinamento' ? 'TREINO' : 'ASO';
+            ws[this.enc(row, c)] = { v: label, t: 's', s: this.sProgDiaAusencia() };
           }
         });
 

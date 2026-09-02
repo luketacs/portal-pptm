@@ -147,7 +147,10 @@ export class ManutencaoProgramacaoService {
     const { error } = await this.supabaseService.client.from('manutencao_programacao').insert(payload);
     if (error) throw new Error(error.message);
 
-    const acaoLabel = req.tipo === 'folga' ? 'lançou folga' : req.tipo === 'treinamento' ? 'lançou treinamento' : 'adicionou OS';
+    const acaoLabel = req.tipo === 'folga' ? 'lançou folga'
+      : req.tipo === 'treinamento' ? 'lançou treinamento'
+      : req.tipo === 'exame_medico' ? 'lançou exame médico'
+      : 'adicionou OS';
     this.auditLogService.log({
       user_id: user.id,
       user_name: user.name,

@@ -921,7 +921,7 @@
       <h3 class="text-lg font-bold text-gray-800 mb-4">{{ formIdEdicao() ? 'Editar ' + tipoLabel[formTipo()] : 'Novo lançamento' }}</h3>
 
       <label class="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
-      <div class="grid grid-cols-3 gap-2 mb-4">
+      <div class="grid grid-cols-2 gap-2 mb-4">
         @for (t of tiposForm(); track t) {
           <button type="button" (click)="formTipo.set(t)"
             class="text-sm font-semibold py-2 rounded-lg border transition"
@@ -1033,7 +1033,7 @@
       } @else {
         <label class="block text-sm font-medium text-slate-700 mb-1">Motivo (opcional)</label>
         <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="2"
-          [placeholder]="tipoLabel[formTipo()] + ' — ex.: Curso NR-10'"
+          [placeholder]="motivoPlaceholder(formTipo())"
           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
       }
 
