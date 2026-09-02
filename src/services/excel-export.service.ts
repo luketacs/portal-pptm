@@ -12,23 +12,35 @@ export interface FechamentoFundoFixoLinha {
   aprovador: string;
 }
 
+// Layout do export replica o Excel que o time já usava (ex.: "PROGRAMAÇÃO ELÉTRICA
+// JUL.xlsx") — cabeçalho ORDEM/DESCRIÇÃO/DURAÇÃO/EQUIPAMENTO/RECURSOS/LOTO/ÁREA DE
+// ATUAÇÃO, 7 colunas de dia (datas reais + SEG..DOM) e STATUS, um bloco por técnico
+// com o nome mesclado na lateral. Não replica marcadores manuais que a planilha
+// original tinha (DSR, "trab", "BH") porque o Portal não rastreia esses códigos —
+// só marca os dias em que a linha está prevista.
 export interface ProgramacaoSemanalLinha {
-  numeroOs: string;
+  tipo: 'ordem' | 'folga' | 'treinamento';
+  numeroOs: string | null;
+  semOs: boolean;
   descricao: string;
-  equipamento: string;
-  area: string;
-  areaAtuacao: string;
-  loto: string;
-  tipoServico: string;
   duracaoHoras: number | null;
-  dias: string;
+  equipamento: string;
+  recursos: string;
+  loto: string;
+  areaAtuacao: string;
+  diasPrevistos: string[]; // datas ISO ('YYYY-MM-DD') dentro da semana exportada
   status: string;
 }
 
 export interface ProgramacaoSemanalGrupo {
   tecnico: string;
-  totalHoras: number;
   linhas: ProgramacaoSemanalLinha[];
+}
+
+export interface ProgramacaoSemanalDia {
+  data: string;   // ISO
+  diaMes: string; // "27/7" — igual ao cabeçalho da planilha original
+  label: string;  // "SEG"
 }
 
 @Injectable({ providedIn: 'root' })
@@ -153,6 +165,52 @@ export class ExcelExportService {
       font: { bold: true, sz: 10, color: { rgb: '7C3A00' } },
       fill: { fgColor: { rgb: 'FFE699' }, patternType: 'solid' },
       alignment: { horizontal: 'right', vertical: 'center' },
+    };
+  }
+
+  // ── Estilos — Programação de Manutenção (cores conferidas na planilha original) ──
+
+  private sProgHeader(): CellStyle {
+    return {
+      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 10 },
+      fill: { fgColor: { rgb: 'FF7E1D' }, patternType: 'solid' },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: { top: { style: 'thin', color: { rgb: 'FFFFFF' } }, bottom: { style: 'thin', color: { rgb: 'FFFFFF' } } },
+    };
+  }
+
+  private sProgSubHeader(): CellStyle {
+    return {
+      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 9 },
+      fill: { fgColor: { rgb: '0070C0' }, patternType: 'solid' },
+      alignment: { horizontal: 'center', vertical: 'center' },
+    };
+  }
+
+  private sProgTecnico(): CellStyle {
+    return {
+      font: { bold: true, sz: 10, color: { rgb: '1A1A1A' } },
+      alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
+      border: { top: { style: 'thin', color: { rgb: 'DDDDDD' } } },
+    };
+  }
+
+  private sProgDado(align: 'left' | 'center' | 'right' = 'left'): CellStyle {
+    return {
+      font: { sz: 9, color: { rgb: '333333' } },
+      alignment: { horizontal: align, vertical: 'center', wrapText: align === 'left' },
+    };
+  }
+
+  private sProgDiaOrdem(): CellStyle {
+    return { fill: { fgColor: { rgb: 'DCE6F1' }, patternType: 'solid' }, alignment: { horizontal: 'center', vertical: 'center' } };
+  }
+
+  private sProgDiaAusencia(): CellStyle {
+    return {
+      font: { bold: true, sz: 8, color: { rgb: 'FFFFFF' } },
+      fill: { fgColor: { rgb: 'FF0000' }, patternType: 'solid' },
+      alignment: { horizontal: 'center', vertical: 'center' },
     };
   }
 
@@ -617,103 +675,126 @@ export class ExcelExportService {
   }
 
   // ── Exportar Programação de Manutenção (semanal) ────────────────────────────
+  // Réplica do layout da planilha que o time já usava: cabeçalho ORDEM/DESCRIÇÃO/
+  // DURAÇÃO/EQUIPAMENTO/RECURSOS/LOTO/ÁREA DE ATUAÇÃO + 7 colunas de dia (datas
+  // reais + SEG..DOM) + STATUS, repetido por técnico, com o nome mesclado na
+  // lateral esquerda do bloco inteiro.
 
-  private tabelaTecnico(ws: WorkSheet, rowInicial: number, NC: number, grupo: ProgramacaoSemanalGrupo): number {
+  private tabelaTecnicoOriginal(
+    ws: WorkSheet, rowInicial: number, NC: number, grupo: ProgramacaoSemanalGrupo, dias: ProgramacaoSemanalDia[],
+  ): number {
     let row = rowInicial;
 
-    this.fillRow(ws, row, NC, this.sSecao());
-    ws[this.enc(row, 0)] = { v: `${grupo.tecnico} — ${grupo.totalHoras}h programadas`, t: 's', s: this.sSecao() };
-    const linhaBanner = row;
-    row++;
-
-    const headers: Array<[string, 'left' | 'center' | 'right']> = [
-      ['Nº OS',        'center'],
-      ['Descrição',    'left'  ],
-      ['Equipamento',  'left'  ],
-      ['Área',         'center'],
-      ['Área Atuação', 'left'  ],
-      ['LOTO',         'center'],
-      ['Tipo Serviço', 'center'],
-      ['Duração',      'right' ],
-      ['Dias',         'center'],
-      ['Status',       'center'],
+    // Cabeçalho de colunas (laranja) — igual ao original.
+    ws[this.enc(row, 0)] = { v: '', t: 's', s: this.sProgHeader() };
+    const headersFixos: Array<[string, number]> = [
+      ['ORDEM', 1], ['DESCRIÇÃO DA ATIVIDADE', 2], ['DURAÇÃO', 3], ['EQUIPAMENTO', 4],
+      ['RECURSOS', 5], ['LOTO', 6], ['ÁREA DE ATUAÇÃO', 7],
     ];
-    headers.forEach(([label, align], c) => {
-      ws[this.enc(row, c)] = { v: label, t: 's', s: this.sHeader(align) };
-    });
+    headersFixos.forEach(([label, c]) => { ws[this.enc(row, c)] = { v: label, t: 's', s: this.sProgHeader() }; });
+    dias.forEach((dia, i) => { ws[this.enc(row, 8 + i)] = { v: dia.diaMes, t: 's', s: this.sProgHeader() }; });
+    ws[this.enc(row, 15)] = { v: 'STATUS', t: 's', s: this.sProgHeader() };
     row++;
 
-    grupo.linhas.forEach((linha, i) => {
-      const even = i % 2 === 1;
-      this.s(ws, row, 0, linha.numeroOs,               this.sData('center', even));
-      this.s(ws, row, 1, linha.descricao,               this.sData('left', even));
-      this.s(ws, row, 2, linha.equipamento,             this.sData('left', even));
-      this.s(ws, row, 3, linha.area,                    this.sData('center', even));
-      this.s(ws, row, 4, linha.areaAtuacao,              this.sData('left', even));
-      this.s(ws, row, 5, linha.loto,                    this.sData('center', even));
-      this.s(ws, row, 6, linha.tipoServico,             this.sData('center', even));
-      if (linha.duracaoHoras !== null) {
-        this.n(ws, row, 7, linha.duracaoHoras, this.sData('right', even), '0.##"h"');
-      } else {
-        this.s(ws, row, 7, '—', this.sData('right', even));
-      }
-      this.s(ws, row, 8, linha.dias,                    this.sData('center', even));
-      this.s(ws, row, 9, linha.status,                  this.sData('center', even));
-      row++;
-    });
+    // Sub-cabeçalho (azul) com SEG..DOM sob as datas — igual ao original.
+    this.fillRow(ws, row, NC, this.sProgSubHeader());
+    dias.forEach((dia, i) => { ws[this.enc(row, 8 + i)] = { v: dia.label, t: 's', s: this.sProgSubHeader() }; });
+    row++;
 
-    if (grupo.linhas.length === 0) {
-      for (let c = 0; c < NC; c++) this.s(ws, row, c, c === 0 ? 'Nenhum lançamento' : '', this.sData('left'));
+    const linhaBlocoInicio = row;
+    const linhas = grupo.linhas.length > 0 ? grupo.linhas : null;
+
+    if (!linhas) {
+      this.s(ws, row, 1, '', this.sProgDado('center'));
+      this.s(ws, row, 2, 'Nenhum lançamento na semana', this.sProgDado('left'));
+      for (let c = 3; c < 8; c++) this.s(ws, row, c, '', this.sProgDado('left'));
+      for (let c = 8; c < 15; c++) this.s(ws, row, c, '', this.sProgDado('center'));
+      this.s(ws, row, 15, '', this.sProgDado('center'));
       row++;
+    } else {
+      linhas.forEach(linha => {
+        const numeroLabel = linha.tipo === 'folga' ? 'FOLGA'
+          : linha.tipo === 'treinamento' ? 'TREINAMENTO'
+          : linha.numeroOs ? linha.numeroOs
+          : linha.semOs ? 'SEM OS'
+          : 'CRIAR OS';
+        this.s(ws, row, 1, numeroLabel, this.sProgDado('center'));
+        this.s(ws, row, 2, linha.descricao, this.sProgDado('left'));
+        if (linha.duracaoHoras !== null) {
+          this.n(ws, row, 3, linha.duracaoHoras, this.sProgDado('center'), '0.00');
+        } else {
+          this.s(ws, row, 3, '', this.sProgDado('center'));
+        }
+        this.s(ws, row, 4, linha.equipamento, this.sProgDado('left'));
+        this.s(ws, row, 5, linha.recursos, this.sProgDado('left'));
+        this.s(ws, row, 6, linha.loto, this.sProgDado('center'));
+        this.s(ws, row, 7, linha.areaAtuacao, this.sProgDado('left'));
+
+        dias.forEach((dia, i) => {
+          const c = 8 + i;
+          if (!linha.diasPrevistos.includes(dia.data)) {
+            this.s(ws, row, c, '', this.sProgDado('center'));
+          } else if (linha.tipo === 'ordem') {
+            ws[this.enc(row, c)] = { v: '', t: 's', s: this.sProgDiaOrdem() };
+          } else {
+            ws[this.enc(row, c)] = { v: linha.tipo === 'folga' ? 'FOLGA' : 'TREINO', t: 's', s: this.sProgDiaAusencia() };
+          }
+        });
+
+        this.s(ws, row, 15, linha.status, this.sProgDado('center'));
+        row++;
+      });
     }
 
+    // Nome do técnico mesclado por toda a altura do bloco.
+    ws[this.enc(linhaBlocoInicio, 0)] = { v: grupo.tecnico, t: 's', s: this.sProgTecnico() };
+    for (let r = linhaBlocoInicio + 1; r < row; r++) {
+      ws[this.enc(r, 0)] = { v: '', t: 's', s: this.sProgTecnico() };
+    }
     ws['!merges'] = ws['!merges'] ?? [];
     (ws['!merges'] as { s: { r: number; c: number }; e: { r: number; c: number } }[]).push(
-      { s: { r: linhaBanner, c: 0 }, e: { r: linhaBanner, c: NC - 1 } },
+      { s: { r: linhaBlocoInicio, c: 0 }, e: { r: row - 1, c: 0 } },
     );
 
-    row++; // espaço
+    row++; // espaço entre blocos de técnico
     return row;
   }
 
   exportarProgramacaoSemanal(params: {
     semanaLabel: string;
     areaLabel: string;
+    dias: ProgramacaoSemanalDia[];
     grupos: ProgramacaoSemanalGrupo[];
   }): void {
-    const NC = 10;
+    const NC = 16;
     const ws: WorkSheet = {};
+    ws['!merges'] = [];
     let row = 0;
 
     this.fillRow(ws, row, NC, this.sTitle());
-    ws[this.enc(row, 0)] = { v: `PROGRAMAÇÃO DE MANUTENÇÃO — ${params.areaLabel.toUpperCase()} — SEMANA ${params.semanaLabel}`, t: 's', s: this.sTitle() };
+    ws[this.enc(row, 0)] = { v: `PROGRAMAÇÃO MANUTENÇÃO ${params.areaLabel.toUpperCase()} - ${params.semanaLabel}`, t: 's', s: this.sTitle() };
     const linhaTitulo = row;
-    row++;
-
-    this.fillRow(ws, row, NC, this.sSub());
-    ws[this.enc(row, 0)] = { v: `Gerado em ${this.nowStr()}`, t: 's', s: this.sSub() };
-    const linhaSub = row;
     row++;
     row++; // espaço
 
     for (const grupo of params.grupos) {
-      row = this.tabelaTecnico(ws, row, NC, grupo);
+      row = this.tabelaTecnicoOriginal(ws, row, NC, grupo, params.dias);
     }
 
-    ws['!ref']    = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(row - 1, linhaSub), c: NC - 1 } });
-    ws['!merges'] = [
-      ...(ws['!merges'] as { s: { r: number; c: number }; e: { r: number; c: number } }[] ?? []),
+    ws['!ref']    = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: row - 1, c: NC - 1 } });
+    (ws['!merges'] as { s: { r: number; c: number }; e: { r: number; c: number } }[]).push(
       { s: { r: linhaTitulo, c: 0 }, e: { r: linhaTitulo, c: NC - 1 } },
-      { s: { r: linhaSub, c: 0 }, e: { r: linhaSub, c: NC - 1 } },
-    ];
+    );
     ws['!cols'] = [
-      { wch: 10 }, { wch: 42 }, { wch: 16 }, { wch: 10 }, { wch: 18 },
-      { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 20 }, { wch: 12 },
+      { wch: 14 }, { wch: 10 }, { wch: 46 }, { wch: 9 }, { wch: 16 },
+      { wch: 12 }, { wch: 10 }, { wch: 20 },
+      { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 },
+      { wch: 10 },
     ];
 
     const wb: WorkBook = XLSX.utils.book_new();
-    wb.Props = { Title: `Programação de Manutenção — ${params.semanaLabel}`, Company: 'Diamante Energia' };
+    wb.Props = { Title: `Programação ${params.areaLabel} — ${params.semanaLabel}`, Company: 'Diamante Energia' };
     XLSX.utils.book_append_sheet(wb, ws, 'Programação');
-    XLSX.writeFile(wb, `programacao_manutencao_${this.todayStr()}.xlsx`);
+    XLSX.writeFile(wb, `programacao_${params.areaLabel.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_')}_${this.todayStr()}.xlsx`);
   }
 }

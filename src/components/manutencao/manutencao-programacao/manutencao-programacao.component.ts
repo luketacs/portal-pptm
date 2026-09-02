@@ -161,30 +161,44 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return `Conflito: ${itens.map(i => `${i.status} (${i.tecnico} — ${i.descricao})`).join(' vs. ')}`;
   }
 
-  // Dias previstos formatados pro Excel (ex.: "SEG, QUA, SEX") — mesma lógica das
-  // pastilhas SEG–SEX da tela, só que como texto pra caber numa célula.
-  private diasFormatados(o: ManutencaoOrdem): string {
-    return this.diasDaSemanaAtual()
-      .filter(d => o.diasPrevistos.includes(d.data))
-      .map(d => d.label)
-      .join(', ');
+  // Número da semana no padrão ISO 8601 (segunda-feira, semana com a 1ª
+  // quinta-feira do ano) — conferido contra a planilha original: 27/07/2026 cai na
+  // "S31", que é exatamente o que esse cálculo dá.
+  private numeroSemanaISO(dataIso: string): number {
+    const [ano, mes, dia] = dataIso.split('-').map(Number);
+    const data = new Date(Date.UTC(ano, mes - 1, dia));
+    const diaDaSemana = (data.getUTCDay() + 6) % 7;
+    data.setUTCDate(data.getUTCDate() - diaDaSemana + 3);
+    const primeiraQuinta = new Date(Date.UTC(data.getUTCFullYear(), 0, 4));
+    const diffDias = (data.getTime() - primeiraQuinta.getTime()) / 86400000;
+    return 1 + Math.round(diffDias / 7);
+  }
+
+  private diaMesCompacto(dataIso: string): string {
+    const [, mes, dia] = dataIso.split('-').map(Number);
+    return `${dia}/${mes}`;
+  }
+
+  private diaMesPadded(dataIso: string): string {
+    const [, mes, dia] = dataIso.split('-');
+    return `${dia}/${mes}`;
   }
 
   exportarSemana(): void {
     const grupos: ProgramacaoSemanalGrupo[] = this.grupos().map(g => ({
       tecnico: g.tecnico,
-      totalHoras: g.totalHoras,
       linhas: g.ordens.map(o => ({
-        numeroOs: o.tipo !== 'ordem' ? this.tipoLabel[o.tipo] : (o.numeroOs || (o.semOs ? 'SEM OS' : 'CRIAR OS')),
+        tipo: o.tipo,
+        numeroOs: o.numeroOs,
+        semOs: o.semOs,
         descricao: o.descricao,
-        equipamento: o.equipamento || '—',
-        area: this.areaLabel[o.area],
-        areaAtuacao: o.areaAtuacao || '—',
-        loto: o.loto || '—',
-        tipoServico: o.tipoServico || '—',
         duracaoHoras: o.duracaoHoras,
-        dias: this.diasFormatados(o) || '—',
-        status: o.tipo === 'ordem' ? o.status : '—',
+        equipamento: o.equipamento || '—',
+        recursos: o.recursos || '—',
+        loto: o.loto || '—',
+        areaAtuacao: o.areaAtuacao || '—',
+        diasPrevistos: o.diasPrevistos,
+        status: o.tipo === 'ordem' ? o.status : '',
       })),
     }));
 
@@ -193,9 +207,15 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       return;
     }
 
+    const semana = this.semanaFiltro();
+    const [ano] = semana.split('-').map(Number);
+    const dias = this.diasDaSemanaAtual();
+    const semanaLabel = `S${this.numeroSemanaISO(semana)} ${ano} (${this.diaMesPadded(dias[0].data)} À ${this.diaMesPadded(dias[6].data)})`;
+
     this.excelExportService.exportarProgramacaoSemanal({
-      semanaLabel: this.semanaFiltroLabel(),
+      semanaLabel,
       areaLabel: this.areaFixa ? this.areaLabel[this.areaFixa] : 'Elétrica + Mecânica',
+      dias: dias.map(d => ({ data: d.data, diaMes: this.diaMesCompacto(d.data), label: d.label })),
       grupos,
     });
   }
