@@ -372,9 +372,6 @@
                               } @else {
                                 <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700" title="Ainda não tem número de OS — precisa ser criada no ERP">CRIAR OS</span>
                               }
-                              @if (statusExecucao(o); as exec) {
-                                <span class="inline-block w-2 h-2 rounded-full flex-shrink-0" [class]="exec.dot" [title]="exec.title"></span>
-                              }
                             </span>
                           </td>
                           <td class="py-1.5 pr-3 text-gray-800 max-w-xs">
@@ -382,7 +379,7 @@
                             @if (o.tipoServico) {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoServicoBadgeClass(o.tipoServico)">{{ o.tipoServico }}</span>
                             }
-                            @if (o.loto) {
+                            @if (o.loto && o.loto.toUpperCase() !== 'SEM LOTO') {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="lotoBadgeClass(o.loto)">{{ o.loto }}</span>
                             }
                           </td>
@@ -393,9 +390,11 @@
                           <td class="py-1.5 pr-3 text-gray-600 text-xs">{{ diasResumo(o) }}</td>
                           <td class="py-1.5 pr-3">
                             @if (o.tipo === 'ordem') {
-                              <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">
-                                {{ o.status }}
-                              </span>
+                              @if (statusOuExecucao(o); as st) {
+                                <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="st.class">{{ st.label }}</span>
+                              } @else {
+                                <span class="text-xs text-gray-300">—</span>
+                              }
                             }
                           </td>
                           <td class="py-1.5 pr-3 whitespace-nowrap text-right">
@@ -462,9 +461,6 @@
                               } @else {
                                 <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700" title="Ainda não tem número de OS — precisa ser criada no ERP">CRIAR OS</span>
                               }
-                              @if (statusExecucao(o); as exec) {
-                                <span class="inline-block w-2 h-2 rounded-full flex-shrink-0" [class]="exec.dot" [title]="exec.title"></span>
-                              }
                             </span>
                           </td>
                           <td class="py-1.5 pr-3 text-gray-800 max-w-xs">
@@ -473,7 +469,7 @@
                             @if (o.tipoServico) {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoServicoBadgeClass(o.tipoServico)">{{ o.tipoServico }}</span>
                             }
-                            @if (o.loto) {
+                            @if (o.loto && o.loto.toUpperCase() !== 'SEM LOTO') {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="lotoBadgeClass(o.loto)">{{ o.loto }}</span>
                             }
                           </td>
@@ -484,9 +480,11 @@
                           </td>
                           <td class="py-1.5 pr-3">
                             @if (o.tipo === 'ordem') {
-                              <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">
-                                {{ o.status }}
-                              </span>
+                              @if (statusOuExecucao(o); as st) {
+                                <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="st.class">{{ st.label }}</span>
+                              } @else {
+                                <span class="text-xs text-gray-300">—</span>
+                              }
                             }
                           </td>
                           <td class="py-1.5 pr-3 whitespace-nowrap text-right">
@@ -547,9 +545,6 @@
                             } @else {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">CRIAR OS</span>
                             }
-                            @if (statusExecucao(o); as exec) {
-                              <span class="inline-block w-2 h-2 rounded-full flex-shrink-0" [class]="exec.dot" [title]="exec.title"></span>
-                            }
                           </span>
                         </td>
                         <td class="py-1.5 pr-3 text-gray-800 max-w-xs">
@@ -562,7 +557,11 @@
                         <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
                         <td class="py-1.5 pr-3">
                           @if (o.tipo === 'ordem') {
-                            <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">{{ o.status }}</span>
+                            @if (statusOuExecucao(o); as st) {
+                              <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="st.class">{{ st.label }}</span>
+                            } @else {
+                              <span class="text-xs text-gray-300">—</span>
+                            }
                           }
                         </td>
                         <td class="py-1.5 pr-3 whitespace-nowrap text-right">
@@ -712,9 +711,6 @@
                                       } @else {
                                         <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">CRIAR OS</span>
                                       }
-                                      @if (statusExecucao(o, bloco.diasIso); as exec) {
-                                        <span class="inline-block w-2 h-2 rounded-full flex-shrink-0" [class]="exec.dot" [title]="exec.title"></span>
-                                      }
                                     </span>
                                   </td>
                                   <td class="py-1.5 pr-3 text-gray-800 max-w-xs">
@@ -722,7 +718,7 @@
                                     @if (o.tipoServico) {
                                       <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoServicoBadgeClass(o.tipoServico)">{{ o.tipoServico }}</span>
                                     }
-                                    @if (o.loto) {
+                                    @if (o.loto && o.loto.toUpperCase() !== 'SEM LOTO') {
                                       <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="lotoBadgeClass(o.loto)">{{ o.loto }}</span>
                                     }
                                   </td>
@@ -733,7 +729,11 @@
                                   <td class="py-1.5 pr-3 text-gray-600 text-xs">{{ diasResumo(o, bloco.dias) }}</td>
                                   <td class="py-1.5 pr-3">
                                     @if (o.tipo === 'ordem') {
-                                      <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">{{ o.status }}</span>
+                                      @if (statusOuExecucao(o, bloco.diasIso); as st) {
+                                        <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="st.class">{{ st.label }}</span>
+                                      } @else {
+                                        <span class="text-xs text-gray-300">—</span>
+                                      }
                                     }
                                   </td>
                                   <td class="py-1.5 pr-3 whitespace-nowrap text-right">
@@ -798,9 +798,6 @@
                                       } @else {
                                         <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">CRIAR OS</span>
                                       }
-                                      @if (statusExecucao(o, bloco.diasIso); as exec) {
-                                        <span class="inline-block w-2 h-2 rounded-full flex-shrink-0" [class]="exec.dot" [title]="exec.title"></span>
-                                      }
                                     </span>
                                   </td>
                                   <td class="py-1.5 pr-3 text-gray-800 max-w-xs">
@@ -809,7 +806,7 @@
                                     @if (o.tipoServico) {
                                       <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoServicoBadgeClass(o.tipoServico)">{{ o.tipoServico }}</span>
                                     }
-                                    @if (o.loto) {
+                                    @if (o.loto && o.loto.toUpperCase() !== 'SEM LOTO') {
                                       <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="lotoBadgeClass(o.loto)">{{ o.loto }}</span>
                                     }
                                   </td>
@@ -820,7 +817,11 @@
                                   </td>
                                   <td class="py-1.5 pr-3">
                                     @if (o.tipo === 'ordem') {
-                                      <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">{{ o.status }}</span>
+                                      @if (statusOuExecucao(o, bloco.diasIso); as st) {
+                                        <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="st.class">{{ st.label }}</span>
+                                      } @else {
+                                        <span class="text-xs text-gray-300">—</span>
+                                      }
                                     }
                                   </td>
                                   <td class="py-1.5 pr-3 whitespace-nowrap text-right">

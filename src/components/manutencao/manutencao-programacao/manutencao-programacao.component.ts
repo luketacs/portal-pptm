@@ -904,6 +904,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     };
   }
 
+  // A coluna "Status" hoje é sempre 'PEND' pra qualquer OS criada pelo Portal (o valor
+  // real de execução vem do SIGMA, ver statusExecucao()) — mostrar "PEND" em toda linha
+  // não informa nada. Só vale mostrar o status bruto quando ele for diferente de PEND
+  // (dado legado, de antes dessa mudança); no caso comum, mostra a execução no lugar.
+  statusOuExecucao(o: ManutencaoOrdem, diasSemanaOverride?: string[]): { label: string; class: string } | null {
+    if (o.status && o.status.toUpperCase() !== 'PEND') {
+      return { label: o.status, class: this.statusBadgeClass(o.status) };
+    }
+    return this.statusExecucao(o, diasSemanaOverride);
+  }
+
   // "Dias" em texto compacto (ex.: "SEG, QUA, SEX") em vez das 7 pastilhas — mesma
   // informação, ocupando uma linha só. `dias` é opcional pra reaproveitar nos blocos
   // do horizonte de 4 semanas, que usam datas diferentes de diasDaSemanaAtual().
