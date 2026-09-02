@@ -1059,6 +1059,7 @@
           <label class="flex flex-col items-center gap-1 cursor-pointer">
             <input type="checkbox" [checked]="formDiasSelecionados().includes(dia.data)" (change)="toggleDia(dia.data)" class="rounded" />
             <span class="text-xs text-gray-500">{{ dia.label }}</span>
+            <span class="text-[10px] text-gray-400">{{ diaMesPadded(dia.data) }}</span>
           </label>
         }
       </div>
@@ -1101,6 +1102,7 @@
           <label class="flex flex-col items-center gap-1 cursor-pointer">
             <input type="checkbox" [checked]="feriadoDiasSelecionados().includes(dia.data)" (change)="toggleDiaFeriado(dia.data)" class="rounded" />
             <span class="text-xs text-gray-500">{{ dia.label }}</span>
+            <span class="text-[10px] text-gray-400">{{ diaMesPadded(dia.data) }}</span>
           </label>
         }
       </div>

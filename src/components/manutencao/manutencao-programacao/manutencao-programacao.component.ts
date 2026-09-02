@@ -193,7 +193,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return `${dia}/${mes}`;
   }
 
-  private diaMesPadded(dataIso: string): string {
+  diaMesPadded(dataIso: string): string {
     const [, mes, dia] = dataIso.split('-');
     return `${dia}/${mes}`;
   }
@@ -270,7 +270,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       inicio.setDate(inicio.getDate() - i * 7);
       const fim = new Date(inicio);
       fim.setDate(fim.getDate() + 6);
-      result.push({ value: paraIso(inicio), label: `${formatarDiaMes(inicio)} a ${formatarDiaMes(fim)}` });
+      const inicioIso = paraIso(inicio);
+      result.push({ value: inicioIso, label: `Semana ${this.numeroSemanaISO(inicioIso)} (${formatarDiaMes(inicio)} a ${formatarDiaMes(fim)})` });
     }
     return result;
   })();
