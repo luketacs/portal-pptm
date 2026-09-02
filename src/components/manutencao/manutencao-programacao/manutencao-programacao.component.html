@@ -906,8 +906,7 @@
 <!-- Modal: Nova OS / Editar OS -->
 @if (formAberto()) {
   <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" (click)="fecharForm()">
-    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-h-[90vh] overflow-y-auto"
-      [class]="formTipo() === 'ordem' ? 'max-w-2xl' : 'max-w-lg'" (click)="$event.stopPropagation()">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto" (click)="$event.stopPropagation()">
       <h3 class="text-lg font-bold text-gray-800 mb-4">{{ formIdEdicao() ? 'Editar ' + tipoLabel[formTipo()] : 'Novo lançamento' }}</h3>
 
       <label class="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
@@ -921,119 +920,116 @@
         }
       </div>
 
-      <div [class]="formTipo() === 'ordem' ? 'grid grid-cols-1 lg:grid-cols-2 gap-x-6' : ''">
+      <div class="grid grid-cols-2 gap-3 mb-4">
         <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Área</label>
           @if (areaFixa) {
-            <p class="text-sm font-medium text-slate-700 mb-4">Área: {{ areaLabel[areaFixa] }}</p>
+            <p class="text-sm text-slate-600 py-2">{{ areaLabel[areaFixa] }}</p>
           } @else {
-            <label class="block text-sm font-medium text-slate-700 mb-1">Área</label>
             <select [ngModel]="formArea()" (ngModelChange)="formArea.set($event)"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-4">
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
               <option value="ELETRICA">Elétrica</option>
               <option value="MECANICA">Mecânica</option>
             </select>
           }
-
+        </div>
+        <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">{{ formArea() === 'APOIO' ? 'Equipe/Empresa' : 'Técnico' }} <span class="text-red-500">*</span></label>
           <select [ngModel]="formTecnicoNome()" (ngModelChange)="onTecnicoSelected($event)"
-            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-4">
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
             <option value="">Selecione...</option>
             @for (t of tecnicosDaAreaForm(); track t.matricula) {
               <option [value]="t.nome">{{ t.nome }}</option>
             }
           </select>
+        </div>
+      </div>
 
-          @if (formTipo() === 'ordem') {
-            <label class="flex items-center gap-2 mb-3 cursor-pointer">
-              <input type="checkbox" [checked]="formSemOs()" (change)="formSemOs.set(!formSemOs())" class="rounded" />
-              <span class="text-sm text-slate-700">Não precisa de OS (ex.: revisão de planos)</span>
-            </label>
+      @if (formTipo() === 'ordem') {
+        <label class="flex items-center gap-2 mb-3 cursor-pointer">
+          <input type="checkbox" [checked]="formSemOs()" (change)="formSemOs.set(!formSemOs())" class="rounded" />
+          <span class="text-sm text-slate-700">Não precisa de OS (ex.: revisão de planos)</span>
+        </label>
 
-            @if (!formSemOs()) {
-              <label class="block text-sm font-medium text-slate-700 mb-1">Número da OS</label>
-              <div class="flex items-center gap-2 mb-1">
-                <input type="text" [ngModel]="formNumeroOs()" (ngModelChange)="formNumeroOs.set($event)" (blur)="buscarDescricaoDaOs()"
-                  placeholder="Ainda não tem? Deixe em branco (aparece como CRIAR OS)"
-                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                @if (buscandoOsNoSigma()) {
-                  <svg class="animate-spin h-4 w-4 text-blue-600 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                  </svg>
-                }
-              </div>
-              <p class="text-xs text-gray-400 mb-4">A OS é criada no ERP (SIGMA) — informe o número e saia do campo pra puxar a descrição sozinha.</p>
+        @if (!formSemOs()) {
+          <label class="block text-sm font-medium text-slate-700 mb-1">Número da OS</label>
+          <div class="flex items-center gap-2 mb-1">
+            <input type="text" [ngModel]="formNumeroOs()" (ngModelChange)="formNumeroOs.set($event)" (blur)="buscarDescricaoDaOs()"
+              placeholder="Ainda não tem? Deixe em branco (aparece como CRIAR OS)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            @if (buscandoOsNoSigma()) {
+              <svg class="animate-spin h-4 w-4 text-blue-600 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
             }
+          </div>
+          <p class="text-xs text-gray-400 mb-4">A OS é criada no ERP (SIGMA) — informe o número e saia do campo pra puxar a descrição sozinha.</p>
+        }
 
-            <label class="block text-sm font-medium text-slate-700 mb-1">Descrição <span class="text-red-500">*</span></label>
-            <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="4"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
-          } @else {
-            <label class="block text-sm font-medium text-slate-700 mb-1">Motivo (opcional)</label>
-            <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="2"
-              [placeholder]="motivoPlaceholder(formTipo())"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
-          }
+        <label class="block text-sm font-medium text-slate-700 mb-1">Descrição <span class="text-red-500">*</span></label>
+        <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="2"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
+
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Equipamento</label>
+            <select [ngModel]="formEquipamento()" (ngModelChange)="formEquipamento.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <option value="">Selecione...</option>
+              @for (eq of equipamentos(); track eq) {
+                <option [value]="eq">{{ eq }}</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Área de atuação</label>
+            <input type="text" [ngModel]="formAreaAtuacao()" (ngModelChange)="formAreaAtuacao.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
         </div>
 
-        @if (formTipo() === 'ordem') {
+        <div class="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <div class="grid grid-cols-2 gap-3 mb-4">
-              <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Equipamento</label>
-                <select [ngModel]="formEquipamento()" (ngModelChange)="formEquipamento.set($event)"
-                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                  <option value="">Selecione...</option>
-                  @for (eq of equipamentos(); track eq) {
-                    <option [value]="eq">{{ eq }}</option>
-                  }
-                </select>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Área de atuação</label>
-                <input type="text" [ngModel]="formAreaAtuacao()" (ngModelChange)="formAreaAtuacao.set($event)"
-                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-3 mb-4">
-              <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Recursos (ajudante)</label>
-                <input type="text" [ngModel]="formRecursos()" (ngModelChange)="formRecursos.set($event)"
-                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">LOTO <span class="text-red-500">*</span></label>
-                <select [ngModel]="formLoto()" (ngModelChange)="formLoto.set($event)"
-                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                  <option value="">Selecione...</option>
-                  @for (op of lotoOpcoes; track op) {
-                    <option [value]="op">{{ op }}</option>
-                  }
-                </select>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-3 mb-4">
-              <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Tipo de serviço</label>
-                <select [ngModel]="formTipoServico()" (ngModelChange)="formTipoServico.set($event)"
-                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                  <option value="">Selecione...</option>
-                  @for (op of tipoServicoOpcoes; track op) {
-                    <option [value]="op">{{ op }}</option>
-                  }
-                </select>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Duração estimada (horas)</label>
-                <input type="number" step="0.5" min="0" [ngModel]="formDuracaoHoras()" (ngModelChange)="formDuracaoHoras.set($event)"
-                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-            </div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Recursos (ajudante)</label>
+            <input type="text" [ngModel]="formRecursos()" (ngModelChange)="formRecursos.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-        }
-      </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">LOTO <span class="text-red-500">*</span></label>
+            <select [ngModel]="formLoto()" (ngModelChange)="formLoto.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <option value="">Selecione...</option>
+              @for (op of lotoOpcoes; track op) {
+                <option [value]="op">{{ op }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Tipo de serviço</label>
+            <select [ngModel]="formTipoServico()" (ngModelChange)="formTipoServico.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <option value="">Selecione...</option>
+              @for (op of tipoServicoOpcoes; track op) {
+                <option [value]="op">{{ op }}</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Duração estimada (horas)</label>
+            <input type="number" step="0.5" min="0" [ngModel]="formDuracaoHoras()" (ngModelChange)="formDuracaoHoras.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+      } @else {
+        <label class="block text-sm font-medium text-slate-700 mb-1">Motivo (opcional)</label>
+        <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="2"
+          [placeholder]="motivoPlaceholder(formTipo())"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
+      }
 
       <label class="block text-sm font-medium text-slate-700 mb-1">
         Dias previstos na semana
