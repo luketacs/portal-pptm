@@ -694,27 +694,36 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Selo de execução por OS, pra saber se ela já foi apontada (executada) dentro da
   // semana programada, ou fora dela, ou ainda nem apontada. `null` = ou não tem número
   // de OS pra checar, ou a consulta ao SIGMA ainda não voltou.
-  statusExecucao(o: ManutencaoOrdem, diasSemanaOverride?: string[]): { label: string; class: string; title: string } | null {
+  statusExecucao(o: ManutencaoOrdem, diasSemanaOverride?: string[]): { label: string; class: string; dot: string; title: string } | null {
     if (!o.numeroOs?.trim()) return null;
     const resultado = this.sigmaPorOs()[normalizarNumeroOs(o.numeroOs)];
     if (!resultado) return null;
 
     if (resultado.apontamentos.length === 0) {
-      return { label: 'Não executada', class: 'bg-gray-100 text-gray-500', title: 'Nenhum apontamento encontrado no SIGMA pra essa OS.' };
+      return { label: 'Não executada', class: 'bg-gray-100 text-gray-500', dot: 'bg-gray-400', title: 'Nenhum apontamento encontrado no SIGMA pra essa OS.' };
     }
 
     const diasDaSemana = o.diasPrevistos.length > 0 ? o.diasPrevistos : (diasSemanaOverride ?? this.diasDaSemanaAtual().map(d => d.data));
     const dentroDaSemana = resultado.apontamentos.filter(a => diasDaSemana.includes(a.data));
     if (dentroDaSemana.length > 0) {
       return {
-        label: 'Executada', class: 'bg-green-100 text-green-700',
-        title: `Apontada em: ${dentroDaSemana.map(a => a.data).join(', ')}`,
+        label: 'Executada', class: 'bg-green-100 text-green-700', dot: 'bg-green-500',
+        title: `Executada — apontada em: ${dentroDaSemana.map(a => a.data).join(', ')}`,
       };
     }
     return {
-      label: 'Fora da semana', class: 'bg-amber-100 text-amber-700',
+      label: 'Fora da semana', class: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500',
       title: `Apontada fora da semana programada, em: ${resultado.apontamentos.map(a => a.data).join(', ')}`,
     };
+  }
+
+  // "Dias" em texto compacto (ex.: "SEG, QUA, SEX") em vez das 7 pastilhas — mesma
+  // informação, ocupando uma linha só. `dias` é opcional pra reaproveitar nos blocos
+  // do horizonte de 4 semanas, que usam datas diferentes de diasDaSemanaAtual().
+  diasResumo(o: ManutencaoOrdem, dias?: { data: string; label: string }[]): string {
+    const base = dias ?? this.diasDaSemanaAtual();
+    const label = base.filter(d => o.diasPrevistos.includes(d.data)).map(d => d.label).join(', ');
+    return label || '—';
   }
 
   // ── Buscar descrição da OS no SIGMA ao sair do campo "Número da OS" ───

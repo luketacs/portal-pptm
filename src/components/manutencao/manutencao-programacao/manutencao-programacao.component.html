@@ -129,23 +129,20 @@
     }
 
     @if (!horizonteAtivo()) {
-    <!-- Quadro de bloqueios (LOTO) + total da semana numa faixa só — sempre as duas
-         áreas juntas, pra qualquer equipe ver antes de programar se o equipamento já
-         está comprometido. -->
-    <div class="app-card p-3">
-      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <div class="flex items-center gap-3">
+    <!-- Quadro de bloqueios (LOTO) — sempre as duas áreas juntas, pra qualquer equipe
+         ver antes de programar se o equipamento já está comprometido. Só aparece
+         quando tem algo pra mostrar (maioria das semanas não tem conflito). -->
+    @if (quadroLoto().length > 0) {
+      <div class="app-card p-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
           <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Bloqueios (LOTO) — {{ semanaFiltroLabel() }}</p>
-          <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{{ countTotal() }} OS na semana</span>
+          <div class="flex items-center gap-3 text-[11px] text-gray-500">
+            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-400"></span>LOTO</span>
+            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-green-400"></span>Funcionando</span>
+            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>Sem LOTO</span>
+            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-orange-400"></span>Conflito</span>
+          </div>
         </div>
-        <div class="flex items-center gap-3 text-[11px] text-gray-500">
-          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-400"></span>LOTO</span>
-          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-green-400"></span>Funcionando</span>
-          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>Sem LOTO</span>
-          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-orange-400"></span>Conflito</span>
-        </div>
-      </div>
-      @if (quadroLoto().length > 0) {
         <div class="overflow-x-auto">
           <table class="min-w-full text-sm">
             <thead>
@@ -176,10 +173,8 @@
             </tbody>
           </table>
         </div>
-      } @else {
-        <p class="text-sm text-gray-400 py-1">Nenhuma OS com equipamento + LOTO informados nessa semana ainda.</p>
-      }
-    </div>
+      </div>
+    }
 
     @if (areaFixa === 'APOIO') {
       <!-- Escala de turno (D/N/F) da Operação — rodízio fixo de 8 dias, calculado, não
@@ -235,6 +230,11 @@
             }
           </select>
         </div>
+        @if (!horizonteAtivo()) {
+          <div class="flex items-end pb-2">
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{{ countTotal() }} OS na semana</span>
+          </div>
+        }
         <div class="flex items-end pb-0.5">
           <label class="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-gray-600">
             <input type="checkbox" [checked]="horizonteAtivo()" (change)="horizonteAtivo.set(!horizonteAtivo())" class="rounded" />
@@ -326,7 +326,6 @@
                         <th class="py-1 pr-3">OS</th>
                         <th class="py-1 pr-3">Descrição</th>
                         <th class="py-1 pr-3">Equipamento</th>
-                        <th class="py-1 pr-3">Duração</th>
                         <th class="py-1 pr-3">Dias</th>
                         <th class="py-1 pr-3">Status</th>
                         <th class="py-1 pr-3"></th>
@@ -335,19 +334,21 @@
                     <tbody class="divide-y divide-slate-100">
                       @for (o of grupo.ordens; track o.id) {
                         <tr [class]="linhaClasse(o.tipo)">
-                          <td class="py-1.5 pr-3">
-                            @if (o.tipo !== 'ordem') {
-                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
-                            } @else if (o.numeroOs) {
-                              <span class="text-gray-600">{{ o.numeroOs }}</span>
-                            } @else if (o.semOs) {
-                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500" title="Esse serviço não precisa de OS no SIGMA">SEM OS</span>
-                            } @else {
-                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700" title="Ainda não tem número de OS — precisa ser criada no ERP">CRIAR OS</span>
-                            }
-                            @if (statusExecucao(o); as exec) {
-                              <div class="text-[10px] font-semibold px-1.5 py-0.5 rounded mt-0.5 inline-block" [class]="exec.class" [title]="exec.title">{{ exec.label }}</div>
-                            }
+                          <td class="py-1.5 pr-3 whitespace-nowrap">
+                            <span class="inline-flex items-center gap-1">
+                              @if (o.tipo !== 'ordem') {
+                                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
+                              } @else if (o.numeroOs) {
+                                <span class="text-gray-600">{{ o.numeroOs }}</span>
+                              } @else if (o.semOs) {
+                                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500" title="Esse serviço não precisa de OS no SIGMA">SEM OS</span>
+                              } @else {
+                                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700" title="Ainda não tem número de OS — precisa ser criada no ERP">CRIAR OS</span>
+                              }
+                              @if (statusExecucao(o); as exec) {
+                                <span class="inline-block w-2 h-2 rounded-full flex-shrink-0" [class]="exec.dot" [title]="exec.title"></span>
+                              }
+                            </span>
                           </td>
                           <td class="py-1.5 pr-3 text-gray-800 max-w-xs">
                             <span class="block truncate" [title]="o.descricao">{{ o.descricao }}</span>
@@ -358,18 +359,11 @@
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="lotoBadgeClass(o.loto)">{{ o.loto }}</span>
                             }
                           </td>
-                          <td class="py-1.5 pr-3 text-gray-600">{{ o.equipamento || '—' }}</td>
-                          <td class="py-1.5 pr-3 text-gray-600">{{ o.duracaoHoras ? (o.duracaoHoras + 'h') : '—' }}</td>
-                          <td class="py-1.5 pr-3">
-                            <div class="flex gap-1">
-                              @for (dia of diasDaSemanaAtual(); track dia.data) {
-                                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded"
-                                  [class]="o.diasPrevistos.includes(dia.data) ? 'bg-blue-100 text-blue-700' : 'bg-gray-50 text-gray-300'">
-                                  {{ dia.label }}
-                                </span>
-                              }
-                            </div>
+                          <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">
+                            {{ o.equipamento || '—' }}
+                            @if (o.duracaoHoras) { <span class="text-gray-400">· {{ o.duracaoHoras }}h</span> }
                           </td>
+                          <td class="py-1.5 pr-3 text-gray-600 text-xs">{{ diasResumo(o) }}</td>
                           <td class="py-1.5 pr-3">
                             @if (o.tipo === 'ordem') {
                               <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">
@@ -428,10 +422,8 @@
                       <tr class="text-left text-xs text-gray-500 uppercase">
                         <th class="py-1 pr-3">OS</th>
                         <th class="py-1 pr-3">Descrição</th>
-                        <th class="py-1 pr-3">Equipamento</th>
-                        <th class="py-1 pr-3">Área</th>
                         <th class="py-1 pr-3">Técnico</th>
-                        <th class="py-1 pr-3">Duração</th>
+                        <th class="py-1 pr-3">Equipamento</th>
                         <th class="py-1 pr-3">Status</th>
                         <th class="py-1 pr-3"></th>
                       </tr>
@@ -439,22 +431,25 @@
                     <tbody class="divide-y divide-slate-100">
                       @for (o of dia.ordens; track o.id) {
                         <tr [class]="linhaClasse(o.tipo)">
-                          <td class="py-1.5 pr-3">
-                            @if (o.tipo !== 'ordem') {
-                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
-                            } @else if (o.numeroOs) {
-                              <span class="text-gray-600">{{ o.numeroOs }}</span>
-                            } @else if (o.semOs) {
-                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500" title="Esse serviço não precisa de OS no SIGMA">SEM OS</span>
-                            } @else {
-                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700" title="Ainda não tem número de OS — precisa ser criada no ERP">CRIAR OS</span>
-                            }
-                            @if (statusExecucao(o); as exec) {
-                              <div class="text-[10px] font-semibold px-1.5 py-0.5 rounded mt-0.5 inline-block" [class]="exec.class" [title]="exec.title">{{ exec.label }}</div>
-                            }
+                          <td class="py-1.5 pr-3 whitespace-nowrap">
+                            <span class="inline-flex items-center gap-1">
+                              @if (o.tipo !== 'ordem') {
+                                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
+                              } @else if (o.numeroOs) {
+                                <span class="text-gray-600">{{ o.numeroOs }}</span>
+                              } @else if (o.semOs) {
+                                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500" title="Esse serviço não precisa de OS no SIGMA">SEM OS</span>
+                              } @else {
+                                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700" title="Ainda não tem número de OS — precisa ser criada no ERP">CRIAR OS</span>
+                              }
+                              @if (statusExecucao(o); as exec) {
+                                <span class="inline-block w-2 h-2 rounded-full flex-shrink-0" [class]="exec.dot" [title]="exec.title"></span>
+                              }
+                            </span>
                           </td>
                           <td class="py-1.5 pr-3 text-gray-800 max-w-xs">
                             <span class="block truncate" [title]="o.descricao">{{ o.descricao }}</span>
+                            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-50 text-slate-500">{{ areaLabel[o.area] }}</span>
                             @if (o.tipoServico) {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoServicoBadgeClass(o.tipoServico)">{{ o.tipoServico }}</span>
                             }
@@ -462,10 +457,11 @@
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="lotoBadgeClass(o.loto)">{{ o.loto }}</span>
                             }
                           </td>
-                          <td class="py-1.5 pr-3 text-gray-600">{{ o.equipamento || '—' }}</td>
-                          <td class="py-1.5 pr-3 text-gray-600">{{ areaLabel[o.area] }}</td>
                           <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
-                          <td class="py-1.5 pr-3 text-gray-600">{{ o.duracaoHoras ? (o.duracaoHoras + 'h') : '—' }}</td>
+                          <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">
+                            {{ o.equipamento || '—' }}
+                            @if (o.duracaoHoras) { <span class="text-gray-400">· {{ o.duracaoHoras }}h</span> }
+                          </td>
                           <td class="py-1.5 pr-3">
                             @if (o.tipo === 'ordem') {
                               <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">
@@ -527,19 +523,21 @@
                   <tbody class="divide-y divide-slate-100">
                     @for (o of ordensSemDia(); track o.id) {
                       <tr [class]="linhaClasse(o.tipo)">
-                        <td class="py-1.5 pr-3">
-                          @if (o.tipo !== 'ordem') {
-                            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
-                          } @else if (o.numeroOs) {
-                            <span class="text-gray-600">{{ o.numeroOs }}</span>
-                          } @else if (o.semOs) {
-                            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">SEM OS</span>
-                          } @else {
-                            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">CRIAR OS</span>
-                          }
-                          @if (statusExecucao(o); as exec) {
-                            <div class="text-[10px] font-semibold px-1.5 py-0.5 rounded mt-0.5 inline-block" [class]="exec.class" [title]="exec.title">{{ exec.label }}</div>
-                          }
+                        <td class="py-1.5 pr-3 whitespace-nowrap">
+                          <span class="inline-flex items-center gap-1">
+                            @if (o.tipo !== 'ordem') {
+                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
+                            } @else if (o.numeroOs) {
+                              <span class="text-gray-600">{{ o.numeroOs }}</span>
+                            } @else if (o.semOs) {
+                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">SEM OS</span>
+                            } @else {
+                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">CRIAR OS</span>
+                            }
+                            @if (statusExecucao(o); as exec) {
+                              <span class="inline-block w-2 h-2 rounded-full flex-shrink-0" [class]="exec.dot" [title]="exec.title"></span>
+                            }
+                          </span>
                         </td>
                         <td class="py-1.5 pr-3 text-gray-800 max-w-xs">
                           <span class="block truncate" [title]="o.descricao">{{ o.descricao }}</span>
@@ -689,7 +687,6 @@
                                 <th class="py-1 pr-3">OS</th>
                                 <th class="py-1 pr-3">Descrição</th>
                                 <th class="py-1 pr-3">Equipamento</th>
-                                <th class="py-1 pr-3">Duração</th>
                                 <th class="py-1 pr-3">Dias</th>
                                 <th class="py-1 pr-3">Status</th>
                                 <th class="py-1 pr-3"></th>
@@ -698,19 +695,21 @@
                             <tbody class="divide-y divide-slate-100">
                               @for (o of grupo.ordens; track o.id) {
                                 <tr [class]="linhaClasse(o.tipo)">
-                                  <td class="py-1.5 pr-3">
-                                    @if (o.tipo !== 'ordem') {
-                                      <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
-                                    } @else if (o.numeroOs) {
-                                      <span class="text-gray-600">{{ o.numeroOs }}</span>
-                                    } @else if (o.semOs) {
-                                      <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">SEM OS</span>
-                                    } @else {
-                                      <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">CRIAR OS</span>
-                                    }
-                                    @if (statusExecucao(o, bloco.diasIso); as exec) {
-                                      <div class="text-[10px] font-semibold px-1.5 py-0.5 rounded mt-0.5 inline-block" [class]="exec.class" [title]="exec.title">{{ exec.label }}</div>
-                                    }
+                                  <td class="py-1.5 pr-3 whitespace-nowrap">
+                                    <span class="inline-flex items-center gap-1">
+                                      @if (o.tipo !== 'ordem') {
+                                        <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
+                                      } @else if (o.numeroOs) {
+                                        <span class="text-gray-600">{{ o.numeroOs }}</span>
+                                      } @else if (o.semOs) {
+                                        <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">SEM OS</span>
+                                      } @else {
+                                        <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">CRIAR OS</span>
+                                      }
+                                      @if (statusExecucao(o, bloco.diasIso); as exec) {
+                                        <span class="inline-block w-2 h-2 rounded-full flex-shrink-0" [class]="exec.dot" [title]="exec.title"></span>
+                                      }
+                                    </span>
                                   </td>
                                   <td class="py-1.5 pr-3 text-gray-800 max-w-xs">
                                     <span class="block truncate" [title]="o.descricao">{{ o.descricao }}</span>
@@ -721,18 +720,11 @@
                                       <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="lotoBadgeClass(o.loto)">{{ o.loto }}</span>
                                     }
                                   </td>
-                                  <td class="py-1.5 pr-3 text-gray-600">{{ o.equipamento || '—' }}</td>
-                                  <td class="py-1.5 pr-3 text-gray-600">{{ o.duracaoHoras ? (o.duracaoHoras + 'h') : '—' }}</td>
-                                  <td class="py-1.5 pr-3">
-                                    <div class="flex gap-1">
-                                      @for (dia of bloco.dias; track dia.data) {
-                                        <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded"
-                                          [class]="o.diasPrevistos.includes(dia.data) ? 'bg-blue-100 text-blue-700' : 'bg-gray-50 text-gray-300'">
-                                          {{ dia.label }}
-                                        </span>
-                                      }
-                                    </div>
+                                  <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">
+                                    {{ o.equipamento || '—' }}
+                                    @if (o.duracaoHoras) { <span class="text-gray-400">· {{ o.duracaoHoras }}h</span> }
                                   </td>
+                                  <td class="py-1.5 pr-3 text-gray-600 text-xs">{{ diasResumo(o, bloco.dias) }}</td>
                                   <td class="py-1.5 pr-3">
                                     @if (o.tipo === 'ordem') {
                                       <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">{{ o.status }}</span>
@@ -787,10 +779,8 @@
                               <tr class="text-left text-xs text-gray-500 uppercase">
                                 <th class="py-1 pr-3">OS</th>
                                 <th class="py-1 pr-3">Descrição</th>
-                                <th class="py-1 pr-3">Equipamento</th>
-                                <th class="py-1 pr-3">Área</th>
                                 <th class="py-1 pr-3">Técnico</th>
-                                <th class="py-1 pr-3">Duração</th>
+                                <th class="py-1 pr-3">Equipamento</th>
                                 <th class="py-1 pr-3">Status</th>
                                 <th class="py-1 pr-3"></th>
                               </tr>
@@ -798,22 +788,25 @@
                             <tbody class="divide-y divide-slate-100">
                               @for (o of dia.ordens; track o.id) {
                                 <tr [class]="linhaClasse(o.tipo)">
-                                  <td class="py-1.5 pr-3">
-                                    @if (o.tipo !== 'ordem') {
-                                      <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
-                                    } @else if (o.numeroOs) {
-                                      <span class="text-gray-600">{{ o.numeroOs }}</span>
-                                    } @else if (o.semOs) {
-                                      <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">SEM OS</span>
-                                    } @else {
-                                      <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">CRIAR OS</span>
-                                    }
-                                    @if (statusExecucao(o, bloco.diasIso); as exec) {
-                                      <div class="text-[10px] font-semibold px-1.5 py-0.5 rounded mt-0.5 inline-block" [class]="exec.class" [title]="exec.title">{{ exec.label }}</div>
-                                    }
+                                  <td class="py-1.5 pr-3 whitespace-nowrap">
+                                    <span class="inline-flex items-center gap-1">
+                                      @if (o.tipo !== 'ordem') {
+                                        <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
+                                      } @else if (o.numeroOs) {
+                                        <span class="text-gray-600">{{ o.numeroOs }}</span>
+                                      } @else if (o.semOs) {
+                                        <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">SEM OS</span>
+                                      } @else {
+                                        <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">CRIAR OS</span>
+                                      }
+                                      @if (statusExecucao(o, bloco.diasIso); as exec) {
+                                        <span class="inline-block w-2 h-2 rounded-full flex-shrink-0" [class]="exec.dot" [title]="exec.title"></span>
+                                      }
+                                    </span>
                                   </td>
                                   <td class="py-1.5 pr-3 text-gray-800 max-w-xs">
                                     <span class="block truncate" [title]="o.descricao">{{ o.descricao }}</span>
+                                    <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-50 text-slate-500">{{ areaLabel[o.area] }}</span>
                                     @if (o.tipoServico) {
                                       <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoServicoBadgeClass(o.tipoServico)">{{ o.tipoServico }}</span>
                                     }
@@ -821,10 +814,11 @@
                                       <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="lotoBadgeClass(o.loto)">{{ o.loto }}</span>
                                     }
                                   </td>
-                                  <td class="py-1.5 pr-3 text-gray-600">{{ o.equipamento || '—' }}</td>
-                                  <td class="py-1.5 pr-3 text-gray-600">{{ areaLabel[o.area] }}</td>
                                   <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
-                                  <td class="py-1.5 pr-3 text-gray-600">{{ o.duracaoHoras ? (o.duracaoHoras + 'h') : '—' }}</td>
+                                  <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">
+                                    {{ o.equipamento || '—' }}
+                                    @if (o.duracaoHoras) { <span class="text-gray-400">· {{ o.duracaoHoras }}h</span> }
+                                  </td>
                                   <td class="py-1.5 pr-3">
                                     @if (o.tipo === 'ordem') {
                                       <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">{{ o.status }}</span>
