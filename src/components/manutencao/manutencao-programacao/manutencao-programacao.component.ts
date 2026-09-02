@@ -340,6 +340,18 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     ) ?? null;
   }
 
+  // Folga já lançada pro técnico que toca algum dos dias informados — se ele está de
+  // folga, não deixa lançar mais nada (OS, treinamento, exame médico, outra folga)
+  // nesses dias. `idExcluir` evita a folga se auto-bloquear quando ela mesma está
+  // sendo editada.
+  private folgaNoIntervalo(tecnicoNome: string, diasIso: string[], idExcluir?: string | null): ManutencaoOrdem | null {
+    if (diasIso.length === 0) return null;
+    return this.manutencaoService.ordens().find(o =>
+      o.tipo === 'folga' && o.tecnicoNome === tecnicoNome && o.id !== idExcluir
+        && o.diasPrevistos.some(d => diasIso.includes(d)),
+    ) ?? null;
+  }
+
   private gruposCalc(lista: ManutencaoOrdem[], dias: { data: string; label: string }[]) {
     const porTecnico = new Map<string, ManutencaoOrdem[]>();
     for (const o of lista) {
@@ -1052,8 +1064,21 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.apoioTecnicoMatricula.set(colaborador?.matricula ?? '');
   }
 
+  // Mesmo bloqueio de férias/folga do formulário principal, aplicado ao técnico de
+  // apoio nos dias da OS de origem.
+  apoioTecnicoBloqueio = computed<{ motivo: string } | null>(() => {
+    const origem = this.apoioOrigem();
+    const nome = this.apoioTecnicoNome().trim();
+    if (!origem || !nome) return null;
+    const ferias = this.feriasNoIntervalo(nome, origem.diasPrevistos);
+    if (ferias) return { motivo: `${nome} está de férias de ${this.formatarDataBr(ferias.dataInicio)} a ${this.formatarDataBr(ferias.dataFim)}.` };
+    const folga = this.folgaNoIntervalo(nome, origem.diasPrevistos);
+    if (folga) return { motivo: `${nome} já está de folga em algum desses dias.` };
+    return null;
+  });
+
   canConfirmarApoio(): boolean {
-    return !this.isProcessando() && !!this.apoioOrigem() && !!this.apoioTecnicoNome().trim();
+    return !this.isProcessando() && !!this.apoioOrigem() && !!this.apoioTecnicoNome().trim() && !this.apoioTecnicoBloqueio();
   }
 
   async confirmarApoio(): Promise<void> {
@@ -1117,6 +1142,15 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return this.feriasNoIntervalo(nome, dias);
   });
 
+  // Mesma ideia pra folga: se o técnico já está de folga em algum dos dias marcados,
+  // bloqueia — não deixa empilhar OS/treinamento/exame médico em cima da folga.
+  formTecnicoFolga = computed<ManutencaoOrdem | null>(() => {
+    const nome = this.formTecnicoNome().trim();
+    const dias = this.formDiasSelecionados();
+    if (!nome || dias.length === 0) return null;
+    return this.folgaNoIntervalo(nome, dias, this.formIdEdicao());
+  });
+
   formatarDataBr(dataIso: string): string {
     const [ano, mes, dia] = dataIso.split('-');
     return `${dia}/${mes}/${ano}`;
@@ -1124,7 +1158,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   canConfirmarForm(): boolean {
     if (this.isProcessando() || !this.formTecnicoNome().trim()) return false;
-    if (this.formTecnicoFerias()) return false;
+    if (this.formTecnicoFerias() || this.formTecnicoFolga()) return false;
     if (this.formTipo() === 'ordem') {
       return !!this.formDescricao().trim() && !!this.formLoto();
     }
