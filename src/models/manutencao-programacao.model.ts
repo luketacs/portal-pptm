@@ -98,6 +98,18 @@ export interface OperadorEscalaApoio {
   equipe: 'A' | 'B' | 'C' | 'D';
 }
 
+// Período de férias de um técnico — diferente de Folga (semanal), dura várias
+// semanas. Usado pra avisar/bloquear lançamento de atividade pro técnico nesse
+// período. Só faz sentido pra Elétrica/Mecânica (Apoio programa por empresa).
+export interface FeriasTecnico {
+  id: string;
+  tecnicoNome: string;
+  tecnicoMatricula: string | null;
+  area: ManutencaoArea;
+  dataInicio: string; // ISO 'YYYY-MM-DD'
+  dataFim: string;    // ISO 'YYYY-MM-DD'
+}
+
 export interface EditarManutencaoOrdemRequest {
   tipo: ManutencaoTipo;
   area: ManutencaoArea;

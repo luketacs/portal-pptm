@@ -3,8 +3,8 @@ import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
 import {
-  ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest, EquipeApoioItem, ManutencaoArea,
-  ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, SigmaBacklogItem,
+  ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest, EquipeApoioItem, FeriasTecnico,
+  ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, SigmaBacklogItem,
 } from '../models/manutencao-programacao.model';
 
 interface ManutencaoOrdemRow {
@@ -81,6 +81,11 @@ export class ManutencaoProgramacaoService {
   equipesApoio = this._equipesApoio.asReadonly();
   private _escalaApoio = signal<OperadorEscalaApoio[]>([]);
   escalaApoio = this._escalaApoio.asReadonly();
+
+  // Períodos de férias por técnico (Elétrica/Mecânica) — usado pra avisar/bloquear
+  // lançamento de atividade dentro do período.
+  private _ferias = signal<FeriasTecnico[]>([]);
+  ferias = this._ferias.asReadonly();
 
   constructor(
     private supabaseService: SupabaseService,
@@ -388,5 +393,79 @@ export class ManutencaoProgramacaoService {
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) throw new Error('Não foi possível excluir (permissão do banco).');
     await this.loadApoioCadastros();
+  }
+
+  // ── Férias ────────────────────────────────────────────────────────────────
+
+  async loadFerias(): Promise<void> {
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_ferias')
+      .select('id, tecnico_nome, tecnico_matricula, area, data_inicio, data_fim')
+      .order('data_inicio');
+    if (error) throw new Error(error.message);
+    this._ferias.set((data ?? []).map(r => ({
+      id: r.id,
+      tecnicoNome: r.tecnico_nome,
+      tecnicoMatricula: r.tecnico_matricula,
+      area: r.area as ManutencaoArea,
+      dataInicio: r.data_inicio,
+      dataFim: r.data_fim,
+    })));
+  }
+
+  async criarFerias(params: {
+    tecnicoNome: string; tecnicoMatricula: string | null; area: ManutencaoArea; dataInicio: string; dataFim: string;
+  }): Promise<void> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+    if (!params.tecnicoNome.trim()) throw new Error('Selecione o técnico.');
+    if (!params.dataInicio || !params.dataFim) throw new Error('Informe início e fim das férias.');
+    if (params.dataFim < params.dataInicio) throw new Error('A data final não pode ser antes da inicial.');
+
+    const { error } = await this.supabaseService.client.from('manutencao_ferias').insert({
+      tecnico_nome: params.tecnicoNome,
+      tecnico_matricula: params.tecnicoMatricula,
+      area: params.area,
+      data_inicio: params.dataInicio,
+      data_fim: params.dataFim,
+      criado_por_id: user.id,
+      criado_por_nome: user.name,
+    });
+    if (error) throw new Error(error.message);
+
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'manutencao_ferias_criada',
+      resource_type: 'manutencao_ferias',
+      description: `${user.name} cadastrou férias de ${params.tecnicoNome} (${params.dataInicio} a ${params.dataFim})`,
+    });
+
+    await this.loadFerias();
+  }
+
+  async excluirFerias(id: string): Promise<void> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+
+    const item = this._ferias().find(f => f.id === id);
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_ferias')
+      .delete()
+      .eq('id', id)
+      .select('id');
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) throw new Error('Não foi possível excluir (permissão do banco).');
+
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'manutencao_ferias_excluida',
+      resource_type: 'manutencao_ferias',
+      resource_id: id,
+      description: `${user.name} excluiu férias de ${item?.tecnicoNome ?? ''}`,
+    });
+
+    await this.loadFerias();
   }
 }

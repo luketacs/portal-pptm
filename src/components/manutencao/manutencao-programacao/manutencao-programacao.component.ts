@@ -8,7 +8,7 @@ import { NotificationService } from '../../../services/toast.service';
 import { ApontamentosService } from '../../../services/apontamentos.service';
 import { ExcelExportService, ProgramacaoSemanalGrupo } from '../../../services/excel-export.service';
 import {
-  ConsultaSigmaResultado, EquipeApoioItem, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo,
+  ConsultaSigmaResultado, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo,
   OperadorEscalaApoio, SigmaBacklogItem,
 } from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, TURNO_LABEL, turnoNoDia } from '../../../utils/escala-apoio';
@@ -260,10 +260,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   }
 
   // Filtros
+  // 8 semanas à frente (cobre o horizonte de 4 semanas partindo de qualquer uma
+  // delas) + a atual + 4 semanas passadas pra referência/histórico.
   readonly semanas = (() => {
     const result: { value: string; label: string }[] = [];
     const hojeSegunda = segundaFeiraDe(new Date());
-    for (let i = -1; i < 10; i++) {
+    for (let i = -8; i < 5; i++) {
       const inicio = new Date(hojeSegunda);
       inicio.setDate(inicio.getDate() - i * 7);
       const fim = new Date(inicio);
@@ -319,6 +321,15 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return o.diasPrevistos.length > 0 ? [...o.diasPrevistos].sort()[0] : '9999-12-31';
   }
 
+  // Período de férias do técnico que toca algum dos dias informados (a semana em
+  // exibição, por ex.) — `null` se não tiver nenhuma férias cadastrada nesse período.
+  private feriasNoIntervalo(tecnicoNome: string, diasIso: string[]): FeriasTecnico | null {
+    if (diasIso.length === 0) return null;
+    return this.manutencaoService.ferias().find(f =>
+      f.tecnicoNome === tecnicoNome && diasIso.some(d => d >= f.dataInicio && d <= f.dataFim),
+    ) ?? null;
+  }
+
   private gruposCalc(lista: ManutencaoOrdem[], dias: { data: string; label: string }[]) {
     const porTecnico = new Map<string, ManutencaoOrdem[]>();
     for (const o of lista) {
@@ -326,13 +337,24 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       lista2.push(o);
       porTecnico.set(o.tecnicoNome, lista2);
     }
+    const diasIso = dias.map(d => d.data);
+    // Técnico de férias na semana aparece mesmo sem nenhum lançamento — o objetivo é
+    // justamente avisar antes de alguém tentar programar algo pra ele.
+    const area = this.areaFiltro();
+    for (const f of this.manutencaoService.ferias()) {
+      if (area !== 'todos' && f.area !== area) continue;
+      if (porTecnico.has(f.tecnicoNome)) continue;
+      if (!diasIso.some(d => d >= f.dataInicio && d <= f.dataFim)) continue;
+      porTecnico.set(f.tecnicoNome, []);
+    }
     return Array.from(porTecnico.entries())
       .map(([tecnico, ordens]) => {
         const ordensOrdenadas = [...ordens].sort((a, b) => this.primeiroDia(a).localeCompare(this.primeiroDia(b)));
         const totalHoras = somaHoras(ordensOrdenadas);
         const capacidade = this.capacidadeSemana(tecnico, ordensOrdenadas, dias);
         const saldo = capacidade !== null ? parseFloat((capacidade - totalHoras).toFixed(2)) : null;
-        return { tecnico, ordens: ordensOrdenadas, totalHoras, capacidade, saldo };
+        const ferias = this.feriasNoIntervalo(tecnico, diasIso);
+        return { tecnico, ordens: ordensOrdenadas, totalHoras, capacidade, saldo, ferias };
       })
       .sort((a, b) => a.tecnico.localeCompare(b.tecnico));
   }
@@ -479,6 +501,83 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       }));
   }
   escalaDaSemana = computed(() => this.escalaDaSemanaCalc(this.diasDaSemanaAtual()));
+
+  // ── Férias (Admin): período de férias por técnico, pra avisar/bloquear
+  // lançamento de atividade nesse período. Só faz sentido pra Elétrica/Mecânica.
+  readonly ferias = this.manutencaoService.ferias;
+  feriasAberto = signal(false);
+  feriasTecnicoNome = signal('');
+  feriasTecnicoMatricula = signal('');
+  feriasArea = signal<ManutencaoArea>('ELETRICA');
+  feriasDataInicio = signal('');
+  feriasDataFim = signal('');
+
+  tecnicosParaFerias = computed(() => this.tecnicosPorArea(this.feriasArea()));
+
+  abrirFerias(): void {
+    this.feriasArea.set(this.areaFixa === 'MECANICA' ? 'MECANICA' : 'ELETRICA');
+    this.feriasTecnicoNome.set('');
+    this.feriasTecnicoMatricula.set('');
+    this.feriasDataInicio.set('');
+    this.feriasDataFim.set('');
+    this.feriasAberto.set(true);
+  }
+
+  fecharFerias(): void {
+    this.feriasAberto.set(false);
+  }
+
+  onFeriasAreaSelected(area: ManutencaoArea): void {
+    this.feriasArea.set(area);
+    this.feriasTecnicoNome.set('');
+    this.feriasTecnicoMatricula.set('');
+  }
+
+  onFeriasTecnicoSelected(nome: string): void {
+    this.feriasTecnicoNome.set(nome);
+    const colaborador = this.tecnicosParaFerias().find(c => c.nome === nome);
+    this.feriasTecnicoMatricula.set(colaborador?.matricula ?? '');
+  }
+
+  canConfirmarFerias(): boolean {
+    return !this.isProcessando() && !!this.feriasTecnicoNome().trim()
+      && !!this.feriasDataInicio() && !!this.feriasDataFim() && this.feriasDataFim() >= this.feriasDataInicio();
+  }
+
+  async adicionarFerias(): Promise<void> {
+    if (!this.canConfirmarFerias()) return;
+    this.isProcessando.set(true);
+    try {
+      await this.manutencaoService.criarFerias({
+        tecnicoNome: this.feriasTecnicoNome(),
+        tecnicoMatricula: this.feriasTecnicoMatricula() || null,
+        area: this.feriasArea(),
+        dataInicio: this.feriasDataInicio(),
+        dataFim: this.feriasDataFim(),
+      });
+      this.notificationService.showSuccess('Férias cadastradas.');
+      this.feriasTecnicoNome.set('');
+      this.feriasTecnicoMatricula.set('');
+      this.feriasDataInicio.set('');
+      this.feriasDataFim.set('');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao cadastrar férias.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  async removerFerias(item: FeriasTecnico): Promise<void> {
+    if (this.isProcessando() || !confirm(`Remover férias de "${item.tecnicoNome}"?`)) return;
+    this.isProcessando.set(true);
+    try {
+      await this.manutencaoService.excluirFerias(item.id);
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover férias.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
 
   // ── Gerenciar Apoio (Admin): cadastro de equipes/empresas e da escala de turno ──
   gerenciarApoioAberto = signal(false);
@@ -780,6 +879,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       await this.apontamentosService.loadColaboradores();
       await this.manutencaoService.loadEquipamentos();
       if (this.areaFixa === 'APOIO') await this.carregarDadosApoio();
+      else await this.manutencaoService.loadFerias();
     } catch {
       this.errorMessage.set('Erro ao carregar a programação de manutenção.');
     }
@@ -998,8 +1098,23 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return this.formDescricao().trim() || TIPO_LABEL[this.formTipo()];
   }
 
+  // Avisa/bloqueia se o técnico escolhido no formulário está de férias em algum dos
+  // dias marcados — não deixa lançar nada pra ele nesse período.
+  formTecnicoFerias = computed<FeriasTecnico | null>(() => {
+    const nome = this.formTecnicoNome().trim();
+    const dias = this.formDiasSelecionados();
+    if (!nome || dias.length === 0) return null;
+    return this.feriasNoIntervalo(nome, dias);
+  });
+
+  formatarDataBr(dataIso: string): string {
+    const [ano, mes, dia] = dataIso.split('-');
+    return `${dia}/${mes}/${ano}`;
+  }
+
   canConfirmarForm(): boolean {
     if (this.isProcessando() || !this.formTecnicoNome().trim()) return false;
+    if (this.formTecnicoFerias()) return false;
     if (this.formTipo() === 'ordem') {
       return !!this.formDescricao().trim() && !!this.formLoto();
     }
