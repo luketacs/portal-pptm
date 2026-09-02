@@ -829,6 +829,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // se o SIGMA estiver fora do ar, a tela continua funcionando normalmente, só sem esse
   // preenchimento/validação.
   sigmaPorOs = signal<Record<string, ConsultaSigmaResultado>>({});
+  sigmaAtualizando = signal(false);
 
   private numerosOsVisiveis = computed(() => {
     const ordens = this.horizonteAtivo()
@@ -869,12 +870,22 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     });
   }
 
+  // Botão "Atualizar" do card de Atendimento — refaz a consulta ao SIGMA sob demanda,
+  // pra quem quiser conferir uma baixa recém-lançada sem esperar trocar de filtro.
+  atualizarAtendimento(): void {
+    const numeros = this.numerosOsVisiveis();
+    if (numeros.length > 0) this.buscarExecucaoSigma(numeros);
+  }
+
   private async buscarExecucaoSigma(numeros: string[]): Promise<void> {
+    this.sigmaAtualizando.set(true);
     try {
       const resultado = await this.manutencaoService.consultarOrdensSigma(numeros);
       this.sigmaPorOs.update(atual => ({ ...atual, ...resultado }));
     } catch {
       // Consulta best-effort — falha do SIGMA não deve travar a tela de programação.
+    } finally {
+      this.sigmaAtualizando.set(false);
     }
   }
 
@@ -913,6 +924,31 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       return { label: o.status, class: this.statusBadgeClass(o.status) };
     }
     return this.statusExecucao(o, diasSemanaOverride);
+  }
+
+  // KPI "Atendimento da programação" — % das OS da semana filtrada que já foram
+  // apontadas (executadas) no SIGMA dentro da própria semana. Só entra na conta quem dá
+  // pra rastrear (tem número de OS e o SIGMA já respondeu); lançamentos sem OS ficam de
+  // fora do percentual (não tem como saber se foram feitos), mas aparecem à parte.
+  atendimentoProgramacao = computed(() => {
+    const ordens = this.listaFiltrada().filter(o => o.tipo === 'ordem');
+    let executadas = 0;
+    let rastreaveis = 0;
+    for (const o of ordens) {
+      const exec = this.statusExecucao(o);
+      if (!exec) continue;
+      rastreaveis++;
+      if (exec.label === 'Executada') executadas++;
+    }
+    const percentual = rastreaveis > 0 ? Math.round((executadas / rastreaveis) * 100) : 0;
+    return { executadas, rastreaveis, totalOrdens: ordens.length, percentual };
+  });
+
+  gaugeCorClass(at: { percentual: number; rastreaveis: number }): string {
+    if (at.rastreaveis === 0) return 'text-slate-200';
+    if (at.percentual >= 80) return 'text-green-500';
+    if (at.percentual >= 50) return 'text-amber-500';
+    return 'text-red-500';
   }
 
   // "Dias" em texto compacto (ex.: "SEG, QUA, SEX") em vez das 7 pastilhas — mesma
