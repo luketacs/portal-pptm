@@ -810,6 +810,19 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   tecnicosDaAreaForm = computed(() => this.tecnicosPorArea(this.formArea()));
 
+  // Sugestões pro campo "Recursos" — outro técnico ajudando (de qualquer área,
+  // Elétrica ou Mecânica — a ajuda não precisa ser do mesmo time da OS) ou um
+  // recurso especial usado na atividade. Datalist: sugere, mas continua aceitando
+  // texto livre pra qualquer outra coisa.
+  private readonly recursosEquipamentoOpcoes = ['MUNCK', 'GUINDASTE', 'ANDAIME'];
+
+  recursosOpcoes = computed(() => {
+    const nomesTecnicos = this.todosTecnicos()
+      .map(t => t.nome)
+      .filter(nome => nome !== this.formTecnicoNome());
+    return [...nomesTecnicos, ...this.recursosEquipamentoOpcoes];
+  });
+
   // ── Integração com o SIGMA (mesmos links que a planilha "Fechamento Semanal.2"
   // usa via Power Query) — preenche a descrição sozinha ao informar o número da OS, e
   // confere se ela já foi apontada (executada) dentro da semana programada. Best-effort:
@@ -1248,12 +1261,51 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           observacoes: this.formObservacoes().trim() || undefined,
         });
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} adicionada à programação.`);
+        if (ehOrdem) await this.criarApoioAndaimeSeNecessario();
       }
       this.fecharForm();
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao salvar OS.');
     } finally {
       this.isProcessando.set(false);
+    }
+  }
+
+  // Empresa que executa serviço de andaime no Apoio (cadastro de equipes, ver
+  // "Gerenciar Apoio") — precisa bater com o nome exato lá cadastrado.
+  private readonly ANDAIMES_TECNICO_APOIO = 'TOP ANDAIMES';
+
+  // Se o recurso usado for andaime, monta automaticamente uma OS equivalente na
+  // programação do Apoio (empresa TOP ANDAIMES) — evita esquecer de programar o
+  // contratado responsável pelo andaime junto com o serviço de Elétrica/Mecânica.
+  // Só roda na criação (não na edição, pra não duplicar toda vez que a OS original
+  // for reaberta e salva de novo).
+  private async criarApoioAndaimeSeNecessario(): Promise<void> {
+    if (this.formArea() === 'APOIO') return;
+    if (!this.formRecursos().toUpperCase().includes('ANDAIME')) return;
+    try {
+      const numero = this.formNumeroOs().trim();
+      await this.manutencaoService.criarOrdem({
+        tipo: 'ordem',
+        area: 'APOIO',
+        semanaInicio: this.semanaFiltro(),
+        numeroOs: numero || undefined,
+        semOs: this.formSemOs(),
+        descricao: this.descricaoParaEnvio(),
+        equipamento: this.formEquipamento().trim() || undefined,
+        recursos: this.formRecursos().trim() || undefined,
+        loto: this.formLoto().trim() || undefined,
+        areaAtuacao: this.formAreaAtuacao().trim() || undefined,
+        duracaoHoras: this.formDuracaoHoras() ?? undefined,
+        tipoServico: this.formTipoServico().trim() || undefined,
+        tecnicoNome: this.ANDAIMES_TECNICO_APOIO,
+        diasPrevistos: this.formDiasSelecionados(),
+        status: 'PEND',
+        observacoes: `Apoio automático (andaime) — vinculado à OS de ${this.areaLabel[this.formArea()]}${numero ? ' nº ' + numero : ''}.`,
+      });
+      this.notificationService.showSuccess('Também programado pra TOP ANDAIMES (Apoio).');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao programar apoio de andaime.');
     }
   }
 

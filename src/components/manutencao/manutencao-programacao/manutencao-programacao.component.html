@@ -991,9 +991,15 @@
 
         <div class="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Recursos (ajudante)</label>
-            <input type="text" [ngModel]="formRecursos()" (ngModelChange)="formRecursos.set($event)"
+            <label class="block text-sm font-medium text-slate-700 mb-1">Recursos (ajudante/equipamento)</label>
+            <input type="text" [ngModel]="formRecursos()" (ngModelChange)="formRecursos.set($event)" list="recursos-opcoes"
+              placeholder="Ex.: outro técnico, MUNCK, GUINDASTE, ANDAIME..."
               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <datalist id="recursos-opcoes">
+              @for (op of recursosOpcoes(); track op) {
+                <option [value]="op"></option>
+              }
+            </datalist>
           </div>
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">LOTO <span class="text-red-500">*</span></label>
