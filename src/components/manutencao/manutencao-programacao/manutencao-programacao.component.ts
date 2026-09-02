@@ -663,6 +663,18 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Não é tempo real: o proxy cacheia a exportação do SIGMA por até ~10min pra não
   // rebaixar um arquivo de vários MB a cada clique — por isso busca de novo toda vez
   // que o painel é aberto (não só na primeira vez) e mostra o horário da última busca.
+  // Menu "Mais ações" no cabeçalho — agrupa Backlog/Gerenciar Apoio/Feriado/Férias
+  // pra não empilhar um botão por ação na barra de topo.
+  menuAcoesAberto = signal(false);
+
+  // Menu ⋯ de ações por linha (+ Apoio/Editar/Excluir) — só um aberto por vez,
+  // guardado pelo id da ordem.
+  linhaMenuAberta = signal<string | null>(null);
+
+  toggleLinhaMenu(id: string): void {
+    this.linhaMenuAberta.update(atual => atual === id ? null : id);
+  }
+
   backlogAberto = signal(false);
   backlogCarregando = signal(false);
   backlogErro = signal('');

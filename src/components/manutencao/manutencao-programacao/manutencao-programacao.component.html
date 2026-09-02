@@ -11,15 +11,47 @@
       </p>
     </div>
     <div class="flex items-center gap-2 flex-shrink-0">
-      @if (areaFixa && areaFixa !== 'APOIO') {
-        <button (click)="toggleBacklog()" title="OS abertas no SIGMA que ainda não foram lançadas na programação"
-          class="inline-flex items-center gap-2 bg-white text-slate-600 text-sm font-semibold py-2.5 px-4 rounded-lg border border-slate-300 hover:bg-slate-50 transition">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-          Backlog do SIGMA
-          @if (backlogFiltrado().length > 0) {
-            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">{{ backlogFiltrado().length }}</span>
+      @if ((areaFixa && areaFixa !== 'APOIO') || isAdmin()) {
+        <div class="relative">
+          <button (click)="menuAcoesAberto.set(!menuAcoesAberto())"
+            class="inline-flex items-center gap-2 bg-white text-slate-600 text-sm font-semibold py-2.5 px-4 rounded-lg border border-slate-300 hover:bg-slate-50 transition">
+            Mais ações
+            @if (areaFixa && areaFixa !== 'APOIO' && backlogFiltrado().length > 0) {
+              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">{{ backlogFiltrado().length }}</span>
+            }
+            <svg class="h-3.5 w-3.5 text-gray-400 transition-transform" [class.rotate-180]="menuAcoesAberto()" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /></svg>
+          </button>
+          @if (menuAcoesAberto()) {
+            <div class="fixed inset-0 z-40" (click)="menuAcoesAberto.set(false)"></div>
+            <div class="absolute right-0 mt-2 w-60 bg-white rounded-lg shadow-lg border border-slate-200 z-50 py-1">
+              @if (areaFixa && areaFixa !== 'APOIO') {
+                <button (click)="toggleBacklog(); menuAcoesAberto.set(false)"
+                  class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between gap-2">
+                  <span>Backlog do SIGMA</span>
+                  @if (backlogFiltrado().length > 0) {
+                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">{{ backlogFiltrado().length }}</span>
+                  }
+                </button>
+              }
+              @if (isAdmin() && areaFixa === 'APOIO') {
+                <button (click)="gerenciarApoioAberto.set(true); menuAcoesAberto.set(false)"
+                  class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                  Gerenciar Apoio
+                </button>
+              }
+              @if (isAdmin() && areaFixa !== 'APOIO') {
+                <button (click)="abrirFeriado(); menuAcoesAberto.set(false)"
+                  class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                  Feriado
+                </button>
+                <button (click)="abrirFerias(); menuAcoesAberto.set(false)"
+                  class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                  Férias
+                </button>
+              }
+            </div>
           }
-        </button>
+        </div>
       }
       <button (click)="exportarSemana()" [disabled]="exportandoSemana()" title="Exportar/imprimir a programação da semana selecionada"
         class="inline-flex items-center gap-2 bg-white text-slate-600 text-sm font-semibold py-2.5 px-4 rounded-lg border border-slate-300 hover:bg-slate-50 transition disabled:opacity-50">
@@ -33,25 +65,6 @@
         }
         Exportar
       </button>
-      @if (isAdmin() && areaFixa === 'APOIO') {
-        <button (click)="gerenciarApoioAberto.set(true)" title="Cadastro de equipes/empresas e da escala de turno"
-          class="inline-flex items-center gap-2 bg-white text-slate-600 text-sm font-semibold py-2.5 px-4 rounded-lg border border-slate-300 hover:bg-slate-50 transition">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-          Gerenciar Apoio
-        </button>
-      }
-      @if (isAdmin() && areaFixa !== 'APOIO') {
-        <button (click)="abrirFeriado()" title="Lança folga pra toda a equipe (Elétrica + Mecânica) de uma vez"
-          class="inline-flex items-center gap-2 bg-white text-slate-600 text-sm font-semibold py-2.5 px-4 rounded-lg border border-slate-300 hover:bg-slate-50 transition">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-          Feriado
-        </button>
-        <button (click)="abrirFerias()" title="Cadastra o período de férias de um técnico"
-          class="inline-flex items-center gap-2 bg-white text-slate-600 text-sm font-semibold py-2.5 px-4 rounded-lg border border-slate-300 hover:bg-slate-50 transition">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-          Férias
-        </button>
-      }
       @if (isAdmin()) {
         <button (click)="abrirCriar()"
           class="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-semibold py-2.5 px-4 rounded-lg hover:bg-blue-700 transition">
@@ -314,26 +327,23 @@
         <div class="space-y-2">
           @for (grupo of grupos(); track grupo.tecnico) {
             <div class="app-card p-3" [class.ring-2]="!!grupo.ferias" [class.ring-teal-300]="!!grupo.ferias">
-              <button type="button" (click)="toggleGrupo('tec:' + grupo.tecnico)" class="w-full flex items-center justify-between gap-2 text-left">
-                <div class="flex items-center gap-2">
+              <button type="button" (click)="toggleGrupo('tec:' + grupo.tecnico)" class="w-full flex flex-wrap items-center justify-between gap-2 text-left">
+                <div class="flex items-center gap-2 min-w-0">
                   <svg class="h-4 w-4 text-gray-400 transition-transform flex-shrink-0" [class.rotate-90]="isGrupoExpandido('tec:' + grupo.tecnico)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
-                  <h2 class="text-sm font-bold text-gray-800">{{ grupo.tecnico }}</h2>
+                  <h2 class="text-sm font-bold text-gray-800 truncate">{{ grupo.tecnico }}</h2>
                   @if (grupo.ferias; as fer) {
-                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700" [title]="'Férias de ' + formatarDataBr(fer.dataInicio) + ' a ' + formatarDataBr(fer.dataFim)">
+                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 flex-shrink-0" [title]="'Férias de ' + formatarDataBr(fer.dataInicio) + ' a ' + formatarDataBr(fer.dataFim)">
                       Férias até {{ formatarDataBr(fer.dataFim) }}
                     </span>
                   }
                 </div>
-                <div class="flex items-center gap-2 flex-shrink-0">
-                  @if (grupo.capacidade !== null) {
-                    <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-                      [class]="grupo.saldo! < 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'"
-                      [title]="grupo.saldo! < 0 ? 'Alocado acima da capacidade da semana' : 'Alocado dentro da capacidade da semana'">
-                      {{ grupo.totalHoras }}h / {{ grupo.capacidade }}h
-                    </span>
-                  }
-                  <span class="text-xs text-gray-400">{{ grupo.ordens.length }} OS @if (grupo.totalHoras > 0 && grupo.capacidade === null) { · {{ grupo.totalHoras }}h }</span>
-                </div>
+                <span class="text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                  [class]="grupo.capacidade !== null && grupo.saldo! < 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'"
+                  [title]="grupo.capacidade !== null ? (grupo.saldo! < 0 ? 'Alocado acima da capacidade da semana' : 'Alocado dentro da capacidade da semana') : ''">
+                  {{ grupo.ordens.length }} OS
+                  @if (grupo.capacidade !== null) { · {{ grupo.totalHoras }}h/{{ grupo.capacidade }}h }
+                  @else if (grupo.totalHoras > 0) { · {{ grupo.totalHoras }}h }
+                </span>
               </button>
               @if (isGrupoExpandido('tec:' + grupo.tecnico)) {
                 <div class="overflow-x-auto mt-2">
@@ -388,17 +398,22 @@
                               </span>
                             }
                           </td>
-                          <td class="py-1.5 pr-3 whitespace-nowrap">
+                          <td class="py-1.5 pr-3 whitespace-nowrap text-right">
                             @if (isAdmin()) {
-                              <div class="flex items-center gap-1.5">
-                                @if (o.tipo === 'ordem') {
-                                  <button (click)="abrirApoio(o)" title="Adicionar outro técnico de apoio nessa OS"
-                                    class="text-xs font-semibold px-2 py-1 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition">+ Apoio</button>
+                              <div class="relative inline-block">
+                                <button (click)="toggleLinhaMenu(o.id)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
+                                  <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                                </button>
+                                @if (linhaMenuAberta() === o.id) {
+                                  <div class="fixed inset-0 z-40" (click)="linhaMenuAberta.set(null)"></div>
+                                  <div class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 z-50 py-1">
+                                    @if (o.tipo === 'ordem') {
+                                      <button (click)="abrirApoio(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-slate-50">+ Apoio</button>
+                                    }
+                                    <button (click)="abrirEditar(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Editar</button>
+                                    <button (click)="excluir(o); linhaMenuAberta.set(null)" [disabled]="isProcessando()" class="w-full text-left px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-slate-50 disabled:opacity-50">Excluir</button>
+                                  </div>
                                 }
-                                <button (click)="abrirEditar(o)" title="Editar"
-                                  class="text-xs font-semibold px-2 py-1 rounded-lg bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 transition">Editar</button>
-                                <button (click)="excluir(o)" [disabled]="isProcessando()" title="Excluir"
-                                  class="text-xs font-semibold px-2 py-1 rounded-lg bg-gray-50 text-gray-500 border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition disabled:opacity-50">Excluir</button>
                               </div>
                             }
                           </td>
@@ -486,17 +501,22 @@
                               </span>
                             }
                           </td>
-                          <td class="py-1.5 pr-3 whitespace-nowrap">
+                          <td class="py-1.5 pr-3 whitespace-nowrap text-right">
                             @if (isAdmin()) {
-                              <div class="flex items-center gap-1.5">
-                                @if (o.tipo === 'ordem') {
-                                  <button (click)="abrirApoio(o)" title="Adicionar outro técnico de apoio nessa OS"
-                                    class="text-xs font-semibold px-2 py-1 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition">+ Apoio</button>
+                              <div class="relative inline-block">
+                                <button (click)="toggleLinhaMenu(o.id)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
+                                  <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                                </button>
+                                @if (linhaMenuAberta() === o.id) {
+                                  <div class="fixed inset-0 z-40" (click)="linhaMenuAberta.set(null)"></div>
+                                  <div class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 z-50 py-1">
+                                    @if (o.tipo === 'ordem') {
+                                      <button (click)="abrirApoio(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-slate-50">+ Apoio</button>
+                                    }
+                                    <button (click)="abrirEditar(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Editar</button>
+                                    <button (click)="excluir(o); linhaMenuAberta.set(null)" [disabled]="isProcessando()" class="w-full text-left px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-slate-50 disabled:opacity-50">Excluir</button>
+                                  </div>
                                 }
-                                <button (click)="abrirEditar(o)" title="Editar"
-                                  class="text-xs font-semibold px-2 py-1 rounded-lg bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 transition">Editar</button>
-                                <button (click)="excluir(o)" [disabled]="isProcessando()" title="Excluir"
-                                  class="text-xs font-semibold px-2 py-1 rounded-lg bg-gray-50 text-gray-500 border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition disabled:opacity-50">Excluir</button>
                               </div>
                             }
                           </td>
@@ -569,17 +589,22 @@
                             <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">{{ o.status }}</span>
                           }
                         </td>
-                        <td class="py-1.5 pr-3 whitespace-nowrap">
+                        <td class="py-1.5 pr-3 whitespace-nowrap text-right">
                           @if (isAdmin()) {
-                            <div class="flex items-center gap-1.5">
-                              @if (o.tipo === 'ordem') {
-                                <button (click)="abrirApoio(o)" title="Adicionar outro técnico de apoio nessa OS"
-                                  class="text-xs font-semibold px-2 py-1 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition">+ Apoio</button>
+                            <div class="relative inline-block">
+                              <button (click)="toggleLinhaMenu(o.id)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
+                                <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                              </button>
+                              @if (linhaMenuAberta() === o.id) {
+                                <div class="fixed inset-0 z-40" (click)="linhaMenuAberta.set(null)"></div>
+                                <div class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 z-50 py-1">
+                                  @if (o.tipo === 'ordem') {
+                                    <button (click)="abrirApoio(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-slate-50">+ Apoio</button>
+                                  }
+                                  <button (click)="abrirEditar(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Editar</button>
+                                  <button (click)="excluir(o); linhaMenuAberta.set(null)" [disabled]="isProcessando()" class="w-full text-left px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-slate-50 disabled:opacity-50">Excluir</button>
+                                </div>
                               }
-                              <button (click)="abrirEditar(o)" title="Editar"
-                                class="text-xs font-semibold px-2 py-1 rounded-lg bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 transition">Editar</button>
-                              <button (click)="excluir(o)" [disabled]="isProcessando()" title="Excluir"
-                                class="text-xs font-semibold px-2 py-1 rounded-lg bg-gray-50 text-gray-500 border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition disabled:opacity-50">Excluir</button>
                             </div>
                           }
                         </td>
@@ -681,23 +706,20 @@
                 <div class="space-y-2">
                   @for (grupo of bloco.grupos; track grupo.tecnico) {
                     <div class="app-card p-3" [class.ring-2]="!!grupo.ferias" [class.ring-teal-300]="!!grupo.ferias">
-                      <button type="button" (click)="toggleGrupo('h:' + bloco.semana + ':tec:' + grupo.tecnico)" class="w-full flex items-center justify-between gap-2 text-left">
-                        <div class="flex items-center gap-2">
+                      <button type="button" (click)="toggleGrupo('h:' + bloco.semana + ':tec:' + grupo.tecnico)" class="w-full flex flex-wrap items-center justify-between gap-2 text-left">
+                        <div class="flex items-center gap-2 min-w-0">
                           <svg class="h-4 w-4 text-gray-400 transition-transform flex-shrink-0" [class.rotate-90]="isGrupoExpandido('h:' + bloco.semana + ':tec:' + grupo.tecnico)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
-                          <h3 class="text-sm font-bold text-gray-800">{{ grupo.tecnico }}</h3>
+                          <h3 class="text-sm font-bold text-gray-800 truncate">{{ grupo.tecnico }}</h3>
                           @if (grupo.ferias; as fer) {
-                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700">Férias até {{ formatarDataBr(fer.dataFim) }}</span>
+                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 flex-shrink-0">Férias até {{ formatarDataBr(fer.dataFim) }}</span>
                           }
                         </div>
-                        <div class="flex items-center gap-2 flex-shrink-0">
-                          @if (grupo.capacidade !== null) {
-                            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-                              [class]="grupo.saldo! < 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'">
-                              {{ grupo.totalHoras }}h / {{ grupo.capacidade }}h
-                            </span>
-                          }
-                          <span class="text-xs text-gray-400">{{ grupo.ordens.length }} OS</span>
-                        </div>
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                          [class]="grupo.capacidade !== null && grupo.saldo! < 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'">
+                          {{ grupo.ordens.length }} OS
+                          @if (grupo.capacidade !== null) { · {{ grupo.totalHoras }}h/{{ grupo.capacidade }}h }
+                          @else if (grupo.totalHoras > 0) { · {{ grupo.totalHoras }}h }
+                        </span>
                       </button>
                       @if (isGrupoExpandido('h:' + bloco.semana + ':tec:' + grupo.tecnico)) {
                         <div class="overflow-x-auto mt-2">
@@ -750,17 +772,22 @@
                                       <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">{{ o.status }}</span>
                                     }
                                   </td>
-                                  <td class="py-1.5 pr-3 whitespace-nowrap">
+                                  <td class="py-1.5 pr-3 whitespace-nowrap text-right">
                                     @if (isAdmin()) {
-                                      <div class="flex items-center gap-1.5">
-                                        @if (o.tipo === 'ordem') {
-                                          <button (click)="abrirApoio(o)" title="Adicionar outro técnico de apoio nessa OS"
-                                            class="text-xs font-semibold px-2 py-1 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition">+ Apoio</button>
+                                      <div class="relative inline-block">
+                                        <button (click)="toggleLinhaMenu(o.id)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
+                                          <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                                        </button>
+                                        @if (linhaMenuAberta() === o.id) {
+                                          <div class="fixed inset-0 z-40" (click)="linhaMenuAberta.set(null)"></div>
+                                          <div class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 z-50 py-1">
+                                            @if (o.tipo === 'ordem') {
+                                              <button (click)="abrirApoio(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-slate-50">+ Apoio</button>
+                                            }
+                                            <button (click)="abrirEditar(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Editar</button>
+                                            <button (click)="excluir(o); linhaMenuAberta.set(null)" [disabled]="isProcessando()" class="w-full text-left px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-slate-50 disabled:opacity-50">Excluir</button>
+                                          </div>
                                         }
-                                        <button (click)="abrirEditar(o)" title="Editar"
-                                          class="text-xs font-semibold px-2 py-1 rounded-lg bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 transition">Editar</button>
-                                        <button (click)="excluir(o)" [disabled]="isProcessando()" title="Excluir"
-                                          class="text-xs font-semibold px-2 py-1 rounded-lg bg-gray-50 text-gray-500 border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition disabled:opacity-50">Excluir</button>
                                       </div>
                                     }
                                   </td>
@@ -844,17 +871,22 @@
                                       <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(o.status)">{{ o.status }}</span>
                                     }
                                   </td>
-                                  <td class="py-1.5 pr-3 whitespace-nowrap">
+                                  <td class="py-1.5 pr-3 whitespace-nowrap text-right">
                                     @if (isAdmin()) {
-                                      <div class="flex items-center gap-1.5">
-                                        @if (o.tipo === 'ordem') {
-                                          <button (click)="abrirApoio(o)" title="Adicionar outro técnico de apoio nessa OS"
-                                            class="text-xs font-semibold px-2 py-1 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition">+ Apoio</button>
+                                      <div class="relative inline-block">
+                                        <button (click)="toggleLinhaMenu(o.id)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
+                                          <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                                        </button>
+                                        @if (linhaMenuAberta() === o.id) {
+                                          <div class="fixed inset-0 z-40" (click)="linhaMenuAberta.set(null)"></div>
+                                          <div class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 z-50 py-1">
+                                            @if (o.tipo === 'ordem') {
+                                              <button (click)="abrirApoio(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-slate-50">+ Apoio</button>
+                                            }
+                                            <button (click)="abrirEditar(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Editar</button>
+                                            <button (click)="excluir(o); linhaMenuAberta.set(null)" [disabled]="isProcessando()" class="w-full text-left px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-slate-50 disabled:opacity-50">Excluir</button>
+                                          </div>
                                         }
-                                        <button (click)="abrirEditar(o)" title="Editar"
-                                          class="text-xs font-semibold px-2 py-1 rounded-lg bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 transition">Editar</button>
-                                        <button (click)="excluir(o)" [disabled]="isProcessando()" title="Excluir"
-                                          class="text-xs font-semibold px-2 py-1 rounded-lg bg-gray-50 text-gray-500 border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition disabled:opacity-50">Excluir</button>
                                       </div>
                                     }
                                   </td>
@@ -907,13 +939,19 @@
                                 <td class="py-1.5 pr-3 text-gray-800 max-w-xs"><span class="block truncate" [title]="o.descricao">{{ o.descricao }}</span></td>
                                 <td class="py-1.5 pr-3 text-gray-600">{{ areaLabel[o.area] }}</td>
                                 <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
-                                <td class="py-1.5 pr-3 whitespace-nowrap">
+                                <td class="py-1.5 pr-3 whitespace-nowrap text-right">
                                   @if (isAdmin()) {
-                                    <div class="flex items-center gap-1.5">
-                                      <button (click)="abrirEditar(o)" title="Editar"
-                                        class="text-xs font-semibold px-2 py-1 rounded-lg bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 transition">Editar</button>
-                                      <button (click)="excluir(o)" [disabled]="isProcessando()" title="Excluir"
-                                        class="text-xs font-semibold px-2 py-1 rounded-lg bg-gray-50 text-gray-500 border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition disabled:opacity-50">Excluir</button>
+                                    <div class="relative inline-block">
+                                      <button (click)="toggleLinhaMenu(o.id)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
+                                        <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                                      </button>
+                                      @if (linhaMenuAberta() === o.id) {
+                                        <div class="fixed inset-0 z-40" (click)="linhaMenuAberta.set(null)"></div>
+                                        <div class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 z-50 py-1">
+                                          <button (click)="abrirEditar(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Editar</button>
+                                          <button (click)="excluir(o); linhaMenuAberta.set(null)" [disabled]="isProcessando()" class="w-full text-left px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-slate-50 disabled:opacity-50">Excluir</button>
+                                        </div>
+                                      }
                                     </div>
                                   }
                                 </td>
@@ -937,11 +975,12 @@
 <!-- Modal: Nova OS / Editar OS -->
 @if (formAberto()) {
   <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" (click)="fecharForm()">
-    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" (click)="$event.stopPropagation()">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-h-[90vh] overflow-y-auto"
+      [class]="formTipo() === 'ordem' ? 'max-w-2xl' : 'max-w-lg'" (click)="$event.stopPropagation()">
       <h3 class="text-lg font-bold text-gray-800 mb-4">{{ formIdEdicao() ? 'Editar ' + tipoLabel[formTipo()] : 'Novo lançamento' }}</h3>
 
       <label class="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
-      <div class="grid grid-cols-2 gap-2 mb-4">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
         @for (t of tiposForm(); track t) {
           <button type="button" (click)="formTipo.set(t)"
             class="text-sm font-semibold py-2 rounded-lg border transition"
@@ -951,111 +990,119 @@
         }
       </div>
 
-      @if (areaFixa) {
-        <p class="text-sm font-medium text-slate-700 mb-4">Área: {{ areaLabel[areaFixa] }}</p>
-      } @else {
-        <label class="block text-sm font-medium text-slate-700 mb-1">Área</label>
-        <select [ngModel]="formArea()" (ngModelChange)="formArea.set($event)"
-          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-4">
-          <option value="ELETRICA">Elétrica</option>
-          <option value="MECANICA">Mecânica</option>
-        </select>
-      }
+      <div [class]="formTipo() === 'ordem' ? 'grid grid-cols-1 lg:grid-cols-2 gap-x-6' : ''">
+        <div>
+          @if (areaFixa) {
+            <p class="text-sm font-medium text-slate-700 mb-4">Área: {{ areaLabel[areaFixa] }}</p>
+          } @else {
+            <label class="block text-sm font-medium text-slate-700 mb-1">Área</label>
+            <select [ngModel]="formArea()" (ngModelChange)="formArea.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-4">
+              <option value="ELETRICA">Elétrica</option>
+              <option value="MECANICA">Mecânica</option>
+            </select>
+          }
 
-      <label class="block text-sm font-medium text-slate-700 mb-1">{{ formArea() === 'APOIO' ? 'Equipe/Empresa' : 'Técnico' }} <span class="text-red-500">*</span></label>
-      <select [ngModel]="formTecnicoNome()" (ngModelChange)="onTecnicoSelected($event)"
-        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-4">
-        <option value="">Selecione...</option>
-        @for (t of tecnicosDaAreaForm(); track t.matricula) {
-          <option [value]="t.nome">{{ t.nome }}</option>
-        }
-      </select>
-
-      @if (formTipo() === 'ordem') {
-        <label class="flex items-center gap-2 mb-3 cursor-pointer">
-          <input type="checkbox" [checked]="formSemOs()" (change)="formSemOs.set(!formSemOs())" class="rounded" />
-          <span class="text-sm text-slate-700">Não precisa de OS (ex.: revisão de planos)</span>
-        </label>
-
-        @if (!formSemOs()) {
-          <label class="block text-sm font-medium text-slate-700 mb-1">Número da OS</label>
-          <div class="flex items-center gap-2 mb-1">
-            <input type="text" [ngModel]="formNumeroOs()" (ngModelChange)="formNumeroOs.set($event)" (blur)="buscarDescricaoDaOs()"
-              placeholder="Ainda não tem? Deixe em branco (aparece como CRIAR OS)"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            @if (buscandoOsNoSigma()) {
-              <svg class="animate-spin h-4 w-4 text-blue-600 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-              </svg>
+          <label class="block text-sm font-medium text-slate-700 mb-1">{{ formArea() === 'APOIO' ? 'Equipe/Empresa' : 'Técnico' }} <span class="text-red-500">*</span></label>
+          <select [ngModel]="formTecnicoNome()" (ngModelChange)="onTecnicoSelected($event)"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-4">
+            <option value="">Selecione...</option>
+            @for (t of tecnicosDaAreaForm(); track t.matricula) {
+              <option [value]="t.nome">{{ t.nome }}</option>
             }
+          </select>
+
+          @if (formTipo() === 'ordem') {
+            <label class="flex items-center gap-2 mb-3 cursor-pointer">
+              <input type="checkbox" [checked]="formSemOs()" (change)="formSemOs.set(!formSemOs())" class="rounded" />
+              <span class="text-sm text-slate-700">Não precisa de OS (ex.: revisão de planos)</span>
+            </label>
+
+            @if (!formSemOs()) {
+              <label class="block text-sm font-medium text-slate-700 mb-1">Número da OS</label>
+              <div class="flex items-center gap-2 mb-1">
+                <input type="text" [ngModel]="formNumeroOs()" (ngModelChange)="formNumeroOs.set($event)" (blur)="buscarDescricaoDaOs()"
+                  placeholder="Ainda não tem? Deixe em branco (aparece como CRIAR OS)"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                @if (buscandoOsNoSigma()) {
+                  <svg class="animate-spin h-4 w-4 text-blue-600 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                  </svg>
+                }
+              </div>
+              <p class="text-xs text-gray-400 mb-4">A OS é criada no ERP (SIGMA) — informe o número e saia do campo pra puxar a descrição sozinha.</p>
+            }
+
+            <label class="block text-sm font-medium text-slate-700 mb-1">Descrição <span class="text-red-500">*</span></label>
+            <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="4"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
+          } @else {
+            <label class="block text-sm font-medium text-slate-700 mb-1">Motivo (opcional)</label>
+            <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="2"
+              [placeholder]="motivoPlaceholder(formTipo())"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
+          }
+        </div>
+
+        @if (formTipo() === 'ordem') {
+          <div>
+            <div class="grid grid-cols-2 gap-3 mb-4">
+              <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Equipamento</label>
+                <select [ngModel]="formEquipamento()" (ngModelChange)="formEquipamento.set($event)"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                  <option value="">Selecione...</option>
+                  @for (eq of equipamentos(); track eq) {
+                    <option [value]="eq">{{ eq }}</option>
+                  }
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Área de atuação</label>
+                <input type="text" [ngModel]="formAreaAtuacao()" (ngModelChange)="formAreaAtuacao.set($event)"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mb-4">
+              <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Recursos (ajudante)</label>
+                <input type="text" [ngModel]="formRecursos()" (ngModelChange)="formRecursos.set($event)"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">LOTO <span class="text-red-500">*</span></label>
+                <select [ngModel]="formLoto()" (ngModelChange)="formLoto.set($event)"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                  <option value="">Selecione...</option>
+                  @for (op of lotoOpcoes; track op) {
+                    <option [value]="op">{{ op }}</option>
+                  }
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mb-4">
+              <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Tipo de serviço</label>
+                <select [ngModel]="formTipoServico()" (ngModelChange)="formTipoServico.set($event)"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                  <option value="">Selecione...</option>
+                  @for (op of tipoServicoOpcoes; track op) {
+                    <option [value]="op">{{ op }}</option>
+                  }
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Duração estimada (horas)</label>
+                <input type="number" step="0.5" min="0" [ngModel]="formDuracaoHoras()" (ngModelChange)="formDuracaoHoras.set($event)"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
           </div>
-          <p class="text-xs text-gray-400 mb-4">A OS é criada no ERP (SIGMA) — informe o número e saia do campo pra puxar a descrição sozinha.</p>
         }
-
-        <label class="block text-sm font-medium text-slate-700 mb-1">Descrição <span class="text-red-500">*</span></label>
-        <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="2"
-          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
-
-        <div class="grid grid-cols-2 gap-3 mb-4">
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Equipamento</label>
-            <select [ngModel]="formEquipamento()" (ngModelChange)="formEquipamento.set($event)"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-              <option value="">Selecione...</option>
-              @for (eq of equipamentos(); track eq) {
-                <option [value]="eq">{{ eq }}</option>
-              }
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Área de atuação</label>
-            <input type="text" [ngModel]="formAreaAtuacao()" (ngModelChange)="formAreaAtuacao.set($event)"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3 mb-4">
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Recursos (ajudante)</label>
-            <input type="text" [ngModel]="formRecursos()" (ngModelChange)="formRecursos.set($event)"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">LOTO <span class="text-red-500">*</span></label>
-            <select [ngModel]="formLoto()" (ngModelChange)="formLoto.set($event)"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-              <option value="">Selecione...</option>
-              @for (op of lotoOpcoes; track op) {
-                <option [value]="op">{{ op }}</option>
-              }
-            </select>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3 mb-4">
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Tipo de serviço</label>
-            <select [ngModel]="formTipoServico()" (ngModelChange)="formTipoServico.set($event)"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-              <option value="">Selecione...</option>
-              @for (op of tipoServicoOpcoes; track op) {
-                <option [value]="op">{{ op }}</option>
-              }
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Duração estimada (horas)</label>
-            <input type="number" step="0.5" min="0" [ngModel]="formDuracaoHoras()" (ngModelChange)="formDuracaoHoras.set($event)"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-        </div>
-      } @else {
-        <label class="block text-sm font-medium text-slate-700 mb-1">Motivo (opcional)</label>
-        <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="2"
-          [placeholder]="motivoPlaceholder(formTipo())"
-          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
-      }
+      </div>
 
       <label class="block text-sm font-medium text-slate-700 mb-1">
         Dias previstos na semana
