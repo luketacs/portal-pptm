@@ -363,6 +363,21 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     ) ?? null;
   }
 
+  // Mesma OS já lançada pro mesmo técnico em algum dos dias informados — evita
+  // duplicar sem querer o mesmo lançamento (ex.: clicar duas vezes em Adicionar, ou
+  // esquecer que já tinha lançado aquela OS pra ele). Compara o número normalizado
+  // (mesma lógica da consulta ao SIGMA), não o texto digitado, pra "45203" e "045203"
+  // baterem como a mesma OS. `idExcluir` evita a OS se auto-bloquear ao ser editada.
+  private ordemDuplicada(numeroOs: string, tecnicoNome: string, diasIso: string[], idExcluir?: string | null): ManutencaoOrdem | null {
+    if (!numeroOs.trim() || diasIso.length === 0) return null;
+    const numeroNormalizado = normalizarNumeroOs(numeroOs);
+    return this.manutencaoService.ordens().find(o =>
+      o.id !== idExcluir && o.tipo === 'ordem' && o.tecnicoNome === tecnicoNome
+        && !!o.numeroOs && normalizarNumeroOs(o.numeroOs) === numeroNormalizado
+        && o.diasPrevistos.some(d => diasIso.includes(d)),
+    ) ?? null;
+  }
+
   private gruposCalc(lista: ManutencaoOrdem[], dias: { data: string; label: string }[]) {
     const porTecnico = new Map<string, ManutencaoOrdem[]>();
     for (const o of lista) {
@@ -1277,6 +1292,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     if (ferias) return { motivo: `${nome} está de férias de ${this.formatarDataBr(ferias.dataInicio)} a ${this.formatarDataBr(ferias.dataFim)}.` };
     const folga = this.folgaNoIntervalo(nome, origem.diasPrevistos);
     if (folga) return { motivo: `${nome} já está de folga em algum desses dias.` };
+    if (origem.numeroOs && this.ordemDuplicada(origem.numeroOs, nome, origem.diasPrevistos)) {
+      return { motivo: `${nome} já tem a OS ${origem.numeroOs} lançada em algum desses dias.` };
+    }
     return null;
   });
 
@@ -1354,6 +1372,18 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return this.folgaNoIntervalo(nome, dias, this.formIdEdicao());
   });
 
+  // Mesma OS (número) já lançada pro mesmo técnico em algum dos dias marcados — evita
+  // o lançamento duplicado (ver ordemDuplicada). Só faz sentido pra tipo 'ordem' com
+  // número preenchido.
+  formOrdemDuplicada = computed<ManutencaoOrdem | null>(() => {
+    if (this.formTipo() !== 'ordem') return null;
+    const numero = this.formNumeroOs().trim();
+    const nome = this.formTecnicoNome().trim();
+    const dias = this.formDiasSelecionados();
+    if (!numero || !nome || dias.length === 0) return null;
+    return this.ordemDuplicada(numero, nome, dias, this.formIdEdicao());
+  });
+
   formatarDataBr(dataIso: string): string {
     const [ano, mes, dia] = dataIso.split('-');
     return `${dia}/${mes}/${ano}`;
@@ -1361,6 +1391,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   canConfirmarForm(): boolean {
     if (this.isProcessando() || !this.formTecnicoNome().trim()) return false;
+    if (this.formOrdemDuplicada()) return false;
     if (this.formTecnicoFerias() || this.formTecnicoFolga()) return false;
     if (this.formTipo() === 'ordem') {
       return !!this.formDescricao().trim() && !!this.formLoto();
@@ -1503,6 +1534,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       const folga = this.folgaNoIntervalo(tecnico.nome, dias);
       if (ferias || folga) {
         this.notificationService.showError(`${tecnico.nome} está de ${ferias ? 'férias' : 'folga'} — não foi programado como apoio.`);
+        continue;
+      }
+      if (numero && this.ordemDuplicada(numero, tecnico.nome, dias)) {
+        this.notificationService.showError(`${tecnico.nome} já tem a OS ${numero} lançada nesses dias — não foi duplicada.`);
         continue;
       }
       try {

@@ -1166,6 +1166,12 @@
         }
       </div>
 
+      @if (formOrdemDuplicada(); as dup) {
+        <div class="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800 mb-4">
+          A OS {{ formNumeroOs() }} já está lançada pra {{ dup.tecnicoNome }} em algum desses dias — não dá pra lançar duplicada.
+          Escolha outro dia, ou edite/exclua o lançamento existente.
+        </div>
+      }
       @if (formTecnicoFerias(); as fer) {
         <div class="rounded-lg bg-teal-50 border border-teal-200 p-3 text-sm text-teal-800 mb-4">
           {{ fer.tecnicoNome }} está de férias de {{ formatarDataBr(fer.dataInicio) }} a {{ formatarDataBr(fer.dataFim) }} —
