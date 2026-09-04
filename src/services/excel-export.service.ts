@@ -36,6 +36,7 @@ export interface ProgramacaoSemanalLinha {
 export interface ProgramacaoSemanalGrupo {
   tecnico: string;
   linhas: ProgramacaoSemanalLinha[];
+  feriasAte?: string; // "DD/MM/AAAA" — presente quando o técnico está de férias na semana
 }
 
 export interface ProgramacaoSemanalDia {
@@ -665,6 +666,15 @@ export class ExcelExportService {
     }
   }
 
+  // Feriado e folga pessoal (atestado, banco de horas etc.) usam o mesmo tipo 'folga'
+  // no banco — não tem como diferenciar por tipo. O Portal lança feriado com a
+  // descrição padrão "Feriado" (ver criarFolgaEmLote), então usa isso como sinal: só
+  // quando a descrição bate exatamente com "Feriado" o rótulo muda, senão continua
+  // "FOLGA" genérico.
+  private labelFolga(descricao: string): string {
+    return descricao.trim().toUpperCase() === 'FERIADO' ? 'FERIADO' : 'FOLGA';
+  }
+
   // Best-effort: se a logo não carregar (rede, arquivo ausente), o export segue
   // sem ela em vez de falhar.
   private async carregarLogoBuffer(): Promise<ArrayBuffer | null> {
@@ -693,7 +703,10 @@ export class ExcelExportService {
     ws.getRow(row).height = 18;
     ws.mergeCells(row, 1, row, NC);
     const celDivisor = ws.getCell(row, 1);
-    celDivisor.value = totalHoras > 0 ? `${grupo.tecnico}   ·   ${totalHoras.toFixed(2)}h programadas` : grupo.tecnico;
+    const partes = [grupo.tecnico];
+    if (totalHoras > 0) partes.push(`${totalHoras.toFixed(2)}h programadas`);
+    if (grupo.feriasAte) partes.push(`Férias até ${grupo.feriasAte}`);
+    celDivisor.value = partes.join('   ·   ');
     celDivisor.font = { bold: true, size: 10, color: { argb: this.PROG_NAVY } };
     celDivisor.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_NAVY_CLARO } };
     celDivisor.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
@@ -709,7 +722,7 @@ export class ExcelExportService {
       row++;
     } else {
       linhas.forEach(linha => {
-        const numeroLabel = linha.tipo === 'folga' ? 'FOLGA'
+        const numeroLabel = linha.tipo === 'folga' ? this.labelFolga(linha.descricao)
           : linha.tipo === 'treinamento' ? 'TREINAMENTO'
           : linha.tipo === 'exame_medico' ? 'EXAME MÉDICO'
           : linha.tipo === 'reuniao' ? 'REUNIÃO'
@@ -784,7 +797,7 @@ export class ExcelExportService {
             cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_DIA_ORDEM } };
           } else {
             const cor = this.corAusenciaPorTipo(linha.tipo);
-            cel.value = linha.tipo === 'folga' ? 'FOLGA' : linha.tipo === 'treinamento' ? 'TREINO' : linha.tipo === 'reuniao' ? 'REUNIÃO' : 'ASO';
+            cel.value = linha.tipo === 'folga' ? this.labelFolga(linha.descricao) : linha.tipo === 'treinamento' ? 'TREINO' : linha.tipo === 'reuniao' ? 'REUNIÃO' : 'ASO';
             cel.font = { bold: true, size: 7, color: { argb: cor.texto } };
             cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor.bg } };
           }

@@ -1196,7 +1196,11 @@
       }
       @if (formTecnicoFolga(); as fg) {
         <div class="rounded-lg bg-purple-50 border border-purple-200 p-3 text-sm text-purple-800 mb-4">
-          {{ fg.tecnicoNome }} já está de folga em algum dos dias marcados — não é possível lançar mais nada nesses dias.
+          @if (formTipo() === 'folga') {
+            {{ fg.tecnicoNome }} já tem "{{ fg.descricao }}" marcado em algum desses dias — não é possível lançar folga em cima.
+          } @else {
+            {{ fg.tecnicoNome }} já está de folga em algum dos dias marcados — não é possível lançar mais nada nesses dias.
+          }
           Escolha outro dia ou outro técnico.
         </div>
       }

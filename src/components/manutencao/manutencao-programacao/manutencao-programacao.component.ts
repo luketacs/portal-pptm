@@ -249,6 +249,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   async exportarSemana(): Promise<void> {
     const grupos: ProgramacaoSemanalGrupo[] = this.grupos().map(g => ({
       tecnico: g.tecnico,
+      feriasAte: g.ferias ? this.formatarDataBr(g.ferias.dataFim) : undefined,
       linhas: g.ordens.map(o => ({
         tipo: o.tipo,
         numeroOs: o.numeroOs,
@@ -1478,13 +1479,22 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return this.feriasNoIntervalo(nome, dias);
   });
 
-  // Mesma ideia pra folga: se o técnico já está de folga em algum dos dias marcados,
-  // bloqueia — não deixa empilhar OS/treinamento/exame médico em cima da folga.
+  // Folga bloqueia tudo nos dois sentidos: não dá pra lançar nada em cima de um dia
+  // que já é folga do técnico (OS/treinamento/exame médico/reunião), E não dá pra
+  // lançar folga em cima de um dia que já tem qualquer outra coisa marcada pra ele —
+  // sem essa segunda direção, dava pra criar a folga DEPOIS de uma reunião/OS já
+  // existente pro mesmo dia, sem nenhum aviso.
   formTecnicoFolga = computed<ManutencaoOrdem | null>(() => {
     const nome = this.formTecnicoNome().trim();
     const dias = this.formDiasSelecionados();
     if (!nome || dias.length === 0) return null;
-    return this.folgaNoIntervalo(nome, dias, this.formIdEdicao());
+    const idExcluir = this.formIdEdicao();
+    if (this.formTipo() === 'folga') {
+      return this.manutencaoService.ordens().find(o =>
+        o.tecnicoNome === nome && o.id !== idExcluir && o.diasPrevistos.some(d => dias.includes(d)),
+      ) ?? null;
+    }
+    return this.folgaNoIntervalo(nome, dias, idExcluir);
   });
 
   // Mesma OS (número) já lançada pro mesmo técnico em algum dos dias marcados — evita
