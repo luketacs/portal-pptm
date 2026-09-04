@@ -392,7 +392,7 @@
                 <div class="overflow-x-auto mt-2">
                   <table class="min-w-full text-sm">
                     <thead>
-                      <tr class="text-left text-xs text-gray-500 uppercase">
+                      <tr class="text-center text-xs text-gray-500 uppercase">
                         <th class="py-1 pr-3">OS</th>
                         <th class="py-1 pr-3">Descrição</th>
                         <th class="py-1 pr-3">Equipamento</th>
@@ -401,7 +401,7 @@
                         <th class="py-1 pr-3"></th>
                       </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-200">
+                    <tbody class="divide-y divide-slate-200 text-center">
                       @for (o of grupo.ordens; track o.id) {
                         <tr [class]="linhaClasse(o.tipo)">
                           <td class="py-1.5 pr-3 whitespace-nowrap">
@@ -409,7 +409,7 @@
                               @if (o.tipo !== 'ordem') {
                                 <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
                               } @else if (o.numeroOs) {
-                                <span class="text-gray-600">{{ o.numeroOs }}</span>
+                                <span class="text-sm font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800">{{ o.numeroOs }}</span>
                               } @else if (o.semOs) {
                                 <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500" title="Esse serviço não precisa de OS no SIGMA">SEM OS</span>
                               } @else {
@@ -428,10 +428,10 @@
                           </td>
                           <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">
                             {{ o.equipamento || '—' }}
-                            @if (o.duracaoHoras) { <span class="text-gray-400">· {{ o.duracaoHoras }}h</span> }
+                            @if (o.duracaoHoras) { <span class="ml-1 text-sm font-bold text-blue-700">{{ o.duracaoHoras }}h</span> }
                           </td>
                           <td class="py-1.5 pr-3">
-                            <div class="flex flex-wrap gap-1">
+                            <div class="flex flex-wrap justify-center gap-1">
                               @for (d of diasBadges(o); track d) {
                                 <span class="text-[11px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">{{ d }}</span>
                               } @empty {
@@ -448,7 +448,7 @@
                               }
                             }
                           </td>
-                          <td class="py-1.5 pr-3 whitespace-nowrap text-right">
+                          <td class="py-1.5 pr-3 whitespace-nowrap text-center">
                             @if (podeEditar()) {
                               <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
                                 <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
@@ -489,7 +489,7 @@
                 <div class="overflow-x-auto mt-2">
                   <table class="min-w-full text-sm">
                     <thead>
-                      <tr class="text-left text-xs text-gray-500 uppercase">
+                      <tr class="text-center text-xs text-gray-500 uppercase">
                         <th class="py-1 pr-3">OS</th>
                         <th class="py-1 pr-3">Descrição</th>
                         <th class="py-1 pr-3">Técnico</th>
@@ -498,7 +498,7 @@
                         <th class="py-1 pr-3"></th>
                       </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-200">
+                    <tbody class="divide-y divide-slate-200 text-center">
                       @for (o of dia.ordens; track o.id) {
                         <tr [class]="linhaClasse(o.tipo)">
                           <td class="py-1.5 pr-3 whitespace-nowrap">
@@ -506,7 +506,7 @@
                               @if (o.tipo !== 'ordem') {
                                 <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
                               } @else if (o.numeroOs) {
-                                <span class="text-gray-600">{{ o.numeroOs }}</span>
+                                <span class="text-sm font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800">{{ o.numeroOs }}</span>
                               } @else if (o.semOs) {
                                 <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500" title="Esse serviço não precisa de OS no SIGMA">SEM OS</span>
                               } @else {
@@ -527,7 +527,7 @@
                           <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
                           <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">
                             {{ o.equipamento || '—' }}
-                            @if (o.duracaoHoras) { <span class="text-gray-400">· {{ o.duracaoHoras }}h</span> }
+                            @if (o.duracaoHoras) { <span class="ml-1 text-sm font-bold text-blue-700">{{ o.duracaoHoras }}h</span> }
                           </td>
                           <td class="py-1.5 pr-3">
                             @if (o.tipo === 'ordem') {
@@ -538,7 +538,7 @@
                               }
                             }
                           </td>
-                          <td class="py-1.5 pr-3 whitespace-nowrap text-right">
+                          <td class="py-1.5 pr-3 whitespace-nowrap text-center">
                             @if (podeEditar()) {
                               <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
                                 <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
@@ -573,7 +573,7 @@
               <div class="overflow-x-auto mt-2">
                 <table class="min-w-full text-sm">
                   <thead>
-                    <tr class="text-left text-xs text-gray-500 uppercase">
+                    <tr class="text-center text-xs text-gray-500 uppercase">
                       <th class="py-1 pr-3">OS</th>
                       <th class="py-1 pr-3">Descrição</th>
                       <th class="py-1 pr-3">Área</th>
@@ -582,7 +582,7 @@
                       <th class="py-1 pr-3"></th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-slate-200">
+                  <tbody class="divide-y divide-slate-200 text-center">
                     @for (o of ordensSemDia(); track o.id) {
                       <tr [class]="linhaClasse(o.tipo)">
                         <td class="py-1.5 pr-3 whitespace-nowrap">
@@ -590,7 +590,7 @@
                             @if (o.tipo !== 'ordem') {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
                             } @else if (o.numeroOs) {
-                              <span class="text-gray-600">{{ o.numeroOs }}</span>
+                              <span class="text-sm font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800">{{ o.numeroOs }}</span>
                             } @else if (o.semOs) {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">SEM OS</span>
                             } @else {
@@ -615,7 +615,7 @@
                             }
                           }
                         </td>
-                        <td class="py-1.5 pr-3 whitespace-nowrap text-right">
+                        <td class="py-1.5 pr-3 whitespace-nowrap text-center">
                           @if (podeEditar()) {
                             <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
                               <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
@@ -739,7 +739,7 @@
                         <div class="overflow-x-auto mt-2">
                           <table class="min-w-full text-sm">
                             <thead>
-                              <tr class="text-left text-xs text-gray-500 uppercase">
+                              <tr class="text-center text-xs text-gray-500 uppercase">
                                 <th class="py-1 pr-3">OS</th>
                                 <th class="py-1 pr-3">Descrição</th>
                                 <th class="py-1 pr-3">Equipamento</th>
@@ -748,7 +748,7 @@
                                 <th class="py-1 pr-3"></th>
                               </tr>
                             </thead>
-                            <tbody class="divide-y divide-slate-200">
+                            <tbody class="divide-y divide-slate-200 text-center">
                               @for (o of grupo.ordens; track o.id) {
                                 <tr [class]="linhaClasse(o.tipo)">
                                   <td class="py-1.5 pr-3 whitespace-nowrap">
@@ -756,7 +756,7 @@
                                       @if (o.tipo !== 'ordem') {
                                         <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
                                       } @else if (o.numeroOs) {
-                                        <span class="text-gray-600">{{ o.numeroOs }}</span>
+                                        <span class="text-sm font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800">{{ o.numeroOs }}</span>
                                       } @else if (o.semOs) {
                                         <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">SEM OS</span>
                                       } @else {
@@ -775,10 +775,10 @@
                                   </td>
                                   <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">
                                     {{ o.equipamento || '—' }}
-                                    @if (o.duracaoHoras) { <span class="text-gray-400">· {{ o.duracaoHoras }}h</span> }
+                                    @if (o.duracaoHoras) { <span class="ml-1 text-sm font-bold text-blue-700">{{ o.duracaoHoras }}h</span> }
                                   </td>
                                   <td class="py-1.5 pr-3">
-                                    <div class="flex flex-wrap gap-1">
+                                    <div class="flex flex-wrap justify-center gap-1">
                                       @for (d of diasBadges(o, bloco.dias); track d) {
                                         <span class="text-[11px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">{{ d }}</span>
                                       } @empty {
@@ -795,7 +795,7 @@
                                       }
                                     }
                                   </td>
-                                  <td class="py-1.5 pr-3 whitespace-nowrap text-right">
+                                  <td class="py-1.5 pr-3 whitespace-nowrap text-center">
                                     @if (podeEditar()) {
                                       <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
                                         <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
@@ -834,7 +834,7 @@
                         <div class="overflow-x-auto mt-2">
                           <table class="min-w-full text-sm">
                             <thead>
-                              <tr class="text-left text-xs text-gray-500 uppercase">
+                              <tr class="text-center text-xs text-gray-500 uppercase">
                                 <th class="py-1 pr-3">OS</th>
                                 <th class="py-1 pr-3">Descrição</th>
                                 <th class="py-1 pr-3">Técnico</th>
@@ -843,7 +843,7 @@
                                 <th class="py-1 pr-3"></th>
                               </tr>
                             </thead>
-                            <tbody class="divide-y divide-slate-200">
+                            <tbody class="divide-y divide-slate-200 text-center">
                               @for (o of dia.ordens; track o.id) {
                                 <tr [class]="linhaClasse(o.tipo)">
                                   <td class="py-1.5 pr-3 whitespace-nowrap">
@@ -851,7 +851,7 @@
                                       @if (o.tipo !== 'ordem') {
                                         <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
                                       } @else if (o.numeroOs) {
-                                        <span class="text-gray-600">{{ o.numeroOs }}</span>
+                                        <span class="text-sm font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800">{{ o.numeroOs }}</span>
                                       } @else if (o.semOs) {
                                         <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">SEM OS</span>
                                       } @else {
@@ -872,7 +872,7 @@
                                   <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
                                   <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">
                                     {{ o.equipamento || '—' }}
-                                    @if (o.duracaoHoras) { <span class="text-gray-400">· {{ o.duracaoHoras }}h</span> }
+                                    @if (o.duracaoHoras) { <span class="ml-1 text-sm font-bold text-blue-700">{{ o.duracaoHoras }}h</span> }
                                   </td>
                                   <td class="py-1.5 pr-3">
                                     @if (o.tipo === 'ordem') {
@@ -883,7 +883,7 @@
                                       }
                                     }
                                   </td>
-                                  <td class="py-1.5 pr-3 whitespace-nowrap text-right">
+                                  <td class="py-1.5 pr-3 whitespace-nowrap text-center">
                                     @if (podeEditar()) {
                                       <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
                                         <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
@@ -914,7 +914,7 @@
                       <div class="overflow-x-auto mt-2">
                         <table class="min-w-full text-sm">
                           <thead>
-                            <tr class="text-left text-xs text-gray-500 uppercase">
+                            <tr class="text-center text-xs text-gray-500 uppercase">
                               <th class="py-1 pr-3">OS</th>
                               <th class="py-1 pr-3">Descrição</th>
                               <th class="py-1 pr-3">Área</th>
@@ -922,14 +922,14 @@
                               <th class="py-1 pr-3"></th>
                             </tr>
                           </thead>
-                          <tbody class="divide-y divide-slate-200">
+                          <tbody class="divide-y divide-slate-200 text-center">
                             @for (o of bloco.ordensSemDia; track o.id) {
                               <tr [class]="linhaClasse(o.tipo)">
                                 <td class="py-1.5 pr-3">
                                   @if (o.tipo !== 'ordem') {
                                     <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="tipoBadgeClass(o.tipo)">{{ tipoLabel[o.tipo] }}</span>
                                   } @else if (o.numeroOs) {
-                                    <span class="text-gray-600">{{ o.numeroOs }}</span>
+                                    <span class="text-sm font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800">{{ o.numeroOs }}</span>
                                   } @else if (o.semOs) {
                                     <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">SEM OS</span>
                                   } @else {
@@ -939,7 +939,7 @@
                                 <td class="py-1.5 pr-3 text-gray-800 max-w-xs"><span class="block truncate" [title]="o.descricao">{{ o.descricao }}</span></td>
                                 <td class="py-1.5 pr-3 text-gray-600">{{ areaLabel[o.area] }}</td>
                                 <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
-                                <td class="py-1.5 pr-3 whitespace-nowrap text-right">
+                                <td class="py-1.5 pr-3 whitespace-nowrap text-center">
                                   @if (podeEditar()) {
                                     <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
                                       <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
