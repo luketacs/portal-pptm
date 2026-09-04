@@ -400,6 +400,7 @@
                         <th class="py-1 pr-3 text-center">OS</th>
                         <th class="py-1 pr-3">Descrição</th>
                         <th class="py-1 pr-3">Equipamento</th>
+                        <th class="py-1 pr-3">Recursos</th>
                         <th class="py-1 pr-3 text-center">Dias</th>
                         <th class="py-1 pr-3 text-center">Status</th>
                         <th class="py-1 pr-3"></th>
@@ -437,6 +438,7 @@
                             {{ o.equipamento || '—' }}
                             @if (o.duracaoHoras) { <span class="ml-1 text-sm font-bold text-blue-700">{{ o.duracaoHoras }}h</span> }
                           </td>
+                          <td class="py-1.5 pr-3 text-gray-600">{{ o.recursos || '—' }}</td>
                           <td class="py-1.5 pr-3 text-center">
                             <div class="flex flex-wrap justify-center gap-1">
                               @for (d of diasBadges(o); track d) {
@@ -501,6 +503,7 @@
                         <th class="py-1 pr-3">Descrição</th>
                         <th class="py-1 pr-3">Técnico</th>
                         <th class="py-1 pr-3">Equipamento</th>
+                        <th class="py-1 pr-3">Recursos</th>
                         <th class="py-1 pr-3 text-center">Status</th>
                         <th class="py-1 pr-3"></th>
                       </tr>
@@ -539,6 +542,7 @@
                             {{ o.equipamento || '—' }}
                             @if (o.duracaoHoras) { <span class="ml-1 text-sm font-bold text-blue-700">{{ o.duracaoHoras }}h</span> }
                           </td>
+                          <td class="py-1.5 pr-3 text-gray-600">{{ o.recursos || '—' }}</td>
                           <td class="py-1.5 pr-3 text-center">
                             @if (o.tipo === 'ordem') {
                               @if (statusOuExecucao(o); as st) {
@@ -753,6 +757,7 @@
                                 <th class="py-1 pr-3 text-center">OS</th>
                                 <th class="py-1 pr-3">Descrição</th>
                                 <th class="py-1 pr-3">Equipamento</th>
+                                <th class="py-1 pr-3">Recursos</th>
                                 <th class="py-1 pr-3 text-center">Dias</th>
                                 <th class="py-1 pr-3 text-center">Status</th>
                                 <th class="py-1 pr-3"></th>
@@ -790,6 +795,7 @@
                                     {{ o.equipamento || '—' }}
                                     @if (o.duracaoHoras) { <span class="ml-1 text-sm font-bold text-blue-700">{{ o.duracaoHoras }}h</span> }
                                   </td>
+                                  <td class="py-1.5 pr-3 text-gray-600">{{ o.recursos || '—' }}</td>
                                   <td class="py-1.5 pr-3 text-center">
                                     <div class="flex flex-wrap justify-center gap-1">
                                       @for (d of diasBadges(o, bloco.dias); track d) {
@@ -852,6 +858,7 @@
                                 <th class="py-1 pr-3">Descrição</th>
                                 <th class="py-1 pr-3">Técnico</th>
                                 <th class="py-1 pr-3">Equipamento</th>
+                                <th class="py-1 pr-3">Recursos</th>
                                 <th class="py-1 pr-3 text-center">Status</th>
                                 <th class="py-1 pr-3"></th>
                               </tr>
@@ -890,6 +897,7 @@
                                     {{ o.equipamento || '—' }}
                                     @if (o.duracaoHoras) { <span class="ml-1 text-sm font-bold text-blue-700">{{ o.duracaoHoras }}h</span> }
                                   </td>
+                                  <td class="py-1.5 pr-3 text-gray-600">{{ o.recursos || '—' }}</td>
                                   <td class="py-1.5 pr-3 text-center">
                                     @if (o.tipo === 'ordem') {
                                       @if (statusOuExecucao(o, bloco.diasIso); as st) {

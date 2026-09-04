@@ -805,10 +805,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           // Agrupa por número de OS antes de comparar — a mesma OS pode aparecer em
           // mais de uma linha (apoio/vários técnicos na mesma atividade), com o mesmo
           // LOTO. Só é conflito de verdade quando OS DIFERENTES do mesmo equipamento
-          // divergem no status; a mesma OS repetida não conta contra ela mesma.
+          // divergem no status; a mesma OS repetida não conta contra ela mesma. "SEM
+          // LOTO" não entra na comparação — não impõe nenhuma exigência sobre o
+          // equipamento, então nunca conflita com LOTO nem com FUNCIONANDO.
           const statusPorOs = new Map<string, string>();
           itens.forEach((item, idx) => statusPorOs.set(item.numeroOs ?? `__sem-os-${idx}`, item.status.toUpperCase()));
-          const statusUnicos = new Set(statusPorOs.values());
+          const statusUnicos = new Set([...statusPorOs.values()].filter(s => s !== 'SEM LOTO'));
           return { data: dia, itens, conflito: statusUnicos.size > 1 };
         }),
       }))
