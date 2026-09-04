@@ -1259,18 +1259,39 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   async confirmarFeriado(): Promise<void> {
     if (!this.canConfirmarFeriado()) return;
-    const tecnicos = this.todosTecnicos();
+    const dias = this.feriadoDiasSelecionados();
     const motivo = this.feriadoMotivo().trim() || 'Feriado';
-    if (!confirm(`Lançar "${motivo}" pra ${tecnicos.length} técnicos (Elétrica + Mecânica)?`)) return;
+
+    // Quem já tem qualquer coisa marcada pra algum desses dias não entra — feriado
+    // empilhado em cima de OS/reunião/outra folga gera a mesma inconsistência que já
+    // corrigimos pro lote de Reunião (ver criarApoioTecnicosSeNecessario/
+    // confirmarReuniaoLote).
+    const bloqueados: string[] = [];
+    const tecnicos = this.todosTecnicos().filter(t => {
+      const existente = this.manutencaoService.ordens().find(o =>
+        o.tecnicoNome === t.nome && o.diasPrevistos.some(d => dias.includes(d)),
+      );
+      if (existente) bloqueados.push(t.nome);
+      return !existente;
+    });
+    if (tecnicos.length === 0) {
+      this.notificationService.showError('Todos os técnicos já têm algo lançado nesses dias — nenhum feriado lançado.');
+      return;
+    }
+
+    const aviso = bloqueados.length > 0
+      ? `\n\n${bloqueados.length} técnico(s) já têm algo lançado nesses dias e não vão entrar: ${bloqueados.join(', ')}.`
+      : '';
+    if (!confirm(`Lançar "${motivo}" pra ${tecnicos.length} técnicos (Elétrica + Mecânica)?${aviso}`)) return;
 
     this.isProcessando.set(true);
     try {
       await this.manutencaoService.criarFolgaEmLote({
-        diasPrevistos: this.feriadoDiasSelecionados(),
+        diasPrevistos: dias,
         motivo,
         tecnicos,
       });
-      this.notificationService.showSuccess(`"${motivo}" lançado pra ${tecnicos.length} técnicos.`);
+      this.notificationService.showSuccess(`"${motivo}" lançado pra ${tecnicos.length} técnicos.${bloqueados.length > 0 ? ` (${bloqueados.length} pulados por já ter algo marcado)` : ''}`);
       this.fecharFeriado();
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao lançar feriado.');
