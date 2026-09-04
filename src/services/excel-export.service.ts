@@ -647,8 +647,8 @@ export class ExcelExportService {
   // Cores por tipo de ausência — mesma paleta (fundo claro + texto colorido) usada na
   // tela do Portal pros badges de Folga/Treinamento/Exame Médico/Reunião, só que em
   // hex pro Excel. Nada de fundo sólido saturado — fica pesado numa planilha inteira.
-  private readonly PROG_FOLGA_BG = 'FFF3E8FF';
-  private readonly PROG_FOLGA_TEXTO = 'FF7E22CE';
+  private readonly PROG_FOLGA_BG = 'FFFEE2E2';
+  private readonly PROG_FOLGA_TEXTO = 'FFB91C1C';
   private readonly PROG_TREINAMENTO_BG = 'FFE0E7FF';
   private readonly PROG_TREINAMENTO_TEXTO = 'FF4338CA';
   private readonly PROG_EXAME_BG = 'FFCCFBF1';

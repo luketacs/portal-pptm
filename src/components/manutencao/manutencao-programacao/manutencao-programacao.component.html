@@ -92,6 +92,77 @@
     </div>
   } @else {
 
+    <!-- Filtros -->
+    <div class="app-card p-3 space-y-2">
+      <div class="flex flex-wrap gap-4">
+        <div class="min-w-48">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Semana</label>
+          <select [ngModel]="semanaFiltro()" (ngModelChange)="semanaFiltro.set($event)"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+            @for (s of semanas; track s.value) {
+              <option [value]="s.value">{{ s.label }}</option>
+            }
+          </select>
+        </div>
+        @if (!horizonteAtivo()) {
+          <div class="flex items-end pb-2">
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{{ countTotal() }} OS na semana</span>
+          </div>
+        }
+        <div class="flex items-end pb-0.5">
+          <label class="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-gray-600">
+            <input type="checkbox" [checked]="horizonteAtivo()" (change)="horizonteAtivo.set(!horizonteAtivo())" class="rounded" />
+            Ver 4 semanas à frente
+          </label>
+        </div>
+        @if (!areaFixa) {
+          <div class="min-w-36">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Área</label>
+            <select [ngModel]="areaFiltro()" (ngModelChange)="areaFiltro.set($event)"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <option value="todos">Todas</option>
+              <option value="ELETRICA">Elétrica</option>
+              <option value="MECANICA">Mecânica</option>
+              <option value="APOIO">Apoio</option>
+            </select>
+          </div>
+        }
+        <div class="min-w-40">
+          <label class="block text-xs font-medium text-gray-600 mb-1">{{ areaFixa === 'APOIO' ? 'Equipe' : 'Técnico' }}</label>
+          <select [ngModel]="tecnicoFiltro()" (ngModelChange)="tecnicoFiltro.set($event)"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+            <option value="todos">Todos</option>
+            @for (t of tecnicosComOrdemNaSemana(); track t) {
+              <option [value]="t">{{ t }}</option>
+            }
+          </select>
+        </div>
+        <div class="flex-1 min-w-52">
+          <label class="block text-xs font-medium text-gray-600 mb-1">OS, descrição ou equipamento</label>
+          <input type="text" [ngModel]="searchTerm()" (ngModelChange)="searchTerm.set($event)"
+            placeholder="Buscar..."
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Status</label>
+        <div class="flex flex-wrap gap-1.5">
+          <button type="button" (click)="statusFiltro.set('todos')"
+            class="text-xs font-semibold px-2.5 py-1 rounded-full border transition"
+            [class]="statusFiltro() === 'todos' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-slate-300 hover:bg-slate-50'">
+            Todos
+          </button>
+          @for (s of statusesComOrdemNaSemana(); track s) {
+            <button type="button" (click)="statusFiltro.set(s)"
+              class="text-xs font-semibold px-2.5 py-1 rounded-full border transition"
+              [class]="statusFiltro() === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-slate-300 hover:bg-slate-50'">
+              {{ s }}
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+
     @if (!horizonteAtivo()) {
       <div class="app-card p-4">
         <div class="flex items-center justify-between mb-1">
@@ -290,77 +361,6 @@
       </div>
     }
     }
-
-    <!-- Filtros -->
-    <div class="app-card p-3 space-y-2">
-      <div class="flex flex-wrap gap-4">
-        <div class="min-w-48">
-          <label class="block text-xs font-medium text-gray-600 mb-1">Semana</label>
-          <select [ngModel]="semanaFiltro()" (ngModelChange)="semanaFiltro.set($event)"
-            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-            @for (s of semanas; track s.value) {
-              <option [value]="s.value">{{ s.label }}</option>
-            }
-          </select>
-        </div>
-        @if (!horizonteAtivo()) {
-          <div class="flex items-end pb-2">
-            <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{{ countTotal() }} OS na semana</span>
-          </div>
-        }
-        <div class="flex items-end pb-0.5">
-          <label class="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-gray-600">
-            <input type="checkbox" [checked]="horizonteAtivo()" (change)="horizonteAtivo.set(!horizonteAtivo())" class="rounded" />
-            Ver 4 semanas à frente
-          </label>
-        </div>
-        @if (!areaFixa) {
-          <div class="min-w-36">
-            <label class="block text-xs font-medium text-gray-600 mb-1">Área</label>
-            <select [ngModel]="areaFiltro()" (ngModelChange)="areaFiltro.set($event)"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-              <option value="todos">Todas</option>
-              <option value="ELETRICA">Elétrica</option>
-              <option value="MECANICA">Mecânica</option>
-              <option value="APOIO">Apoio</option>
-            </select>
-          </div>
-        }
-        <div class="min-w-40">
-          <label class="block text-xs font-medium text-gray-600 mb-1">{{ areaFixa === 'APOIO' ? 'Equipe' : 'Técnico' }}</label>
-          <select [ngModel]="tecnicoFiltro()" (ngModelChange)="tecnicoFiltro.set($event)"
-            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-            <option value="todos">Todos</option>
-            @for (t of tecnicosComOrdemNaSemana(); track t) {
-              <option [value]="t">{{ t }}</option>
-            }
-          </select>
-        </div>
-        <div class="flex-1 min-w-52">
-          <label class="block text-xs font-medium text-gray-600 mb-1">OS, descrição ou equipamento</label>
-          <input type="text" [ngModel]="searchTerm()" (ngModelChange)="searchTerm.set($event)"
-            placeholder="Buscar..."
-            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Status</label>
-        <div class="flex flex-wrap gap-1.5">
-          <button type="button" (click)="statusFiltro.set('todos')"
-            class="text-xs font-semibold px-2.5 py-1 rounded-full border transition"
-            [class]="statusFiltro() === 'todos' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-slate-300 hover:bg-slate-50'">
-            Todos
-          </button>
-          @for (s of statusesComOrdemNaSemana(); track s) {
-            <button type="button" (click)="statusFiltro.set(s)"
-              class="text-xs font-semibold px-2.5 py-1 rounded-full border transition"
-              [class]="statusFiltro() === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-slate-300 hover:bg-slate-50'">
-              {{ s }}
-            </button>
-          }
-        </div>
-      </div>
-    </div>
 
     @if (!horizonteAtivo()) {
     <!-- Expandir/recolher todos os grupos -->

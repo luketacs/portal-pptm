@@ -223,6 +223,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return 1 + Math.round(diffDias / 7);
   }
 
+  // Segunda-feira de um ano/semana ISO 8601 — inverso de numeroSemanaISO(). 4 de
+  // janeiro sempre cai na semana 1 (garantido pela definição do padrão), então dá
+  // pra calcular a segunda de qualquer semana a partir dali.
+  private segundaDaSemanaISO(ano: number, semana: number): Date {
+    const referencia = new Date(ano, 0, 4);
+    const diaDaSemana = (referencia.getDay() + 6) % 7; // 0 = segunda
+    const segunda = new Date(ano, 0, 4 - diaDaSemana);
+    segunda.setDate(segunda.getDate() + (semana - 1) * 7);
+    return segunda;
+  }
+
   private diaMesCompacto(dataIso: string): string {
     const [, mes, dia] = dataIso.split('-').map(Number);
     return `${dia}/${mes}`;
@@ -305,22 +316,31 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   // Filtros
   // 8 semanas à frente (cobre o horizonte de 4 semanas partindo de qualquer uma
-  // delas) + a atual + 4 semanas passadas pra referência/histórico.
+  // delas), sem semana passada além da S37/2026 pra trás — é quando a programação
+  // nativa começou a ser usada de verdade, semanas anteriores nunca tiveram dados.
   readonly semanas = (() => {
     const result: { value: string; label: string }[] = [];
     const hojeSegunda = segundaFeiraDe(new Date());
+    const inicioMinimoIso = paraIso(this.segundaDaSemanaISO(2026, 37));
     for (let i = -8; i < 5; i++) {
       const inicio = new Date(hojeSegunda);
       inicio.setDate(inicio.getDate() - i * 7);
+      const inicioIso = paraIso(inicio);
+      if (inicioIso < inicioMinimoIso) continue;
       const fim = new Date(inicio);
       fim.setDate(fim.getDate() + 6);
-      const inicioIso = paraIso(inicio);
       result.push({ value: inicioIso, label: `Semana ${this.numeroSemanaISO(inicioIso)} (${formatarDiaMes(inicio)} a ${formatarDiaMes(fim)})` });
     }
     return result;
   })();
 
-  semanaFiltro = signal(paraIso(segundaFeiraDe(new Date())));
+  // Semana da vez, mas nunca antes da S37/2026 — antes disso o dropdown nem lista a
+  // opção (ver `semanas`), então não faz sentido abrir a tela numa semana escondida.
+  semanaFiltro = signal((() => {
+    const hojeIso = paraIso(segundaFeiraDe(new Date()));
+    const minimoIso = paraIso(this.segundaDaSemanaISO(2026, 37));
+    return hojeIso < minimoIso ? minimoIso : hojeIso;
+  })());
   areaFiltro = signal<AreaFiltro>('todos');
   statusFiltro = signal<'todos' | string>('todos');
   tecnicoFiltro = signal<'todos' | string>('todos');
