@@ -975,6 +975,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   formReuniaoHorario = signal('');
   formReuniaoLocal = signal('');
   buscandoOsNoSigma = signal(false);
+  // Status da OS no SIGMA (ver buscarDescricaoDaOs) — só usado pra bloquear programar
+  // uma OS que já está concluída/cancelada no ERP. `null` = ainda não consultou, ou o
+  // número mudou desde a última consulta.
+  formNumeroOsStatusSigma = signal<string | null>(null);
 
   tecnicosDaAreaForm = computed(() => this.tecnicosPorArea(this.formArea()));
 
@@ -1161,6 +1165,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return base.filter(d => o.diasPrevistos.includes(d.data)).map(d => d.label);
   }
 
+  // Digitar de novo o número invalida o status já consultado (a OS antiga pode estar
+  // encerrada, a nova digitação ainda nem foi checada).
+  onFormNumeroOsChange(valor: string): void {
+    this.formNumeroOs.set(valor);
+    this.formNumeroOsStatusSigma.set(null);
+  }
+
   // ── Buscar descrição da OS no SIGMA ao sair do campo "Número da OS" ───
   async buscarDescricaoDaOs(): Promise<void> {
     const numero = this.formNumeroOs().trim();
@@ -1174,6 +1185,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         this.notificationService.showError(`OS ${numero} não encontrada no SIGMA — confira o número ou preencha manualmente.`);
         return;
       }
+      this.formNumeroOsStatusSigma.set(info.statusCodigo?.toUpperCase().trim() || null);
       if (!this.formDescricao().trim()) this.formDescricao.set(info.descricao);
       if (!this.formEquipamento().trim() && this.equipamentos().includes(info.equipamento)) {
         this.formEquipamento.set(info.equipamento);
@@ -1346,6 +1358,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const area = this.areaFiltro();
     this.formArea.set(area !== 'todos' ? area : 'ELETRICA');
     this.formNumeroOs.set('');
+    this.formNumeroOsStatusSigma.set(null);
     this.formSemOs.set(false);
     this.formDescricao.set('');
     this.formEquipamento.set('');
@@ -1380,6 +1393,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formTipo.set(o.tipo);
     this.formArea.set(o.area);
     this.formNumeroOs.set(o.numeroOs ?? '');
+    this.formNumeroOsStatusSigma.set(null);
     this.formSemOs.set(o.semOs);
     this.formDescricao.set(o.descricao);
     this.formEquipamento.set(o.equipamento ?? '');
@@ -1459,6 +1473,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const origem = this.apoioOrigem();
     if (!this.canConfirmarApoio() || !origem) return;
     this.isProcessando.set(true);
+    // Da perspectiva do técnico de apoio, "Recursos" é quem mais está no serviço — o
+    // mandante da OS original e os outros recursos já listados, nunca ele mesmo.
+    const apoioTecnico = this.apoioTecnicoNome();
+    const recursosDoApoio = [
+      ...(origem.recursos ? origem.recursos.split(',').map(s => s.trim()).filter(Boolean) : []),
+      origem.tecnicoNome,
+    ].filter(r => r.toUpperCase() !== apoioTecnico.toUpperCase()).join(', ');
     try {
       await this.manutencaoService.criarOrdem({
         tipo: 'ordem',
@@ -1468,7 +1489,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         semOs: origem.semOs,
         descricao: origem.descricao,
         equipamento: origem.equipamento ?? undefined,
-        recursos: origem.recursos ?? undefined,
+        recursos: recursosDoApoio || undefined,
         loto: origem.loto ?? undefined,
         areaAtuacao: origem.areaAtuacao ?? undefined,
         duracaoHoras: origem.duracaoHoras ?? undefined,
@@ -1546,6 +1567,14 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return this.ordemDuplicada(numero, nome, dias, this.formIdEdicao());
   });
 
+  // OS já concluída (CONC) ou cancelada (CANC) no SIGMA não faz sentido programar de
+  // novo — bloqueia a confirmação com o status que veio do ERP.
+  formOsEncerradaNoSigma = computed<string | null>(() => {
+    if (this.formTipo() !== 'ordem') return null;
+    const status = this.formNumeroOsStatusSigma();
+    return status === 'CANC' || status === 'CONC' ? status : null;
+  });
+
   formatarDataBr(dataIso: string): string {
     const [ano, mes, dia] = dataIso.split('-');
     return `${dia}/${mes}/${ano}`;
@@ -1554,6 +1583,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   canConfirmarForm(): boolean {
     if (this.isProcessando() || !this.formTecnicoNome().trim()) return false;
     if (this.formOrdemDuplicada()) return false;
+    if (this.formOsEncerradaNoSigma()) return false;
     if (this.formTecnicoFerias() || this.formTecnicoFolga()) return false;
     if (this.formTipo() === 'ordem') {
       return !!this.formDescricao().trim() && !!this.formLoto();
@@ -1734,6 +1764,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         this.notificationService.showError(`${tecnico.nome} já tem a OS ${numero} lançada nesses dias — não foi duplicada.`);
         continue;
       }
+      // Da perspectiva desse técnico, "Recursos" é quem MAIS está no serviço — o
+      // mandante e os outros ajudantes, nunca ele mesmo (senão a própria cópia dele
+      // aparecia listada como recurso de si próprio).
+      const recursosDoEspelho = [
+        ...this.formRecursosLista().filter(r => r.toUpperCase() !== tecnico.nome.toUpperCase()),
+        mandante,
+      ].join(', ');
       try {
         await this.manutencaoService.criarOrdem({
           tipo: 'ordem',
@@ -1743,7 +1780,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           semOs: this.formSemOs(),
           descricao: this.descricaoParaEnvio(),
           equipamento: this.formEquipamento().trim() || undefined,
-          recursos: this.formRecursosTexto() || undefined,
+          recursos: recursosDoEspelho || undefined,
           loto: this.formLoto().trim() || undefined,
           areaAtuacao: this.formAreaAtuacao().trim() || undefined,
           duracaoHoras: this.formDuracaoHoras() ?? undefined,
