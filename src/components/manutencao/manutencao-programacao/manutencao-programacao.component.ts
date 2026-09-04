@@ -175,8 +175,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return TIPO_LINHA_CLASSE[tipo];
   }
 
+  // Dica curta do hover nativo (title) — "SEM LOTO" já nem chega aqui (fica de fora
+  // do quadro inteiro, ver quadroLotoCalc). O detalhe completo fica no painel de
+  // clique (ver toggleLotoDetalhe), não faz sentido duplicar tudo aqui também.
   conflitoLotoTitle(itens: { status: string; descricao: string; tecnicos: string[] }[]): string {
-    return `Conflito: ${itens.map(i => `${i.status} (${i.tecnicos.join(', ')} — ${i.descricao})`).join(' vs. ')}`;
+    return `Conflito: ${itens.map(i => `${i.status} (${i.tecnicos.join(', ')})`).join(' vs. ')} — clique pra ver detalhes`;
   }
 
   // Painel de detalhe da célula do quadro de LOTO, aberto por clique (não só hover —
@@ -847,29 +850,31 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         equipamento,
         dias: dias.map(dia => {
           const itensBrutos = porDia.get(dia) ?? [];
-          // Agrupa por número de OS antes de tudo — a mesma OS pode aparecer em mais
-          // de uma linha (apoio/vários técnicos na mesma atividade), com o mesmo LOTO.
-          // Sem isso, a mesma atividade aparecia repetida uma vez por técnico no
-          // detalhe. Só é conflito de verdade quando OS DIFERENTES do mesmo
-          // equipamento divergem no status; a mesma OS repetida não conta contra ela
-          // mesma. "SEM LOTO" não entra na comparação — não impõe nenhuma exigência
-          // sobre o equipamento, então nunca conflita com LOTO nem com FUNCIONANDO.
+          // "Sem LOTO" é o estado padrão/sem novidade — não impõe nenhuma exigência
+          // sobre o equipamento, então fica de fora do quadro inteiro (nunca conflita
+          // com LOTO nem com FUNCIONANDO, nem aparece como item isolado). Só sobra
+          // quem realmente diz algo sobre o equipamento.
+          const relevantes = itensBrutos.filter(i => i.status.toUpperCase() !== 'SEM LOTO');
+          // Agrupa por número de OS — a mesma OS pode aparecer em mais de uma linha
+          // (apoio/vários técnicos na mesma atividade), com o mesmo LOTO. Sem isso, a
+          // mesma atividade aparecia repetida uma vez por técnico no detalhe. Só é
+          // conflito de verdade quando OS DIFERENTES do mesmo equipamento divergem no
+          // status; a mesma OS repetida não conta contra ela mesma.
           const porOs = new Map<string, { status: string; descricao: string; tecnicos: string[]; numeroOs: string | null }>();
-          itensBrutos.forEach((item, idx) => {
+          relevantes.forEach((item, idx) => {
             const chave = item.numeroOs ?? `__sem-os-${idx}`;
             const existente = porOs.get(chave);
             if (existente) existente.tecnicos.push(item.tecnico);
             else porOs.set(chave, { status: item.status, descricao: item.descricao, tecnicos: [item.tecnico], numeroOs: item.numeroOs });
           });
           const itens = Array.from(porOs.values());
-          const statusUnicos = new Set(itens.map(i => i.status.toUpperCase()).filter(s => s !== 'SEM LOTO'));
+          const statusUnicos = new Set(itens.map(i => i.status.toUpperCase()));
           return { data: dia, itens, conflito: statusUnicos.size > 1 };
         }),
       }))
-      // "Sem LOTO" é o estado padrão/sem novidade — só vale a pena aparecer no
-      // quadro o equipamento que tem algo realmente pra observar (bloqueio,
-      // funcionando marcado, ou conflito entre equipes).
-      .filter(linha => linha.dias.some(d => d.conflito || d.itens.some(i => i.status.toUpperCase() !== 'SEM LOTO')))
+      // Só vale a pena aparecer no quadro o equipamento que tem algo realmente pra
+      // observar (bloqueio, funcionando marcado, ou conflito entre equipes).
+      .filter(linha => linha.dias.some(d => d.itens.length > 0))
       .sort((a, b) => a.equipamento.localeCompare(b.equipamento));
   }
   quadroLoto = computed(() => this.quadroLotoCalc(this.ordensDaSemana(), this.diasDaSemanaAtual()));
