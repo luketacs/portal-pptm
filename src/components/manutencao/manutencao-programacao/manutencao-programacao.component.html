@@ -801,7 +801,7 @@
                                   </td>
                                   <td class="py-1.5 pr-3 text-center">
                                     @if (o.tipo === 'ordem') {
-                                      @if (statusOuExecucao(o); as st) {
+                                      @if (statusOuExecucao(o, bloco.diasIso); as st) {
                                         <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="st.class">{{ st.label }}</span>
                                       } @else {
                                         <span class="text-xs text-gray-300">—</span>
@@ -892,7 +892,7 @@
                                   </td>
                                   <td class="py-1.5 pr-3 text-center">
                                     @if (o.tipo === 'ordem') {
-                                      @if (statusOuExecucao(o); as st) {
+                                      @if (statusOuExecucao(o, bloco.diasIso); as st) {
                                         <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="st.class">{{ st.label }}</span>
                                       } @else {
                                         <span class="text-xs text-gray-300">—</span>

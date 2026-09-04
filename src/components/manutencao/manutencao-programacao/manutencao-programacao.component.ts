@@ -942,34 +942,36 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
   }
 
-  // Selo de execução por OS, pra saber se ela já foi apontada (executada) no SIGMA ou
-  // ainda não. `null` = ou não tem número de OS pra checar, ou a consulta ao SIGMA
-  // ainda não voltou. Não diferencia mais se o apontamento caiu dentro ou fora da
-  // semana programada — só importa se já foi feita ou não.
-  statusExecucao(o: ManutencaoOrdem): { label: string; class: string; dot: string; title: string } | null {
+  // Selo de execução por OS, pra saber se ela já foi apontada (executada) no SIGMA
+  // dentro da própria semana programada, ou ainda não. `null` = ou não tem número de
+  // OS pra checar, ou a consulta ao SIGMA ainda não voltou. Um apontamento fora da
+  // semana (feito em outra semana) conta como "Não executada" — só vale o que caiu no
+  // intervalo em que a OS foi programada pra rodar.
+  statusExecucao(o: ManutencaoOrdem, diasSemanaOverride?: string[]): { label: string; class: string; dot: string; title: string } | null {
     if (!o.numeroOs?.trim()) return null;
     const resultado = this.sigmaPorOs()[normalizarNumeroOs(o.numeroOs)];
     if (!resultado) return null;
 
-    if (resultado.apontamentos.length === 0) {
-      return { label: 'Não executada', class: 'bg-gray-100 text-gray-500', dot: 'bg-gray-400', title: 'Nenhum apontamento encontrado no SIGMA pra essa OS.' };
+    const diasDaSemana = o.diasPrevistos.length > 0 ? o.diasPrevistos : (diasSemanaOverride ?? this.diasDaSemanaAtual().map(d => d.data));
+    const dentroDaSemana = resultado.apontamentos.filter(a => diasDaSemana.includes(a.data));
+    if (dentroDaSemana.length > 0) {
+      return {
+        label: 'Executada', class: 'bg-green-100 text-green-700', dot: 'bg-green-500',
+        title: `Executada — apontada em: ${dentroDaSemana.map(a => a.data).join(', ')}`,
+      };
     }
-
-    return {
-      label: 'Executada', class: 'bg-green-100 text-green-700', dot: 'bg-green-500',
-      title: `Executada — apontada em: ${resultado.apontamentos.map(a => a.data).join(', ')}`,
-    };
+    return { label: 'Não executada', class: 'bg-gray-100 text-gray-500', dot: 'bg-gray-400', title: 'Nenhum apontamento encontrado dentro da semana programada.' };
   }
 
   // A coluna "Status" hoje é sempre 'PEND' pra qualquer OS criada pelo Portal (o valor
   // real de execução vem do SIGMA, ver statusExecucao()) — mostrar "PEND" em toda linha
   // não informa nada. Só vale mostrar o status bruto quando ele for diferente de PEND
   // (dado legado, de antes dessa mudança); no caso comum, mostra a execução no lugar.
-  statusOuExecucao(o: ManutencaoOrdem): { label: string; class: string } | null {
+  statusOuExecucao(o: ManutencaoOrdem, diasSemanaOverride?: string[]): { label: string; class: string } | null {
     if (o.status && o.status.toUpperCase() !== 'PEND') {
       return { label: o.status, class: this.statusBadgeClass(o.status) };
     }
-    return this.statusExecucao(o);
+    return this.statusExecucao(o, diasSemanaOverride);
   }
 
   // KPI "Atendimento da programação" — % das OS da semana filtrada que já foram
