@@ -640,11 +640,30 @@ export class ExcelExportService {
   private readonly PROG_NAVY_CLARO = 'FFEBF1F8';
   private readonly PROG_BORDA = 'FFD9D9D9';
   private readonly PROG_DIA_ORDEM = 'FFDCE6F1';
+  // DSR (fim de semana sem lançamento) — fundo claro, sem chamar mais atenção que o
+  // resto da planilha.
   private readonly PROG_AUSENCIA_BG = 'FFFDE9D9';
   private readonly PROG_AUSENCIA_TEXTO = 'FFC0392B';
-  private readonly PROG_DSR_BG = 'FFDC3545';
-  private readonly PROG_TREINAMENTO_BG = 'FF4A69BD';
-  private readonly PROG_EXAME_BG = 'FF17A673';
+  // Cores por tipo de ausência — mesma paleta (fundo claro + texto colorido) usada na
+  // tela do Portal pros badges de Folga/Treinamento/Exame Médico/Reunião, só que em
+  // hex pro Excel. Nada de fundo sólido saturado — fica pesado numa planilha inteira.
+  private readonly PROG_FOLGA_BG = 'FFF3E8FF';
+  private readonly PROG_FOLGA_TEXTO = 'FF7E22CE';
+  private readonly PROG_TREINAMENTO_BG = 'FFE0E7FF';
+  private readonly PROG_TREINAMENTO_TEXTO = 'FF4338CA';
+  private readonly PROG_EXAME_BG = 'FFCCFBF1';
+  private readonly PROG_EXAME_TEXTO = 'FF0F766E';
+  private readonly PROG_REUNIAO_BG = 'FFE0F2FE';
+  private readonly PROG_REUNIAO_TEXTO = 'FF0369A1';
+
+  private corAusenciaPorTipo(tipo: string): { bg: string; texto: string } {
+    switch (tipo) {
+      case 'folga': return { bg: this.PROG_FOLGA_BG, texto: this.PROG_FOLGA_TEXTO };
+      case 'treinamento': return { bg: this.PROG_TREINAMENTO_BG, texto: this.PROG_TREINAMENTO_TEXTO };
+      case 'exame_medico': return { bg: this.PROG_EXAME_BG, texto: this.PROG_EXAME_TEXTO };
+      default: return { bg: this.PROG_REUNIAO_BG, texto: this.PROG_REUNIAO_TEXTO }; // reuniao
+    }
+  }
 
   // Best-effort: se a logo não carregar (rede, arquivo ausente), o export segue
   // sem ela em vez de falhar.
@@ -703,19 +722,19 @@ export class ExcelExportService {
         // quebra em mais de uma linha (wrapText), senão o texto fica cortado.
 
         // Folga/Treinamento/Exame médico não têm OS/equipamento/LOTO — em vez de
-        // espalhar campos vazios pelas 7 primeiras colunas, vira uma faixa colorida
-        // única com o rótulo centralizado, fácil de bater o olho na semana inteira.
-        const corAusencia = linha.tipo === 'folga' ? this.PROG_DSR_BG
-          : linha.tipo === 'treinamento' ? this.PROG_TREINAMENTO_BG
-          : linha.tipo === 'exame_medico' ? this.PROG_EXAME_BG
-          : null;
+        // espalhar campos vazios pelas 7 primeiras colunas, vira uma faixa única com
+        // o rótulo centralizado, fácil de bater o olho na semana inteira. Fundo claro
+        // (mesma paleta da tela), não sólido saturado — fica pesado numa planilha
+        // inteira.
+        const ehAusenciaComBanner = linha.tipo === 'folga' || linha.tipo === 'treinamento' || linha.tipo === 'exame_medico';
 
-        if (corAusencia) {
+        if (ehAusenciaComBanner) {
+          const cor = this.corAusenciaPorTipo(linha.tipo);
           ws.mergeCells(row, 1, row, 7);
           const cel = ws.getCell(row, 1);
           cel.value = numeroLabel;
-          cel.font = { bold: true, size: 10, color: { argb: 'FFFFFFFF' } };
-          cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: corAusencia } };
+          cel.font = { bold: true, size: 10, color: { argb: cor.texto } };
+          cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor.bg } };
           cel.alignment = { horizontal: 'center', vertical: 'middle' };
         } else {
           const cOs = ws.getCell(row, 1);
@@ -764,9 +783,10 @@ export class ExcelExportService {
           if (linha.tipo === 'ordem') {
             cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_DIA_ORDEM } };
           } else {
+            const cor = this.corAusenciaPorTipo(linha.tipo);
             cel.value = linha.tipo === 'folga' ? 'FOLGA' : linha.tipo === 'treinamento' ? 'TREINO' : linha.tipo === 'reuniao' ? 'REUNIÃO' : 'ASO';
-            cel.font = { bold: true, size: 7, color: { argb: this.PROG_AUSENCIA_TEXTO } };
-            cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AUSENCIA_BG } };
+            cel.font = { bold: true, size: 7, color: { argb: cor.texto } };
+            cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor.bg } };
           }
         });
 
@@ -781,9 +801,10 @@ export class ExcelExportService {
     }
 
     // DSR nos fins de semana em que o técnico não tem nenhum lançamento marcado —
-    // pinta de vermelho e mescla numa célula só ao longo do bloco dele. Se ele
-    // precisar trabalhar no sábado/domingo (tem algo em diasPrevistos naquele dia),
-    // não mexe — os marcadores normais da linha continuam valendo.
+    // fundo claro (mesmo tom pastel do resto), mesclado numa célula só ao longo do
+    // bloco dele. Se ele precisar trabalhar no sábado/domingo (tem algo em
+    // diasPrevistos naquele dia), não mexe — os marcadores normais da linha
+    // continuam valendo.
     const ultimaLinhaRow = row - 1;
     dias.forEach((dia, i) => {
       if (dia.label !== 'SAB' && dia.label !== 'DOM') return;
@@ -795,8 +816,8 @@ export class ExcelExportService {
       }
       const cel = ws.getCell(primeiraLinhaRow, col);
       cel.value = 'DSR';
-      cel.font = { bold: true, size: 8, color: { argb: 'FFFFFFFF' } };
-      cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_DSR_BG } };
+      cel.font = { bold: true, size: 8, color: { argb: this.PROG_AUSENCIA_TEXTO } };
+      cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AUSENCIA_BG } };
       cel.alignment = { horizontal: 'center', vertical: 'middle' };
       for (let r = primeiraLinhaRow; r <= ultimaLinhaRow; r++) {
         ws.getCell(r, col).border = this.bordaFina();
