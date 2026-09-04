@@ -1443,6 +1443,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           reuniaoLocal: ehReuniao ? (this.formReuniaoLocal().trim() || null) : null,
         });
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} atualizada.`);
+        if (ehOrdem) {
+          await this.criarApoioAndaimeSeNecessario();
+          await this.criarApoioTecnicosSeNecessario();
+        }
       } else {
         await this.manutencaoService.criarOrdem({
           tipo,
@@ -1486,13 +1490,15 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Se o recurso usado for andaime, monta automaticamente uma OS equivalente na
   // programação do Apoio (empresa TOP ANDAIMES) — evita esquecer de programar o
   // contratado responsável pelo andaime junto com o serviço de Elétrica/Mecânica.
-  // Só roda na criação (não na edição, pra não duplicar toda vez que a OS original
-  // for reaberta e salva de novo).
+  // Roda na criação E na edição (ex.: adicionar "ANDAIME" só depois, reabrindo a OS)
+  // — a checagem de duplicata evita criar de novo toda vez que a OS for reaberta e
+  // salva sem mudar nada.
   private async criarApoioAndaimeSeNecessario(): Promise<void> {
     if (this.formArea() === 'APOIO') return;
     if (!this.formRecursosLista().some(r => r.toUpperCase().includes('ANDAIME'))) return;
+    const numero = this.formNumeroOs().trim();
+    if (numero && this.ordemDuplicada(numero, this.ANDAIMES_TECNICO_APOIO, this.formDiasSelecionados())) return;
     try {
-      const numero = this.formNumeroOs().trim();
       await this.manutencaoService.criarOrdem({
         tipo: 'ordem',
         area: 'APOIO',
@@ -1519,9 +1525,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   // Quando outro(s) técnico(s) são marcados em "Recursos", a OS é espelhada
   // automaticamente pra agenda de cada um deles (mesma ideia do "+Apoio" manual, só que
-  // pra vários de uma vez, direto na criação) — sem isso, o ajudante nunca via a OS na
-  // própria conta, só o técnico principal (mandante). Só roda na criação, igual ao
-  // apoio de andaime, pra não duplicar a cada edição.
+  // pra vários de uma vez) — sem isso, o ajudante nunca via a OS na própria conta, só
+  // o técnico principal (mandante). Roda na criação E na edição (ex.: adicionar um
+  // ajudante só depois, reabrindo a OS) — a checagem de duplicata dentro do loop evita
+  // criar de novo pra quem já tem essa OS nesses dias.
   private async criarApoioTecnicosSeNecessario(): Promise<void> {
     const mandante = this.formTecnicoNome().trim();
     const dias = this.formDiasSelecionados();
