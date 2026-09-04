@@ -373,6 +373,16 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return o.diasPrevistos.length > 0 ? [...o.diasPrevistos].sort()[0] : '9999-12-31';
   }
 
+  // Dentro do mesmo dia, Exame Médico (ASO) vem antes de qualquer outra coisa — é o
+  // primeiro compromisso que a pessoa tem que cumprir naquele dia.
+  private ordenarPorDiaEAso(a: ManutencaoOrdem, b: ManutencaoOrdem): number {
+    const dia = this.primeiroDia(a).localeCompare(this.primeiroDia(b));
+    if (dia !== 0) return dia;
+    const pesoA = a.tipo === 'exame_medico' ? 0 : 1;
+    const pesoB = b.tipo === 'exame_medico' ? 0 : 1;
+    return pesoA - pesoB;
+  }
+
   // Período de férias do técnico que toca algum dos dias informados (a semana em
   // exibição, por ex.) — `null` se não tiver nenhuma férias cadastrada nesse período.
   private feriasNoIntervalo(tecnicoNome: string, diasIso: string[]): FeriasTecnico | null {
@@ -428,7 +438,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
     return Array.from(porTecnico.entries())
       .map(([tecnico, ordens]) => {
-        const ordensOrdenadas = [...ordens].sort((a, b) => this.primeiroDia(a).localeCompare(this.primeiroDia(b)));
+        const ordensOrdenadas = [...ordens].sort((a, b) => this.ordenarPorDiaEAso(a, b));
         const totalHoras = somaHoras(ordensOrdenadas);
         const capacidade = this.capacidadeSemana(tecnico, ordensOrdenadas, dias);
         const saldo = capacidade !== null ? parseFloat((capacidade - totalHoras).toFixed(2)) : null;
@@ -911,8 +921,14 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Sugestões pro campo "Recursos" — outro técnico ajudando (de qualquer área,
   // Elétrica ou Mecânica — a ajuda não precisa ser do mesmo time da OS) ou um
   // recurso especial usado na atividade. Datalist: sugere, mas continua aceitando
-  // texto livre pra qualquer outra coisa.
-  private readonly recursosEquipamentoOpcoes = ['MUNCK', 'GUINDASTE', 'ANDAIME'];
+  // texto livre pra qualquer outra coisa. Munck/Guindaste têm duas empresas
+  // contratadas (as duas fazem os dois serviços) — a opção já vem com a empresa
+  // junto, escolhida na hora de lançar a OS, em vez de perguntar depois.
+  private readonly recursosEquipamentoOpcoes = [
+    'MUNCK - DB GUINDASTES', 'MUNCK - CORDEIRO',
+    'GUINDASTE - DB GUINDASTES', 'GUINDASTE - CORDEIRO',
+    'ANDAIME',
+  ];
 
   recursosOpcoes = computed(() => {
     const jaAdicionados = new Set(this.formRecursosLista().map(r => r.toUpperCase()));
@@ -1501,7 +1517,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         });
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} atualizada.`);
         if (ehOrdem) {
-          await this.criarApoioAndaimeSeNecessario();
+          await this.criarApoioEquipamentosSeNecessario();
           await this.criarApoioTecnicosSeNecessario();
         }
       } else {
@@ -1528,7 +1544,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         });
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} adicionada à programação.`);
         if (ehOrdem) {
-          await this.criarApoioAndaimeSeNecessario();
+          await this.criarApoioEquipamentosSeNecessario();
           await this.criarApoioTecnicosSeNecessario();
         }
       }
@@ -1540,43 +1556,62 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
   }
 
-  // Empresa que executa serviço de andaime no Apoio (cadastro de equipes, ver
-  // "Gerenciar Apoio") — precisa bater com o nome exato lá cadastrado.
-  private readonly ANDAIMES_TECNICO_APOIO = 'TOP ANDAIMES';
+  // Cada opção de recurso "de equipamento" aponta pra uma empresa/equipe cadastrada
+  // no Apoio (ver "Gerenciar Apoio") — precisa bater com o nome exato lá cadastrado.
+  // Munck e Guindaste têm duas contratadas (a opção de recurso já vem com a empresa
+  // junto, ver recursosEquipamentoOpcoes), andaime só tem uma.
+  private readonly RECURSO_PARA_EMPRESA_APOIO: Record<string, string> = {
+    'ANDAIME': 'TOP ANDAIMES',
+    'MUNCK - DB GUINDASTES': 'DB GUINDASTES',
+    'MUNCK - CORDEIRO': 'CORDEIRO',
+    'GUINDASTE - DB GUINDASTES': 'DB GUINDASTES',
+    'GUINDASTE - CORDEIRO': 'CORDEIRO',
+  };
 
-  // Se o recurso usado for andaime, monta automaticamente uma OS equivalente na
-  // programação do Apoio (empresa TOP ANDAIMES) — evita esquecer de programar o
-  // contratado responsável pelo andaime junto com o serviço de Elétrica/Mecânica.
-  // Roda na criação E na edição (ex.: adicionar "ANDAIME" só depois, reabrindo a OS)
+  // Se o recurso usado for andaime/munck/guindaste, monta automaticamente uma OS
+  // equivalente na programação do Apoio (pra empresa certa) — evita esquecer de
+  // programar o contratado responsável junto com o serviço de Elétrica/Mecânica.
+  // Roda na criação E na edição (ex.: adicionar o recurso só depois, reabrindo a OS)
   // — a checagem de duplicata evita criar de novo toda vez que a OS for reaberta e
-  // salva sem mudar nada.
-  private async criarApoioAndaimeSeNecessario(): Promise<void> {
+  // salva sem mudar nada. Duas opções que apontam pra mesma empresa no mesmo dia
+  // (ex.: Munck e Guindaste da Cordeiro na mesma OS) também não duplicam, pelo
+  // mesmo motivo.
+  private async criarApoioEquipamentosSeNecessario(): Promise<void> {
     if (this.formArea() === 'APOIO') return;
-    if (!this.formRecursosLista().some(r => r.toUpperCase().includes('ANDAIME'))) return;
+    const empresas = new Set(
+      this.formRecursosLista()
+        .map(r => this.RECURSO_PARA_EMPRESA_APOIO[r.toUpperCase()])
+        .filter((e): e is string => !!e),
+    );
+    if (empresas.size === 0) return;
+
     const numero = this.formNumeroOs().trim();
-    if (numero && this.ordemDuplicada(numero, this.ANDAIMES_TECNICO_APOIO, this.formDiasSelecionados())) return;
-    try {
-      await this.manutencaoService.criarOrdem({
-        tipo: 'ordem',
-        area: 'APOIO',
-        semanaInicio: this.semanaFiltro(),
-        numeroOs: numero || undefined,
-        semOs: this.formSemOs(),
-        descricao: this.descricaoParaEnvio(),
-        equipamento: this.formEquipamento().trim() || undefined,
-        recursos: this.formRecursosTexto() || undefined,
-        loto: this.formLoto().trim() || undefined,
-        areaAtuacao: this.formAreaAtuacao().trim() || undefined,
-        duracaoHoras: this.formDuracaoHoras() ?? undefined,
-        tipoServico: this.formTipoServico().trim() || undefined,
-        tecnicoNome: this.ANDAIMES_TECNICO_APOIO,
-        diasPrevistos: this.formDiasSelecionados(),
-        status: 'PEND',
-        observacoes: `Apoio automático (andaime) — vinculado à OS de ${this.areaLabel[this.formArea()]}${numero ? ' nº ' + numero : ''}.`,
-      });
-      this.notificationService.showSuccess('Também programado pra TOP ANDAIMES (Apoio).');
-    } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao programar apoio de andaime.');
+    const dias = this.formDiasSelecionados();
+    for (const empresa of empresas) {
+      if (numero && this.ordemDuplicada(numero, empresa, dias)) continue;
+      try {
+        await this.manutencaoService.criarOrdem({
+          tipo: 'ordem',
+          area: 'APOIO',
+          semanaInicio: this.semanaFiltro(),
+          numeroOs: numero || undefined,
+          semOs: this.formSemOs(),
+          descricao: this.descricaoParaEnvio(),
+          equipamento: this.formEquipamento().trim() || undefined,
+          recursos: this.formRecursosTexto() || undefined,
+          loto: this.formLoto().trim() || undefined,
+          areaAtuacao: this.formAreaAtuacao().trim() || undefined,
+          duracaoHoras: this.formDuracaoHoras() ?? undefined,
+          tipoServico: this.formTipoServico().trim() || undefined,
+          tecnicoNome: empresa,
+          diasPrevistos: dias,
+          status: 'PEND',
+          observacoes: `Apoio automático (${empresa}) — vinculado à OS de ${this.areaLabel[this.formArea()]}${numero ? ' nº ' + numero : ''}.`,
+        });
+        this.notificationService.showSuccess(`Também programado pra ${empresa} (Apoio).`);
+      } catch (err: unknown) {
+        this.notificationService.showError(err instanceof Error ? err.message : `Erro ao programar apoio pra ${empresa}.`);
+      }
     }
   }
 

@@ -642,6 +642,9 @@ export class ExcelExportService {
   private readonly PROG_DIA_ORDEM = 'FFDCE6F1';
   private readonly PROG_AUSENCIA_BG = 'FFFDE9D9';
   private readonly PROG_AUSENCIA_TEXTO = 'FFC0392B';
+  private readonly PROG_DSR_BG = 'FFDC3545';
+  private readonly PROG_TREINAMENTO_BG = 'FF4A69BD';
+  private readonly PROG_EXAME_BG = 'FF17A673';
 
   // Best-effort: se a logo não carregar (rede, arquivo ausente), o export segue
   // sem ela em vez de falhar.
@@ -678,6 +681,7 @@ export class ExcelExportService {
     row++;
 
     const linhas = grupo.linhas.length > 0 ? grupo.linhas : null;
+    const primeiraLinhaRow = row;
 
     if (!linhas) {
       const cel = ws.getCell(row, 2);
@@ -695,45 +699,63 @@ export class ExcelExportService {
           : 'CRIAR OS';
 
         const fonteBase: Partial<ExcelJS.Font> = { size: 9, color: { argb: 'FF333333' } };
-        ws.getRow(row).height = 15;
+        // Sem altura fixa aqui — deixa o Excel calcular sozinho quando a descrição
+        // quebra em mais de uma linha (wrapText), senão o texto fica cortado.
 
-        const cOs = ws.getCell(row, 1);
-        cOs.value = numeroLabel;
-        cOs.font = fonteBase;
-        cOs.alignment = { horizontal: 'center', vertical: 'middle' };
+        // Folga/Treinamento/Exame médico não têm OS/equipamento/LOTO — em vez de
+        // espalhar campos vazios pelas 7 primeiras colunas, vira uma faixa colorida
+        // única com o rótulo centralizado, fácil de bater o olho na semana inteira.
+        const corAusencia = linha.tipo === 'folga' ? this.PROG_DSR_BG
+          : linha.tipo === 'treinamento' ? this.PROG_TREINAMENTO_BG
+          : linha.tipo === 'exame_medico' ? this.PROG_EXAME_BG
+          : null;
 
-        const cDesc = ws.getCell(row, 2);
-        cDesc.value = linha.descricao;
-        cDesc.font = fonteBase;
-        cDesc.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        if (corAusencia) {
+          ws.mergeCells(row, 1, row, 7);
+          const cel = ws.getCell(row, 1);
+          cel.value = numeroLabel;
+          cel.font = { bold: true, size: 10, color: { argb: 'FFFFFFFF' } };
+          cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: corAusencia } };
+          cel.alignment = { horizontal: 'center', vertical: 'middle' };
+        } else {
+          const cOs = ws.getCell(row, 1);
+          cOs.value = numeroLabel;
+          cOs.font = fonteBase;
+          cOs.alignment = { horizontal: 'center', vertical: 'middle' };
 
-        const cDur = ws.getCell(row, 3);
-        if (linha.duracaoHoras !== null) {
-          cDur.value = linha.duracaoHoras;
-          cDur.numFmt = '0.00';
+          const cDesc = ws.getCell(row, 2);
+          cDesc.value = linha.descricao;
+          cDesc.font = fonteBase;
+          cDesc.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+
+          const cDur = ws.getCell(row, 3);
+          if (linha.duracaoHoras !== null) {
+            cDur.value = linha.duracaoHoras;
+            cDur.numFmt = '0.00';
+          }
+          cDur.font = fonteBase;
+          cDur.alignment = { horizontal: 'center', vertical: 'middle' };
+
+          const cEquip = ws.getCell(row, 4);
+          cEquip.value = linha.equipamento;
+          cEquip.font = fonteBase;
+          cEquip.alignment = { horizontal: 'left', vertical: 'middle' };
+
+          const cRec = ws.getCell(row, 5);
+          cRec.value = linha.recursos;
+          cRec.font = fonteBase;
+          cRec.alignment = { horizontal: 'left', vertical: 'middle' };
+
+          const cLoto = ws.getCell(row, 6);
+          cLoto.value = linha.loto;
+          cLoto.font = fonteBase;
+          cLoto.alignment = { horizontal: 'center', vertical: 'middle' };
+
+          const cArea = ws.getCell(row, 7);
+          cArea.value = linha.areaAtuacao;
+          cArea.font = fonteBase;
+          cArea.alignment = { horizontal: 'left', vertical: 'middle' };
         }
-        cDur.font = fonteBase;
-        cDur.alignment = { horizontal: 'center', vertical: 'middle' };
-
-        const cEquip = ws.getCell(row, 4);
-        cEquip.value = linha.equipamento;
-        cEquip.font = fonteBase;
-        cEquip.alignment = { horizontal: 'left', vertical: 'middle' };
-
-        const cRec = ws.getCell(row, 5);
-        cRec.value = linha.recursos;
-        cRec.font = fonteBase;
-        cRec.alignment = { horizontal: 'left', vertical: 'middle' };
-
-        const cLoto = ws.getCell(row, 6);
-        cLoto.value = linha.loto;
-        cLoto.font = fonteBase;
-        cLoto.alignment = { horizontal: 'center', vertical: 'middle' };
-
-        const cArea = ws.getCell(row, 7);
-        cArea.value = linha.areaAtuacao;
-        cArea.font = fonteBase;
-        cArea.alignment = { horizontal: 'left', vertical: 'middle' };
 
         dias.forEach((dia, i) => {
           const cel = ws.getCell(row, 8 + i);
@@ -758,6 +780,29 @@ export class ExcelExportService {
       });
     }
 
+    // DSR nos fins de semana em que o técnico não tem nenhum lançamento marcado —
+    // pinta de vermelho e mescla numa célula só ao longo do bloco dele. Se ele
+    // precisar trabalhar no sábado/domingo (tem algo em diasPrevistos naquele dia),
+    // não mexe — os marcadores normais da linha continuam valendo.
+    const ultimaLinhaRow = row - 1;
+    dias.forEach((dia, i) => {
+      if (dia.label !== 'SAB' && dia.label !== 'DOM') return;
+      const temTrabalho = linhas?.some(l => l.diasPrevistos.includes(dia.data)) ?? false;
+      if (temTrabalho) return;
+      const col = 8 + i;
+      if (ultimaLinhaRow > primeiraLinhaRow) {
+        ws.mergeCells(primeiraLinhaRow, col, ultimaLinhaRow, col);
+      }
+      const cel = ws.getCell(primeiraLinhaRow, col);
+      cel.value = 'DSR';
+      cel.font = { bold: true, size: 8, color: { argb: 'FFFFFFFF' } };
+      cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_DSR_BG } };
+      cel.alignment = { horizontal: 'center', vertical: 'middle' };
+      for (let r = primeiraLinhaRow; r <= ultimaLinhaRow; r++) {
+        ws.getCell(r, col).border = this.bordaFina();
+      }
+    });
+
     row++; // espaço entre blocos de técnico
     return row;
   }
@@ -778,7 +823,7 @@ export class ExcelExportService {
     });
 
     ws.columns = [
-      { width: 10 }, { width: 46 }, { width: 9 }, { width: 16 }, { width: 12 },
+      { width: 13 }, { width: 46 }, { width: 9 }, { width: 16 }, { width: 12 },
       { width: 10 }, { width: 20 },
       { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 },
       { width: 10 },
