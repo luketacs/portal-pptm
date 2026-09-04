@@ -48,6 +48,10 @@
                   class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
                   Férias
                 </button>
+                <button (click)="abrirReuniaoLote(); menuAcoesAberto.set(false)"
+                  class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                  Reunião
+                </button>
               }
             </div>
           }
@@ -425,6 +429,9 @@
                             @if (o.loto && o.loto.toUpperCase() !== 'SEM LOTO') {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="lotoBadgeClass(o.loto)">{{ o.loto }}</span>
                             }
+                            @if (o.tipo === 'reuniao' && (o.reuniaoHorario || o.reuniaoLocal)) {
+                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-sky-50 text-sky-700">{{ o.reuniaoHorario }}{{ o.reuniaoHorario && o.reuniaoLocal ? ' · ' : '' }}{{ o.reuniaoLocal }}</span>
+                            }
                           </td>
                           <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">
                             {{ o.equipamento || '—' }}
@@ -522,6 +529,9 @@
                             }
                             @if (o.loto && o.loto.toUpperCase() !== 'SEM LOTO') {
                               <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="lotoBadgeClass(o.loto)">{{ o.loto }}</span>
+                            }
+                            @if (o.tipo === 'reuniao' && (o.reuniaoHorario || o.reuniaoLocal)) {
+                              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-sky-50 text-sky-700">{{ o.reuniaoHorario }}{{ o.reuniaoHorario && o.reuniaoLocal ? ' · ' : '' }}{{ o.reuniaoLocal }}</span>
                             }
                           </td>
                           <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
@@ -772,6 +782,9 @@
                                     @if (o.loto && o.loto.toUpperCase() !== 'SEM LOTO') {
                                       <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="lotoBadgeClass(o.loto)">{{ o.loto }}</span>
                                     }
+                                    @if (o.tipo === 'reuniao' && (o.reuniaoHorario || o.reuniaoLocal)) {
+                                      <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-sky-50 text-sky-700">{{ o.reuniaoHorario }}{{ o.reuniaoHorario && o.reuniaoLocal ? ' · ' : '' }}{{ o.reuniaoLocal }}</span>
+                                    }
                                   </td>
                                   <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">
                                     {{ o.equipamento || '—' }}
@@ -788,7 +801,7 @@
                                   </td>
                                   <td class="py-1.5 pr-3 text-center">
                                     @if (o.tipo === 'ordem') {
-                                      @if (statusOuExecucao(o, bloco.diasIso); as st) {
+                                      @if (statusOuExecucao(o); as st) {
                                         <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="st.class">{{ st.label }}</span>
                                       } @else {
                                         <span class="text-xs text-gray-300">—</span>
@@ -868,6 +881,9 @@
                                     @if (o.loto && o.loto.toUpperCase() !== 'SEM LOTO') {
                                       <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="lotoBadgeClass(o.loto)">{{ o.loto }}</span>
                                     }
+                                    @if (o.tipo === 'reuniao' && (o.reuniaoHorario || o.reuniaoLocal)) {
+                                      <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-sky-50 text-sky-700">{{ o.reuniaoHorario }}{{ o.reuniaoHorario && o.reuniaoLocal ? ' · ' : '' }}{{ o.reuniaoLocal }}</span>
+                                    }
                                   </td>
                                   <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
                                   <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">
@@ -876,7 +892,7 @@
                                   </td>
                                   <td class="py-1.5 pr-3 text-center">
                                     @if (o.tipo === 'ordem') {
-                                      @if (statusOuExecucao(o, bloco.diasIso); as st) {
+                                      @if (statusOuExecucao(o); as st) {
                                         <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="st.class">{{ st.label }}</span>
                                       } @else {
                                         <span class="text-xs text-gray-300">—</span>
@@ -970,7 +986,7 @@
       <h3 class="text-lg font-bold text-gray-800 mb-4">{{ formIdEdicao() ? 'Editar ' + tipoLabel[formTipo()] : 'Novo lançamento' }}</h3>
 
       <label class="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
         @for (t of tiposForm(); track t) {
           <button type="button" (click)="formTipo.set(t)"
             class="text-sm font-semibold py-2 rounded-lg border transition"
@@ -1054,9 +1070,14 @@
           @if (formRecursosLista().length > 0) {
             <div class="flex flex-wrap gap-1.5 mb-1.5">
               @for (r of formRecursosLista(); track r) {
-                <span class="inline-flex items-center gap-1 text-xs font-semibold pl-2 pr-1 py-1 rounded-full bg-blue-50 text-blue-700">
+                <span class="inline-flex items-center gap-1 text-xs font-semibold pl-2 pr-1 py-1 rounded-full"
+                  [class]="recursoReconhecido(r) === 'tecnico' ? 'bg-blue-50 text-blue-700' : recursoReconhecido(r) === 'equipamento' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'"
+                  [title]="recursoReconhecido(r) === 'tecnico' ? 'Técnico reconhecido — a OS também vai aparecer na agenda dele' : recursoReconhecido(r) === 'equipamento' ? 'Equipamento reconhecido' : 'Não bate com nenhum técnico/equipamento cadastrado — só texto, não espelha em lugar nenhum'">
+                  @if (!recursoReconhecido(r)) {
+                    <svg class="h-3 w-3 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2h1v3a1 1 0 102 0v-4a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>
+                  }
                   {{ r }}
-                  <button type="button" (click)="removerRecurso(r)" title="Remover" class="hover:bg-blue-100 rounded-full p-0.5">
+                  <button type="button" (click)="removerRecurso(r)" title="Remover" class="hover:bg-black/10 rounded-full p-0.5">
                     <svg class="h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 </span>
@@ -1076,7 +1097,7 @@
               <option [value]="op"></option>
             }
           </datalist>
-          <p class="text-[11px] text-gray-400 mt-1">Ao adicionar outro técnico aqui, a OS também aparece automaticamente na agenda dele.</p>
+          <p class="text-[11px] text-gray-400 mt-1">Escolha o nome na lista de sugestões — só assim a OS aparece automaticamente na agenda do técnico também. Chip cinza com ⚠ = não bateu com nenhum nome cadastrado (só texto, não espelha).</p>
         </div>
 
         <div class="grid grid-cols-2 gap-3 mb-4">
@@ -1110,10 +1131,25 @@
           </div>
         </div>
       } @else {
-        <label class="block text-sm font-medium text-slate-700 mb-1">Motivo (opcional)</label>
+        <label class="block text-sm font-medium text-slate-700 mb-1">{{ formTipo() === 'reuniao' ? 'Título' : 'Motivo (opcional)' }}</label>
         <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="2"
           [placeholder]="motivoPlaceholder(formTipo())"
           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"></textarea>
+        @if (formTipo() === 'reuniao') {
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Horário <span class="text-red-500">*</span></label>
+              <input type="time" [ngModel]="formReuniaoHorario()" (ngModelChange)="formReuniaoHorario.set($event)"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Local <span class="text-red-500">*</span></label>
+              <input type="text" [ngModel]="formReuniaoLocal()" (ngModelChange)="formReuniaoLocal.set($event)"
+                placeholder="Ex.: Sala de reuniões"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+        }
       }
 
       <label class="block text-sm font-medium text-slate-700 mb-1">
@@ -1187,6 +1223,54 @@
       <div class="flex justify-end gap-3">
         <button (click)="fecharFeriado()" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Cancelar</button>
         <button (click)="confirmarFeriado()" [disabled]="!canConfirmarFeriado()"
+          class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
+          Aplicar pra {{ todosTecnicos().length }} técnicos
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Modal: Reunião (lançada em lote pra toda a equipe) -->
+@if (reuniaoLoteAberto()) {
+  <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" (click)="fecharReuniaoLote()">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm" (click)="$event.stopPropagation()">
+      <h3 class="text-lg font-bold text-gray-800 mb-1">Lançar reunião</h3>
+      <p class="text-sm text-gray-500 mb-4">Avisa {{ todosTecnicos().length }} técnicos (Elétrica + Mecânica) de uma vez, nos dias marcados.</p>
+
+      <label class="block text-sm font-medium text-slate-700 mb-1">Dia(s) <span class="text-red-500">*</span></label>
+      <div class="flex flex-wrap gap-2 mb-4">
+        @for (dia of diasDaSemanaAtual(); track dia.data) {
+          <label class="flex flex-col items-center gap-1 cursor-pointer">
+            <input type="checkbox" [checked]="reuniaoLoteDias().includes(dia.data)" (change)="toggleDiaReuniaoLote(dia.data)" class="rounded" />
+            <span class="text-xs text-gray-500">{{ dia.label }}</span>
+            <span class="text-[10px] text-gray-400">{{ diaMesPadded(dia.data) }}</span>
+          </label>
+        }
+      </div>
+
+      <label class="block text-sm font-medium text-slate-700 mb-1">Título</label>
+      <input type="text" [ngModel]="reuniaoLoteTitulo()" (ngModelChange)="reuniaoLoteTitulo.set($event)"
+        placeholder="Ex.: Reunião de segurança"
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Horário <span class="text-red-500">*</span></label>
+          <input type="time" [ngModel]="reuniaoLoteHorario()" (ngModelChange)="reuniaoLoteHorario.set($event)"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Local <span class="text-red-500">*</span></label>
+          <input type="text" [ngModel]="reuniaoLoteLocal()" (ngModelChange)="reuniaoLoteLocal.set($event)"
+            placeholder="Ex.: Sala de reuniões"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3">
+        <button (click)="fecharReuniaoLote()" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Cancelar</button>
+        <button (click)="confirmarReuniaoLote()" [disabled]="!canConfirmarReuniaoLote()"
           class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
           Aplicar pra {{ todosTecnicos().length }} técnicos
         </button>

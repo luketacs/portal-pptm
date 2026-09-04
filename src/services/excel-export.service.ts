@@ -20,7 +20,7 @@ export interface FechamentoFundoFixoLinha {
 // original tinha (DSR, "trab", "BH") porque o Portal não rastreia esses códigos —
 // só marca os dias em que a linha está prevista.
 export interface ProgramacaoSemanalLinha {
-  tipo: 'ordem' | 'folga' | 'treinamento' | 'exame_medico';
+  tipo: 'ordem' | 'folga' | 'treinamento' | 'exame_medico' | 'reuniao';
   numeroOs: string | null;
   semOs: boolean;
   descricao: string;
@@ -689,6 +689,7 @@ export class ExcelExportService {
         const numeroLabel = linha.tipo === 'folga' ? 'FOLGA'
           : linha.tipo === 'treinamento' ? 'TREINAMENTO'
           : linha.tipo === 'exame_medico' ? 'EXAME MÉDICO'
+          : linha.tipo === 'reuniao' ? 'REUNIÃO'
           : linha.numeroOs ? linha.numeroOs
           : linha.semOs ? 'SEM OS'
           : 'CRIAR OS';
@@ -741,7 +742,7 @@ export class ExcelExportService {
           if (linha.tipo === 'ordem') {
             cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_DIA_ORDEM } };
           } else {
-            cel.value = linha.tipo === 'folga' ? 'FOLGA' : linha.tipo === 'treinamento' ? 'TREINO' : 'ASO';
+            cel.value = linha.tipo === 'folga' ? 'FOLGA' : linha.tipo === 'treinamento' ? 'TREINO' : linha.tipo === 'reuniao' ? 'REUNIÃO' : 'ASO';
             cel.font = { bold: true, size: 7, color: { argb: this.PROG_AUSENCIA_TEXTO } };
             cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AUSENCIA_BG } };
           }

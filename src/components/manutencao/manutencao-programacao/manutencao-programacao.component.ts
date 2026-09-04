@@ -29,26 +29,30 @@ const TIPO_LABEL: Record<ManutencaoTipo, string> = {
   folga: 'Folga',
   treinamento: 'Treinamento',
   exame_medico: 'Exame Médico (ASO)',
+  reuniao: 'Reunião',
 };
 const TIPO_BADGE: Record<ManutencaoTipo, string> = {
   ordem: '',
   folga: 'bg-purple-100 text-purple-700',
   treinamento: 'bg-indigo-100 text-indigo-700',
   exame_medico: 'bg-teal-100 text-teal-700',
+  reuniao: 'bg-sky-100 text-sky-700',
 };
-// Linha inteira ganha um fundo leve pra folga/treinamento/exame médico se destacarem
-// das OS de verdade sem precisar ler cada célula.
+// Linha inteira ganha um fundo leve pra folga/treinamento/exame médico/reunião se
+// destacarem das OS de verdade sem precisar ler cada célula.
 const TIPO_LINHA_CLASSE: Record<ManutencaoTipo, string> = {
   ordem: '',
   folga: 'bg-purple-50/40',
   treinamento: 'bg-indigo-50/40',
   exame_medico: 'bg-teal-50/40',
+  reuniao: 'bg-sky-50/40',
 };
 // Exemplo de descrição no placeholder do formulário, um pra cada tipo que não é OS.
 const TIPO_MOTIVO_EXEMPLO: Partial<Record<ManutencaoTipo, string>> = {
   folga: 'ex.: Atestado médico',
   treinamento: 'ex.: Curso NR-10',
   exame_medico: 'ex.: ASO periódico',
+  reuniao: 'ex.: Reunião de segurança',
 };
 
 // Status vem do SIGMA (texto livre, ver ManutencaoStatus) — só uns poucos códigos
@@ -141,7 +145,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   readonly lotoOpcoes = LOTO_OPCOES;
   readonly tipoServicoOpcoes = TIPO_SERVICO_OPCOES;
   readonly tipoLabel = TIPO_LABEL;
-  private readonly tiposFormPadrao: ManutencaoTipo[] = ['ordem', 'folga', 'treinamento', 'exame_medico'];
+  private readonly tiposFormPadrao: ManutencaoTipo[] = ['ordem', 'folga', 'treinamento', 'exame_medico', 'reuniao'];
   // Apoio programa por empresa/equipe, não por pessoa — folga/treinamento/exame médico
   // não fazem sentido nesse contexto, só "ordem" fica disponível.
   tiposForm = computed<ManutencaoTipo[]>(() => this.areaFixa === 'APOIO' ? ['ordem'] : this.tiposFormPadrao);
@@ -210,7 +214,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         descricao: o.descricao,
         duracaoHoras: o.duracaoHoras,
         equipamento: o.equipamento || '—',
-        recursos: o.recursos || '—',
+        recursos: o.tipo === 'reuniao' ? [o.reuniaoHorario, o.reuniaoLocal].filter(Boolean).join(' · ') || '—' : (o.recursos || '—'),
         loto: o.loto || '—',
         areaAtuacao: o.areaAtuacao || '—',
         diasPrevistos: o.diasPrevistos,
@@ -824,6 +828,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   formTecnicoMatricula = signal('');
   formDiasSelecionados = signal<string[]>([]);
   formObservacoes = signal('');
+  formReuniaoHorario = signal('');
+  formReuniaoLocal = signal('');
   buscandoOsNoSigma = signal(false);
 
   tecnicosDaAreaForm = computed(() => this.tecnicosPorArea(this.formArea()));
@@ -842,6 +848,18 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const equipamentos = this.recursosEquipamentoOpcoes.filter(op => !jaAdicionados.has(op));
     return [...nomesTecnicos, ...equipamentos];
   });
+
+  // Diz se um chip de recurso bate (exato, sem diferenciar maiúsc./minúsc.) com um
+  // técnico cadastrado ou um dos equipamentos especiais — só nesses casos a OS é
+  // espelhada automaticamente (ver criarApoioTecnicosSeNecessario/criarApoioAndaimeSe
+  // Necessario). Um nome digitado com erro de digitação não bate com nada e vira só
+  // texto solto, sem avisar — por isso o chip mostra essa diferença visualmente.
+  recursoReconhecido(valor: string): 'tecnico' | 'equipamento' | null {
+    const v = valor.toUpperCase();
+    if (this.recursosEquipamentoOpcoes.some(op => op.toUpperCase() === v)) return 'equipamento';
+    if (this.todosTecnicos().some(t => t.nome.toUpperCase() === v)) return 'tecnico';
+    return null;
+  }
 
   adicionarRecurso(valor: string): void {
     const v = valor.trim();
@@ -924,10 +942,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
   }
 
-  // Selo de execução por OS, pra saber se ela já foi apontada (executada) dentro da
-  // semana programada, ou fora dela, ou ainda nem apontada. `null` = ou não tem número
-  // de OS pra checar, ou a consulta ao SIGMA ainda não voltou.
-  statusExecucao(o: ManutencaoOrdem, diasSemanaOverride?: string[]): { label: string; class: string; dot: string; title: string } | null {
+  // Selo de execução por OS, pra saber se ela já foi apontada (executada) no SIGMA ou
+  // ainda não. `null` = ou não tem número de OS pra checar, ou a consulta ao SIGMA
+  // ainda não voltou. Não diferencia mais se o apontamento caiu dentro ou fora da
+  // semana programada — só importa se já foi feita ou não.
+  statusExecucao(o: ManutencaoOrdem): { label: string; class: string; dot: string; title: string } | null {
     if (!o.numeroOs?.trim()) return null;
     const resultado = this.sigmaPorOs()[normalizarNumeroOs(o.numeroOs)];
     if (!resultado) return null;
@@ -936,17 +955,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       return { label: 'Não executada', class: 'bg-gray-100 text-gray-500', dot: 'bg-gray-400', title: 'Nenhum apontamento encontrado no SIGMA pra essa OS.' };
     }
 
-    const diasDaSemana = o.diasPrevistos.length > 0 ? o.diasPrevistos : (diasSemanaOverride ?? this.diasDaSemanaAtual().map(d => d.data));
-    const dentroDaSemana = resultado.apontamentos.filter(a => diasDaSemana.includes(a.data));
-    if (dentroDaSemana.length > 0) {
-      return {
-        label: 'Executada', class: 'bg-green-100 text-green-700', dot: 'bg-green-500',
-        title: `Executada — apontada em: ${dentroDaSemana.map(a => a.data).join(', ')}`,
-      };
-    }
     return {
-      label: 'Fora da semana', class: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500',
-      title: `Apontada fora da semana programada, em: ${resultado.apontamentos.map(a => a.data).join(', ')}`,
+      label: 'Executada', class: 'bg-green-100 text-green-700', dot: 'bg-green-500',
+      title: `Executada — apontada em: ${resultado.apontamentos.map(a => a.data).join(', ')}`,
     };
   }
 
@@ -954,11 +965,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // real de execução vem do SIGMA, ver statusExecucao()) — mostrar "PEND" em toda linha
   // não informa nada. Só vale mostrar o status bruto quando ele for diferente de PEND
   // (dado legado, de antes dessa mudança); no caso comum, mostra a execução no lugar.
-  statusOuExecucao(o: ManutencaoOrdem, diasSemanaOverride?: string[]): { label: string; class: string } | null {
+  statusOuExecucao(o: ManutencaoOrdem): { label: string; class: string } | null {
     if (o.status && o.status.toUpperCase() !== 'PEND') {
       return { label: o.status, class: this.statusBadgeClass(o.status) };
     }
-    return this.statusExecucao(o, diasSemanaOverride);
+    return this.statusExecucao(o);
   }
 
   // KPI "Atendimento da programação" — % das OS da semana filtrada que já foram
@@ -1103,6 +1114,61 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
   }
 
+  // ── Reunião (lançada em lote pra toda a equipe, igual feriado) ─────────
+  reuniaoLoteAberto = signal(false);
+  reuniaoLoteDias = signal<string[]>([]);
+  reuniaoLoteTitulo = signal('Reunião');
+  reuniaoLoteHorario = signal('');
+  reuniaoLoteLocal = signal('');
+
+  abrirReuniaoLote(): void {
+    this.reuniaoLoteDias.set([]);
+    this.reuniaoLoteTitulo.set('Reunião');
+    this.reuniaoLoteHorario.set('');
+    this.reuniaoLoteLocal.set('');
+    this.reuniaoLoteAberto.set(true);
+  }
+
+  fecharReuniaoLote(): void {
+    this.reuniaoLoteAberto.set(false);
+  }
+
+  toggleDiaReuniaoLote(dataIso: string): void {
+    const atual = this.reuniaoLoteDias();
+    this.reuniaoLoteDias.set(
+      atual.includes(dataIso) ? atual.filter(d => d !== dataIso) : [...atual, dataIso].sort(),
+    );
+  }
+
+  canConfirmarReuniaoLote(): boolean {
+    return this.reuniaoLoteDias().length > 0 && !!this.reuniaoLoteHorario().trim() && !!this.reuniaoLoteLocal().trim()
+      && this.todosTecnicos().length > 0 && !this.isProcessando();
+  }
+
+  async confirmarReuniaoLote(): Promise<void> {
+    if (!this.canConfirmarReuniaoLote()) return;
+    const tecnicos = this.todosTecnicos();
+    const titulo = this.reuniaoLoteTitulo().trim() || 'Reunião';
+    if (!confirm(`Lançar "${titulo}" pra ${tecnicos.length} técnicos (Elétrica + Mecânica)?`)) return;
+
+    this.isProcessando.set(true);
+    try {
+      await this.manutencaoService.criarReuniaoEmLote({
+        diasPrevistos: this.reuniaoLoteDias(),
+        titulo,
+        horario: this.reuniaoLoteHorario(),
+        local: this.reuniaoLoteLocal(),
+        tecnicos,
+      });
+      this.notificationService.showSuccess(`"${titulo}" lançada pra ${tecnicos.length} técnicos.`);
+      this.fecharReuniaoLote();
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao lançar reunião.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
   // ── Criar/Editar OS ────────────────────────────────────────────────────
   abrirCriar(): void {
     this.formIdEdicao.set(null);
@@ -1123,6 +1189,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formTecnicoMatricula.set('');
     this.formDiasSelecionados.set([]);
     this.formObservacoes.set('');
+    this.formReuniaoHorario.set('');
+    this.formReuniaoLocal.set('');
     this.formAberto.set(true);
   }
 
@@ -1155,6 +1223,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formTecnicoMatricula.set(o.tecnicoMatricula ?? '');
     this.formDiasSelecionados.set([...o.diasPrevistos]);
     this.formObservacoes.set(o.observacoes ?? '');
+    this.formReuniaoHorario.set(o.reuniaoHorario ?? '');
+    this.formReuniaoLocal.set(o.reuniaoLocal ?? '');
     this.formAberto.set(true);
   }
 
@@ -1293,16 +1363,26 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     if (this.formTipo() === 'ordem') {
       return !!this.formDescricao().trim() && !!this.formLoto();
     }
-    // Folga/treinamento: precisa de pelo menos um dia marcado, senão não diz nada.
+    if (this.formTipo() === 'reuniao') {
+      return this.formDiasSelecionados().length > 0 && !!this.formReuniaoHorario().trim() && !!this.formReuniaoLocal().trim();
+    }
+    // Folga/treinamento/exame médico: precisa de pelo menos um dia marcado, senão não diz nada.
     return this.formDiasSelecionados().length > 0;
   }
 
   async confirmarForm(): Promise<void> {
     if (!this.canConfirmarForm()) return;
+    // Se sobrou texto digitado no campo Recursos sem ter apertado Enter/"+", adiciona
+    // como chip agora — sem isso, quem digita e vai direto pra "Adicionar" perde o
+    // recurso digitado (e o espelhamento pro técnico) sem nenhum aviso.
+    if (this.formRecursosDigitando().trim()) {
+      this.adicionarRecurso(this.formRecursosDigitando());
+    }
     this.isProcessando.set(true);
     try {
       const tipo = this.formTipo();
       const ehOrdem = tipo === 'ordem';
+      const ehReuniao = tipo === 'reuniao';
       const idEdicao = this.formIdEdicao();
       if (idEdicao) {
         await this.manutencaoService.editarOrdem(idEdicao, {
@@ -1324,6 +1404,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           // o apontamento do SIGMA (ver statusExecucao()), não um campo digitado.
           status: ehOrdem ? 'PEND' : '',
           observacoes: this.formObservacoes().trim() || null,
+          reuniaoHorario: ehReuniao ? (this.formReuniaoHorario().trim() || null) : null,
+          reuniaoLocal: ehReuniao ? (this.formReuniaoLocal().trim() || null) : null,
         });
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} atualizada.`);
       } else {
@@ -1345,6 +1427,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           diasPrevistos: this.formDiasSelecionados(),
           status: ehOrdem ? 'PEND' : undefined,
           observacoes: this.formObservacoes().trim() || undefined,
+          reuniaoHorario: ehReuniao ? (this.formReuniaoHorario().trim() || undefined) : undefined,
+          reuniaoLocal: ehReuniao ? (this.formReuniaoLocal().trim() || undefined) : undefined,
         });
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} adicionada à programação.`);
         if (ehOrdem) {

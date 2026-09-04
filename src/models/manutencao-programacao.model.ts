@@ -4,8 +4,9 @@ export type ManutencaoArea = 'ELETRICA' | 'MECANICA' | 'APOIO';
 export type ManutencaoStatus = string;
 // 'ordem' = OS de verdade (padrão). 'folga'/'treinamento'/'exame_medico' marcam o
 // técnico indisponível naqueles dias — usa os mesmos campos de técnico/semana/dias,
-// sem OS/equipamento/LOTO.
-export type ManutencaoTipo = 'ordem' | 'folga' | 'treinamento' | 'exame_medico';
+// sem OS/equipamento/LOTO. 'reuniao' é um aviso pra toda a equipe (lançado em lote,
+// igual feriado), com horário/local próprios — não bloqueia o resto da agenda do dia.
+export type ManutencaoTipo = 'ordem' | 'folga' | 'treinamento' | 'exame_medico' | 'reuniao';
 
 export interface ManutencaoOrdem {
   id: string;
@@ -29,6 +30,8 @@ export interface ManutencaoOrdem {
   diasPrevistos: string[]; // ['YYYY-MM-DD', ...] dentro da semana
   status: ManutencaoStatus;
   observacoes: string | null;
+  reuniaoHorario: string | null; // 'HH:mm', só pra tipo 'reuniao'
+  reuniaoLocal: string | null;
   criadoPorId: string | null;
   criadoPorNome: string;
   createdAt: Date;
@@ -52,6 +55,8 @@ export interface CreateManutencaoOrdemRequest {
   diasPrevistos: string[];
   status?: string; // default 'PEND' no service se não informado
   observacoes?: string;
+  reuniaoHorario?: string;
+  reuniaoLocal?: string;
 }
 
 // Retorno do proxy /api/sigma-ordens-proxy (consulta às exportações do SIGMA — mesmos
@@ -127,4 +132,6 @@ export interface EditarManutencaoOrdemRequest {
   diasPrevistos: string[];
   status: string;
   observacoes: string | null;
+  reuniaoHorario: string | null;
+  reuniaoLocal: string | null;
 }

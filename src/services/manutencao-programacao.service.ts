@@ -26,6 +26,8 @@ interface ManutencaoOrdemRow {
   dias_previstos: string[] | null;
   status: string;
   observacoes: string | null;
+  reuniao_horario: string | null;
+  reuniao_local: string | null;
   criado_por_id: string | null;
   criado_por_nome: string;
   created_at: string;
@@ -57,6 +59,8 @@ function mapRow(r: ManutencaoOrdemRow): ManutencaoOrdem {
     diasPrevistos: r.dias_previstos ?? [],
     status: r.status,
     observacoes: r.observacoes,
+    reuniaoHorario: r.reuniao_horario,
+    reuniaoLocal: r.reuniao_local,
     criadoPorId: r.criado_por_id,
     criadoPorNome: r.criado_por_nome,
     createdAt: new Date(r.created_at),
@@ -145,6 +149,8 @@ export class ManutencaoProgramacaoService {
       // Status do SIGMA só faz sentido pra OS de verdade — folga/treinamento não tem.
       status: (req.tipo ?? 'ordem') === 'ordem' ? (req.status?.trim() || 'PEND') : '',
       observacoes: req.observacoes?.trim() || null,
+      reuniao_horario: req.reuniaoHorario?.trim() || null,
+      reuniao_local: req.reuniaoLocal?.trim() || null,
       criado_por_id: user.id,
       criado_por_nome: user.name,
     };
@@ -155,6 +161,7 @@ export class ManutencaoProgramacaoService {
     const acaoLabel = req.tipo === 'folga' ? 'lançou folga'
       : req.tipo === 'treinamento' ? 'lançou treinamento'
       : req.tipo === 'exame_medico' ? 'lançou exame médico'
+      : req.tipo === 'reuniao' ? 'lançou reunião'
       : 'adicionou OS';
     this.auditLogService.log({
       user_id: user.id,
@@ -219,6 +226,63 @@ export class ManutencaoProgramacaoService {
     await this.load();
   }
 
+  // Reunião pra toda a equipe (Elétrica + Mecânica) num único insert, igual folga em
+  // lote — mas não bloqueia o resto da agenda do dia (só ocupa um horário, não o dia
+  // inteiro), então fica com tipo próprio em vez de reaproveitar 'folga'.
+  async criarReuniaoEmLote(params: {
+    diasPrevistos: string[];
+    titulo: string;
+    horario: string;
+    local: string;
+    tecnicos: { nome: string; matricula: string | null; area: ManutencaoArea }[];
+  }): Promise<void> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+    if (params.tecnicos.length === 0) throw new Error('Nenhum técnico encontrado.');
+
+    const semanaInicio = this.semanaDoDia(params.diasPrevistos[0]);
+    const descricao = params.titulo.trim() || 'Reunião';
+    const horario = params.horario.trim() || null;
+    const local = params.local.trim() || null;
+
+    const payload = params.tecnicos.map(t => ({
+      tipo: 'reuniao',
+      area: t.area,
+      semana_inicio: semanaInicio,
+      numero_os: null,
+      sem_os: false,
+      descricao,
+      equipamento: null,
+      recursos: null,
+      loto: null,
+      area_atuacao: null,
+      duracao_horas: null,
+      tecnico_nome: t.nome,
+      tecnico_matricula: t.matricula,
+      dias_previstos: params.diasPrevistos,
+      status: '',
+      observacoes: null,
+      reuniao_horario: horario,
+      reuniao_local: local,
+      criado_por_id: user.id,
+      criado_por_nome: user.name,
+    }));
+
+    const { error } = await this.supabaseService.client.from('manutencao_programacao').insert(payload);
+    if (error) throw new Error(error.message);
+
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'manutencao_programacao_criada',
+      resource_type: 'manutencao_programacao',
+      description: `${user.name} lançou reunião "${descricao}" pra ${params.tecnicos.length} técnicos, em ${params.diasPrevistos.join(', ')}`,
+      metadata: { tipo: 'reuniao', dias: params.diasPrevistos, tecnicos: params.tecnicos.length, horario, local },
+    });
+
+    await this.load();
+  }
+
   // Segunda-feira da semana de uma data 'YYYY-MM-DD' — o backend guarda tudo por
   // semana_inicio, então precisa disso mesmo recebendo datas já dentro da semana certa.
   private semanaDoDia(dataIso: string): string {
@@ -253,6 +317,8 @@ export class ManutencaoProgramacaoService {
         dias_previstos: updates.diasPrevistos,
         status: updates.tipo === 'ordem' ? (updates.status.trim() || 'PEND') : '',
         observacoes: updates.observacoes?.trim() || null,
+        reuniao_horario: updates.reuniaoHorario?.trim() || null,
+        reuniao_local: updates.reuniaoLocal?.trim() || null,
       })
       .eq('id', id);
     if (error) throw new Error(error.message);
