@@ -470,9 +470,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   grupos = computed(() => this.gruposCalc(this.listaFiltrada(), this.diasDaSemanaAtual()));
 
   // Efetivo/capacidade: soma a disponibilidade cadastrada (matriculas.json, mesma fonte
-  // do Relatório Mensal PCM) nos dias úteis da semana, descontando os dias em que o
-  // técnico já tem folga/treinamento lançado. `null` quando o técnico não está no
-  // matriculas.json (não dá pra saber a disponibilidade dele).
+  // do Relatório Mensal PCM) nos dias ÚTEIS da semana (SEG-SEX — sábado/domingo é DSR,
+  // ninguém trabalha por padrão), descontando os dias em que o técnico já tem
+  // folga/treinamento/exame médico/reunião lançado (ex.: feriado tira o dia inteiro da
+  // conta). `null` quando o técnico não está no matriculas.json (não dá pra saber a
+  // disponibilidade dele).
   private capacidadeSemana(tecnicoNome: string, ordensDoTecnico: ManutencaoOrdem[], dias: { data: string; label: string }[]): number | null {
     const colaborador = this.apontamentosService.colaboradores().find(c => c.nome === tecnicoNome);
     if (!colaborador) return null;
@@ -483,6 +485,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
     let total = 0;
     for (const dia of dias) {
+      if (dia.label === 'SAB' || dia.label === 'DOM') continue;
       if (diasIndisponiveis.has(dia.data)) continue;
       total += this.apontamentosService.disponibilidadeNoDia(colaborador, dia.data);
     }
@@ -1259,20 +1262,37 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   async confirmarReuniaoLote(): Promise<void> {
     if (!this.canConfirmarReuniaoLote()) return;
-    const tecnicos = this.todosTecnicos();
+    const dias = this.reuniaoLoteDias();
+    // Quem já está de folga/férias em algum desses dias não entra — diferente de
+    // Feriado (que vale igual pra todo mundo), reunião é algo que a pessoa precisa
+    // comparecer, não faz sentido marcar pra quem não vai estar trabalhando.
+    const bloqueados: string[] = [];
+    const tecnicos = this.todosTecnicos().filter(t => {
+      const bloqueado = this.folgaNoIntervalo(t.nome, dias) || this.feriasNoIntervalo(t.nome, dias);
+      if (bloqueado) bloqueados.push(t.nome);
+      return !bloqueado;
+    });
+    if (tecnicos.length === 0) {
+      this.notificationService.showError('Todos os técnicos já estão de folga ou férias nesses dias — nenhuma reunião lançada.');
+      return;
+    }
+
     const titulo = this.reuniaoLoteTitulo().trim() || 'Reunião';
-    if (!confirm(`Lançar "${titulo}" pra ${tecnicos.length} técnicos (Elétrica + Mecânica)?`)) return;
+    const aviso = bloqueados.length > 0
+      ? `\n\n${bloqueados.length} técnico(s) de folga/férias nesses dias não vão entrar: ${bloqueados.join(', ')}.`
+      : '';
+    if (!confirm(`Lançar "${titulo}" pra ${tecnicos.length} técnicos (Elétrica + Mecânica)?${aviso}`)) return;
 
     this.isProcessando.set(true);
     try {
       await this.manutencaoService.criarReuniaoEmLote({
-        diasPrevistos: this.reuniaoLoteDias(),
+        diasPrevistos: dias,
         titulo,
         horario: this.reuniaoLoteHorario(),
         local: this.reuniaoLoteLocal(),
         tecnicos,
       });
-      this.notificationService.showSuccess(`"${titulo}" lançada pra ${tecnicos.length} técnicos.`);
+      this.notificationService.showSuccess(`"${titulo}" lançada pra ${tecnicos.length} técnicos.${bloqueados.length > 0 ? ` (${bloqueados.length} de folga/férias não entraram)` : ''}`);
       this.fecharReuniaoLote();
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao lançar reunião.');
