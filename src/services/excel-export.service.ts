@@ -734,18 +734,22 @@ export class ExcelExportService {
         // Sem altura fixa aqui — deixa o Excel calcular sozinho quando a descrição
         // quebra em mais de uma linha (wrapText), senão o texto fica cortado.
 
-        // Folga/Treinamento/Exame médico não têm OS/equipamento/LOTO — em vez de
-        // espalhar campos vazios pelas 7 primeiras colunas, vira uma faixa única com
+        // Folga/Treinamento/Exame médico/Reunião não têm OS/equipamento/LOTO — em vez
+        // de espalhar campos vazios pelas 7 primeiras colunas, vira uma faixa única com
         // o rótulo centralizado, fácil de bater o olho na semana inteira. Fundo claro
         // (mesma paleta da tela), não sólido saturado — fica pesado numa planilha
-        // inteira.
-        const ehAusenciaComBanner = linha.tipo === 'folga' || linha.tipo === 'treinamento' || linha.tipo === 'exame_medico';
+        // inteira. Reunião ainda carrega o título e o horário/local no mesmo texto,
+        // senão essa informação se perde (não tem coluna própria pra isso).
+        const ehAusenciaComBanner = linha.tipo === 'folga' || linha.tipo === 'treinamento'
+          || linha.tipo === 'exame_medico' || linha.tipo === 'reuniao';
 
         if (ehAusenciaComBanner) {
           const cor = this.corAusenciaPorTipo(linha.tipo);
           ws.mergeCells(row, 1, row, 7);
           const cel = ws.getCell(row, 1);
-          cel.value = numeroLabel;
+          cel.value = linha.tipo === 'reuniao'
+            ? `${numeroLabel} — ${linha.descricao}${linha.recursos && linha.recursos !== '—' ? ' (' + linha.recursos + ')' : ''}`
+            : numeroLabel;
           cel.font = { bold: true, size: 10, color: { argb: cor.texto } };
           cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor.bg } };
           cel.alignment = { horizontal: 'center', vertical: 'middle' };

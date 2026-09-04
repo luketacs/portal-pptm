@@ -472,16 +472,16 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   // Efetivo/capacidade: soma a disponibilidade cadastrada (matriculas.json, mesma fonte
   // do Relatório Mensal PCM) nos dias ÚTEIS da semana (SEG-SEX — sábado/domingo é DSR,
-  // ninguém trabalha por padrão), descontando os dias em que o técnico já tem
-  // folga/treinamento/exame médico/reunião lançado (ex.: feriado tira o dia inteiro da
-  // conta). `null` quando o técnico não está no matriculas.json (não dá pra saber a
-  // disponibilidade dele).
+  // ninguém trabalha por padrão), descontando só os dias em que o técnico está de
+  // folga/feriado (mesmo tipo 'folga' no banco) — treinamento/exame médico/reunião não
+  // tiram o dia inteiro da conta, só ocupam uma parte dele. `null` quando o técnico não
+  // está no matriculas.json (não dá pra saber a disponibilidade dele).
   private capacidadeSemana(tecnicoNome: string, ordensDoTecnico: ManutencaoOrdem[], dias: { data: string; label: string }[]): number | null {
     const colaborador = this.apontamentosService.colaboradores().find(c => c.nome === tecnicoNome);
     if (!colaborador) return null;
 
     const diasIndisponiveis = new Set(
-      ordensDoTecnico.filter(o => o.tipo !== 'ordem').flatMap(o => o.diasPrevistos),
+      ordensDoTecnico.filter(o => o.tipo === 'folga').flatMap(o => o.diasPrevistos),
     );
 
     let total = 0;
@@ -952,6 +952,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     'MUNCK - DB GUINDASTES', 'MUNCK - CORDEIRO',
     'GUINDASTE - DB GUINDASTES', 'GUINDASTE - CORDEIRO',
     'ANDAIME',
+    'ROMÁRIO (FONTEBRAS)', 'JÚLIO (FONTEBRAS)', 'FELIPE (FONTEBRAS)', 'SÉRGIO (FONTEBRAS)',
   ];
 
   recursosOpcoes = computed(() => {
@@ -1609,13 +1610,19 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Cada opção de recurso "de equipamento" aponta pra uma empresa/equipe cadastrada
   // no Apoio (ver "Gerenciar Apoio") — precisa bater com o nome exato lá cadastrado.
   // Munck e Guindaste têm duas contratadas (a opção de recurso já vem com a empresa
-  // junto, ver recursosEquipamentoOpcoes), andaime só tem uma.
+  // junto, ver recursosEquipamentoOpcoes), andaime só tem uma. Fontebras é mão de obra
+  // (colaboradores nomeados, não equipamento) — cada um espelha pra própria agenda
+  // dele no Apoio, não pra uma empresa genérica.
   private readonly RECURSO_PARA_EMPRESA_APOIO: Record<string, string> = {
     'ANDAIME': 'TOP ANDAIMES',
     'MUNCK - DB GUINDASTES': 'DB GUINDASTES',
     'MUNCK - CORDEIRO': 'CORDEIRO',
     'GUINDASTE - DB GUINDASTES': 'DB GUINDASTES',
     'GUINDASTE - CORDEIRO': 'CORDEIRO',
+    'ROMÁRIO (FONTEBRAS)': 'ROMÁRIO (FONTEBRAS)',
+    'JÚLIO (FONTEBRAS)': 'JÚLIO (FONTEBRAS)',
+    'FELIPE (FONTEBRAS)': 'FELIPE (FONTEBRAS)',
+    'SÉRGIO (FONTEBRAS)': 'SÉRGIO (FONTEBRAS)',
   };
 
   // Se o recurso usado for andaime/munck/guindaste, monta automaticamente uma OS
