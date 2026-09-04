@@ -11,7 +11,7 @@
       </p>
     </div>
     <div class="flex items-center gap-2 flex-shrink-0">
-      @if ((areaFixa && areaFixa !== 'APOIO') || isAdmin()) {
+      @if ((areaFixa && areaFixa !== 'APOIO') || podeEditar()) {
         <div class="relative">
           <button (click)="menuAcoesAberto.set(!menuAcoesAberto())"
             class="inline-flex items-center gap-2 bg-white text-slate-600 text-sm font-semibold py-2.5 px-4 rounded-lg border border-slate-300 hover:bg-slate-50 transition">
@@ -39,7 +39,7 @@
                   Gerenciar Apoio
                 </button>
               }
-              @if (isAdmin() && areaFixa !== 'APOIO') {
+              @if (podeEditar() && areaFixa !== 'APOIO') {
                 <button (click)="abrirFeriado(); menuAcoesAberto.set(false)"
                   class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
                   Feriado
@@ -65,7 +65,7 @@
         }
         Exportar
       </button>
-      @if (isAdmin()) {
+      @if (podeEditar()) {
         <button (click)="abrirCriar()"
           class="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-semibold py-2.5 px-4 rounded-lg hover:bg-blue-700 transition">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
@@ -183,7 +183,7 @@
                       <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadgeClass(item.statusCodigo)">{{ item.statusCodigo || '—' }}</span>
                     </td>
                     <td class="py-1.5 pr-3 whitespace-nowrap">
-                      @if (isAdmin()) {
+                      @if (podeEditar()) {
                         <button (click)="programarDoBacklog(item)" class="text-xs font-semibold px-2 py-1 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition">Programar</button>
                       }
                     </td>
@@ -449,7 +449,7 @@
                             }
                           </td>
                           <td class="py-1.5 pr-3 whitespace-nowrap text-right">
-                            @if (isAdmin()) {
+                            @if (podeEditar()) {
                               <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
                                 <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
                               </button>
@@ -539,7 +539,7 @@
                             }
                           </td>
                           <td class="py-1.5 pr-3 whitespace-nowrap text-right">
-                            @if (isAdmin()) {
+                            @if (podeEditar()) {
                               <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
                                 <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
                               </button>
@@ -616,7 +616,7 @@
                           }
                         </td>
                         <td class="py-1.5 pr-3 whitespace-nowrap text-right">
-                          @if (isAdmin()) {
+                          @if (podeEditar()) {
                             <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
                               <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
                             </button>
@@ -796,7 +796,7 @@
                                     }
                                   </td>
                                   <td class="py-1.5 pr-3 whitespace-nowrap text-right">
-                                    @if (isAdmin()) {
+                                    @if (podeEditar()) {
                                       <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
                                         <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
                                       </button>
@@ -884,7 +884,7 @@
                                     }
                                   </td>
                                   <td class="py-1.5 pr-3 whitespace-nowrap text-right">
-                                    @if (isAdmin()) {
+                                    @if (podeEditar()) {
                                       <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
                                         <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
                                       </button>
@@ -940,7 +940,7 @@
                                 <td class="py-1.5 pr-3 text-gray-600">{{ areaLabel[o.area] }}</td>
                                 <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
                                 <td class="py-1.5 pr-3 whitespace-nowrap text-right">
-                                  @if (isAdmin()) {
+                                  @if (podeEditar()) {
                                     <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
                                       <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
                                     </button>

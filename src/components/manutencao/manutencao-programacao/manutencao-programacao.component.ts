@@ -297,6 +297,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   isLoading = this.manutencaoService.isLoading;
   currentUser = this.authService.currentUser;
   isAdmin = computed(() => this.authService.currentUser()?.role === 'Admin');
+  // Solicitante também programa a semana no dia a dia (criar/editar/excluir
+  // lançamentos, feriado, férias) — só o cadastro estrutural do Apoio (empresas/
+  // equipes) continua exclusivo de Admin.
+  podeEditar = computed(() => {
+    const role = this.authService.currentUser()?.role;
+    return role === 'Admin' || role === 'Solicitante';
+  });
 
   private ordensDaSemanaCalc(semana: string): ManutencaoOrdem[] {
     return this.manutencaoService.ordens().filter(o => o.semanaInicio === semana);
@@ -754,7 +761,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // simplesmente não aparecer no quadro).
   private quadroLotoCalc(ordensDaSemana: ManutencaoOrdem[], diasSemana: { data: string; label: string }[]) {
     const dias = diasSemana.map(d => d.data);
-    const porEquipamento = new Map<string, Map<string, { status: string; descricao: string; tecnico: string; area: ManutencaoArea }[]>>();
+    const porEquipamento = new Map<string, Map<string, { status: string; descricao: string; tecnico: string; area: ManutencaoArea; numeroOs: string | null }[]>>();
 
     for (const o of ordensDaSemana) {
       const equipamento = o.equipamento?.trim();
@@ -766,7 +773,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       const porDia = porEquipamento.get(equipamento)!;
       for (const dia of diasDaOrdem) {
         const lista = porDia.get(dia) ?? [];
-        lista.push({ status: loto, descricao: o.descricao, tecnico: o.tecnicoNome, area: o.area });
+        lista.push({ status: loto, descricao: o.descricao, tecnico: o.tecnicoNome, area: o.area, numeroOs: o.numeroOs?.trim() || null });
         porDia.set(dia, lista);
       }
     }
@@ -776,7 +783,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         equipamento,
         dias: dias.map(dia => {
           const itens = porDia.get(dia) ?? [];
-          const statusUnicos = new Set(itens.map(i => i.status.toUpperCase()));
+          // Agrupa por número de OS antes de comparar — a mesma OS pode aparecer em
+          // mais de uma linha (apoio/vários técnicos na mesma atividade), com o mesmo
+          // LOTO. Só é conflito de verdade quando OS DIFERENTES do mesmo equipamento
+          // divergem no status; a mesma OS repetida não conta contra ela mesma.
+          const statusPorOs = new Map<string, string>();
+          itens.forEach((item, idx) => statusPorOs.set(item.numeroOs ?? `__sem-os-${idx}`, item.status.toUpperCase()));
+          const statusUnicos = new Set(statusPorOs.values());
           return { data: dia, itens, conflito: statusUnicos.size > 1 };
         }),
       }))
