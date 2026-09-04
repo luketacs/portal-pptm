@@ -797,7 +797,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   formSemOs = signal(false);
   formDescricao = signal('');
   formEquipamento = signal('');
-  formRecursos = signal('');
+  // Recursos vira uma lista de "chips" (outros técnicos e/ou equipamentos) em vez de um
+  // texto livre único — permite marcar vários ajudantes numa OS só. Continua salvo como
+  // texto (join por vírgula) no banco, sem precisar mudar o schema.
+  formRecursosLista = signal<string[]>([]);
+  formRecursosDigitando = signal('');
+  formRecursosTexto = computed(() => this.formRecursosLista().join(', '));
   formLoto = signal('');
   formAreaAtuacao = signal('');
   formDuracaoHoras = signal<number | null>(null);
@@ -817,11 +822,28 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   private readonly recursosEquipamentoOpcoes = ['MUNCK', 'GUINDASTE', 'ANDAIME'];
 
   recursosOpcoes = computed(() => {
+    const jaAdicionados = new Set(this.formRecursosLista().map(r => r.toUpperCase()));
     const nomesTecnicos = this.todosTecnicos()
       .map(t => t.nome)
-      .filter(nome => nome !== this.formTecnicoNome());
-    return [...nomesTecnicos, ...this.recursosEquipamentoOpcoes];
+      .filter(nome => nome !== this.formTecnicoNome() && !jaAdicionados.has(nome.toUpperCase()));
+    const equipamentos = this.recursosEquipamentoOpcoes.filter(op => !jaAdicionados.has(op));
+    return [...nomesTecnicos, ...equipamentos];
   });
+
+  adicionarRecurso(valor: string): void {
+    const v = valor.trim();
+    if (!v) return;
+    if (this.formRecursosLista().some(r => r.toUpperCase() === v.toUpperCase())) {
+      this.formRecursosDigitando.set('');
+      return;
+    }
+    this.formRecursosLista.update(lista => [...lista, v]);
+    this.formRecursosDigitando.set('');
+  }
+
+  removerRecurso(valor: string): void {
+    this.formRecursosLista.update(lista => lista.filter(r => r !== valor));
+  }
 
   // ── Integração com o SIGMA (mesmos links que a planilha "Fechamento Semanal.2"
   // usa via Power Query) — preenche a descrição sozinha ao informar o número da OS, e
@@ -954,10 +976,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // "Dias" em texto compacto (ex.: "SEG, QUA, SEX") em vez das 7 pastilhas — mesma
   // informação, ocupando uma linha só. `dias` é opcional pra reaproveitar nos blocos
   // do horizonte de 4 semanas, que usam datas diferentes de diasDaSemanaAtual().
-  diasResumo(o: ManutencaoOrdem, dias?: { data: string; label: string }[]): string {
+  // Lista dos dias marcados (só os ativos) — vira uma pastilha colorida por dia no
+  // template, pra ficar tão destacado quanto na planilha original, em vez de texto
+  // corrido cinza-claro.
+  diasBadges(o: ManutencaoOrdem, dias?: { data: string; label: string }[]): string[] {
     const base = dias ?? this.diasDaSemanaAtual();
-    const label = base.filter(d => o.diasPrevistos.includes(d.data)).map(d => d.label).join(', ');
-    return label || '—';
+    return base.filter(d => o.diasPrevistos.includes(d.data)).map(d => d.label);
   }
 
   // ── Buscar descrição da OS no SIGMA ao sair do campo "Número da OS" ───
@@ -1076,7 +1100,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formSemOs.set(false);
     this.formDescricao.set('');
     this.formEquipamento.set('');
-    this.formRecursos.set('');
+    this.formRecursosLista.set([]);
+    this.formRecursosDigitando.set('');
     this.formLoto.set('');
     this.formAreaAtuacao.set('');
     this.formDuracaoHoras.set(null);
@@ -1107,7 +1132,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formSemOs.set(o.semOs);
     this.formDescricao.set(o.descricao);
     this.formEquipamento.set(o.equipamento ?? '');
-    this.formRecursos.set(o.recursos ?? '');
+    this.formRecursosLista.set((o.recursos ?? '').split(',').map(r => r.trim()).filter(Boolean));
+    this.formRecursosDigitando.set('');
     this.formLoto.set(o.loto ?? '');
     this.formTipoServico.set(o.tipoServico ?? '');
     this.formAreaAtuacao.set(o.areaAtuacao ?? '');
@@ -1273,7 +1299,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           semOs: ehOrdem && this.formSemOs(),
           descricao: this.descricaoParaEnvio(),
           equipamento: ehOrdem ? (this.formEquipamento().trim() || null) : null,
-          recursos: ehOrdem ? (this.formRecursos().trim() || null) : null,
+          recursos: ehOrdem ? (this.formRecursosTexto() || null) : null,
           loto: ehOrdem ? (this.formLoto().trim() || null) : null,
           areaAtuacao: ehOrdem ? (this.formAreaAtuacao().trim() || null) : null,
           duracaoHoras: ehOrdem ? this.formDuracaoHoras() : null,
@@ -1296,7 +1322,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           semOs: ehOrdem && this.formSemOs(),
           descricao: this.descricaoParaEnvio(),
           equipamento: ehOrdem ? (this.formEquipamento().trim() || undefined) : undefined,
-          recursos: ehOrdem ? (this.formRecursos().trim() || undefined) : undefined,
+          recursos: ehOrdem ? (this.formRecursosTexto() || undefined) : undefined,
           loto: ehOrdem ? (this.formLoto().trim() || undefined) : undefined,
           areaAtuacao: ehOrdem ? (this.formAreaAtuacao().trim() || undefined) : undefined,
           duracaoHoras: ehOrdem ? (this.formDuracaoHoras() ?? undefined) : undefined,
@@ -1308,7 +1334,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           observacoes: this.formObservacoes().trim() || undefined,
         });
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} adicionada à programação.`);
-        if (ehOrdem) await this.criarApoioAndaimeSeNecessario();
+        if (ehOrdem) {
+          await this.criarApoioAndaimeSeNecessario();
+          await this.criarApoioTecnicosSeNecessario();
+        }
       }
       this.fecharForm();
     } catch (err: unknown) {
@@ -1329,7 +1358,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // for reaberta e salva de novo).
   private async criarApoioAndaimeSeNecessario(): Promise<void> {
     if (this.formArea() === 'APOIO') return;
-    if (!this.formRecursos().toUpperCase().includes('ANDAIME')) return;
+    if (!this.formRecursosLista().some(r => r.toUpperCase().includes('ANDAIME'))) return;
     try {
       const numero = this.formNumeroOs().trim();
       await this.manutencaoService.criarOrdem({
@@ -1340,7 +1369,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         semOs: this.formSemOs(),
         descricao: this.descricaoParaEnvio(),
         equipamento: this.formEquipamento().trim() || undefined,
-        recursos: this.formRecursos().trim() || undefined,
+        recursos: this.formRecursosTexto() || undefined,
         loto: this.formLoto().trim() || undefined,
         areaAtuacao: this.formAreaAtuacao().trim() || undefined,
         duracaoHoras: this.formDuracaoHoras() ?? undefined,
@@ -1353,6 +1382,58 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       this.notificationService.showSuccess('Também programado pra TOP ANDAIMES (Apoio).');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao programar apoio de andaime.');
+    }
+  }
+
+  // Quando outro(s) técnico(s) são marcados em "Recursos", a OS é espelhada
+  // automaticamente pra agenda de cada um deles (mesma ideia do "+Apoio" manual, só que
+  // pra vários de uma vez, direto na criação) — sem isso, o ajudante nunca via a OS na
+  // própria conta, só o técnico principal (mandante). Só roda na criação, igual ao
+  // apoio de andaime, pra não duplicar a cada edição.
+  private async criarApoioTecnicosSeNecessario(): Promise<void> {
+    const mandante = this.formTecnicoNome().trim();
+    const dias = this.formDiasSelecionados();
+    const numero = this.formNumeroOs().trim();
+    const candidatos = this.formRecursosLista()
+      .map(r => this.todosTecnicos().find(t => t.nome.toUpperCase() === r.toUpperCase()))
+      .filter((t): t is { nome: string; matricula: string | null; area: ManutencaoArea } => !!t && t.nome !== mandante);
+
+    const programados: string[] = [];
+    for (const tecnico of candidatos) {
+      const ferias = this.feriasNoIntervalo(tecnico.nome, dias);
+      const folga = this.folgaNoIntervalo(tecnico.nome, dias);
+      if (ferias || folga) {
+        this.notificationService.showError(`${tecnico.nome} está de ${ferias ? 'férias' : 'folga'} — não foi programado como apoio.`);
+        continue;
+      }
+      try {
+        await this.manutencaoService.criarOrdem({
+          tipo: 'ordem',
+          area: tecnico.area,
+          semanaInicio: this.semanaFiltro(),
+          numeroOs: numero || undefined,
+          semOs: this.formSemOs(),
+          descricao: this.descricaoParaEnvio(),
+          equipamento: this.formEquipamento().trim() || undefined,
+          recursos: this.formRecursosTexto() || undefined,
+          loto: this.formLoto().trim() || undefined,
+          areaAtuacao: this.formAreaAtuacao().trim() || undefined,
+          duracaoHoras: this.formDuracaoHoras() ?? undefined,
+          tipoServico: this.formTipoServico().trim() || undefined,
+          tecnicoNome: tecnico.nome,
+          tecnicoMatricula: tecnico.matricula ?? undefined,
+          diasPrevistos: dias,
+          status: 'PEND',
+          observacoes: [this.formObservacoes().trim(), `Apoio a ${mandante}${numero ? ' na OS nº ' + numero : ''}.`]
+            .filter(Boolean).join(' — '),
+        });
+        programados.push(tecnico.nome);
+      } catch (err: unknown) {
+        this.notificationService.showError(err instanceof Error ? err.message : `Erro ao programar apoio pra ${tecnico.nome}.`);
+      }
+    }
+    if (programados.length > 0) {
+      this.notificationService.showSuccess(`Também programado pra ${programados.join(', ')}.`);
     }
   }
 
