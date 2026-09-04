@@ -175,8 +175,36 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return TIPO_LINHA_CLASSE[tipo];
   }
 
-  conflitoLotoTitle(itens: { status: string; descricao: string; tecnico: string }[]): string {
-    return `Conflito: ${itens.map(i => `${i.status} (${i.tecnico} — ${i.descricao})`).join(' vs. ')}`;
+  conflitoLotoTitle(itens: { status: string; descricao: string; tecnicos: string[] }[]): string {
+    return `Conflito: ${itens.map(i => `${i.status} (${i.tecnicos.join(', ')} — ${i.descricao})`).join(' vs. ')}`;
+  }
+
+  // Painel de detalhe da célula do quadro de LOTO, aberto por clique (não só hover —
+  // hover não existe em touch, e a informação ficava só ali). Guardado pela chave
+  // "equipamento:data" (não pelo array em si, pra sobreviver a recomputações do
+  // computed quadroLoto) + os próprios itens já resolvidos no momento do clique.
+  lotoDetalheChave = signal<string | null>(null);
+  lotoDetalheItens = signal<{ status: string; descricao: string; tecnicos: string[] }[]>([]);
+  lotoDetalhePos = signal<{ top: number; left: number } | null>(null);
+
+  toggleLotoDetalhe(chave: string, itens: { status: string; descricao: string; tecnicos: string[] }[], event: MouseEvent): void {
+    event.stopPropagation();
+    if (this.lotoDetalheChave() === chave) {
+      this.lotoDetalheChave.set(null);
+      return;
+    }
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const largura = 256; // w-64
+    this.lotoDetalhePos.set({
+      top: rect.bottom + 4,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - largura - 8)),
+    });
+    this.lotoDetalheItens.set(itens);
+    this.lotoDetalheChave.set(chave);
+  }
+
+  fecharLotoDetalhe(): void {
+    this.lotoDetalheChave.set(null);
   }
 
   // Número da semana no padrão ISO 8601 (segunda-feira, semana com a 1ª
@@ -426,6 +454,23 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       total += this.apontamentosService.disponibilidadeNoDia(colaborador, dia.data);
     }
     return parseFloat(total.toFixed(2));
+  }
+
+  // Selo de capacidade do card do técnico: vermelho quando passou da capacidade da
+  // semana (alerta), verde quando bateu certinho (semana toda programada — o "check"
+  // pedido pra sinalizar conclusão), cinza no padrão enquanto ainda sobra capacidade.
+  capacidadeBadgeClass(grupo: { capacidade: number | null; saldo: number | null }): string {
+    if (grupo.capacidade === null) return 'bg-slate-100 text-slate-600';
+    if (grupo.saldo! < 0) return 'bg-red-100 text-red-700';
+    if (grupo.saldo === 0) return 'bg-green-100 text-green-700';
+    return 'bg-slate-100 text-slate-600';
+  }
+
+  capacidadeBadgeTitle(grupo: { capacidade: number | null; saldo: number | null }): string {
+    if (grupo.capacidade === null) return '';
+    if (grupo.saldo! < 0) return 'Alocado acima da capacidade da semana';
+    if (grupo.saldo === 0) return 'Semana totalmente programada';
+    return 'Alocado dentro da capacidade da semana';
   }
 
   // Agrupada por dia — usado na tela geral (as duas áreas juntas), pra ver de cara
@@ -801,16 +846,23 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       .map(([equipamento, porDia]) => ({
         equipamento,
         dias: dias.map(dia => {
-          const itens = porDia.get(dia) ?? [];
-          // Agrupa por número de OS antes de comparar — a mesma OS pode aparecer em
-          // mais de uma linha (apoio/vários técnicos na mesma atividade), com o mesmo
-          // LOTO. Só é conflito de verdade quando OS DIFERENTES do mesmo equipamento
-          // divergem no status; a mesma OS repetida não conta contra ela mesma. "SEM
-          // LOTO" não entra na comparação — não impõe nenhuma exigência sobre o
-          // equipamento, então nunca conflita com LOTO nem com FUNCIONANDO.
-          const statusPorOs = new Map<string, string>();
-          itens.forEach((item, idx) => statusPorOs.set(item.numeroOs ?? `__sem-os-${idx}`, item.status.toUpperCase()));
-          const statusUnicos = new Set([...statusPorOs.values()].filter(s => s !== 'SEM LOTO'));
+          const itensBrutos = porDia.get(dia) ?? [];
+          // Agrupa por número de OS antes de tudo — a mesma OS pode aparecer em mais
+          // de uma linha (apoio/vários técnicos na mesma atividade), com o mesmo LOTO.
+          // Sem isso, a mesma atividade aparecia repetida uma vez por técnico no
+          // detalhe. Só é conflito de verdade quando OS DIFERENTES do mesmo
+          // equipamento divergem no status; a mesma OS repetida não conta contra ela
+          // mesma. "SEM LOTO" não entra na comparação — não impõe nenhuma exigência
+          // sobre o equipamento, então nunca conflita com LOTO nem com FUNCIONANDO.
+          const porOs = new Map<string, { status: string; descricao: string; tecnicos: string[]; numeroOs: string | null }>();
+          itensBrutos.forEach((item, idx) => {
+            const chave = item.numeroOs ?? `__sem-os-${idx}`;
+            const existente = porOs.get(chave);
+            if (existente) existente.tecnicos.push(item.tecnico);
+            else porOs.set(chave, { status: item.status, descricao: item.descricao, tecnicos: [item.tecnico], numeroOs: item.numeroOs });
+          });
+          const itens = Array.from(porOs.values());
+          const statusUnicos = new Set(itens.map(i => i.status.toUpperCase()).filter(s => s !== 'SEM LOTO'));
           return { data: dia, itens, conflito: statusUnicos.size > 1 };
         }),
       }))

@@ -232,9 +232,11 @@
                   @for (cel of linha.dias; track cel.data) {
                     <td class="py-1 px-1 text-center">
                       @if (cel.conflito) {
-                        <span class="inline-block w-5 h-5 leading-5 rounded bg-orange-100 text-orange-700 font-bold text-xs" [title]="conflitoLotoTitle(cel.itens)">⚠</span>
+                        <button type="button" (click)="toggleLotoDetalhe(linha.equipamento + ':' + cel.data, cel.itens, $event)"
+                          class="inline-block w-5 h-5 leading-5 rounded bg-orange-100 text-orange-700 font-bold text-xs hover:ring-2 hover:ring-orange-300" [title]="conflitoLotoTitle(cel.itens)">⚠</button>
                       } @else if (cel.itens.length > 0) {
-                        <span class="inline-block w-5 h-5 rounded" [class]="lotoBadgeClass(cel.itens[0].status)" [title]="cel.itens[0].status + ': ' + cel.itens[0].descricao + ' (' + cel.itens[0].tecnico + ')'"></span>
+                        <button type="button" (click)="toggleLotoDetalhe(linha.equipamento + ':' + cel.data, cel.itens, $event)"
+                          class="inline-block w-5 h-5 rounded hover:ring-2 hover:ring-offset-1" [class]="lotoBadgeClass(cel.itens[0].status)" [title]="cel.itens[0].status + ': ' + cel.itens[0].descricao + ' (' + cel.itens[0].tecnicos.join(', ') + ')'"></button>
                       } @else {
                         <span class="inline-block w-5 h-5 rounded bg-gray-50"></span>
                       }
@@ -384,9 +386,11 @@
                     </span>
                   }
                 </div>
-                <span class="text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
-                  [class]="grupo.capacidade !== null && grupo.saldo! < 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'"
-                  [title]="grupo.capacidade !== null ? (grupo.saldo! < 0 ? 'Alocado acima da capacidade da semana' : 'Alocado dentro da capacidade da semana') : ''">
+                <span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                  [class]="capacidadeBadgeClass(grupo)" [title]="capacidadeBadgeTitle(grupo)">
+                  @if (grupo.capacidade !== null && grupo.saldo === 0) {
+                    <svg class="h-3 w-3 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                  }
                   {{ grupo.ordens.length }} OS
                   @if (grupo.capacidade !== null) { · {{ grupo.totalHoras }}h/{{ grupo.capacidade }}h }
                   @else if (grupo.totalHoras > 0) { · {{ grupo.totalHoras }}h }
@@ -677,9 +681,11 @@
                           @for (cel of linha.dias; track cel.data) {
                             <td class="py-1 px-1 text-center">
                               @if (cel.conflito) {
-                                <span class="inline-block w-5 h-5 leading-5 rounded bg-orange-100 text-orange-700 font-bold text-xs" [title]="conflitoLotoTitle(cel.itens)">⚠</span>
+                                <button type="button" (click)="toggleLotoDetalhe(linha.equipamento + ':' + cel.data, cel.itens, $event)"
+                                  class="inline-block w-5 h-5 leading-5 rounded bg-orange-100 text-orange-700 font-bold text-xs hover:ring-2 hover:ring-orange-300" [title]="conflitoLotoTitle(cel.itens)">⚠</button>
                               } @else if (cel.itens.length > 0) {
-                                <span class="inline-block w-5 h-5 rounded" [class]="lotoBadgeClass(cel.itens[0].status)" [title]="cel.itens[0].status + ': ' + cel.itens[0].descricao + ' (' + cel.itens[0].tecnico + ')'"></span>
+                                <button type="button" (click)="toggleLotoDetalhe(linha.equipamento + ':' + cel.data, cel.itens, $event)"
+                                  class="inline-block w-5 h-5 rounded hover:ring-2 hover:ring-offset-1" [class]="lotoBadgeClass(cel.itens[0].status)" [title]="cel.itens[0].status + ': ' + cel.itens[0].descricao + ' (' + cel.itens[0].tecnicos.join(', ') + ')'"></button>
                               } @else {
                                 <span class="inline-block w-5 h-5 rounded bg-gray-50"></span>
                               }
@@ -742,8 +748,11 @@
                             <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 flex-shrink-0">Férias até {{ formatarDataBr(fer.dataFim) }}</span>
                           }
                         </div>
-                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
-                          [class]="grupo.capacidade !== null && grupo.saldo! < 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'">
+                        <span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                          [class]="capacidadeBadgeClass(grupo)" [title]="capacidadeBadgeTitle(grupo)">
+                          @if (grupo.capacidade !== null && grupo.saldo === 0) {
+                            <svg class="h-3 w-3 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                          }
                           {{ grupo.ordens.length }} OS
                           @if (grupo.capacidade !== null) { · {{ grupo.totalHoras }}h/{{ grupo.capacidade }}h }
                           @else if (grupo.totalHoras > 0) { · {{ grupo.totalHoras }}h }
@@ -1483,6 +1492,22 @@
       }
       <button (click)="abrirEditar(o); linhaMenuAberta.set(null)" class="w-full text-left px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Editar</button>
       <button (click)="excluir(o); linhaMenuAberta.set(null)" [disabled]="isProcessando()" class="w-full text-left px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-slate-50 disabled:opacity-50">Excluir</button>
+    }
+  </div>
+}
+
+<!-- Painel de detalhe do quadro de LOTO — clique numa célula pra ver quem/o quê está
+     naquele equipamento/dia, sem depender de hover (que nem existe em touch). -->
+@if (lotoDetalheChave() && lotoDetalhePos(); as pos) {
+  <div class="fixed inset-0 z-40" (click)="fecharLotoDetalhe()"></div>
+  <div class="fixed w-64 bg-white rounded-lg shadow-lg border border-slate-200 z-50 p-2"
+    [style.top.px]="pos.top" [style.left.px]="pos.left">
+    @for (item of lotoDetalheItens(); track $index; let last = $last) {
+      <div class="py-1.5" [class.border-b]="!last" [class.border-slate-100]="!last">
+        <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="lotoBadgeClass(item.status)">{{ item.status }}</span>
+        <p class="text-xs text-gray-700 mt-1">{{ item.descricao }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">{{ item.tecnicos.join(', ') }}</p>
+      </div>
     }
   </div>
 }
