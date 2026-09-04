@@ -913,6 +913,42 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   }
   quadroLoto = computed(() => this.quadroLotoCalc(this.ordensDaSemana(), this.diasDaSemanaAtual()));
 
+  // Formata o quadro de LOTO como texto simples (com emoji no lugar da cor), pra
+  // colar direto no WhatsApp/e-mail — a tela em si exige login, então quem não tem
+  // acesso ao Portal só recebe essa informação assim.
+  async copiarQuadroLoto(): Promise<void> {
+    const linhas = this.quadroLoto();
+    if (linhas.length === 0) {
+      this.notificationService.showError('Não há bloqueios pra copiar nessa semana.');
+      return;
+    }
+    const diasLabel = new Map(this.diasDaSemanaAtual().map(d => [d.data, d.label]));
+    const partes: string[] = [`🔒 *Bloqueios (LOTO) — ${this.semanaFiltroLabel()}*`, ''];
+    for (const linha of linhas) {
+      partes.push(`📍 *${linha.equipamento}*`);
+      for (const cel of linha.dias) {
+        const diaTexto = `${diasLabel.get(cel.data) ?? ''} ${this.diaMesPadded(cel.data)}`.trim();
+        if (cel.conflito) {
+          const texto = cel.itens.map(i => `${i.status} (${i.tecnicos.join(', ')})`).join(' vs. ');
+          partes.push(`  ⚠️ ${diaTexto} — Conflito: ${texto}`);
+        } else {
+          for (const item of cel.itens) {
+            const emoji = item.status.toUpperCase() === 'LOTO' ? '🔴' : '🟢';
+            partes.push(`  ${emoji} ${diaTexto} — ${item.status}: ${item.descricao} (${item.tecnicos.join(', ')})`);
+          }
+        }
+      }
+      partes.push('');
+    }
+    const texto = partes.join('\n').trim();
+    try {
+      await navigator.clipboard.writeText(texto);
+      this.notificationService.showSuccess('Quadro de LOTO copiado — cole no WhatsApp ou e-mail.');
+    } catch {
+      this.notificationService.showError('Não foi possível copiar. Copie manualmente o quadro na tela.');
+    }
+  }
+
   // ── Modal: criar/editar OS ─────────────────────────────────────────────
   formAberto = signal(false);
   formIdEdicao = signal<string | null>(null);
