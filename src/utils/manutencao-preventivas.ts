@@ -17,10 +17,15 @@ export function calcularProximaData(
   return d.toISOString().slice(0, 10);
 }
 
-// Vence dentro da semana em exibição (data <= fimSemanaIso) ou já venceu antes dela —
-// nunca executada (proximaData=null) sempre conta como vencendo.
-export function preventivaVencendo(proximaData: string | null, fimSemanaIso: string): boolean {
-  return proximaData === null || proximaData <= fimSemanaIso;
+// Vence especificamente DENTRO da semana em exibição (inicioSemanaIso a fimSemanaIso) —
+// não é cumulativo: um plano com próxima data antes do início da semana selecionada
+// pertence à semana em que ele foi programado pra aparecer (ver a redistribuição
+// semanal feita nesta conversa), não a todas as semanas seguintes também. Sem isso, a
+// mesma leva de planos reaparecia idêntica em toda semana futura, já que "vencido"
+// nunca deixava de ser verdade. `proximaData=null` (nunca executada) sempre conta como
+// vencendo, em qualquer semana, até ser programada.
+export function preventivaVencendo(proximaData: string | null, inicioSemanaIso: string, fimSemanaIso: string): boolean {
+  return proximaData === null || (proximaData >= inicioSemanaIso && proximaData <= fimSemanaIso);
 }
 
 // A empresa não opera 24h/dia — às vezes a planta fica meses parada, e nesses períodos

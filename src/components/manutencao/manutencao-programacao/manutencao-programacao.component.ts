@@ -958,8 +958,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // usada só pra saber o total pendente (ver preventivasVencendoLabel).
   private preventivasVencendoTodas = computed(() => {
     const diasUteis = this.diasDaSemanaAtual().filter(d => d.label !== 'SAB' && d.label !== 'DOM');
+    const inicioSemana = diasUteis[0]?.data;
     const fimSemana = diasUteis[diasUteis.length - 1]?.data;
-    if (!fimSemana) return [];
+    if (!inicioSemana || !fimSemana) return [];
     const jaProgramados = this.planosJaProgramados();
     const parada = this.plantaParadaAtiva();
     return this.planosPreventivosDaArea()
@@ -968,7 +969,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, parada);
         return { ...p, proximaData: calcularProximaData(p.ultimaExecucao, efetiva.valor, efetiva.unidade) };
       })
-      .filter(p => preventivaVencendo(p.proximaData, fimSemana))
+      .filter(p => preventivaVencendo(p.proximaData, inicioSemana, fimSemana))
       .sort((a, b) => (a.proximaData ?? '').localeCompare(b.proximaData ?? ''));
   });
 
@@ -979,6 +980,33 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const total = this.preventivasVencendoTodas().length;
     const mostrados = this.preventivasVencendo().length;
     return total > mostrados ? `Mostrando os ${mostrados} mais urgentes de ${total} pendentes` : '';
+  });
+
+  // ── Preventivas atrasadas ─────────────────────────────────────────────────
+  // "Preventivas da semana" agora mostra só a janela da semana selecionada (ver
+  // preventivaVencendo) — sem isso, quem não for programado a tempo simplesmente
+  // desaparecia da lista assim que a semana virasse. Esse painel separado guarda essas
+  // preventivas: qualquer uma cuja "próxima data" já passou da semana atual de verdade
+  // (não a semana selecionada no filtro) e ainda não foi programada.
+  atrasadasAberto = signal(false);
+
+  toggleAtrasadas(): void {
+    this.atrasadasAberto.set(!this.atrasadasAberto());
+  }
+
+  private readonly hojeInicioSemanaIso = paraIso(segundaFeiraDe(new Date()));
+
+  preventivasAtrasadas = computed(() => {
+    const jaProgramados = this.planosJaProgramados();
+    const parada = this.plantaParadaAtiva();
+    return this.planosPreventivosDaArea()
+      .filter(p => !jaProgramados.has(p.id))
+      .map(p => {
+        const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, parada);
+        return { ...p, proximaData: calcularProximaData(p.ultimaExecucao, efetiva.valor, efetiva.unidade) };
+      })
+      .filter(p => p.proximaData === null || p.proximaData < this.hojeInicioSemanaIso)
+      .sort((a, b) => (a.proximaData ?? '').localeCompare(b.proximaData ?? ''));
   });
 
   // Abre "Novo lançamento" já preenchido a partir de um plano preventivo vencendo —

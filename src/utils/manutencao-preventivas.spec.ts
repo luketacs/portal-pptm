@@ -27,20 +27,20 @@ describe('calcularProximaData', () => {
 });
 
 describe('preventivaVencendo', () => {
-  it('considera vencendo quando a próxima data já passou (antes do fim da semana)', () => {
-    expect(preventivaVencendo('2026-08-01', '2026-09-11')).toBe(true);
+  it('considera vencendo quando a próxima data cai dentro da semana em exibição', () => {
+    expect(preventivaVencendo('2026-09-09', '2026-09-07', '2026-09-11')).toBe(true);
   });
 
-  it('considera vencendo quando a próxima data cai dentro da semana em exibição', () => {
-    expect(preventivaVencendo('2026-09-10', '2026-09-11')).toBe(true);
+  it('não considera vencendo quando a próxima data é de antes do início da semana (pertence à semana em que foi programada, não a todas as seguintes)', () => {
+    expect(preventivaVencendo('2026-08-01', '2026-09-07', '2026-09-11')).toBe(false);
   });
 
   it('não considera vencendo quando a próxima data é depois do fim da semana', () => {
-    expect(preventivaVencendo('2026-09-20', '2026-09-11')).toBe(false);
+    expect(preventivaVencendo('2026-09-20', '2026-09-07', '2026-09-11')).toBe(false);
   });
 
-  it('nunca executada (proximaData=null) sempre conta como vencendo', () => {
-    expect(preventivaVencendo(null, '2026-09-11')).toBe(true);
+  it('nunca executada (proximaData=null) sempre conta como vencendo, em qualquer semana', () => {
+    expect(preventivaVencendo(null, '2026-09-07', '2026-09-11')).toBe(true);
   });
 });
 
