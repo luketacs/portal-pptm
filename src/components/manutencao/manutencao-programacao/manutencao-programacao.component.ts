@@ -903,6 +903,15 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.preventivasAberto.set(!this.preventivasAberto());
   }
 
+  // Com 13 meses de atraso acumulado (ver análise desta conversa), praticamente todo o
+  // plano mestre aparece "vencendo" ao mesmo tempo — mostrar tudo de uma vez (356 só em
+  // Mecânica) não é executável em uma semana e não ajuda ninguém. Em vez de um filtro
+  // de data exata (que hoje mostraria zero, já que quase nada vence literalmente nessa
+  // semana — está tudo atrasado desde antes), o painel mostra só os N mais urgentes por
+  // área; conforme vão sendo programados, os próximos da fila aparecem sozinhos —
+  // balanceia o ritmo de recuperação do atraso sem sobrecarregar nenhuma semana.
+  private readonly LOTE_PREVENTIVAS_POR_SEMANA = 20;
+
   private planosPreventivosDaArea = computed(() => {
     const area = this.areaFixa;
     if (!area) return [];
@@ -921,7 +930,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     );
   });
 
-  preventivasVencendo = computed(() => {
+  // Todas as vencendo (ordenadas da mais urgente pra menos), antes do corte do lote —
+  // usada só pra saber o total pendente (ver preventivasVencendoLabel).
+  private preventivasVencendoTodas = computed(() => {
     const diasUteis = this.diasDaSemanaAtual().filter(d => d.label !== 'SAB' && d.label !== 'DOM');
     const fimSemana = diasUteis[diasUteis.length - 1]?.data;
     if (!fimSemana) return [];
@@ -931,6 +942,15 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       .map(p => ({ ...p, proximaData: calcularProximaData(p.ultimaExecucao, p.periodicidadeValor, p.periodicidadeUnidade) }))
       .filter(p => preventivaVencendo(p.proximaData, fimSemana))
       .sort((a, b) => (a.proximaData ?? '').localeCompare(b.proximaData ?? ''));
+  });
+
+  preventivasVencendo = computed(() => this.preventivasVencendoTodas().slice(0, this.LOTE_PREVENTIVAS_POR_SEMANA));
+
+  // "Mostrando os 20 mais urgentes de 356" quando tem mais na fila do que o lote mostra.
+  preventivasVencendoLabel = computed(() => {
+    const total = this.preventivasVencendoTodas().length;
+    const mostrados = this.preventivasVencendo().length;
+    return total > mostrados ? `Mostrando os ${mostrados} mais urgentes de ${total} pendentes` : '';
   });
 
   // Abre "Novo lançamento" já preenchido a partir de um plano preventivo vencendo —
