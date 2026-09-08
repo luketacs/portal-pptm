@@ -32,6 +32,9 @@ export interface ManutencaoOrdem {
   observacoes: string | null;
   reuniaoHorario: string | null; // 'HH:mm', só pra tipo 'reuniao'
   reuniaoLocal: string | null;
+  // Preenchido só quando a OS nasceu do painel "Preventivas da semana" — liga essa OS
+  // ao plano preventivo que ela cumpre (ver PlanoPreventivo). null pra grande maioria.
+  planoPreventivoId: string | null;
   criadoPorId: string | null;
   criadoPorNome: string;
   createdAt: Date;
@@ -57,6 +60,34 @@ export interface CreateManutencaoOrdemRequest {
   observacoes?: string;
   reuniaoHorario?: string;
   reuniaoLocal?: string;
+  planoPreventivoId?: string;
+}
+
+// Periodicidade dos planos de manutenção preventiva — mesmos textos usados no export
+// do SIGMA ("Unid.Manut."), preservados como vieram pra não precisar traduzir na hora
+// de exibir.
+export type PeriodicidadeUnidade = 'Dia(s)' | 'Semana(s)' | 'Mes(es)';
+
+// Plano mestre de manutenção preventiva — cadastro nativo (ver migration 028),
+// populado 1x a partir do export do SIGMA. "Última execução" avança quando a OS é
+// programada no Portal (ver ManutencaoProgramacaoService.avancarPreventiva), não
+// depende do SIGMA confirmar apontamento.
+export interface PlanoPreventivo {
+  id: string;
+  bem: string;
+  nomeBem: string;
+  servico: string;
+  nomeServico: string;
+  sequencia: string;
+  nomeManut: string;
+  area: ManutencaoArea;
+  // Só preenchido quando area='APOIO': 'SERVPLEX' (ex-REFR) ou 'OPERAÇÃO' (ex-OPER) —
+  // única opção real de "técnico" (equipe) do Apoio pra esse plano.
+  tecnicoApoio: string | null;
+  periodicidadeValor: number;
+  periodicidadeUnidade: PeriodicidadeUnidade;
+  ultimaExecucao: string | null; // 'YYYY-MM-DD', null = nunca executada
+  ativo: boolean;
 }
 
 // Retorno do proxy /api/sigma-ordens-proxy (consulta às exportações do SIGMA — mesmos

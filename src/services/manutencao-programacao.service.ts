@@ -4,7 +4,8 @@ import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
 import {
   ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest, EquipeApoioItem, FeriasTecnico,
-  ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, RecursoEspecialItem, SigmaBacklogItem,
+  ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, PeriodicidadeUnidade, PlanoPreventivo,
+  RecursoEspecialItem, SigmaBacklogItem,
 } from '../models/manutencao-programacao.model';
 
 interface ManutencaoOrdemRow {
@@ -28,9 +29,44 @@ interface ManutencaoOrdemRow {
   observacoes: string | null;
   reuniao_horario: string | null;
   reuniao_local: string | null;
+  plano_preventivo_id: string | null;
   criado_por_id: string | null;
   criado_por_nome: string;
   created_at: string;
+}
+
+interface PlanoPreventivoRow {
+  id: string;
+  bem: string;
+  nome_bem: string;
+  servico: string;
+  nome_servico: string;
+  sequencia: string;
+  nome_manut: string;
+  area: string;
+  tecnico_apoio: string | null;
+  periodicidade_valor: number;
+  periodicidade_unidade: string;
+  ultima_execucao: string | null;
+  ativo: boolean;
+}
+
+function mapPlanoPreventivoRow(r: PlanoPreventivoRow): PlanoPreventivo {
+  return {
+    id: r.id,
+    bem: r.bem,
+    nomeBem: r.nome_bem,
+    servico: r.servico,
+    nomeServico: r.nome_servico,
+    sequencia: r.sequencia,
+    nomeManut: r.nome_manut,
+    area: r.area as ManutencaoArea,
+    tecnicoApoio: r.tecnico_apoio,
+    periodicidadeValor: Number(r.periodicidade_valor),
+    periodicidadeUnidade: r.periodicidade_unidade as PeriodicidadeUnidade,
+    ultimaExecucao: r.ultima_execucao,
+    ativo: r.ativo,
+  };
 }
 
 const AREA_LABEL_LOG: Record<ManutencaoArea, string> = {
@@ -61,6 +97,7 @@ function mapRow(r: ManutencaoOrdemRow): ManutencaoOrdem {
     observacoes: r.observacoes,
     reuniaoHorario: r.reuniao_horario,
     reuniaoLocal: r.reuniao_local,
+    planoPreventivoId: r.plano_preventivo_id,
     criadoPorId: r.criado_por_id,
     criadoPorNome: r.criado_por_nome,
     createdAt: new Date(r.created_at),
@@ -96,6 +133,11 @@ export class ManutencaoProgramacaoService {
   // de deploy pra cadastrar uma empresa/pessoa nova.
   private _recursosEspeciais = signal<RecursoEspecialItem[]>([]);
   recursosEspeciais = this._recursosEspeciais.asReadonly();
+
+  // Plano mestre de manutenção preventiva (cadastro nativo, ver migration 028) —
+  // alimenta o painel "Preventivas da semana" na Programação.
+  private _planosPreventivos = signal<PlanoPreventivo[]>([]);
+  planosPreventivos = this._planosPreventivos.asReadonly();
 
   constructor(
     private supabaseService: SupabaseService,
@@ -157,6 +199,7 @@ export class ManutencaoProgramacaoService {
       observacoes: req.observacoes?.trim() || null,
       reuniao_horario: req.reuniaoHorario?.trim() || null,
       reuniao_local: req.reuniaoLocal?.trim() || null,
+      plano_preventivo_id: req.planoPreventivoId ?? null,
       criado_por_id: user.id,
       criado_por_nome: user.name,
     };
@@ -478,6 +521,30 @@ export class ManutencaoProgramacaoService {
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) throw new Error('Não foi possível excluir (permissão do banco).');
     await this.loadRecursosEspeciais();
+  }
+
+  // ── Planos de manutenção preventiva (cadastro nativo) ────────────────────────
+
+  async loadPlanosPreventivos(): Promise<void> {
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_planos_preventivos')
+      .select('*')
+      .eq('ativo', true)
+      .order('nome_bem');
+    if (error) throw new Error(error.message);
+    this._planosPreventivos.set((data ?? []).map(mapPlanoPreventivoRow));
+  }
+
+  // Avança a "última execução" do plano — chamada assim que a preventiva é programada
+  // pra alguém na Programação (não espera confirmação de apontamento no SIGMA, ver
+  // criarOrdem/plano_preventivo_id).
+  async avancarPreventiva(id: string, dataExecucaoIso: string): Promise<void> {
+    const { error } = await this.supabaseService.client
+      .from('manutencao_planos_preventivos')
+      .update({ ultima_execucao: dataExecucaoIso, atualizado_em: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+    await this.loadPlanosPreventivos();
   }
 
   async criarOperadorEscala(nome: string, equipe: 'A' | 'B' | 'C' | 'D'): Promise<void> {

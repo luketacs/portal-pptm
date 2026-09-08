@@ -9,13 +9,14 @@ import { ApontamentosService } from '../../../services/apontamentos.service';
 import { ExcelExportService, ProgramacaoSemanalGrupo } from '../../../services/excel-export.service';
 import {
   ConsultaSigmaResultado, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo,
-  OperadorEscalaApoio, RecursoEspecialItem, SigmaBacklogItem,
+  OperadorEscalaApoio, PlanoPreventivo, RecursoEspecialItem, SigmaBacklogItem,
 } from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, TURNO_LABEL, turnoNoDia } from '../../../utils/escala-apoio';
 import {
   calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo, encontrarOrdemDuplicada,
   recursosParaEspelho,
 } from '../../../utils/manutencao-regras';
+import { calcularProximaData, preventivaVencendo } from '../../../utils/manutencao-preventivas';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 
@@ -891,6 +892,65 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
   }
 
+  // ── Preventivas da semana (cadastro nativo — ver PlanoPreventivo) ────────────
+  // Mesma ideia do Backlog do SIGMA acima, mas a fonte não é mais o SIGMA (a análise
+  // desta conversa provou que ele parou de gerar OS preventiva de forma confiável) —
+  // é o plano mestre importado 1x pro Portal, com a "próxima data" calculada em
+  // runtime (calcularProximaData) a partir da última execução registrada.
+  preventivasAberto = signal(false);
+
+  togglePreventivas(): void {
+    this.preventivasAberto.set(!this.preventivasAberto());
+  }
+
+  private planosPreventivosDaArea = computed(() => {
+    const area = this.areaFixa;
+    if (!area) return [];
+    return this.manutencaoService.planosPreventivos().filter(p => p.area === area && p.ativo);
+  });
+
+  // Planos já programados essa semana (têm uma OS ligada via plano_preventivo_id) —
+  // saem da lista pra não sugerir de novo o que já foi resolvido.
+  private planosJaProgramados = computed(() => {
+    const area = this.areaFixa;
+    if (!area) return new Set<string>();
+    return new Set(
+      this.manutencaoService.ordens()
+        .filter(o => o.area === area && o.planoPreventivoId)
+        .map(o => o.planoPreventivoId!),
+    );
+  });
+
+  preventivasVencendo = computed(() => {
+    const diasUteis = this.diasDaSemanaAtual().filter(d => d.label !== 'SAB' && d.label !== 'DOM');
+    const fimSemana = diasUteis[diasUteis.length - 1]?.data;
+    if (!fimSemana) return [];
+    const jaProgramados = this.planosJaProgramados();
+    return this.planosPreventivosDaArea()
+      .filter(p => !jaProgramados.has(p.id))
+      .map(p => ({ ...p, proximaData: calcularProximaData(p.ultimaExecucao, p.periodicidadeValor, p.periodicidadeUnidade) }))
+      .filter(p => preventivaVencendo(p.proximaData, fimSemana))
+      .sort((a, b) => (a.proximaData ?? '').localeCompare(b.proximaData ?? ''));
+  });
+
+  // Abre "Novo lançamento" já preenchido a partir de um plano preventivo vencendo —
+  // mesma ideia do programarDoBacklog, mas o "Nome Bem" do plano mestre quase nunca
+  // bate com o catálogo estático de equipamentos.json, então aqui é setado direto (é
+  // informação real, vale mais que ficar em branco). Técnico/dias ficam pro usuário
+  // escolher, exceto no Apoio, onde já existe só uma equipe real pro plano
+  // (SERVPLEX/OPERAÇÃO) — pré-selecionada, mas continua editável.
+  programarDaPreventiva(plano: PlanoPreventivo): void {
+    this.abrirCriar();
+    this.formArea.set(plano.area);
+    this.formDescricao.set(plano.nomeManut);
+    this.formEquipamento.set(plano.nomeBem);
+    this.formTipoServico.set('PREVENTIVA');
+    this.formPlanoPreventivoId.set(plano.id);
+    if (plano.area === 'APOIO' && plano.tecnicoApoio) {
+      this.formTecnicoNome.set(plano.tecnicoApoio);
+    }
+  }
+
   // Quadro de bloqueios (LOTO) por equipamento/dia — logo no topo da tela, pra
   // qualquer time ver antes de programar se o equipamento já está comprometido
   // num estado incompatível (ex.: uma equipe precisa dele rodando, outra parado).
@@ -1017,6 +1077,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // uma OS que já está concluída/cancelada no ERP. `null` = ainda não consultou, ou o
   // número mudou desde a última consulta.
   formNumeroOsStatusSigma = signal<string | null>(null);
+  // Preenchido só quando o formulário foi aberto a partir de "Preventivas da semana"
+  // (ver programarDaPreventiva) — depois que a OS é criada, avança a "última execução"
+  // desse plano (ver confirmarForm).
+  formPlanoPreventivoId = signal<string | null>(null);
 
   tecnicosDaAreaForm = computed(() => this.tecnicosPorArea(this.formArea()));
 
@@ -1239,11 +1303,24 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       await this.manutencaoService.load();
       await this.apontamentosService.loadColaboradores();
       await this.manutencaoService.loadEquipamentos();
-      await this.manutencaoService.loadRecursosEspeciais();
       if (this.areaFixa === 'APOIO') await this.carregarDadosApoio();
       else await this.manutencaoService.loadFerias();
     } catch {
       this.errorMessage.set('Erro ao carregar a programação de manutenção.');
+    }
+    // Cadastros complementares (recursos especiais, planos preventivos) — cada um numa
+    // migration própria, rodada manualmente pelo usuário no Supabase. Se algum ainda
+    // não existir no banco (migration não rodada ainda), a falha fica isolada aqui e
+    // não derruba a tela inteira de Programação.
+    try {
+      await this.manutencaoService.loadRecursosEspeciais();
+    } catch (err) {
+      console.error('[ManutencaoProgramacaoComponent] Falha ao carregar recursos especiais:', err);
+    }
+    try {
+      await this.manutencaoService.loadPlanosPreventivos();
+    } catch (err) {
+      console.error('[ManutencaoProgramacaoComponent] Falha ao carregar planos preventivos:', err);
     }
   }
 
@@ -1430,6 +1507,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formObservacoes.set('');
     this.formReuniaoHorario.set('');
     this.formReuniaoLocal.set('');
+    this.formPlanoPreventivoId.set(null);
     this.formAberto.set(true);
   }
 
@@ -1465,6 +1543,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formObservacoes.set(o.observacoes ?? '');
     this.formReuniaoHorario.set(o.reuniaoHorario ?? '');
     this.formReuniaoLocal.set(o.reuniaoLocal ?? '');
+    this.formPlanoPreventivoId.set(null);
     this.formAberto.set(true);
   }
 
@@ -1714,11 +1793,24 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           observacoes: this.formObservacoes().trim() || undefined,
           reuniaoHorario: ehReuniao ? (this.formReuniaoHorario().trim() || undefined) : undefined,
           reuniaoLocal: ehReuniao ? (this.formReuniaoLocal().trim() || undefined) : undefined,
+          planoPreventivoId: ehOrdem ? (this.formPlanoPreventivoId() ?? undefined) : undefined,
         });
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} adicionada à programação.`);
         if (ehOrdem) {
           await this.criarApoioEquipamentosSeNecessario();
           await this.criarApoioTecnicosSeNecessario();
+        }
+        // Preventiva programada a partir de "Preventivas da semana" (ver
+        // programarDaPreventiva) — avança a "última execução" do plano assim que ela é
+        // programada pra alguém, sem esperar confirmação de apontamento no SIGMA.
+        const planoId = this.formPlanoPreventivoId();
+        const primeiroDia = [...this.formDiasSelecionados()].sort()[0];
+        if (ehOrdem && planoId && primeiroDia) {
+          try {
+            await this.manutencaoService.avancarPreventiva(planoId, primeiroDia);
+          } catch (err: unknown) {
+            this.notificationService.showError(err instanceof Error ? err.message : 'OS criada, mas não deu pra atualizar o plano preventivo.');
+          }
         }
       }
       this.fecharForm();

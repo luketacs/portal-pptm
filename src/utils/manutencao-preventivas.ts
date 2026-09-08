@@ -1,0 +1,24 @@
+// Cálculo de "próxima data" dos planos de manutenção preventiva. Não existe uma coluna
+// pra isso no banco — é sempre calculada em runtime a partir de `ultima_execucao +
+// periodicidade` (mesmo espírito de manter matemática de datas fora do SQL, ver
+// src/utils/manutencao-regras.ts).
+export type PeriodicidadeUnidade = 'Dia(s)' | 'Semana(s)' | 'Mes(es)';
+
+// `ultimaExecucao=null` (plano nunca executado) sempre retorna null — quem consome
+// trata null como "vencido desde sempre" (ver preventivaVencendo).
+export function calcularProximaData(
+  ultimaExecucao: string | null, valor: number, unidade: PeriodicidadeUnidade,
+): string | null {
+  if (!ultimaExecucao) return null;
+  const d = new Date(ultimaExecucao + 'T00:00:00');
+  if (unidade === 'Dia(s)') d.setDate(d.getDate() + valor);
+  else if (unidade === 'Semana(s)') d.setDate(d.getDate() + valor * 7);
+  else d.setMonth(d.getMonth() + valor); // Mes(es)
+  return d.toISOString().slice(0, 10);
+}
+
+// Vence dentro da semana em exibição (data <= fimSemanaIso) ou já venceu antes dela —
+// nunca executada (proximaData=null) sempre conta como vencendo.
+export function preventivaVencendo(proximaData: string | null, fimSemanaIso: string): boolean {
+  return proximaData === null || proximaData <= fimSemanaIso;
+}

@@ -19,8 +19,8 @@ function ordem(overrides: Partial<ManutencaoOrdem>): ManutencaoOrdem {
     id: 'x', tipo: 'ordem', area: 'ELETRICA', semanaInicio: '2026-09-07', numeroOs: null, semOs: false,
     descricao: '', equipamento: null, recursos: null, loto: null, areaAtuacao: null, duracaoHoras: null,
     tipoServico: null, tecnicoNome: '', tecnicoMatricula: null, diasPrevistos: [], status: 'PEND',
-    observacoes: null, reuniaoHorario: null, reuniaoLocal: null, criadoPorId: null, criadoPorNome: '',
-    createdAt: new Date(), ...overrides,
+    observacoes: null, reuniaoHorario: null, reuniaoLocal: null, planoPreventivoId: null, criadoPorId: null,
+    criadoPorNome: '', createdAt: new Date(), ...overrides,
   };
 }
 
