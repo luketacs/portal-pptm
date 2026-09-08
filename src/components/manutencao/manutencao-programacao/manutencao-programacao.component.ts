@@ -896,12 +896,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Mesma ideia do Backlog do SIGMA acima, mas a fonte não é mais o SIGMA (a análise
   // desta conversa provou que ele parou de gerar OS preventiva de forma confiável) —
   // é o plano mestre importado 1x pro Portal, com a "próxima data" calculada em
-  // runtime (calcularProximaData) a partir da última execução registrada.
-  preventivasAberto = signal(false);
-
-  togglePreventivas(): void {
-    this.preventivasAberto.set(!this.preventivasAberto());
-  }
+  // runtime (calcularProximaData) a partir da última execução registrada. Card fixo
+  // (sempre visível, não fica escondido atrás de um clique em "Mais ações") — é
+  // consultado com frequência suficiente pra merecer esse destaque.
 
   // Admin-only: liga/desliga a parada da planta (ver plantaParadaAtiva acima).
   async togglePlantaParada(): Promise<void> {
@@ -980,6 +977,27 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const total = this.preventivasVencendoTodas().length;
     const mostrados = this.preventivasVencendo().length;
     return total > mostrados ? `Mostrando os ${mostrados} mais urgentes de ${total} pendentes` : '';
+  });
+
+  // OS já criadas a partir de um plano preventivo, com dia dentro da semana
+  // selecionada — usado só pra calcular o velocímetro (quanto da leva da semana já foi
+  // programado). Diferente de planosJaProgramados (que olha todas as semanas, pra
+  // excluir da lista de pendentes) — aqui é só a leva desta semana específica.
+  private preventivasProgramadasNaSemana = computed(() => {
+    const area = this.areaFixa;
+    if (!area) return 0;
+    const semana = this.semanaFiltro();
+    return this.manutencaoService.ordens().filter(o => o.area === area && !!o.planoPreventivoId && o.semanaInicio === semana).length;
+  });
+
+  // Velocímetro do card fixo: quanto da leva de preventivas dessa semana já foi
+  // programado. Mesmo formato de `atendimentoProgramacao` (reaproveita gaugeCorClass).
+  preventivasGauge = computed(() => {
+    const pendentes = this.preventivasVencendoTodas().length;
+    const programadas = this.preventivasProgramadasNaSemana();
+    const total = pendentes + programadas;
+    const percentual = total > 0 ? Math.round((programadas / total) * 100) : 0;
+    return { pendentes, programadas, total, percentual, rastreaveis: total };
   });
 
   // ── Preventivas atrasadas ─────────────────────────────────────────────────
