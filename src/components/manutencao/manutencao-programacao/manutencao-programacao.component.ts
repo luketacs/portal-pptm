@@ -1751,10 +1751,19 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     );
     if (empresas.size === 0) return;
 
+    const mandante = this.formTecnicoNome().trim();
     const numero = this.formNumeroOs().trim();
     const dias = this.formDiasSelecionados();
     for (const empresa of empresas) {
       if (numero && this.ordemDuplicada(numero, empresa, dias)) continue;
+      // Da perspectiva dessa empresa/pessoa, "Recursos" é quem mais está no serviço —
+      // o mandante e os outros recursos, nunca o próprio recurso que aponta pra ela
+      // mesma (mesma correção já feita pro espelhamento de técnico PPTM, ver
+      // criarApoioTecnicosSeNecessario).
+      const recursosDoEspelho = [
+        ...this.formRecursosLista().filter(r => this.RECURSO_PARA_EMPRESA_APOIO[r.toUpperCase()] !== empresa),
+        mandante,
+      ].join(', ');
       try {
         await this.manutencaoService.criarOrdem({
           tipo: 'ordem',
@@ -1764,7 +1773,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           semOs: this.formSemOs(),
           descricao: this.descricaoParaEnvio(),
           equipamento: this.formEquipamento().trim() || undefined,
-          recursos: this.formRecursosTexto() || undefined,
+          recursos: recursosDoEspelho || undefined,
           loto: this.formLoto().trim() || undefined,
           areaAtuacao: this.formAreaAtuacao().trim() || undefined,
           duracaoHoras: this.formDuracaoHoras() ?? undefined,
