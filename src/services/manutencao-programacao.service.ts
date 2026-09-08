@@ -4,8 +4,8 @@ import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
 import {
   ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest, EquipeApoioItem, FeriasTecnico,
-  ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, PeriodicidadeUnidade, PlanoPreventivo,
-  RecursoEspecialItem, SigmaBacklogItem,
+  ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, ParadaPlanta, PeriodicidadeUnidade,
+  PlanoPreventivo, RecursoEspecialItem, SigmaBacklogItem,
 } from '../models/manutencao-programacao.model';
 
 interface ManutencaoOrdemRow {
@@ -138,6 +138,11 @@ export class ManutencaoProgramacaoService {
   // alimenta o painel "Preventivas da semana" na Programação.
   private _planosPreventivos = signal<PlanoPreventivo[]>([]);
   planosPreventivos = this._planosPreventivos.asReadonly();
+
+  // Parada da planta (Admin-only, ver migration 029) — enquanto ativa, planos
+  // preventivos de ciclo curto são calculados como mensais. `null` = operando normal.
+  private _paradaAtual = signal<ParadaPlanta | null>(null);
+  paradaAtual = this._paradaAtual.asReadonly();
 
   constructor(
     private supabaseService: SupabaseService,
@@ -545,6 +550,41 @@ export class ManutencaoProgramacaoService {
       .eq('id', id);
     if (error) throw new Error(error.message);
     await this.loadPlanosPreventivos();
+  }
+
+  // ── Parada da planta (Admin-only) ────────────────────────────────────────────
+
+  async loadParadaAtual(): Promise<void> {
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_parada_planta')
+      .select('id, data_inicio, data_fim')
+      .is('data_fim', null)
+      .order('data_inicio', { ascending: false })
+      .limit(1);
+    if (error) throw new Error(error.message);
+    const row = (data ?? [])[0];
+    this._paradaAtual.set(row ? { id: row.id, dataInicio: row.data_inicio, dataFim: row.data_fim } : null);
+  }
+
+  async iniciarParadaPlanta(): Promise<void> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+    const { error } = await this.supabaseService.client
+      .from('manutencao_parada_planta')
+      .insert({ data_inicio: new Date().toISOString().slice(0, 10), criado_por_id: user.id, criado_por_nome: user.name });
+    if (error) throw new Error(error.message);
+    await this.loadParadaAtual();
+  }
+
+  async encerrarParadaPlanta(): Promise<void> {
+    const atual = this._paradaAtual();
+    if (!atual) return;
+    const { error } = await this.supabaseService.client
+      .from('manutencao_parada_planta')
+      .update({ data_fim: new Date().toISOString().slice(0, 10) })
+      .eq('id', atual.id);
+    if (error) throw new Error(error.message);
+    await this.loadParadaAtual();
   }
 
   async criarOperadorEscala(nome: string, equipe: 'A' | 'B' | 'C' | 'D'): Promise<void> {

@@ -71,6 +71,15 @@
                   Gerenciar Recursos
                 </button>
               }
+              @if (isAdmin()) {
+                <button (click)="togglePlantaParada(); menuAcoesAberto.set(false)"
+                  class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between gap-2">
+                  <span>{{ plantaParadaAtiva() ? 'Retomar operação normal' : 'Marcar planta parada' }}</span>
+                  @if (plantaParadaAtiva()) {
+                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Parada</span>
+                  }
+                </button>
+              }
             </div>
           }
         </div>

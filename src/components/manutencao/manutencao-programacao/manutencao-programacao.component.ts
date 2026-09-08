@@ -16,7 +16,7 @@ import {
   calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo, encontrarOrdemDuplicada,
   recursosParaEspelho,
 } from '../../../utils/manutencao-regras';
-import { calcularProximaData, preventivaVencendo } from '../../../utils/manutencao-preventivas';
+import { calcularProximaData, periodicidadeEfetiva, preventivaVencendo } from '../../../utils/manutencao-preventivas';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 
@@ -903,6 +903,25 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.preventivasAberto.set(!this.preventivasAberto());
   }
 
+  // Admin-only: liga/desliga a parada da planta (ver plantaParadaAtiva acima).
+  async togglePlantaParada(): Promise<void> {
+    if (this.isProcessando()) return;
+    const ativa = this.plantaParadaAtiva();
+    const mensagem = ativa
+      ? 'Retomar operação normal? As inspeções semanais/quinzenais dos planos preventivos voltam a valer no ritmo normal.'
+      : 'Marcar a planta como parada? Enquanto ativo, planos preventivos de ciclo curto (dias/semanas) passam a ser calculados como mensais.';
+    if (!confirm(mensagem)) return;
+    this.isProcessando.set(true);
+    try {
+      if (ativa) await this.manutencaoService.encerrarParadaPlanta();
+      else await this.manutencaoService.iniciarParadaPlanta();
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao atualizar status da planta.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
   // Com 13 meses de atraso acumulado (ver análise desta conversa), praticamente todo o
   // plano mestre aparece "vencendo" ao mesmo tempo — mostrar tudo de uma vez (356 só em
   // Mecânica) não é executável em uma semana e não ajuda ninguém. Em vez de um filtro
@@ -930,6 +949,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     );
   });
 
+  // Parada da planta (Admin-only, ver "Gerenciar" no menu) — enquanto ativa, ciclo
+  // curto (dias/semanas) é tratado como mensal no cálculo abaixo (ver
+  // periodicidadeEfetiva). Não afeta o cadastro do plano, só a leitura.
+  plantaParadaAtiva = computed(() => this.manutencaoService.paradaAtual() !== null);
+
   // Todas as vencendo (ordenadas da mais urgente pra menos), antes do corte do lote —
   // usada só pra saber o total pendente (ver preventivasVencendoLabel).
   private preventivasVencendoTodas = computed(() => {
@@ -937,9 +961,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const fimSemana = diasUteis[diasUteis.length - 1]?.data;
     if (!fimSemana) return [];
     const jaProgramados = this.planosJaProgramados();
+    const parada = this.plantaParadaAtiva();
     return this.planosPreventivosDaArea()
       .filter(p => !jaProgramados.has(p.id))
-      .map(p => ({ ...p, proximaData: calcularProximaData(p.ultimaExecucao, p.periodicidadeValor, p.periodicidadeUnidade) }))
+      .map(p => {
+        const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, parada);
+        return { ...p, proximaData: calcularProximaData(p.ultimaExecucao, efetiva.valor, efetiva.unidade) };
+      })
       .filter(p => preventivaVencendo(p.proximaData, fimSemana))
       .sort((a, b) => (a.proximaData ?? '').localeCompare(b.proximaData ?? ''));
   });
@@ -1341,6 +1369,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       await this.manutencaoService.loadPlanosPreventivos();
     } catch (err) {
       console.error('[ManutencaoProgramacaoComponent] Falha ao carregar planos preventivos:', err);
+    }
+    try {
+      await this.manutencaoService.loadParadaAtual();
+    } catch (err) {
+      console.error('[ManutencaoProgramacaoComponent] Falha ao carregar status de parada da planta:', err);
     }
   }
 

@@ -90,6 +90,16 @@ export interface PlanoPreventivo {
   ativo: boolean;
 }
 
+// Período em que a planta ficou parada (a empresa não opera 24h/dia) — enquanto
+// `dataFim` for null, a parada está em andamento. Admin-only (ver migration 029):
+// enquanto ativa, planos preventivos de ciclo curto (dias/semanas) são calculados
+// como mensais (ver periodicidadeEfetiva em manutencao-preventivas.ts).
+export interface ParadaPlanta {
+  id: string;
+  dataInicio: string;
+  dataFim: string | null;
+}
+
 // Retorno do proxy /api/sigma-ordens-proxy (consulta às exportações do SIGMA — mesmos
 // links que a planilha "Fechamento Semanal.2.xlsx" usa via Dados Externos/Power Query).
 export interface SigmaOrdemInfo {

@@ -22,3 +22,15 @@ export function calcularProximaData(
 export function preventivaVencendo(proximaData: string | null, fimSemanaIso: string): boolean {
   return proximaData === null || proximaData <= fimSemanaIso;
 }
+
+// A empresa não opera 24h/dia — às vezes a planta fica meses parada, e nesses períodos
+// não faz sentido manter o ritmo semanal/quinzenal de inspeção de equipamento parado.
+// Enquanto a planta estiver marcada como parada (ver ParadaPlanta), todo plano de ciclo
+// curto (Dia(s)/Semana(s)) é tratado como se fosse mensal só pra esse cálculo — o
+// cadastro do plano em si não muda, volta ao normal assim que a parada é encerrada.
+export function periodicidadeEfetiva(
+  valor: number, unidade: PeriodicidadeUnidade, plantaParada: boolean,
+): { valor: number; unidade: PeriodicidadeUnidade } {
+  if (plantaParada && unidade !== 'Mes(es)') return { valor: 1, unidade: 'Mes(es)' };
+  return { valor, unidade };
+}

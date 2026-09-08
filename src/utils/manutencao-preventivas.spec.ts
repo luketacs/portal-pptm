@@ -1,4 +1,4 @@
-import { calcularProximaData, preventivaVencendo } from './manutencao-preventivas';
+import { calcularProximaData, periodicidadeEfetiva, preventivaVencendo } from './manutencao-preventivas';
 
 describe('calcularProximaData', () => {
   it('soma dias quando a unidade é Dia(s)', () => {
@@ -41,5 +41,22 @@ describe('preventivaVencendo', () => {
 
   it('nunca executada (proximaData=null) sempre conta como vencendo', () => {
     expect(preventivaVencendo(null, '2026-09-11')).toBe(true);
+  });
+});
+
+describe('periodicidadeEfetiva', () => {
+  it('planta operando normalmente: mantém a periodicidade original', () => {
+    expect(periodicidadeEfetiva(1, 'Semana(s)', false)).toEqual({ valor: 1, unidade: 'Semana(s)' });
+    expect(periodicidadeEfetiva(6, 'Mes(es)', false)).toEqual({ valor: 6, unidade: 'Mes(es)' });
+  });
+
+  it('planta parada: ciclo curto (dias/semanas) vira mensal', () => {
+    expect(periodicidadeEfetiva(2, 'Semana(s)', true)).toEqual({ valor: 1, unidade: 'Mes(es)' });
+    expect(periodicidadeEfetiva(7, 'Dia(s)', true)).toEqual({ valor: 1, unidade: 'Mes(es)' });
+  });
+
+  it('planta parada: ciclo já mensal (ou mais longo) não muda', () => {
+    expect(periodicidadeEfetiva(3, 'Mes(es)', true)).toEqual({ valor: 3, unidade: 'Mes(es)' });
+    expect(periodicidadeEfetiva(12, 'Mes(es)', true)).toEqual({ valor: 12, unidade: 'Mes(es)' });
   });
 });
