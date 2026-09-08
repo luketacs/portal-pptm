@@ -1346,6 +1346,18 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return 'text-red-500';
   }
 
+  // Texto do gauge de atendimento compacto (ao lado de "Mais ações") — mesma
+  // informação que o card grande mostrava, só que como tooltip pra caber num badge
+  // pequeno em vez de ocupar uma linha inteira.
+  atendimentoTooltip(at: { executadas: number; rastreaveis: number; totalOrdens: number; percentual: number }): string {
+    if (at.rastreaveis > 0) {
+      const extra = at.totalOrdens > at.rastreaveis ? ` (${at.totalOrdens - at.rastreaveis} sem número de OS ou aguardando o SIGMA)` : '';
+      return `Atendimento da programação: ${at.executadas} de ${at.rastreaveis} OS executadas dentro da semana${extra}. Clique pra atualizar.`;
+    }
+    if (at.totalOrdens > 0) return 'Nenhuma OS rastreável pelo SIGMA ainda nessa semana. Clique pra atualizar.';
+    return 'Nenhuma OS programada pra essa semana.';
+  }
+
   // "Dias" em texto compacto (ex.: "SEG, QUA, SEX") em vez das 7 pastilhas — mesma
   // informação, ocupando uma linha só. `dias` é opcional pra reaproveitar nos blocos
   // do horizonte de 4 semanas, que usam datas diferentes de diasDaSemanaAtual().
