@@ -4,7 +4,7 @@ import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
 import {
   ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest, EquipeApoioItem, FeriasTecnico,
-  ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, SigmaBacklogItem,
+  ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, RecursoEspecialItem, SigmaBacklogItem,
 } from '../models/manutencao-programacao.model';
 
 interface ManutencaoOrdemRow {
@@ -90,6 +90,12 @@ export class ManutencaoProgramacaoService {
   // lançamento de atividade dentro do período.
   private _ferias = signal<FeriasTecnico[]>([]);
   ferias = this._ferias.asReadonly();
+
+  // Recursos especiais (Munck/Guindaste/Andaime/Fontebras...) que espelham
+  // automaticamente uma OS pro Apoio — no banco (editável por Admin), evita precisar
+  // de deploy pra cadastrar uma empresa/pessoa nova.
+  private _recursosEspeciais = signal<RecursoEspecialItem[]>([]);
+  recursosEspeciais = this._recursosEspeciais.asReadonly();
 
   constructor(
     private supabaseService: SupabaseService,
@@ -435,6 +441,43 @@ export class ManutencaoProgramacaoService {
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) throw new Error('Não foi possível excluir (permissão do banco).');
     await this.loadApoioCadastros();
+  }
+
+  // ── Cadastro de recursos especiais (Munck/Guindaste/Andaime/Fontebras...) ───
+
+  async loadRecursosEspeciais(): Promise<void> {
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_recursos_especiais')
+      .select('id, opcao, empresa_apoio')
+      .order('opcao');
+    if (error) throw new Error(error.message);
+    this._recursosEspeciais.set((data ?? []).map(r => ({ id: r.id, opcao: r.opcao, empresaApoio: r.empresa_apoio })));
+  }
+
+  async criarRecursoEspecial(opcao: string, empresaApoio: string): Promise<void> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+    const opcaoLimpa = opcao.trim().toUpperCase();
+    const empresaLimpa = empresaApoio.trim().toUpperCase();
+    if (!opcaoLimpa) throw new Error('Informe o rótulo do recurso.');
+    if (!empresaLimpa) throw new Error('Informe pra quem esse recurso espelha no Apoio.');
+
+    const { error } = await this.supabaseService.client
+      .from('manutencao_recursos_especiais')
+      .insert({ opcao: opcaoLimpa, empresa_apoio: empresaLimpa, criado_por_id: user.id, criado_por_nome: user.name });
+    if (error) throw new Error(error.code === '23505' ? 'Esse recurso já está cadastrado.' : error.message);
+    await this.loadRecursosEspeciais();
+  }
+
+  async excluirRecursoEspecial(id: string): Promise<void> {
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_recursos_especiais')
+      .delete()
+      .eq('id', id)
+      .select('id');
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) throw new Error('Não foi possível excluir (permissão do banco).');
+    await this.loadRecursosEspeciais();
   }
 
   async criarOperadorEscala(nome: string, equipe: 'A' | 'B' | 'C' | 'D'): Promise<void> {

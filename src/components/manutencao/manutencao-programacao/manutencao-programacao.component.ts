@@ -9,9 +9,13 @@ import { ApontamentosService } from '../../../services/apontamentos.service';
 import { ExcelExportService, ProgramacaoSemanalGrupo } from '../../../services/excel-export.service';
 import {
   ConsultaSigmaResultado, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo,
-  OperadorEscalaApoio, SigmaBacklogItem,
+  OperadorEscalaApoio, RecursoEspecialItem, SigmaBacklogItem,
 } from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, TURNO_LABEL, turnoNoDia } from '../../../utils/escala-apoio';
+import {
+  calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo, encontrarOrdemDuplicada,
+  recursosParaEspelho,
+} from '../../../utils/manutencao-regras';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 
@@ -416,10 +420,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Período de férias do técnico que toca algum dos dias informados (a semana em
   // exibição, por ex.) — `null` se não tiver nenhuma férias cadastrada nesse período.
   private feriasNoIntervalo(tecnicoNome: string, diasIso: string[]): FeriasTecnico | null {
-    if (diasIso.length === 0) return null;
-    return this.manutencaoService.ferias().find(f =>
-      f.tecnicoNome === tecnicoNome && diasIso.some(d => d >= f.dataInicio && d <= f.dataFim),
-    ) ?? null;
+    return encontrarFeriasNoIntervalo(this.manutencaoService.ferias(), tecnicoNome, diasIso);
   }
 
   // Folga já lançada pro técnico que toca algum dos dias informados — se ele está de
@@ -427,11 +428,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // nesses dias. `idExcluir` evita a folga se auto-bloquear quando ela mesma está
   // sendo editada.
   private folgaNoIntervalo(tecnicoNome: string, diasIso: string[], idExcluir?: string | null): ManutencaoOrdem | null {
-    if (diasIso.length === 0) return null;
-    return this.manutencaoService.ordens().find(o =>
-      o.tipo === 'folga' && o.tecnicoNome === tecnicoNome && o.id !== idExcluir
-        && o.diasPrevistos.some(d => diasIso.includes(d)),
-    ) ?? null;
+    return encontrarFolgaNoIntervalo(this.manutencaoService.ordens(), tecnicoNome, diasIso, idExcluir);
   }
 
   // Mesma OS já lançada pro mesmo técnico em algum dos dias informados — evita
@@ -440,13 +437,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // (mesma lógica da consulta ao SIGMA), não o texto digitado, pra "45203" e "045203"
   // baterem como a mesma OS. `idExcluir` evita a OS se auto-bloquear ao ser editada.
   private ordemDuplicada(numeroOs: string, tecnicoNome: string, diasIso: string[], idExcluir?: string | null): ManutencaoOrdem | null {
-    if (!numeroOs.trim() || diasIso.length === 0) return null;
-    const numeroNormalizado = normalizarNumeroOs(numeroOs);
-    return this.manutencaoService.ordens().find(o =>
-      o.id !== idExcluir && o.tipo === 'ordem' && o.tecnicoNome === tecnicoNome
-        && !!o.numeroOs && normalizarNumeroOs(o.numeroOs) === numeroNormalizado
-        && o.diasPrevistos.some(d => diasIso.includes(d)),
-    ) ?? null;
+    if (!numeroOs.trim()) return null;
+    return encontrarOrdemDuplicada(
+      this.manutencaoService.ordens(), normalizarNumeroOs(numeroOs), tecnicoNome, diasIso, normalizarNumeroOs, idExcluir,
+    );
   }
 
   private gruposCalc(lista: ManutencaoOrdem[], dias: { data: string; label: string }[]) {
@@ -488,31 +482,18 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // tiram o dia inteiro da conta; exame médico (ASO) só desconta HORAS_EXAME_MEDICO
   // daquele dia (o exame não toma o dia todo); treinamento/reunião não descontam nada.
   // `null` quando o técnico não está no matriculas.json (não dá pra saber a
-  // disponibilidade dele).
-  private readonly HORAS_EXAME_MEDICO = 3.5;
-
+  // disponibilidade dele). Matemática pura em calcularCapacidadeSemana (testada).
   private capacidadeSemana(tecnicoNome: string, ordensDoTecnico: ManutencaoOrdem[], dias: { data: string; label: string }[]): number | null {
     const colaborador = this.apontamentosService.colaboradores().find(c => c.nome === tecnicoNome);
     if (!colaborador) return null;
 
-    const diasIndisponiveis = new Set(
-      ordensDoTecnico.filter(o => o.tipo === 'folga').flatMap(o => o.diasPrevistos),
-    );
-    const diasComExame = new Set(
-      ordensDoTecnico.filter(o => o.tipo === 'exame_medico').flatMap(o => o.diasPrevistos),
-    );
-    const ferias = this.feriasNoIntervalo(tecnicoNome, dias.map(d => d.data));
-
-    let total = 0;
-    for (const dia of dias) {
-      if (dia.label === 'SAB' || dia.label === 'DOM') continue;
-      if (diasIndisponiveis.has(dia.data)) continue;
-      if (ferias && dia.data >= ferias.dataInicio && dia.data <= ferias.dataFim) continue;
-      let disponivel = this.apontamentosService.disponibilidadeNoDia(colaborador, dia.data);
-      if (diasComExame.has(dia.data)) disponivel = Math.max(0, disponivel - this.HORAS_EXAME_MEDICO);
-      total += disponivel;
-    }
-    return parseFloat(total.toFixed(2));
+    return calcularCapacidadeSemana({
+      dias,
+      disponibilidadePorDia: new Map(dias.map(d => [d.data, this.apontamentosService.disponibilidadeNoDia(colaborador, d.data)])),
+      diasFolga: new Set(ordensDoTecnico.filter(o => o.tipo === 'folga').flatMap(o => o.diasPrevistos)),
+      diasExameMedico: new Set(ordensDoTecnico.filter(o => o.tipo === 'exame_medico').flatMap(o => o.diasPrevistos)),
+      feriasIntervalo: this.feriasNoIntervalo(tecnicoNome, dias.map(d => d.data)),
+    });
   }
 
   // Selo de capacidade do card do técnico: vermelho quando passou da capacidade da
@@ -788,6 +769,41 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
   }
 
+  // ── Gerenciar Recursos (Admin): cadastro dos "recursos especiais" (Munck/
+  // Guindaste/Andaime/Fontebras...) que sugerem no campo Recursos e espelham
+  // automaticamente uma OS pro Apoio — evita precisar de deploy pra cadastrar uma
+  // empresa/pessoa nova (ver recursosEquipamentoOpcoes/recursoParaEmpresaApoio).
+  gerenciarRecursosAberto = signal(false);
+  recursosEspeciais = this.manutencaoService.recursosEspeciais;
+  novoRecursoOpcao = signal('');
+  novoRecursoEmpresa = signal('');
+
+  async adicionarRecursoEspecial(): Promise<void> {
+    if (this.isProcessando()) return;
+    this.isProcessando.set(true);
+    try {
+      await this.manutencaoService.criarRecursoEspecial(this.novoRecursoOpcao(), this.novoRecursoEmpresa());
+      this.novoRecursoOpcao.set('');
+      this.novoRecursoEmpresa.set('');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao adicionar recurso.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  async removerRecursoEspecial(item: RecursoEspecialItem): Promise<void> {
+    if (this.isProcessando() || !confirm(`Remover "${item.opcao}" do cadastro? Lançamentos já feitos com esse recurso não são afetados.`)) return;
+    this.isProcessando.set(true);
+    try {
+      await this.manutencaoService.excluirRecursoEspecial(item.id);
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover recurso.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
   // Backlog do SIGMA (OS abertas da área, ainda não lançadas aqui) — só faz sentido
   // nas telas de área única, porque o campo de área do SIGMA é por OS, não por semana.
   // Não é tempo real: o proxy cacheia a exportação do SIGMA por até ~10min pra não
@@ -1009,20 +1025,16 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // recurso especial usado na atividade. Datalist: sugere, mas continua aceitando
   // texto livre pra qualquer outra coisa. Munck/Guindaste têm duas empresas
   // contratadas (as duas fazem os dois serviços) — a opção já vem com a empresa
-  // junto, escolhida na hora de lançar a OS, em vez de perguntar depois.
-  private readonly recursosEquipamentoOpcoes = [
-    'MUNCK - DB GUINDASTES', 'MUNCK - CORDEIRO',
-    'GUINDASTE - DB GUINDASTES', 'GUINDASTE - CORDEIRO',
-    'ANDAIME',
-    'ROMÁRIO (FONTEBRAS)', 'JÚLIO (FONTEBRAS)', 'FELIPE (FONTEBRAS)', 'SÉRGIO (FONTEBRAS)',
-  ];
+  // junto, escolhida na hora de lançar a OS, em vez de perguntar depois. Cadastro
+  // editável por Admin (ver "Gerenciar Recursos"), não fixo no código.
+  private recursosEquipamentoOpcoes = computed(() => this.manutencaoService.recursosEspeciais().map(r => r.opcao));
 
   recursosOpcoes = computed(() => {
     const jaAdicionados = new Set(this.formRecursosLista().map(r => r.toUpperCase()));
     const nomesTecnicos = this.todosTecnicos()
       .map(t => t.nome)
       .filter(nome => nome !== this.formTecnicoNome() && !jaAdicionados.has(nome.toUpperCase()));
-    const equipamentos = this.recursosEquipamentoOpcoes.filter(op => !jaAdicionados.has(op));
+    const equipamentos = this.recursosEquipamentoOpcoes().filter(op => !jaAdicionados.has(op));
     return [...nomesTecnicos, ...equipamentos];
   });
 
@@ -1033,7 +1045,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // texto solto, sem avisar — por isso o chip mostra essa diferença visualmente.
   recursoReconhecido(valor: string): 'tecnico' | 'equipamento' | null {
     const v = valor.toUpperCase();
-    if (this.recursosEquipamentoOpcoes.some(op => op.toUpperCase() === v)) return 'equipamento';
+    if (this.recursosEquipamentoOpcoes().some(op => op.toUpperCase() === v)) return 'equipamento';
     if (this.todosTecnicos().some(t => t.nome.toUpperCase() === v)) return 'tecnico';
     return null;
   }
@@ -1227,6 +1239,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       await this.manutencaoService.load();
       await this.apontamentosService.loadColaboradores();
       await this.manutencaoService.loadEquipamentos();
+      await this.manutencaoService.loadRecursosEspeciais();
       if (this.areaFixa === 'APOIO') await this.carregarDadosApoio();
       else await this.manutencaoService.loadFerias();
     } catch {
@@ -1716,23 +1729,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
   }
 
-  // Cada opção de recurso "de equipamento" aponta pra uma empresa/equipe cadastrada
-  // no Apoio (ver "Gerenciar Apoio") — precisa bater com o nome exato lá cadastrado.
-  // Munck e Guindaste têm duas contratadas (a opção de recurso já vem com a empresa
-  // junto, ver recursosEquipamentoOpcoes), andaime só tem uma. Fontebras é mão de obra
+  // Cada opção de recurso "de equipamento" aponta pra uma empresa/pessoa — precisa
+  // bater com o nome exato cadastrado em "Gerenciar Recursos". Munck e Guindaste têm
+  // duas contratadas (a opção de recurso já vem com a empresa junto, ver
+  // recursosEquipamentoOpcoes), andaime só tem uma. Fontebras é mão de obra
   // (colaboradores nomeados, não equipamento) — cada um espelha pra própria agenda
   // dele no Apoio, não pra uma empresa genérica.
-  private readonly RECURSO_PARA_EMPRESA_APOIO: Record<string, string> = {
-    'ANDAIME': 'TOP ANDAIMES',
-    'MUNCK - DB GUINDASTES': 'DB GUINDASTES',
-    'MUNCK - CORDEIRO': 'CORDEIRO',
-    'GUINDASTE - DB GUINDASTES': 'DB GUINDASTES',
-    'GUINDASTE - CORDEIRO': 'CORDEIRO',
-    'ROMÁRIO (FONTEBRAS)': 'ROMÁRIO (FONTEBRAS)',
-    'JÚLIO (FONTEBRAS)': 'JÚLIO (FONTEBRAS)',
-    'FELIPE (FONTEBRAS)': 'FELIPE (FONTEBRAS)',
-    'SÉRGIO (FONTEBRAS)': 'SÉRGIO (FONTEBRAS)',
-  };
+  private recursoParaEmpresaApoio = computed<Record<string, string>>(() => {
+    const mapa: Record<string, string> = {};
+    for (const r of this.manutencaoService.recursosEspeciais()) mapa[r.opcao.toUpperCase()] = r.empresaApoio;
+    return mapa;
+  });
 
   // Se o recurso usado for andaime/munck/guindaste, monta automaticamente uma OS
   // equivalente na programação do Apoio (pra empresa certa) — evita esquecer de
@@ -1744,9 +1751,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // mesmo motivo.
   private async criarApoioEquipamentosSeNecessario(): Promise<void> {
     if (this.formArea() === 'APOIO') return;
+    const mapaEmpresa = this.recursoParaEmpresaApoio();
     const empresas = new Set(
       this.formRecursosLista()
-        .map(r => this.RECURSO_PARA_EMPRESA_APOIO[r.toUpperCase()])
+        .map(r => mapaEmpresa[r.toUpperCase()])
         .filter((e): e is string => !!e),
     );
     if (empresas.size === 0) return;
@@ -1760,10 +1768,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       // o mandante e os outros recursos, nunca o próprio recurso que aponta pra ela
       // mesma (mesma correção já feita pro espelhamento de técnico PPTM, ver
       // criarApoioTecnicosSeNecessario).
-      const recursosDoEspelho = [
-        ...this.formRecursosLista().filter(r => this.RECURSO_PARA_EMPRESA_APOIO[r.toUpperCase()] !== empresa),
-        mandante,
-      ].join(', ');
+      const recursosDoEspelho = recursosParaEspelho(this.formRecursosLista(), r => mapaEmpresa[r.toUpperCase()] === empresa, mandante);
       try {
         await this.manutencaoService.criarOrdem({
           tipo: 'ordem',
@@ -1819,10 +1824,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       // Da perspectiva desse técnico, "Recursos" é quem MAIS está no serviço — o
       // mandante e os outros ajudantes, nunca ele mesmo (senão a própria cópia dele
       // aparecia listada como recurso de si próprio).
-      const recursosDoEspelho = [
-        ...this.formRecursosLista().filter(r => r.toUpperCase() !== tecnico.nome.toUpperCase()),
-        mandante,
-      ].join(', ');
+      const recursosDoEspelho = recursosParaEspelho(this.formRecursosLista(), r => r.toUpperCase() === tecnico.nome.toUpperCase(), mandante);
       try {
         await this.manutencaoService.criarOrdem({
           tipo: 'ordem',

@@ -97,6 +97,12 @@ export interface EquipeApoioItem {
   nome: string;
 }
 
+export interface RecursoEspecialItem {
+  id: string;
+  opcao: string;
+  empresaApoio: string;
+}
+
 export interface OperadorEscalaApoio {
   id: string;
   nome: string;
