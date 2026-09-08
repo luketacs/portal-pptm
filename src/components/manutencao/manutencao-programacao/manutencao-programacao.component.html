@@ -411,7 +411,12 @@
             </thead>
             <tbody class="divide-y divide-slate-100">
               @for (linha of quadroLoto(); track linha.equipamento) {
-                <tr>
+                @if (linha.separadorAntes) {
+                  <tr>
+                    <td [attr.colspan]="diasDaSemanaAtual().length + 1" class="pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide border-t border-slate-200">Sem conflito</td>
+                  </tr>
+                }
+                <tr [class.bg-orange-50]="linha.temConflito">
                   <td class="py-1 pr-3 font-semibold text-gray-700">{{ linha.equipamento }}</td>
                   @for (cel of linha.dias; track cel.data) {
                     <td class="py-1 px-1 text-center">
@@ -479,7 +484,7 @@
     @if (!horizonteAtivo()) {
     <!-- Expandir/recolher todos os grupos -->
     <div class="flex justify-end gap-4 text-xs">
-      <button type="button" (click)="expandirTodos()" class="text-blue-600 hover:underline font-medium">Expandir tudo</button>
+      <button type="button" (click)="expandirTodos(chavesGruposVisiveis())" class="text-blue-600 hover:underline font-medium">Expandir tudo</button>
       <button type="button" (click)="recolherTodos(chavesGruposVisiveis())" class="text-gray-500 hover:underline font-medium">Recolher tudo</button>
     </div>
 

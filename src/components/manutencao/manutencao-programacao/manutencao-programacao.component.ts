@@ -307,16 +307,24 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   errorMessage = signal('');
   isProcessando = signal(false);
 
-  // Grupos (técnico ou dia, conforme a tela) começam todos abertos — só entra no mapa
-  // quem foi fechado manualmente, então trocar de semana/filtro não perde estado à toa.
+  // Grupo por técnico (telas de área única) começa aberto por padrão. Grupo por dia
+  // (tela geral) começa FECHADO por padrão, exceto o dia de hoje — evita ter que rolar
+  // a semana toda pra achar o dia atual. Só entra no mapa quem foi decidido manualmente
+  // (aberto ou fechado), então trocar de semana/filtro não perde a escolha do usuário.
   private gruposFechados = signal<Record<string, boolean>>({});
+  private readonly hojeIso = paraIso(new Date());
 
   isGrupoExpandido(chave: string): boolean {
-    return !this.gruposFechados()[chave];
+    const decisaoManual = this.gruposFechados()[chave];
+    if (decisaoManual !== undefined) return !decisaoManual;
+    if (!chave.includes('dia:')) return true; // grupo por técnico: aberto por padrão
+    return chave.endsWith(`dia:${this.hojeIso}`); // grupo por dia (inclui o horizonte de 4 semanas): só hoje aberto por padrão
   }
 
   toggleGrupo(chave: string): void {
-    this.gruposFechados.update(atual => ({ ...atual, [chave]: !atual[chave] }));
+    // Guarda a decisão como "vai ficar fechado?" — o oposto do estado atual (calculado
+    // com o padrão inteligente acima, não só a ausência da chave no mapa).
+    this.gruposFechados.update(atual => ({ ...atual, [chave]: this.isGrupoExpandido(chave) }));
   }
 
   recolherTodos(chaves: string[]): void {
@@ -325,8 +333,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.gruposFechados.set(novo);
   }
 
-  expandirTodos(): void {
-    this.gruposFechados.set({});
+  expandirTodos(chaves: string[]): void {
+    const novo: Record<string, boolean> = {};
+    for (const c of chaves) novo[c] = false;
+    this.gruposFechados.set(novo);
   }
 
   // Filtros
@@ -1101,7 +1111,15 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       // Só vale a pena aparecer no quadro o equipamento que tem algo realmente pra
       // observar (bloqueio, funcionando marcado, ou conflito entre equipes).
       .filter(linha => linha.dias.some(d => d.itens.length > 0))
-      .sort((a, b) => a.equipamento.localeCompare(b.equipamento));
+      // Equipamento com conflito ativo (em qualquer dia) sobe pro topo — o quadro
+      // existe justamente pra chamar atenção pra conflito, não faz sentido ele ficar
+      // enterrado no meio de uma lista alfabética.
+      .map(linha => ({ ...linha, temConflito: linha.dias.some(d => d.conflito) }))
+      .sort((a, b) => {
+        if (a.temConflito !== b.temConflito) return a.temConflito ? -1 : 1;
+        return a.equipamento.localeCompare(b.equipamento);
+      })
+      .map((linha, i, linhas) => ({ ...linha, separadorAntes: i > 0 && linhas[i - 1].temConflito && !linha.temConflito }));
   }
   quadroLoto = computed(() => this.quadroLotoCalc(this.ordensDaSemana(), this.diasDaSemanaAtual()));
 
