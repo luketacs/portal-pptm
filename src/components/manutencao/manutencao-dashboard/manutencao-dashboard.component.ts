@@ -197,10 +197,9 @@ export class ManutencaoDashboardComponent implements OnInit {
   qtdExames = computed(() => this.ordensDaSemana().filter(o => o.tipo === 'exame_medico').length);
   qtdFolgas = computed(() => this.ordensDaSemana().filter(o => o.tipo === 'folga').length);
 
-  // ── HH por equipamento ──
+  // ── HH por equipamento (top 10) ──
   private hhPorEquipamentoTodos = computed<HhEquipamento[]>(() => hhPorEquipamento(this.ordensTipo()));
   hhPorEquipamentoTop10 = computed(() => this.hhPorEquipamentoTodos().slice(0, 10));
-  hhPorEquipamentoTabela = computed(() => this.hhPorEquipamentoTodos());
   hhPorEquipamentoMax = computed(() => this.hhPorEquipamentoTop10()[0]?.horas ?? 0);
 
   // ── HH disponível/indisponível — soma por técnico (Elétrica/Mecânica; Apoio programa
