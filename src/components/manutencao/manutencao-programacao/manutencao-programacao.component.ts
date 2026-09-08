@@ -484,10 +484,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   // Efetivo/capacidade: soma a disponibilidade cadastrada (matriculas.json, mesma fonte
   // do Relatório Mensal PCM) nos dias ÚTEIS da semana (SEG-SEX — sábado/domingo é DSR,
-  // ninguém trabalha por padrão), descontando só os dias em que o técnico está de
-  // folga/feriado (mesmo tipo 'folga' no banco) — treinamento/exame médico/reunião não
-  // tiram o dia inteiro da conta, só ocupam uma parte dele. `null` quando o técnico não
-  // está no matriculas.json (não dá pra saber a disponibilidade dele).
+  // ninguém trabalha por padrão). Folga/feriado tira o dia inteiro da conta; exame
+  // médico (ASO) só desconta HORAS_EXAME_MEDICO daquele dia (o exame não toma o dia
+  // todo); treinamento/reunião não descontam nada. `null` quando o técnico não está no
+  // matriculas.json (não dá pra saber a disponibilidade dele).
+  private readonly HORAS_EXAME_MEDICO = 3.5;
+
   private capacidadeSemana(tecnicoNome: string, ordensDoTecnico: ManutencaoOrdem[], dias: { data: string; label: string }[]): number | null {
     const colaborador = this.apontamentosService.colaboradores().find(c => c.nome === tecnicoNome);
     if (!colaborador) return null;
@@ -495,12 +497,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const diasIndisponiveis = new Set(
       ordensDoTecnico.filter(o => o.tipo === 'folga').flatMap(o => o.diasPrevistos),
     );
+    const diasComExame = new Set(
+      ordensDoTecnico.filter(o => o.tipo === 'exame_medico').flatMap(o => o.diasPrevistos),
+    );
 
     let total = 0;
     for (const dia of dias) {
       if (dia.label === 'SAB' || dia.label === 'DOM') continue;
       if (diasIndisponiveis.has(dia.data)) continue;
-      total += this.apontamentosService.disponibilidadeNoDia(colaborador, dia.data);
+      let disponivel = this.apontamentosService.disponibilidadeNoDia(colaborador, dia.data);
+      if (diasComExame.has(dia.data)) disponivel = Math.max(0, disponivel - this.HORAS_EXAME_MEDICO);
+      total += disponivel;
     }
     return parseFloat(total.toFixed(2));
   }
