@@ -126,6 +126,15 @@ function normalizarTexto(v: string): string {
   return v.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
 }
 
+// Agrupa quem trabalha pra uma mesma empresa terceirizada (ex.: "Romário (Fontebras)",
+// "Júlio (Fontebras)") junto na ordenação dos cards, em vez de espalhar pela ordem
+// alfabética pura de cada nome individual — chave = a empresa entre parênteses, se
+// tiver; senão o próprio nome.
+function chaveOrdenacaoTecnico(nome: string): string {
+  const empresa = nome.match(/\(([^)]+)\)\s*$/)?.[1];
+  return empresa ? empresa.toUpperCase() : nome;
+}
+
 // Mesma normalização usada em api/sigma-ordens-proxy.js — precisa bater pra achar a
 // chave certa no resultado (o SIGMA usa número de OS com 6 dígitos e zero à esquerda).
 function normalizarNumeroOs(v: string): string {
@@ -466,7 +475,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         const ferias = this.feriasNoIntervalo(tecnico, diasIso);
         return { tecnico, ordens: ordensOrdenadas, totalHoras, capacidade, saldo, ferias };
       })
-      .sort((a, b) => a.tecnico.localeCompare(b.tecnico));
+      .sort((a, b) => {
+        const cmp = chaveOrdenacaoTecnico(a.tecnico).localeCompare(chaveOrdenacaoTecnico(b.tecnico));
+        return cmp !== 0 ? cmp : a.tecnico.localeCompare(b.tecnico);
+      });
   }
   grupos = computed(() => this.gruposCalc(this.listaFiltrada(), this.diasDaSemanaAtual()));
 
