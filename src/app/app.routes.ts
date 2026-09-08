@@ -171,6 +171,14 @@ export const APP_ROUTES: Routes = [
   },
 
   {
+    path: 'manutencao/dashboard',
+    loadComponent: () =>
+      import('../components/manutencao/manutencao-dashboard/manutencao-dashboard.component').then(m => m.ManutencaoDashboardComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Dashboard da Programação',
+  },
+  {
     path: 'manutencao/programacao',
     loadComponent: () =>
       import('../components/manutencao/manutencao-programacao/manutencao-programacao.component').then(m => m.ManutencaoProgramacaoComponent),
