@@ -61,22 +61,42 @@ export default async function handler(req, res) {
       console.error('[kanban-atividades-publico] SIGMA indisponível:', sigmaError.message);
     }
 
-    const colunas = { pendente: [], emExecucao: [], concluida: [] };
+    // A mesma OS pode aparecer em várias linhas (apoio/vários técnicos na mesma
+    // atividade, ver criarApoioTecnicosSeNecessario/criarApoioEquipamentosSeNecessario
+    // na Programação) — o número da OS é o mesmo, então agrupa numa única linha do
+    // quadro, com a lista de técnicos, em vez de repetir o card por pessoa. Sem número
+    // de OS não dá pra saber com certeza que é "a mesma atividade", então cada linha
+    // vira seu próprio card.
+    const porColunaEChave = { pendente: new Map(), emExecucao: new Map(), concluida: new Map() };
+    let semOsIdx = 0;
     for (const o of data) {
       const info = o.numero_os ? osPorNumero.get(normalizarNumeroOs(o.numero_os)) : null;
       const statusCodigo = (info?.statusCodigo || '').toUpperCase();
       if (statusCodigo === 'CANC') continue;
       const coluna = STATUS_PARA_COLUNA[statusCodigo] || 'pendente';
-      colunas[coluna].push({
-        numeroOs: o.numero_os,
-        descricao: o.descricao,
-        equipamento: o.equipamento,
-        tecnico: o.tecnico_nome,
-        area: o.area,
-        duracaoHoras: o.duracao_horas,
-        loto: o.loto,
-      });
+      const chave = o.numero_os ? normalizarNumeroOs(o.numero_os) : `sem-os-${semOsIdx++}`;
+
+      const mapa = porColunaEChave[coluna];
+      const existente = mapa.get(chave);
+      if (existente) {
+        existente.tecnicos.push({ nome: o.tecnico_nome, duracaoHoras: o.duracao_horas });
+      } else {
+        mapa.set(chave, {
+          numeroOs: o.numero_os,
+          descricao: o.descricao,
+          equipamento: o.equipamento,
+          area: o.area,
+          loto: o.loto,
+          tecnicos: [{ nome: o.tecnico_nome, duracaoHoras: o.duracao_horas }],
+        });
+      }
     }
+
+    const colunas = {
+      pendente: [...porColunaEChave.pendente.values()],
+      emExecucao: [...porColunaEChave.emExecucao.values()],
+      concluida: [...porColunaEChave.concluida.values()],
+    };
 
     return res.status(200).json({ success: true, atualizadoEm: Date.now(), colunas });
   } catch (error) {

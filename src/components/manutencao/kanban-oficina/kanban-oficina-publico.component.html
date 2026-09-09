@@ -27,7 +27,7 @@
           <span class="bg-white/20 text-white text-lg font-bold px-3 py-0.5 rounded-full">{{ colunas().pendente.length }}</span>
         </div>
         <div class="p-3 space-y-3 overflow-y-auto" style="max-height: 78vh;">
-          @for (item of colunas().pendente; track item.numeroOs + item.tecnico + item.descricao) {
+          @for (item of colunas().pendente; track item.numeroOs + item.descricao + item.equipamento) {
             <div class="border border-slate-200 rounded-lg p-3 bg-slate-50">
               <div class="flex items-center justify-between gap-2 mb-1">
                 <span class="font-bold text-gray-800 text-lg truncate">{{ item.equipamento || 'Sem equipamento' }}</span>
@@ -36,10 +36,14 @@
                 }
               </div>
               <p class="text-sm text-gray-600 line-clamp-2">{{ item.descricao }}</p>
-              <div class="flex items-center justify-between gap-2 mt-2">
-                <span class="text-sm font-semibold text-blue-700 truncate">{{ item.tecnico }}</span>
-                @if (item.duracaoHoras) {
-                  <span class="text-xs font-bold text-gray-500 flex-shrink-0">{{ item.duracaoHoras }}h</span>
+              <div class="mt-2 space-y-0.5">
+                @for (tec of item.tecnicos; track tec.nome) {
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-sm font-semibold text-blue-700 truncate">{{ tec.nome }}</span>
+                    @if (tec.duracaoHoras) {
+                      <span class="text-xs font-bold text-gray-500 flex-shrink-0">{{ tec.duracaoHoras }}h</span>
+                    }
+                  </div>
                 }
               </div>
               @if (item.loto) {
@@ -60,7 +64,7 @@
           <span class="bg-white/20 text-white text-lg font-bold px-3 py-0.5 rounded-full">{{ colunas().emExecucao.length }}</span>
         </div>
         <div class="p-3 space-y-3 overflow-y-auto" style="max-height: 78vh;">
-          @for (item of colunas().emExecucao; track item.numeroOs + item.tecnico + item.descricao) {
+          @for (item of colunas().emExecucao; track item.numeroOs + item.descricao + item.equipamento) {
             <div class="border border-amber-200 rounded-lg p-3 bg-amber-50">
               <div class="flex items-center justify-between gap-2 mb-1">
                 <span class="font-bold text-gray-800 text-lg truncate">{{ item.equipamento || 'Sem equipamento' }}</span>
@@ -69,10 +73,14 @@
                 }
               </div>
               <p class="text-sm text-gray-600 line-clamp-2">{{ item.descricao }}</p>
-              <div class="flex items-center justify-between gap-2 mt-2">
-                <span class="text-sm font-semibold text-blue-700 truncate">{{ item.tecnico }}</span>
-                @if (item.duracaoHoras) {
-                  <span class="text-xs font-bold text-gray-500 flex-shrink-0">{{ item.duracaoHoras }}h</span>
+              <div class="mt-2 space-y-0.5">
+                @for (tec of item.tecnicos; track tec.nome) {
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-sm font-semibold text-blue-700 truncate">{{ tec.nome }}</span>
+                    @if (tec.duracaoHoras) {
+                      <span class="text-xs font-bold text-gray-500 flex-shrink-0">{{ tec.duracaoHoras }}h</span>
+                    }
+                  </div>
                 }
               </div>
               @if (item.loto) {
@@ -93,7 +101,7 @@
           <span class="bg-white/20 text-white text-lg font-bold px-3 py-0.5 rounded-full">{{ colunas().concluida.length }}</span>
         </div>
         <div class="p-3 space-y-3 overflow-y-auto" style="max-height: 78vh;">
-          @for (item of colunas().concluida; track item.numeroOs + item.tecnico + item.descricao) {
+          @for (item of colunas().concluida; track item.numeroOs + item.descricao + item.equipamento) {
             <div class="border border-green-200 rounded-lg p-3 bg-green-50">
               <div class="flex items-center justify-between gap-2 mb-1">
                 <span class="font-bold text-gray-800 text-lg truncate">{{ item.equipamento || 'Sem equipamento' }}</span>
@@ -102,10 +110,14 @@
                 }
               </div>
               <p class="text-sm text-gray-600 line-clamp-2">{{ item.descricao }}</p>
-              <div class="flex items-center justify-between gap-2 mt-2">
-                <span class="text-sm font-semibold text-blue-700 truncate">{{ item.tecnico }}</span>
-                @if (item.duracaoHoras) {
-                  <span class="text-xs font-bold text-gray-500 flex-shrink-0">{{ item.duracaoHoras }}h</span>
+              <div class="mt-2 space-y-0.5">
+                @for (tec of item.tecnicos; track tec.nome) {
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-sm font-semibold text-blue-700 truncate">{{ tec.nome }}</span>
+                    @if (tec.duracaoHoras) {
+                      <span class="text-xs font-bold text-gray-500 flex-shrink-0">{{ tec.duracaoHoras }}h</span>
+                    }
+                  </div>
                 }
               </div>
             </div>

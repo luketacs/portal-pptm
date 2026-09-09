@@ -1,13 +1,19 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
+export interface TecnicoAtividade {
+  nome: string;
+  duracaoHoras: number | null;
+}
+
+// A mesma OS pode ter mais de um técnico (apoio) — o número da OS não repete no
+// quadro, os técnicos entram todos no mesmo card (ver api/kanban-atividades-publico.js).
 export interface CardAtividade {
   numeroOs: string | null;
   descricao: string;
   equipamento: string | null;
-  tecnico: string;
+  tecnicos: TecnicoAtividade[];
   area: 'ELETRICA' | 'MECANICA';
-  duracaoHoras: number | null;
   loto: string | null;
 }
 
