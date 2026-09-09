@@ -943,7 +943,19 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // semana — está tudo atrasado desde antes), o painel mostra só os N mais urgentes por
   // área; conforme vão sendo programados, os próximos da fila aparecem sozinhos —
   // balanceia o ritmo de recuperação do atraso sem sobrecarregar nenhuma semana.
-  private readonly LOTE_PREVENTIVAS_POR_SEMANA = 25;
+  private readonly LOTE_PREVENTIVAS_POR_SEMANA_ANTIGO = 20;
+  private readonly LOTE_PREVENTIVAS_POR_SEMANA_NOVO = 25;
+  // A semana 38 já estava em programação quando as regras novas (lote de 25 e
+  // priorização por ciclo longo) foram combinadas — pedido explícito do usuário pra
+  // não mexer em nada do que já estava sendo trabalhado. Toda mudança de regra de
+  // preventiva daqui pra frente só vale a partir dessa semana (39) em diante; quem
+  // olhar semana 38 (ou anterior) continua vendo o comportamento de antes.
+  private readonly PRIMEIRA_SEMANA_REGRAS_NOVAS = '2026-09-21';
+
+  private regrasNovasValemNaSemana = computed(() => this.semanaFiltro() >= this.PRIMEIRA_SEMANA_REGRAS_NOVAS);
+
+  private loteePreventivasPorSemana = computed(() =>
+    this.regrasNovasValemNaSemana() ? this.LOTE_PREVENTIVAS_POR_SEMANA_NOVO : this.LOTE_PREVENTIVAS_POR_SEMANA_ANTIGO);
 
   private planosPreventivosDaArea = computed(() => {
     const area = this.areaFixa;
@@ -990,6 +1002,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       })
       .filter(p => preventivaVencendo(p.proximaData, inicioSemana, fimSemana))
       .sort((a, b) => {
+        if (!this.regrasNovasValemNaSemana()) return (a.proximaData ?? '').localeCompare(b.proximaData ?? '');
         // Periodicidade do CADASTRO (não a "efetiva" da parada de planta) — é sobre a
         // natureza real da tarefa, não sobre um ajuste temporário de cálculo.
         const diasA = periodicidadeEmDias(a.periodicidadeValor, a.periodicidadeUnidade);
@@ -999,7 +1012,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       });
   });
 
-  preventivasVencendo = computed(() => this.preventivasVencendoTodas().slice(0, this.LOTE_PREVENTIVAS_POR_SEMANA));
+  preventivasVencendo = computed(() => this.preventivasVencendoTodas().slice(0, this.loteePreventivasPorSemana()));
 
   // "Mostrando os 20 mais urgentes de 356" quando tem mais na fila do que o lote mostra.
   preventivasVencendoLabel = computed(() => {
