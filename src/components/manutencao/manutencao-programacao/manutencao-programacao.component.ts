@@ -1190,6 +1190,27 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   formRecursosLista = signal<string[]>([]);
   formRecursosDigitando = signal('');
   formRecursosTexto = computed(() => this.formRecursosLista().join(', '));
+  // Dias em que os Recursos reconhecidos (técnico/equipamento — ver recursoReconhecido)
+  // são espelhados como apoio (ver criarApoioTecnicosSeNecessario/
+  // criarApoioEquipamentosSeNecessario) — independente dos "Dias previstos" da OS
+  // principal, só que sempre um subconjunto deles (ex.: OS de segunda a quarta, apoio
+  // só na terça). Começa vazio — mesma razão do apoioDiasSelecionados do modal "+
+  // Apoio": pré-marcar tudo engana quem só clica no dia que precisa.
+  formApoioDiasSelecionados = signal<string[]>([]);
+  // Só os dias em que a própria OS já está prevista — não faz sentido apoiar num dia em
+  // que a atividade principal nem vai rodar.
+  formApoioDiasDisponiveis = computed(() => this.diasDaSemanaAtual().filter(d => this.formDiasSelecionados().includes(d.data)));
+  // Só mostra/exige o seletor de dias do apoio quando pelo menos um Recurso da lista
+  // realmente vai virar uma OS espelhada (nome solto que não bate com ninguém cadastrado
+  // não mirra em nada, ver recursoReconhecido — não faz sentido pedir dia pra ele).
+  formTemRecursoReconhecido = computed(() => this.formRecursosLista().some(r => this.recursoReconhecido(r) !== null));
+
+  toggleFormApoioDia(dataIso: string): void {
+    const atual = this.formApoioDiasSelecionados();
+    this.formApoioDiasSelecionados.set(
+      atual.includes(dataIso) ? atual.filter(d => d !== dataIso) : [...atual, dataIso].sort(),
+    );
+  }
   formLoto = signal('');
   formAreaAtuacao = signal('');
   formDuracaoHoras = signal<number | null>(null);
@@ -1658,6 +1679,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formEquipamento.set('');
     this.formRecursosLista.set([]);
     this.formRecursosDigitando.set('');
+    this.formApoioDiasSelecionados.set([]);
     this.formLoto.set('');
     this.formAreaAtuacao.set('');
     this.formDuracaoHoras.set(null);
@@ -1694,6 +1716,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formEquipamento.set(o.equipamento ?? '');
     this.formRecursosLista.set((o.recursos ?? '').split(',').map(r => r.trim()).filter(Boolean));
     this.formRecursosDigitando.set('');
+    // Não dá pra recuperar quais dias cada recurso já espelhado tinha (não fica
+    // guardado na OS de origem) — começa vazio, mesmo comportamento de abrirCriar.
+    // Só importa mesmo se um recurso NOVO for adicionado durante essa edição.
+    this.formApoioDiasSelecionados.set([]);
     this.formLoto.set(o.loto ?? '');
     this.formTipoServico.set(o.tipoServico ?? '');
     this.formAreaAtuacao.set(o.areaAtuacao ?? '');
@@ -1907,6 +1933,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     if (this.formOrdemDuplicada()) return false;
     if (this.formOsEncerradaNoSigma()) return false;
     if (this.formTecnicoFerias() || this.formTecnicoFolga()) return false;
+    if (this.formTemRecursoReconhecido() && this.formApoioDiasSelecionados().length === 0) return false;
     if (this.formTipo() === 'ordem') {
       return !!this.formDescricao().trim() && !!this.formLoto();
     }
@@ -2020,6 +2047,15 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return mapa;
   });
 
+  // Dias em que os recursos espelhados (equipamento/técnico) entram — o subconjunto
+  // escolhido em "Dias do apoio" (ver formApoioDiasSelecionados), sempre restrito aos
+  // dias em que a OS principal realmente está prevista (evita um dia "solto" caso o
+  // usuário tenha desmarcado algo em "Dias previstos" depois de já ter marcado o apoio).
+  private diasParaApoioDeRecursos(): string[] {
+    const diasDaOs = this.formDiasSelecionados();
+    return this.formApoioDiasSelecionados().filter(d => diasDaOs.includes(d));
+  }
+
   // Se o recurso usado for andaime/munck/guindaste, monta automaticamente uma OS
   // equivalente na programação do Apoio (pra empresa certa) — evita esquecer de
   // programar o contratado responsável junto com o serviço de Elétrica/Mecânica.
@@ -2040,7 +2076,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
     const mandante = this.formTecnicoNome().trim();
     const numero = this.formNumeroOs().trim();
-    const dias = this.formDiasSelecionados();
+    const dias = this.diasParaApoioDeRecursos();
+    if (dias.length === 0) return;
     for (const empresa of empresas) {
       if (numero && this.ordemDuplicada(numero, empresa, dias)) continue;
       // Da perspectiva dessa empresa/pessoa, "Recursos" é quem mais está no serviço —
@@ -2082,11 +2119,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // criar de novo pra quem já tem essa OS nesses dias.
   private async criarApoioTecnicosSeNecessario(): Promise<void> {
     const mandante = this.formTecnicoNome().trim();
-    const dias = this.formDiasSelecionados();
+    const dias = this.diasParaApoioDeRecursos();
     const numero = this.formNumeroOs().trim();
     const candidatos = this.formRecursosLista()
       .map(r => this.todosTecnicos().find(t => t.nome.toUpperCase() === r.toUpperCase()))
       .filter((t): t is { nome: string; matricula: string | null; area: ManutencaoArea } => !!t && t.nome !== mandante);
+    if (candidatos.length === 0 || dias.length === 0) return;
 
     const programados: string[] = [];
     for (const tecnico of candidatos) {
