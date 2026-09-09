@@ -29,5 +29,6 @@
   { "nome": "Anderson Felipe",       "matricula": "20004602", "area": "Operação", "disponibilidade": 9.5 },
   { "nome": "Pascoal Cardoso",       "matricula": "20005485", "area": "Operação", "disponibilidade": 9.5 },
   { "nome": "Joaquim Neto",          "matricula": "20005985", "area": "Mecânica", "disponibilidade": 9.5, "disponibilidade_pos_corte": 6.5 },
-  { "nome": "William",               "matricula": "710624",   "area": "Mecânica", "disponibilidade": 9.5, "disponibilidade_pos_corte": 6.5 }
+  { "nome": "William",               "matricula": "710624",   "area": "Mecânica", "disponibilidade": 9.5, "disponibilidade_pos_corte": 6.5 },
+  { "nome": "Moacir Jones",          "matricula": "710724",   "area": "Mecânica", "disponibilidade": 9.5, "disponibilidade_pos_corte": 6.5 }
 ]
