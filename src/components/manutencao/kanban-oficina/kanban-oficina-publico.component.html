@@ -1,7 +1,7 @@
 <div>
   <div class="flex items-center justify-between mb-4">
     <div>
-      <h1 class="text-3xl font-bold text-gray-800">Kanban da Oficina</h1>
+      <h1 class="text-3xl font-bold text-gray-800">Programação Semana {{ numeroSemana }}</h1>
       <p class="text-lg text-gray-500 capitalize">{{ hojeLabel }}</p>
     </div>
     <div class="text-right">
@@ -19,16 +19,19 @@
       <div class="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 mb-3 text-sm">{{ erro() }} — tentando de novo automaticamente.</div>
     }
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- items-start: sem isso, o grid esticava as colunas vazias (Em execução/
+         Concluída) pra bater a altura da coluna Pendente, deixando um bloco branco
+         enorme sem nada dentro. -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
       <!-- Pendente -->
       <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col">
-        <div class="bg-slate-600 text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
+        <div class="bg-blue-600 text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
           <h2 class="text-xl font-bold">Pendente</h2>
           <span class="bg-white/20 text-white text-lg font-bold px-3 py-0.5 rounded-full">{{ colunas().pendente.length }}</span>
         </div>
-        <div class="p-3 space-y-3 overflow-y-auto" style="max-height: 78vh;">
+        <div class="p-3 grid grid-cols-1 xl:grid-cols-2 gap-3 overflow-y-auto content-start" style="max-height: 78vh;">
           @for (item of colunas().pendente; track item.numeroOs + item.descricao + item.equipamento) {
-            <div class="border border-slate-200 rounded-lg p-3 bg-slate-50">
+            <div class="border border-blue-100 rounded-lg p-3 bg-blue-50/40">
               <div class="flex items-center justify-between gap-2 mb-1">
                 <span class="font-bold text-gray-800 text-lg truncate">{{ item.equipamento || 'Sem equipamento' }}</span>
                 @if (item.numeroOs) {
@@ -52,20 +55,20 @@
             </div>
           }
           @if (colunas().pendente.length === 0) {
-            <p class="text-center text-gray-400 py-6">Nada pendente.</p>
+            <p class="text-center text-gray-400 py-6 xl:col-span-2">Nada pendente.</p>
           }
         </div>
       </div>
 
       <!-- Em execução -->
       <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col">
-        <div class="bg-amber-500 text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
+        <div class="bg-marca-600 text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
           <h2 class="text-xl font-bold">Em execução</h2>
           <span class="bg-white/20 text-white text-lg font-bold px-3 py-0.5 rounded-full">{{ colunas().emExecucao.length }}</span>
         </div>
-        <div class="p-3 space-y-3 overflow-y-auto" style="max-height: 78vh;">
+        <div class="p-3 grid grid-cols-1 xl:grid-cols-2 gap-3 overflow-y-auto content-start" style="max-height: 78vh;">
           @for (item of colunas().emExecucao; track item.numeroOs + item.descricao + item.equipamento) {
-            <div class="border border-amber-200 rounded-lg p-3 bg-amber-50">
+            <div class="border border-marca-100 rounded-lg p-3 bg-marca-50/60">
               <div class="flex items-center justify-between gap-2 mb-1">
                 <span class="font-bold text-gray-800 text-lg truncate">{{ item.equipamento || 'Sem equipamento' }}</span>
                 @if (item.numeroOs) {
@@ -89,7 +92,7 @@
             </div>
           }
           @if (colunas().emExecucao.length === 0) {
-            <p class="text-center text-gray-400 py-6">Nada em execução.</p>
+            <p class="text-center text-gray-400 py-6 xl:col-span-2">Nada em execução.</p>
           }
         </div>
       </div>
@@ -100,7 +103,7 @@
           <h2 class="text-xl font-bold">Concluída</h2>
           <span class="bg-white/20 text-white text-lg font-bold px-3 py-0.5 rounded-full">{{ colunas().concluida.length }}</span>
         </div>
-        <div class="p-3 space-y-3 overflow-y-auto" style="max-height: 78vh;">
+        <div class="p-3 grid grid-cols-1 xl:grid-cols-2 gap-3 overflow-y-auto content-start" style="max-height: 78vh;">
           @for (item of colunas().concluida; track item.numeroOs + item.descricao + item.equipamento) {
             <div class="border border-green-200 rounded-lg p-3 bg-green-50">
               <div class="flex items-center justify-between gap-2 mb-1">
@@ -123,7 +126,7 @@
             </div>
           }
           @if (colunas().concluida.length === 0) {
-            <p class="text-center text-gray-400 py-6">Nada concluído ainda.</p>
+            <p class="text-center text-gray-400 py-6 xl:col-span-2">Nada concluído ainda.</p>
           }
         </div>
       </div>

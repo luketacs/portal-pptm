@@ -25,6 +25,18 @@ interface ColunasKanban {
 
 const RECARREGAR_A_CADA_MS = 60 * 1000;
 
+// Mesmo cálculo de semana ISO 8601 usado na Programação (numeroSemanaISO em
+// manutencao-programacao.component.ts) — duplicado aqui porque esse componente é
+// público/standalone, sem nenhuma dependência do resto do app.
+function numeroSemanaISO(d: Date): number {
+  const data = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const diaDaSemana = (data.getUTCDay() + 6) % 7;
+  data.setUTCDate(data.getUTCDate() - diaDaSemana + 3);
+  const primeiraQuinta = new Date(Date.UTC(data.getUTCFullYear(), 0, 4));
+  const diffDias = (data.getTime() - primeiraQuinta.getTime()) / 86400000;
+  return 1 + Math.round(diffDias / 7);
+}
+
 // Quadro público (sem login) das atividades do dia — Elétrica + Mecânica, pensado pra
 // ficar aberto numa TV da oficina. Só consome /api/kanban-atividades-publico, sem
 // nenhuma dependência de AuthService/ManutencaoProgramacaoService (não precisa de sessão).
@@ -41,6 +53,7 @@ export class KanbanOficinaPublicoComponent implements OnInit, OnDestroy {
   erro = signal('');
   carregando = signal(true);
   readonly hojeLabel = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+  readonly numeroSemana = numeroSemanaISO(new Date());
 
   private intervalId?: ReturnType<typeof setInterval>;
 
