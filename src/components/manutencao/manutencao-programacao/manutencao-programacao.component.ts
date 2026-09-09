@@ -1310,6 +1310,15 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return [...nomesTecnicos, ...equipamentos];
   });
 
+  // Sugestões filtradas pelo que já foi digitado — dropdown próprio (ver template),
+  // não o autocomplete nativo do navegador (<datalist>): esse não segue nenhum estilo
+  // do app, aparece com a cara padrão do sistema operacional, destoando de tudo.
+  formRecursosSugeridos = computed(() => {
+    const termo = this.formRecursosDigitando().trim().toUpperCase();
+    if (!termo) return [];
+    return this.recursosOpcoes().filter(op => op.toUpperCase().includes(termo)).slice(0, 8);
+  });
+
   // Diz se um chip de recurso bate (exato, sem diferenciar maiúsc./minúsc.) com um
   // técnico cadastrado ou um dos equipamentos especiais — só nesses casos a OS é
   // espelhada automaticamente (ver criarApoioTecnicosSeNecessario/criarApoioAndaimeSe

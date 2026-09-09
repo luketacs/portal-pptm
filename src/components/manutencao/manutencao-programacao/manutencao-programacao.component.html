@@ -1270,16 +1270,21 @@
           <div class="flex gap-1.5">
             <input type="text" [ngModel]="formRecursosDigitando()" (ngModelChange)="formRecursosDigitando.set($event)"
               (keydown.enter)="$event.preventDefault(); adicionarRecurso(formRecursosDigitando())"
-              list="recursos-opcoes" placeholder="Outro técnico, MUNCK, GUINDASTE, ANDAIME..."
+              placeholder="Outro técnico, MUNCK, GUINDASTE, ANDAIME..."
               class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             <button type="button" (click)="adicionarRecurso(formRecursosDigitando())" title="Adicionar"
               class="px-3 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-semibold">+</button>
           </div>
-          <datalist id="recursos-opcoes">
-            @for (op of recursosOpcoes(); track op) {
-              <option [value]="op"></option>
-            }
-          </datalist>
+          @if (formRecursosSugeridos().length > 0) {
+            <div class="mt-1.5 space-y-0.5 max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-sm p-1">
+              @for (op of formRecursosSugeridos(); track op) {
+                <button type="button" (click)="adicionarRecurso(op)"
+                  class="w-full text-left rounded-md hover:bg-blue-50 px-2 py-1.5 text-xs font-medium text-slate-700 transition">
+                  {{ op }}
+                </button>
+              }
+            </div>
+          }
           <p class="text-[11px] text-gray-400 mt-1">Escolha o nome na lista de sugestões — só assim a OS aparece automaticamente na agenda do técnico também. Chip cinza com ⚠ = não bateu com nenhum nome cadastrado (só texto, não espelha).</p>
 
           @if (formRecursosReconhecidos().length > 0) {
