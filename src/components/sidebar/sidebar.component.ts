@@ -54,13 +54,13 @@ interface NavGroup {
 
     .nav-link.active,
     .nav-group-trigger.active {
-      background-color: #eff6ff;
-      color: #1d4ed8;
+      background-color: #f0f2ff;
+      color: #0620e5;
     }
 
     .nav-link.active :is(svg),
     .nav-group-trigger.active :is(svg) {
-      color: #2563eb;
+      color: #2039f9;
     }
 
     .nav-link:not(.active),
@@ -125,8 +125,8 @@ interface NavGroup {
     }
 
     .submenu-link.active {
-      background: #eff6ff;
-      color: #1d4ed8;
+      background: #f0f2ff;
+      color: #0620e5;
       font-weight: 600;
     }
 
