@@ -999,12 +999,19 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // OS já criadas a partir de um plano preventivo, com dia dentro da semana
   // selecionada — usado só pra calcular o velocímetro (quanto da leva da semana já foi
   // programado). Diferente de planosJaProgramados (que olha todas as semanas, pra
-  // excluir da lista de pendentes) — aqui é só a leva desta semana específica.
+  // excluir da lista de pendentes) — aqui é só a leva desta semana específica. Conta
+  // plano_preventivo_id distintos, não linhas — a mesma OS/plano pode ter mais de uma
+  // linha (apoio dividido entre técnicos), o que inflaria a contagem se contasse linha.
   private preventivasProgramadasNaSemana = computed(() => {
     const area = this.areaFixa;
     if (!area) return 0;
     const semana = this.semanaFiltro();
-    return this.manutencaoService.ordens().filter(o => o.area === area && !!o.planoPreventivoId && o.semanaInicio === semana).length;
+    const planos = new Set(
+      this.manutencaoService.ordens()
+        .filter(o => o.area === area && o.semanaInicio === semana && !!o.planoPreventivoId)
+        .map(o => o.planoPreventivoId!),
+    );
+    return planos.size;
   });
 
   // Velocímetro do card fixo: quanto da leva de preventivas dessa semana já foi
