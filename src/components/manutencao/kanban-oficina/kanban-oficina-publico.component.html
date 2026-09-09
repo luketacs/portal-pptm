@@ -1,0 +1,120 @@
+<div>
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-800">Kanban da Oficina</h1>
+      <p class="text-lg text-gray-500 capitalize">{{ hojeLabel }}</p>
+    </div>
+    <div class="text-right">
+      <p class="text-sm text-gray-400">Diamante Energia — PPTM · Elétrica + Mecânica</p>
+      @if (atualizadoEm()) {
+        <p class="text-sm text-gray-400">Atualizado às {{ atualizadoEmLabel() }}</p>
+      }
+    </div>
+  </div>
+
+  @if (erro() && carregando()) {
+    <div class="bg-white rounded-xl shadow p-8 text-center text-gray-500 text-xl">Carregando quadro...</div>
+  } @else {
+    @if (erro()) {
+      <div class="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 mb-3 text-sm">{{ erro() }} — tentando de novo automaticamente.</div>
+    }
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <!-- Pendente -->
+      <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col">
+        <div class="bg-slate-600 text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
+          <h2 class="text-xl font-bold">Pendente</h2>
+          <span class="bg-white/20 text-white text-lg font-bold px-3 py-0.5 rounded-full">{{ colunas().pendente.length }}</span>
+        </div>
+        <div class="p-3 space-y-3 overflow-y-auto" style="max-height: 78vh;">
+          @for (item of colunas().pendente; track item.numeroOs + item.tecnico + item.descricao) {
+            <div class="border border-slate-200 rounded-lg p-3 bg-slate-50">
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <span class="font-bold text-gray-800 text-lg truncate">{{ item.equipamento || 'Sem equipamento' }}</span>
+                @if (item.numeroOs) {
+                  <span class="text-xs font-semibold text-gray-400 flex-shrink-0">OS {{ item.numeroOs }}</span>
+                }
+              </div>
+              <p class="text-sm text-gray-600 line-clamp-2">{{ item.descricao }}</p>
+              <div class="flex items-center justify-between gap-2 mt-2">
+                <span class="text-sm font-semibold text-blue-700 truncate">{{ item.tecnico }}</span>
+                @if (item.duracaoHoras) {
+                  <span class="text-xs font-bold text-gray-500 flex-shrink-0">{{ item.duracaoHoras }}h</span>
+                }
+              </div>
+              @if (item.loto) {
+                <span class="inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">{{ item.loto }}</span>
+              }
+            </div>
+          }
+          @if (colunas().pendente.length === 0) {
+            <p class="text-center text-gray-400 py-6">Nada pendente.</p>
+          }
+        </div>
+      </div>
+
+      <!-- Em execução -->
+      <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col">
+        <div class="bg-amber-500 text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
+          <h2 class="text-xl font-bold">Em execução</h2>
+          <span class="bg-white/20 text-white text-lg font-bold px-3 py-0.5 rounded-full">{{ colunas().emExecucao.length }}</span>
+        </div>
+        <div class="p-3 space-y-3 overflow-y-auto" style="max-height: 78vh;">
+          @for (item of colunas().emExecucao; track item.numeroOs + item.tecnico + item.descricao) {
+            <div class="border border-amber-200 rounded-lg p-3 bg-amber-50">
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <span class="font-bold text-gray-800 text-lg truncate">{{ item.equipamento || 'Sem equipamento' }}</span>
+                @if (item.numeroOs) {
+                  <span class="text-xs font-semibold text-gray-400 flex-shrink-0">OS {{ item.numeroOs }}</span>
+                }
+              </div>
+              <p class="text-sm text-gray-600 line-clamp-2">{{ item.descricao }}</p>
+              <div class="flex items-center justify-between gap-2 mt-2">
+                <span class="text-sm font-semibold text-blue-700 truncate">{{ item.tecnico }}</span>
+                @if (item.duracaoHoras) {
+                  <span class="text-xs font-bold text-gray-500 flex-shrink-0">{{ item.duracaoHoras }}h</span>
+                }
+              </div>
+              @if (item.loto) {
+                <span class="inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">{{ item.loto }}</span>
+              }
+            </div>
+          }
+          @if (colunas().emExecucao.length === 0) {
+            <p class="text-center text-gray-400 py-6">Nada em execução.</p>
+          }
+        </div>
+      </div>
+
+      <!-- Concluída -->
+      <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col">
+        <div class="bg-green-600 text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
+          <h2 class="text-xl font-bold">Concluída</h2>
+          <span class="bg-white/20 text-white text-lg font-bold px-3 py-0.5 rounded-full">{{ colunas().concluida.length }}</span>
+        </div>
+        <div class="p-3 space-y-3 overflow-y-auto" style="max-height: 78vh;">
+          @for (item of colunas().concluida; track item.numeroOs + item.tecnico + item.descricao) {
+            <div class="border border-green-200 rounded-lg p-3 bg-green-50">
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <span class="font-bold text-gray-800 text-lg truncate">{{ item.equipamento || 'Sem equipamento' }}</span>
+                @if (item.numeroOs) {
+                  <span class="text-xs font-semibold text-gray-400 flex-shrink-0">OS {{ item.numeroOs }}</span>
+                }
+              </div>
+              <p class="text-sm text-gray-600 line-clamp-2">{{ item.descricao }}</p>
+              <div class="flex items-center justify-between gap-2 mt-2">
+                <span class="text-sm font-semibold text-blue-700 truncate">{{ item.tecnico }}</span>
+                @if (item.duracaoHoras) {
+                  <span class="text-xs font-bold text-gray-500 flex-shrink-0">{{ item.duracaoHoras }}h</span>
+                }
+              </div>
+            </div>
+          }
+          @if (colunas().concluida.length === 0) {
+            <p class="text-center text-gray-400 py-6">Nada concluído ainda.</p>
+          }
+        </div>
+      </div>
+    </div>
+  }
+</div>
