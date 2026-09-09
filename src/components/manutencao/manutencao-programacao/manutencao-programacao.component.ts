@@ -1732,10 +1732,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formEquipamento.set(o.equipamento ?? '');
     this.formRecursosLista.set((o.recursos ?? '').split(',').map(r => r.trim()).filter(Boolean));
     this.formRecursosDigitando.set('');
-    // Não dá pra recuperar quais dias cada recurso já espelhado tinha (não fica
-    // guardado na OS de origem) — começa vazio, mesmo comportamento de abrirCriar.
-    // Só importa mesmo se um recurso NOVO for adicionado durante essa edição.
-    this.formApoioDiasPorRecurso.set({});
+    // Reconstrói os dias de cada recurso já espelhado, procurando a OS-espelho dele
+    // (mesmo número + mesma semana). Sem isso, reabrir pra editar uma OS que já tem
+    // recurso cadastrado ficava com o seletor de dias vazio e travava o salvar (ver
+    // formRecursoSemDiasDeApoio) mesmo sem mexer em nada dos recursos.
+    this.formApoioDiasPorRecurso.set(this.diasApoioPorRecursoExistentes(o));
     this.formLoto.set(o.loto ?? '');
     this.formTipoServico.set(o.tipoServico ?? '');
     this.formAreaAtuacao.set(o.areaAtuacao ?? '');
@@ -1752,6 +1753,15 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   fecharForm(): void {
     this.formAberto.set(false);
+  }
+
+  // Clicar fora da caixa (fundo escuro) fechava direto — fácil de perder o que já
+  // tinha preenchido sem querer. Só o clique no fundo passa por aqui; o botão
+  // "Cancelar" continua fechando na hora (ali a intenção de sair já é explícita).
+  fecharFormComConfirmacao(): void {
+    if (confirm('Tem certeza que deseja sair? O que foi preenchido nesse lançamento será perdido.')) {
+      this.fecharForm();
+    }
   }
 
   // ── Adicionar apoio (duplica a OS pra um segundo técnico) ─────────────────
@@ -1856,7 +1866,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         recursos: recursosDoApoio || undefined,
         loto: origem.loto ?? undefined,
         areaAtuacao: origem.areaAtuacao ?? undefined,
-        duracaoHoras: origem.duracaoHoras ?? undefined,
+        // Não copia a duração da OS de origem — o apoio pode estar em menos dias (ou um
+        // esforço diferente) do que a atividade inteira; copiar a mesma duração inflava
+        // o HH do apoio pro valor da atividade toda. Fica em branco pro técnico
+        // preencher o esforço real dele (editável depois em "Editar").
         tipoServico: origem.tipoServico ?? undefined,
         tecnicoNome: this.apoioTecnicoNome(),
         tecnicoMatricula: this.apoioTecnicoMatricula() || undefined,
@@ -2063,6 +2076,35 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return mapa;
   });
 
+  // Reconstrói, pra cada recurso reconhecido da OS sendo editada, os dias que a
+  // OS-espelho dele já tem hoje (procurando pelo mesmo número + mesma semana) — usado
+  // só ao abrir "Editar" (ver abrirEditar), pra não achar que o recurso "não tem dia
+  // nenhum" só porque essa informação não fica guardada na OS de origem.
+  private diasApoioPorRecursoExistentes(o: ManutencaoOrdem): Record<string, string[]> {
+    const numero = o.numeroOs?.trim();
+    const mapaEmpresa = this.recursoParaEmpresaApoio();
+    // Sem número de OS não dá pra correlacionar com segurança pelo número — usa mesma
+    // semana + descrição + equipamento como aproximação (mesmo padrão informal que o
+    // resto da tela usa pra "sem OS").
+    const ordensDaOs = this.manutencaoService.ordens().filter(x => {
+      if (x.tipo !== 'ordem' || x.semanaInicio !== o.semanaInicio) return false;
+      return numero
+        ? !!x.numeroOs?.trim() && normalizarNumeroOs(x.numeroOs) === normalizarNumeroOs(numero)
+        : !x.numeroOs?.trim() && x.descricao === o.descricao && x.equipamento === o.equipamento;
+    });
+    const resultado: Record<string, string[]> = {};
+    for (const r of (o.recursos ?? '').split(',').map(s => s.trim()).filter(Boolean)) {
+      const tipo = this.recursoReconhecido(r);
+      const alvo = tipo === 'tecnico'
+        ? this.todosTecnicos().find(t => t.nome.toUpperCase() === r.toUpperCase())?.nome
+        : tipo === 'equipamento' ? mapaEmpresa[r.toUpperCase()] : undefined;
+      if (!alvo) continue;
+      const espelho = ordensDaOs.find(x => x.tecnicoNome.toUpperCase() === alvo.toUpperCase());
+      if (espelho) resultado[r] = [...espelho.diasPrevistos];
+    }
+    return resultado;
+  }
+
   // Se o recurso usado for andaime/munck/guindaste, monta automaticamente uma OS
   // equivalente na programação do Apoio (pra empresa certa) — evita esquecer de
   // programar o contratado responsável junto com o serviço de Elétrica/Mecânica.
@@ -2110,7 +2152,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           recursos: recursosDoEspelho || undefined,
           loto: this.formLoto().trim() || undefined,
           areaAtuacao: this.formAreaAtuacao().trim() || undefined,
-          duracaoHoras: this.formDuracaoHoras() ?? undefined,
+          // Não copia a duração da OS principal — ver comentário equivalente em
+          // confirmarApoio(). Fica em branco pro esforço real ser preenchido depois.
           tipoServico: this.formTipoServico().trim() || undefined,
           tecnicoNome: empresa,
           diasPrevistos: dias,
@@ -2169,7 +2212,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           recursos: recursosDoEspelho || undefined,
           loto: this.formLoto().trim() || undefined,
           areaAtuacao: this.formAreaAtuacao().trim() || undefined,
-          duracaoHoras: this.formDuracaoHoras() ?? undefined,
+          // Não copia a duração da OS principal — ver comentário equivalente em
+          // confirmarApoio(). Fica em branco pro esforço real ser preenchido depois.
           tipoServico: this.formTipoServico().trim() || undefined,
           tecnicoNome: tecnico.nome,
           tecnicoMatricula: tecnico.matricula ?? undefined,
