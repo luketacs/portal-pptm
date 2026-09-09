@@ -170,23 +170,39 @@ export class ManutencaoDashboardComponent implements OnInit {
     }
   }
 
-  private ordemExecutada(o: ManutencaoOrdem): boolean {
-    if (!o.numeroOs?.trim()) return false;
-    const resultado = this.sigmaPorOs()[normalizarNumeroOs(o.numeroOs)];
-    if (!resultado) return false;
-    const dias = o.diasPrevistos.length > 0 ? o.diasPrevistos : this.diasDaSemanaAtual().map(d => d.data);
-    return resultado.apontamentos.some(a => dias.includes(a.data));
+  // A mesma OS pode aparecer em mais de uma linha (apoio dividido entre técnicos/áreas,
+  // ver "+ Apoio" na Programação) — sem agrupar por número antes de contar, cada apoio
+  // contava a OS de novo, inflando "Y programadas" e podendo contar 1 OS como executada
+  // mais de uma vez. Agrupa por número de OS e considera executada se QUALQUER linha do
+  // grupo caiu num apontamento dentro da união dos dias previstos do grupo.
+  private ordemExecutadaAgrupada(ordens: ManutencaoOrdem[]): boolean[] {
+    const porOs = new Map<string, ManutencaoOrdem[]>();
+    let semOsIdx = 0;
+    for (const o of ordens) {
+      const chave = o.numeroOs?.trim() ? normalizarNumeroOs(o.numeroOs) : `__sem-os-${semOsIdx++}`;
+      const lista = porOs.get(chave);
+      if (lista) lista.push(o);
+      else porOs.set(chave, [o]);
+    }
+    const sigmaPorOs = this.sigmaPorOs();
+    return [...porOs.values()].map(linhas => {
+      if (!linhas[0].numeroOs?.trim()) return false;
+      const resultado = sigmaPorOs[normalizarNumeroOs(linhas[0].numeroOs!)];
+      if (!resultado) return false;
+      const diasUniao = new Set(linhas.flatMap(o => o.diasPrevistos.length > 0 ? o.diasPrevistos : this.diasDaSemanaAtual().map(d => d.data)));
+      return resultado.apontamentos.some(a => diasUniao.has(a.data));
+    });
   }
 
   // ── KPIs de execução ──
   kpiGeral = computed<KpiExecucao>(() =>
-    calcularKpiExecucao(this.ordensTipo().map(o => ({ executada: this.ordemExecutada(o) }))));
+    calcularKpiExecucao(this.ordemExecutadaAgrupada(this.ordensTipo()).map(executada => ({ executada }))));
 
   kpiCorretivas = computed<KpiExecucao>(() =>
-    calcularKpiExecucao(this.ordensTipo().filter(o => o.tipoServico?.trim().toUpperCase() === 'CORRETIVA').map(o => ({ executada: this.ordemExecutada(o) }))));
+    calcularKpiExecucao(this.ordemExecutadaAgrupada(this.ordensTipo().filter(o => o.tipoServico?.trim().toUpperCase() === 'CORRETIVA')).map(executada => ({ executada }))));
 
   kpiPreventivas = computed<KpiExecucao>(() =>
-    calcularKpiExecucao(this.ordensTipo().filter(o => o.tipoServico?.trim().toUpperCase() === 'PREVENTIVA').map(o => ({ executada: this.ordemExecutada(o) }))));
+    calcularKpiExecucao(this.ordemExecutadaAgrupada(this.ordensTipo().filter(o => o.tipoServico?.trim().toUpperCase() === 'PREVENTIVA')).map(executada => ({ executada }))));
 
   corPercentual(percentual: number): string {
     if (percentual >= 80) return 'text-green-600';

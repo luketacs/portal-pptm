@@ -1050,8 +1050,24 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formEquipamento.set(plano.nomeBem);
     this.formTipoServico.set('PREVENTIVA');
     this.formPlanoPreventivoId.set(plano.id);
+    // Se o número da OS já foi reservado com antecedência (ver reservarNumeroOsPreventiva),
+    // vem pré-preenchido — some do plano quando a OS for confirmada (avancarPreventiva).
+    if (plano.numeroOsReservado) this.formNumeroOs.set(plano.numeroOsReservado);
     if (plano.area === 'APOIO' && plano.tecnicoApoio) {
       this.formTecnicoNome.set(plano.tecnicoApoio);
+    }
+  }
+
+  // Edição inline do número de OS reservado direto na lista de "Preventivas da
+  // semana"/"atrasadas" — deixa anotar o número assim que a OS é aberta/reservada no
+  // SIGMA, sem precisar abrir o formulário de programar. Best-effort: erro não trava a
+  // tela, só avisa.
+  async salvarNumeroOsReservado(plano: PlanoPreventivo, valor: string): Promise<void> {
+    if (valor.trim() === (plano.numeroOsReservado ?? '')) return;
+    try {
+      await this.manutencaoService.reservarNumeroOsPreventiva(plano.id, valor);
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao salvar o número da OS reservada.');
     }
   }
 
@@ -1343,18 +1359,34 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // apontadas (executadas) no SIGMA dentro da própria semana. Só entra na conta quem dá
   // pra rastrear (tem número de OS e o SIGMA já respondeu); lançamentos sem OS ficam de
   // fora do percentual (não tem como saber se foram feitos), mas aparecem à parte.
+  //
+  // A mesma OS pode aparecer em mais de uma linha (apoio dividido entre técnicos/áreas,
+  // ver abrirApoio/confirmarApoio) — sem agrupar por número, cada apoio contava a OS de
+  // novo, inflando "Y programadas" e podendo contar 1 OS como "executada" duas vezes.
   atendimentoProgramacao = computed(() => {
     const ordens = this.listaFiltrada().filter(o => o.tipo === 'ordem');
+    const porOs = new Map<string, ManutencaoOrdem[]>();
+    let semOsIdx = 0;
+    for (const o of ordens) {
+      const chave = o.numeroOs?.trim() ? normalizarNumeroOs(o.numeroOs) : `__sem-os-${semOsIdx++}`;
+      const lista = porOs.get(chave);
+      if (lista) lista.push(o);
+      else porOs.set(chave, [o]);
+    }
+
+    const sigmaPorOs = this.sigmaPorOs();
     let executadas = 0;
     let rastreaveis = 0;
-    for (const o of ordens) {
-      const exec = this.statusExecucao(o);
-      if (!exec) continue;
+    for (const [chave, linhas] of porOs) {
+      if (!linhas[0].numeroOs?.trim()) continue;
+      const resultado = sigmaPorOs[chave];
+      if (!resultado) continue;
       rastreaveis++;
-      if (exec.label === 'Executada') executadas++;
+      const diasUniao = new Set(linhas.flatMap(o => o.diasPrevistos.length > 0 ? o.diasPrevistos : this.diasDaSemanaAtual().map(d => d.data)));
+      if (resultado.apontamentos.some(a => diasUniao.has(a.data))) executadas++;
     }
     const percentual = rastreaveis > 0 ? Math.round((executadas / rastreaveis) * 100) : 0;
-    return { executadas, rastreaveis, totalOrdens: ordens.length, percentual };
+    return { executadas, rastreaveis, totalOrdens: porOs.size, percentual };
   });
 
   gaugeCorClass(at: { percentual: number; rastreaveis: number }): string {
@@ -1688,6 +1720,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   apoioOrigem = signal<ManutencaoOrdem | null>(null);
   apoioTecnicoNome = signal('');
   apoioTecnicoMatricula = signal('');
+  // Por padrão começa com todos os dias da OS de origem marcados (mesmo comportamento
+  // de antes) — o usuário desmarca só os dias em que não precisa do apoio (ex.: OS de
+  // terça a quinta, apoio só na quarta).
+  apoioDiasSelecionados = signal<string[]>([]);
 
   tecnicosParaApoio = computed(() => {
     const origem = this.apoioOrigem();
@@ -1695,16 +1731,32 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return this.tecnicosPorArea(origem.area).filter(t => t.nome !== origem.tecnicoNome);
   });
 
+  // Dias selecionáveis pro apoio — só os dias em que a OS de origem já está prevista
+  // (não faz sentido apoiar num dia em que a atividade nem vai rodar).
+  apoioDiasDisponiveis = computed(() => {
+    const origem = this.apoioOrigem();
+    if (!origem) return [];
+    return this.diasDaSemanaAtual().filter(d => origem.diasPrevistos.includes(d.data));
+  });
+
   abrirApoio(o: ManutencaoOrdem): void {
     this.apoioOrigem.set(o);
     this.apoioTecnicoNome.set('');
     this.apoioTecnicoMatricula.set('');
+    this.apoioDiasSelecionados.set(o.diasPrevistos);
     this.apoioAberto.set(true);
   }
 
   fecharApoio(): void {
     this.apoioAberto.set(false);
     this.apoioOrigem.set(null);
+  }
+
+  toggleApoioDia(dataIso: string): void {
+    const atual = this.apoioDiasSelecionados();
+    this.apoioDiasSelecionados.set(
+      atual.includes(dataIso) ? atual.filter(d => d !== dataIso) : [...atual, dataIso].sort(),
+    );
   }
 
   onApoioTecnicoSelected(nome: string): void {
@@ -1714,23 +1766,26 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   }
 
   // Mesmo bloqueio de férias/folga do formulário principal, aplicado ao técnico de
-  // apoio nos dias da OS de origem.
+  // apoio só nos dias efetivamente selecionados pro apoio (não a OS de origem inteira
+  // — não faz sentido bloquear por um dia em que o apoio nem foi marcado).
   apoioTecnicoBloqueio = computed<{ motivo: string } | null>(() => {
     const origem = this.apoioOrigem();
     const nome = this.apoioTecnicoNome().trim();
-    if (!origem || !nome) return null;
-    const ferias = this.feriasNoIntervalo(nome, origem.diasPrevistos);
+    const dias = this.apoioDiasSelecionados();
+    if (!origem || !nome || dias.length === 0) return null;
+    const ferias = this.feriasNoIntervalo(nome, dias);
     if (ferias) return { motivo: `${nome} está de férias de ${this.formatarDataBr(ferias.dataInicio)} a ${this.formatarDataBr(ferias.dataFim)}.` };
-    const folga = this.folgaNoIntervalo(nome, origem.diasPrevistos);
+    const folga = this.folgaNoIntervalo(nome, dias);
     if (folga) return { motivo: `${nome} já está de folga em algum desses dias.` };
-    if (origem.numeroOs && this.ordemDuplicada(origem.numeroOs, nome, origem.diasPrevistos)) {
+    if (origem.numeroOs && this.ordemDuplicada(origem.numeroOs, nome, dias)) {
       return { motivo: `${nome} já tem a OS ${origem.numeroOs} lançada em algum desses dias.` };
     }
     return null;
   });
 
   canConfirmarApoio(): boolean {
-    return !this.isProcessando() && !!this.apoioOrigem() && !!this.apoioTecnicoNome().trim() && !this.apoioTecnicoBloqueio();
+    return !this.isProcessando() && !!this.apoioOrigem() && !!this.apoioTecnicoNome().trim()
+      && this.apoioDiasSelecionados().length > 0 && !this.apoioTecnicoBloqueio();
   }
 
   async confirmarApoio(): Promise<void> {
@@ -1760,7 +1815,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         tipoServico: origem.tipoServico ?? undefined,
         tecnicoNome: this.apoioTecnicoNome(),
         tecnicoMatricula: this.apoioTecnicoMatricula() || undefined,
-        diasPrevistos: origem.diasPrevistos,
+        diasPrevistos: this.apoioDiasSelecionados(),
         status: 'PEND',
         observacoes: origem.observacoes ?? undefined,
       });

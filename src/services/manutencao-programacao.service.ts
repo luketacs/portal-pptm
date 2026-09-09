@@ -49,6 +49,7 @@ interface PlanoPreventivoRow {
   periodicidade_unidade: string;
   ultima_execucao: string | null;
   ativo: boolean;
+  numero_os_reservado: string | null;
 }
 
 function mapPlanoPreventivoRow(r: PlanoPreventivoRow): PlanoPreventivo {
@@ -66,6 +67,7 @@ function mapPlanoPreventivoRow(r: PlanoPreventivoRow): PlanoPreventivo {
     periodicidadeUnidade: r.periodicidade_unidade as PeriodicidadeUnidade,
     ultimaExecucao: r.ultima_execucao,
     ativo: r.ativo,
+    numeroOsReservado: r.numero_os_reservado,
   };
 }
 
@@ -542,11 +544,25 @@ export class ManutencaoProgramacaoService {
 
   // Avança a "última execução" do plano — chamada assim que a preventiva é programada
   // pra alguém na Programação (não espera confirmação de apontamento no SIGMA, ver
-  // criarOrdem/plano_preventivo_id).
+  // criarOrdem/plano_preventivo_id). Também limpa o número de OS reservado (ver
+  // reservarNumeroOsPreventiva): uma vez virada OS de verdade, o número já está na
+  // Programação, não precisa mais ficar guardado no plano.
   async avancarPreventiva(id: string, dataExecucaoIso: string): Promise<void> {
     const { error } = await this.supabaseService.client
       .from('manutencao_planos_preventivos')
-      .update({ ultima_execucao: dataExecucaoIso, atualizado_em: new Date().toISOString() })
+      .update({ ultima_execucao: dataExecucaoIso, numero_os_reservado: null, atualizado_em: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+    await this.loadPlanosPreventivos();
+  }
+
+  // Anota (ou limpa, se numeroOs vier vazio) o número da OS já aberta/reservada no
+  // SIGMA pra esse plano, antes dele ser efetivamente programado — ver
+  // programarDaPreventiva, que usa isso pra pré-preencher o formulário.
+  async reservarNumeroOsPreventiva(id: string, numeroOs: string): Promise<void> {
+    const { error } = await this.supabaseService.client
+      .from('manutencao_planos_preventivos')
+      .update({ numero_os_reservado: numeroOs.trim() || null, atualizado_em: new Date().toISOString() })
       .eq('id', id);
     if (error) throw new Error(error.message);
     await this.loadPlanosPreventivos();

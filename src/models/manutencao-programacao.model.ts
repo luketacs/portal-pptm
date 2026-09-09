@@ -88,6 +88,9 @@ export interface PlanoPreventivo {
   periodicidadeUnidade: PeriodicidadeUnidade;
   ultimaExecucao: string | null; // 'YYYY-MM-DD', null = nunca executada
   ativo: boolean;
+  // Número da OS já aberta/reservada no SIGMA pra esse plano, anotado antes dele ser
+  // programado de fato (ver programarDaPreventiva) — some assim que vira uma OS real.
+  numeroOsReservado: string | null;
 }
 
 // Período em que a planta ficou parada (a empresa não opera 24h/dia) — enquanto
