@@ -838,8 +838,15 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
     const larguraMenu = 144; // w-36
+    // Linha perto do rodapé da tela: abrir sempre pra baixo cortava o menu (ex.: "Excluir"
+    // ficava inacessível). "+ Apoio" só existe pra tipo 'ordem' — estima 3 itens pra ela,
+    // 2 pros demais tipos (Editar/Excluir), e abre pra cima quando não cabe embaixo.
+    const ordem = this.manutencaoService.getById(id);
+    const qtdItens = ordem?.tipo === 'ordem' ? 3 : 2;
+    const alturaMenu = qtdItens * 30 + 8;
+    const cabeAbaixo = rect.bottom + alturaMenu + 4 <= window.innerHeight;
     this.linhaMenuPos.set({
-      top: rect.bottom + 4,
+      top: cabeAbaixo ? rect.bottom + 4 : Math.max(8, rect.top - alturaMenu - 4),
       left: Math.max(8, Math.min(rect.right - larguraMenu, window.innerWidth - larguraMenu - 8)),
     });
     this.linhaMenuAberta.set(id);
