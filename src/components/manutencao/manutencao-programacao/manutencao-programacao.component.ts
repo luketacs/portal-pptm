@@ -4,7 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { ManutencaoProgramacaoService } from '../../../services/manutencao-programacao.service';
 import { AuthService } from '../../../services/auth.service';
-import { NotificationService } from '../../../services/toast.service';
+import { NotificationService } from '../../../services/notification.service';
+import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { ApontamentosService } from '../../../services/apontamentos.service';
 import { ExcelExportService, ProgramacaoSemanalGrupo } from '../../../services/excel-export.service';
 import {
@@ -712,7 +713,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   }
 
   async removerFerias(item: FeriasTecnico): Promise<void> {
-    if (this.isProcessando() || !confirm(`Remover férias de "${item.tecnicoNome}"?`)) return;
+    if (this.isProcessando() || !(await this.confirmDialogService.confirm(`Remover férias de "${item.tecnicoNome}"?`))) return;
     this.isProcessando.set(true);
     try {
       await this.manutencaoService.excluirFerias(item.id);
@@ -744,7 +745,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   }
 
   async removerEquipeApoio(item: EquipeApoioItem): Promise<void> {
-    if (this.isProcessando() || !confirm(`Remover "${item.nome}" do cadastro? Lançamentos já feitos com essa equipe não são afetados.`)) return;
+    if (this.isProcessando() || !(await this.confirmDialogService.confirm(`Remover "${item.nome}" do cadastro? Lançamentos já feitos com essa equipe não são afetados.`))) return;
     this.isProcessando.set(true);
     try {
       await this.manutencaoService.excluirEquipeApoio(item.id);
@@ -769,7 +770,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   }
 
   async removerOperadorEscala(item: OperadorEscalaApoio): Promise<void> {
-    if (this.isProcessando() || !confirm(`Remover "${item.nome}" da escala?`)) return;
+    if (this.isProcessando() || !(await this.confirmDialogService.confirm(`Remover "${item.nome}" da escala?`))) return;
     this.isProcessando.set(true);
     try {
       await this.manutencaoService.excluirOperadorEscala(item.id);
@@ -804,7 +805,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   }
 
   async removerRecursoEspecial(item: RecursoEspecialItem): Promise<void> {
-    if (this.isProcessando() || !confirm(`Remover "${item.opcao}" do cadastro? Lançamentos já feitos com esse recurso não são afetados.`)) return;
+    if (this.isProcessando() || !(await this.confirmDialogService.confirm(`Remover "${item.opcao}" do cadastro? Lançamentos já feitos com esse recurso não são afetados.`))) return;
     this.isProcessando.set(true);
     try {
       await this.manutencaoService.excluirRecursoEspecial(item.id);
@@ -924,7 +925,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const mensagem = ativa
       ? 'Retomar operação normal? As inspeções semanais/quinzenais dos planos preventivos voltam a valer no ritmo normal.'
       : 'Marcar a planta como parada? Enquanto ativo, planos preventivos de ciclo curto (dias/semanas) passam a ser calculados como mensais.';
-    if (!confirm(mensagem)) return;
+    if (!(await this.confirmDialogService.confirm(mensagem))) return;
     this.isProcessando.set(true);
     try {
       if (ativa) await this.manutencaoService.encerrarParadaPlanta();
@@ -1402,6 +1403,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     private notificationService: NotificationService,
     private apontamentosService: ApontamentosService,
     private excelExportService: ExcelExportService,
+    private confirmDialogService: ConfirmDialogService,
   ) {
     const area = this.route.snapshot.data['area'] as ManutencaoArea | undefined;
     if (area) {
@@ -1670,7 +1672,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const aviso = bloqueados.length > 0
       ? `\n\n${bloqueados.length} técnico(s) já têm algo lançado nesses dias e não vão entrar: ${bloqueados.join(', ')}.`
       : '';
-    if (!confirm(`Lançar "${motivo}" pra ${tecnicos.length} técnicos (Elétrica + Mecânica)?${aviso}`)) return;
+    if (!(await this.confirmDialogService.confirm(`Lançar "${motivo}" pra ${tecnicos.length} técnicos (Elétrica + Mecânica)?${aviso}`))) return;
 
     this.isProcessando.set(true);
     try {
@@ -1740,7 +1742,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const aviso = bloqueados.length > 0
       ? `\n\n${bloqueados.length} técnico(s) de folga/férias nesses dias não vão entrar: ${bloqueados.join(', ')}.`
       : '';
-    if (!confirm(`Lançar "${titulo}" pra ${tecnicos.length} técnicos (Elétrica + Mecânica)?${aviso}`)) return;
+    if (!(await this.confirmDialogService.confirm(`Lançar "${titulo}" pra ${tecnicos.length} técnicos (Elétrica + Mecânica)?${aviso}`))) return;
 
     this.isProcessando.set(true);
     try {
@@ -1842,8 +1844,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Clicar fora da caixa (fundo escuro) fechava direto — fácil de perder o que já
   // tinha preenchido sem querer. Só o clique no fundo passa por aqui; o botão
   // "Cancelar" continua fechando na hora (ali a intenção de sair já é explícita).
-  fecharFormComConfirmacao(): void {
-    if (confirm('Tem certeza que deseja sair? O que foi preenchido nesse lançamento será perdido.')) {
+  async fecharFormComConfirmacao(): Promise<void> {
+    if (await this.confirmDialogService.confirm('Tem certeza que deseja sair? O que foi preenchido nesse lançamento será perdido.')) {
       this.fecharForm();
     }
   }
@@ -2333,7 +2335,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // ── Excluir ────────────────────────────────────────────────────────────
   async excluir(o: ManutencaoOrdem): Promise<void> {
     if (this.isProcessando()) return;
-    if (!confirm(`Excluir "${o.descricao}" (${o.tecnicoNome})?\n\nEsta ação não pode ser desfeita.`)) return;
+    if (!(await this.confirmDialogService.confirm(`Excluir "${o.descricao}" (${o.tecnicoNome})?\n\nEsta ação não pode ser desfeita.`, { confirmLabel: 'Excluir', danger: true }))) return;
 
     this.isProcessando.set(true);
     try {

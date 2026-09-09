@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseRestService } from './supabase-rest.service';
 import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
+import { NotificationService } from './notification.service';
 import { environment } from '../environments/environment';
 import { withRetry } from '../utils/retry';
 
@@ -23,7 +24,8 @@ export class UserService {
     supabaseService: SupabaseService,
     private supabaseRestService: SupabaseRestService,
     private authService: AuthService,
-    private auditLogService: AuditLogService
+    private auditLogService: AuditLogService,
+    private notificationService: NotificationService
   ) {
     this.supabase = supabaseService.client;
   }
@@ -177,7 +179,7 @@ export class UserService {
       const { error } = (await Promise.race([deletePromise, timeoutPromise])) as any;
 
       if (error) {
-        alert(`Erro ao excluir usuário: ${error.message}. Verifique se a função 'delete_user' existe no Supabase.`);
+        this.notificationService.showError(`Erro ao excluir usuário: ${error.message}. Verifique se a função 'delete_user' existe no Supabase.`);
       } else {
         await this.loadUsers();
 
@@ -195,7 +197,7 @@ export class UserService {
         }
       }
     } catch (error: any) {
-      alert(`Erro ao excluir usuário: ${error.message || 'Timeout'}`);
+      this.notificationService.showError(`Erro ao excluir usuário: ${error.message || 'Timeout'}`);
     }
   }
 

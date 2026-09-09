@@ -6,6 +6,7 @@ import { Subscription } from 'rxjs';
 import { RequestService } from '../../../services/request.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
+import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { RequestFilterStateService } from '../../../services/request-filter-state.service';
 import { MaterialService } from '../../../services/material.service';
 import { StockInfo } from '../../../models/material.model';
@@ -70,6 +71,7 @@ export class RequestListComponent implements OnInit, OnDestroy {
     public requestService: RequestService,
     public authService: AuthService,
     private notificationService: NotificationService,
+    private confirmDialogService: ConfirmDialogService,
     private filterStateService: RequestFilterStateService,
     private materialService: MaterialService
   ) {
@@ -536,7 +538,7 @@ export class RequestListComponent implements OnInit, OnDestroy {
       `Status: ${request.status}\n\n` +
       `ESTA AÇÃO NÃO PODE SER DESFEITA!`;
     
-    if (!confirm(confirmMessage)) {
+    if (!(await this.confirmDialogService.confirm(confirmMessage, { confirmLabel: 'Excluir', danger: true }))) {
       return;
     }
     

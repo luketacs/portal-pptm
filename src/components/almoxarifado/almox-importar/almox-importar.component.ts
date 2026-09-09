@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AlmoxarifadoService, UltimaImportacao } from '../../../services/almoxarifado.service';
-import { NotificationService } from '../../../services/toast.service';
+import { NotificationService } from '../../../services/notification.service';
 import { AuditLogService } from '../../../services/audit-log.service';
 import { AuthService } from '../../../services/auth.service';
 

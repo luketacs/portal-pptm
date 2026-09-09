@@ -1,7 +1,7 @@
 ﻿import { Injectable, computed, signal } from '@angular/core';
 import { HistoryEvent, PurchaseRequest, RequestStatus } from '../models/request.model';
 import { UserProfile } from '../models/user.model';
-import { NotificationService } from './toast.service';
+import { NotificationService } from './notification.service';
 import { SupabaseRestService } from './supabase-rest.service';
 import { AuditLogService } from './audit-log.service';
 import type { PurchaseRequestRow } from '../models/database.types';

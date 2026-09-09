@@ -1,7 +1,7 @@
 ﻿<div class="app-panel p-6 md:p-8 relative">
   <div class="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
-    <h1 class="text-2xl font-bold text-gray-800" style="font-family: 'Manrope', 'Segoe UI', Arial, sans-serif;">Gerenciamento de Usuários</h1>
-    <button (click)="openAddUserModal()" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-150 ease-in-out flex items-center justify-center shadow-sm w-full md:w-auto">
+    <h1 class="text-2xl font-bold text-gray-800" style="font-family: 'Montserrat', 'Segoe UI', Arial, sans-serif;">Gerenciamento de Usuários</h1>
+    <button (click)="openAddUserModal()" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-150 ease-in-out flex items-center justify-center shadow-sm w-full md:w-auto">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
       Novo Usuário
     </button>
@@ -62,7 +62,7 @@
 
 <!-- Add User Modal -->
 @if (isAddingUser()) {
-<div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 transition-opacity duration-300" role="dialog" aria-modal="true" aria-label="Adicionar novo usuário">
+<div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-opacity duration-300" role="dialog" aria-modal="true" aria-label="Adicionar novo usuário">
   <div class="bg-white rounded-lg shadow-xl p-6 md:p-8 w-full max-w-lg m-4">
     <div class="flex justify-between items-center mb-6">
       <h2 class="text-2xl font-bold text-gray-800">Adicionar Novo Usuário</h2>
@@ -110,7 +110,7 @@
       }
       <div class="pt-6 flex justify-end space-x-4 border-t border-gray-200 mt-6">
         <button type="button" (click)="cancelAddUser()" class="bg-gray-200 text-gray-800 font-bold py-2 px-6 rounded-lg hover:bg-gray-300 transition">Cancelar</button>
-        <button type="submit" [disabled]="addUserForm.invalid || isSavingNew()" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition flex items-center justify-center">
+        <button type="submit" [disabled]="addUserForm.invalid || isSavingNew()" class="bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition flex items-center justify-center">
           @if (isSavingNew()) {
             <svg class="animate-spin h-4 w-4 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
             <span>Criando...</span>
@@ -127,7 +127,7 @@
 
 <!-- Edit User Modal -->
 @if (editingUser(); as user) {
-  <div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 transition-opacity duration-300" role="dialog" aria-modal="true" aria-label="Editar usuário">
+  <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-opacity duration-300" role="dialog" aria-modal="true" aria-label="Editar usuário">
     <div class="bg-white rounded-lg shadow-xl p-6 md:p-8 w-full max-w-lg m-4">
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-bold text-gray-800">Editar Usuário</h2>
@@ -166,7 +166,7 @@
         </div>
         <div class="pt-6 flex justify-end space-x-4 border-t border-gray-200 mt-6">
           <button type="button" (click)="cancelEdit()" class="bg-gray-200 text-gray-800 font-bold py-2 px-6 rounded-lg hover:bg-gray-300 transition">Cancelar</button>
-          <button type="submit" [disabled]="userForm.invalid || isSavingEdit()" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition flex items-center justify-center">
+          <button type="submit" [disabled]="userForm.invalid || isSavingEdit()" class="bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition flex items-center justify-center">
             @if (isSavingEdit()) {
               <svg class="animate-spin h-4 w-4 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
               <span>Salvando...</span>
@@ -182,7 +182,7 @@
 
 <!-- Reset Password Modal -->
 @if (showResetPasswordModal()) {
-  <div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 transition-opacity duration-300" role="dialog" aria-modal="true" aria-label="Resetar senha">
+  <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-opacity duration-300" role="dialog" aria-modal="true" aria-label="Resetar senha">
     <div class="bg-white rounded-lg shadow-xl p-6 md:p-8 w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
       @if (selectedUserForReset(); as user) {
         <div class="flex justify-between items-center mb-6">
@@ -246,7 +246,7 @@
             <button 
               (click)="sendResetEmail()" 
               [disabled]="resettingPasswordUserId() === user.id"
-              class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition flex items-center">
+              class="bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition flex items-center">
               @if (resettingPasswordUserId() === user.id) {
                 <svg class="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

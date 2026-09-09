@@ -2,7 +2,7 @@ import { Component, Input, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HistoryService } from '../../../services/history.service';
 import { AuthService } from '../../../services/auth.service';
-import { NotificationService } from '../../../services/toast.service';
+import { NotificationService } from '../../../services/notification.service';
 import { FormsModule } from '@angular/forms';
 
 @Component({

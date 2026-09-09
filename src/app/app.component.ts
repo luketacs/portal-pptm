@@ -5,6 +5,7 @@ import { AuthService } from '../services/auth.service';
 import { HeaderComponent } from '../components/header/header.component';
 import { SidebarComponent } from '../components/sidebar/sidebar.component';
 import { NotificationComponent } from '../components/notification/notification.component';
+import { ConfirmDialogComponent } from '../components/confirm-dialog/confirm-dialog.component';
 import { RequestService } from '../services/request.service';
 import { UserService } from '../services/user.service';
 import { NotificationService } from '../services/notification.service';
@@ -19,8 +20,9 @@ import { Subscription } from 'rxjs';
     CommonModule, 
     RouterOutlet, 
     HeaderComponent, 
-    SidebarComponent, 
-    NotificationComponent
+    SidebarComponent,
+    NotificationComponent,
+    ConfirmDialogComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

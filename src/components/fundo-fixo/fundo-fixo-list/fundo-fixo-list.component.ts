@@ -5,7 +5,8 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FundoFixoService, FUNDO_FIXO_GESTORES, FUNDO_FIXO_LIMITE_MENSAL, FUNDO_FIXO_LIMITE_POR_COMPRA, FUNDO_FIXO_SETORES } from '../../../services/fundo-fixo.service';
 import { AuthService } from '../../../services/auth.service';
-import { NotificationService } from '../../../services/toast.service';
+import { NotificationService } from '../../../services/notification.service';
+import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { UserService } from '../../../services/user.service';
 import { ExcelExportService, FechamentoFundoFixoLinha } from '../../../services/excel-export.service';
 import { FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSetor, FundoFixoSolicitacao, FundoFixoStatus } from '../../../models/fundo-fixo.model';
@@ -234,6 +235,7 @@ export class FundoFixoListComponent implements OnInit {
     private notificationService: NotificationService,
     private userService: UserService,
     private excelExportService: ExcelExportService,
+    private confirmDialogService: ConfirmDialogService,
   ) {
     if (this.route.snapshot.data['mode'] === 'gestao') {
       this.mode = 'gestao';
@@ -451,8 +453,9 @@ export class FundoFixoListComponent implements OnInit {
 
   async excluir(s: FundoFixoSolicitacao): Promise<void> {
     if (this.isProcessando()) return;
-    const confirmado = confirm(
+    const confirmado = await this.confirmDialogService.confirm(
       `Excluir a solicitação de ${s.solicitanteNome} (${s.material})?\n\nEsta ação não pode ser desfeita.`,
+      { confirmLabel: 'Excluir', danger: true },
     );
     if (!confirmado) return;
 
@@ -541,8 +544,9 @@ export class FundoFixoListComponent implements OnInit {
   // ── Excluir saque ──────────────────────────────────────────────────────
   async excluirSaque(saque: FundoFixoSaque): Promise<void> {
     if (this.isProcessando()) return;
-    const confirmado = confirm(
+    const confirmado = await this.confirmDialogService.confirm(
       `Excluir o saque de ${saque.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} de ${this.formatDate(saque.dataSaque)}?\n\nEsta ação não pode ser desfeita.`,
+      { confirmLabel: 'Excluir', danger: true },
     );
     if (!confirmado) return;
 
@@ -560,7 +564,7 @@ export class FundoFixoListComponent implements OnInit {
   // ── Marcar reembolso como pago ─────────────────────────────────────────
   async marcarReembolsado(s: FundoFixoSolicitacao): Promise<void> {
     if (this.isProcessando()) return;
-    const confirmado = confirm(`Confirmar que ${s.solicitanteNome} já recebeu de volta o valor de "${s.material}"?`);
+    const confirmado = await this.confirmDialogService.confirm(`Confirmar que ${s.solicitanteNome} já recebeu de volta o valor de "${s.material}"?`);
     if (!confirmado) return;
 
     this.isProcessando.set(true);
@@ -729,7 +733,7 @@ export class FundoFixoListComponent implements OnInit {
   async moverParaProximoMes(s: FundoFixoSolicitacao): Promise<void> {
     if (this.isProcessando()) return;
     const novoMes = this.formatMesLabel(proximoMes(s.mesReferencia));
-    const confirmado = confirm(
+    const confirmado = await this.confirmDialogService.confirm(
       `Mover "${s.material}" para ${novoMes}?\n\nEla vai sair do total de ${this.formatMesLabel(s.mesReferencia)} e passar a contar no total de ${novoMes}.`,
     );
     if (!confirmado) return;

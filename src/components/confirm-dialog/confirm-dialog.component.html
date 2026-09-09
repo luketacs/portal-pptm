@@ -1,0 +1,19 @@
+@if (confirmDialogService.request(); as req) {
+  <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-[110] p-4" (click)="confirmDialogService.respond(false)">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md" (click)="$event.stopPropagation()">
+      <h3 class="text-lg font-bold text-gray-800 mb-3">Confirmação</h3>
+      <p class="text-sm text-gray-600 mb-6 whitespace-pre-line">{{ req.message }}</p>
+      <div class="flex justify-end gap-3">
+        <button (click)="confirmDialogService.respond(false)"
+          class="text-sm font-semibold text-gray-500 hover:text-gray-700 px-3 py-2">
+          {{ req.cancelLabel }}
+        </button>
+        <button (click)="confirmDialogService.respond(true)"
+          class="text-white text-sm font-semibold py-2 px-4 rounded-lg transition"
+          [class]="req.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'">
+          {{ req.confirmLabel }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

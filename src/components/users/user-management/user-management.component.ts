@@ -5,6 +5,7 @@ import { UserService } from '../../../services/user.service';
 import { UserProfile, UserRole } from '../../../models/user.model';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
+import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 
 type NewUserForm = Omit<UserProfile, 'id'> & { password?: string };
 
@@ -39,7 +40,8 @@ export class UserManagementComponent {
   constructor(
     public userService: UserService,
     public authService: AuthService,
-    public notificationService: NotificationService
+    public notificationService: NotificationService,
+    private confirmDialogService: ConfirmDialogService
   ) {
     this.users = this.userService.users;
     this.currentUser = this.authService.currentUser;
@@ -162,11 +164,15 @@ export class UserManagementComponent {
 
   async deleteUser(userToDelete: UserProfile): Promise<void> {
     if (userToDelete.id === this.currentUser()?.id) {
-      alert('Você não pode excluir sua própria conta.');
+      this.notificationService.showError('Você não pode excluir sua própria conta.');
       return;
     }
 
-    if (!confirm(`Tem certeza que deseja excluir o usuário ${userToDelete.name}? Esta ação não pode ser desfeita.`)) {
+    const confirmado = await this.confirmDialogService.confirm(
+      `Tem certeza que deseja excluir o usuário ${userToDelete.name}? Esta ação não pode ser desfeita.`,
+      { confirmLabel: 'Excluir', danger: true },
+    );
+    if (!confirmado) {
       return;
     }
 
@@ -223,7 +229,7 @@ export class UserManagementComponent {
       `Após confirmar, o sistema tentará resetar automaticamente (sem precisar de SQL).\n` +
       `Se falhar, você ainda pode usar o SQL como alternativa.`;
 
-    if (!confirm(confirmMsg)) return;
+    if (!(await this.confirmDialogService.confirm(confirmMsg))) return;
 
     this.resettingPasswordUserId.set(user.id);
     const result = await this.userService.resetPasswordInstant(user.id);

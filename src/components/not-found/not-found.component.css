@@ -17,14 +17,14 @@
   text-align: center;
   width: min(420px, 90vw);
   box-shadow: var(--shadow-md);
-  font-family: "Manrope", "Segoe UI", Arial, sans-serif;
+  font-family: "Montserrat", "Segoe UI", Arial, sans-serif;
 }
 
 
 .card h1 {
   font-size: 64px;
   margin: 0 0 8px;
-  font-family: "Manrope", "Segoe UI", Arial, sans-serif;
+  font-family: "Montserrat", "Segoe UI", Arial, sans-serif;
   color: var(--color-primary-700);
 }
 

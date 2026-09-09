@@ -17,7 +17,7 @@
         Exportar
       </button>
       @if (canCreateMaterial()) {
-        <a routerLink="/materials/new" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition flex items-center justify-center shadow-sm text-sm">
+        <a routerLink="/materials/new" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition flex items-center justify-center shadow-sm text-sm">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
@@ -101,7 +101,7 @@
         <p>{{ canCreateMaterial() ? 'Comece cadastrando seu primeiro material' : 'Não há materiais cadastrados no sistema' }}</p>
       }
       @if (canCreateMaterial()) {
-        <a routerLink="/materials/new" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-150 ease-in-out inline-flex items-center justify-center shadow-md hover:shadow-lg text-sm">
+        <a routerLink="/materials/new" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-150 ease-in-out inline-flex items-center justify-center shadow-md hover:shadow-lg text-sm">
           Cadastrar Material
         </a>
       }
@@ -261,27 +261,5 @@
       </div>
     </div>
   </div>
-  }
-
-  <!-- Modal de confirmação -->
-  @if (showConfirmDialog()) {
-    <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" (click)="onConfirmDialogResult(false)">
-      <div class="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4" (click)="$event.stopPropagation()">
-        <h3 class="text-lg font-semibold text-gray-900 mb-3">Confirmação</h3>
-        <p class="text-gray-600 mb-6">{{ confirmMessage() }}</p>
-        <div class="flex justify-end gap-3">
-          <button
-            (click)="onConfirmDialogResult(false)"
-            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
-            Cancelar
-          </button>
-          <button
-            (click)="onConfirmDialogResult(true)"
-            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition">
-            Confirmar
-          </button>
-        </div>
-      </div>
-    </div>
   }
 </div>

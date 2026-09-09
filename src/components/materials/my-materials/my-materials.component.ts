@@ -5,7 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { MaterialService } from '../../../services/material.service';
 import { RequestService } from '../../../services/request.service';
 import { AuthService } from '../../../services/auth.service';
-import { NotificationService } from '../../../services/toast.service';
+import { NotificationService } from '../../../services/notification.service';
 import { Material } from '../../../models/material.model';
 import { PurchaseRequest, RequestStatus } from '../../../models/request.model';
 import { createClientPageItems, createPageNavigation } from '../../../utils/pagination';

@@ -7,7 +7,8 @@ import { UserService } from '../../../services/user.service';
 import { EmailService } from '../../../services/email.service';
 import { Material } from '../../../models/material.model';
 import { AuthService } from '../../../services/auth.service';
-import { NotificationService } from '../../../services/toast.service';
+import { NotificationService } from '../../../services/notification.service';
+import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { createClientPageItems, createPageNavigation } from '../../../utils/pagination';
 
 @Component({
@@ -27,11 +28,6 @@ export class MaterialListComponent implements OnInit {
   searchTerm = signal('');
   statusFilter = signal<'all' | 'pendente' | 'liberado'>('all');
 
-  // Confirmação customizada
-  showConfirmDialog = signal(false);
-  confirmMessage = signal('');
-  private confirmResolve: ((value: boolean) => void) | null = null;
-
   // Paginação
   private pageNav = createPageNavigation(computed(() => this.filteredMaterials().length), 15);
   currentPage = this.pageNav.currentPage;
@@ -50,7 +46,8 @@ export class MaterialListComponent implements OnInit {
     private emailService: EmailService,
     private authService: AuthService,
     private router: Router,
-    private toast: NotificationService
+    private toast: NotificationService,
+    private confirmDialogService: ConfirmDialogService
   ) {}
 
   async ngOnInit(): Promise<void> {
@@ -174,25 +171,6 @@ export class MaterialListComponent implements OnInit {
   });
 
   /**
-   * Abre diálogo de confirmação customizado
-   */
-  private confirm(message: string): Promise<boolean> {
-    return new Promise(resolve => {
-      this.confirmMessage.set(message);
-      this.showConfirmDialog.set(true);
-      this.confirmResolve = resolve;
-    });
-  }
-
-  onConfirmDialogResult(result: boolean): void {
-    this.showConfirmDialog.set(false);
-    if (this.confirmResolve) {
-      this.confirmResolve(result);
-      this.confirmResolve = null;
-    }
-  }
-
-  /**
    * Visualiza/Edita material (navega para tela de detalhes)
    */
   viewMaterial(id: string): void {
@@ -226,7 +204,7 @@ export class MaterialListComponent implements OnInit {
     }
 
     const novoStatus: 'liberado' = 'liberado';
-    const confirmChange = await this.confirm(
+    const confirmChange = await this.confirmDialogService.confirm(
       `Liberar o material "${material.descricao_breve}"?\nApós liberado, ele ficará disponível para uso em solicitações de compra.`
     );
 
@@ -265,7 +243,7 @@ export class MaterialListComponent implements OnInit {
       return;
     }
 
-    const confirmDelete = await this.confirm(`Tem certeza que deseja deletar "${descricao}"?`);
+    const confirmDelete = await this.confirmDialogService.confirm(`Tem certeza que deseja deletar "${descricao}"?`, { confirmLabel: 'Excluir', danger: true });
     
     if (!confirmDelete) {
       return;

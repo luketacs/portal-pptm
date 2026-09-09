@@ -171,7 +171,7 @@
         </label>
       </div>
 
-      <button type="submit" [disabled]="isLoggingIn() || !consentGiven()" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out shadow-lg flex items-center justify-center disabled:bg-blue-400 disabled:cursor-not-allowed">
+      <button type="submit" [disabled]="isLoggingIn() || !consentGiven()" class="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out shadow-lg flex items-center justify-center disabled:bg-blue-400 disabled:cursor-not-allowed">
         @if(isLoggingIn()) {
           <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

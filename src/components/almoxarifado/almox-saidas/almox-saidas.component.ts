@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { AlmoxarifadoService, Movimentacao, UltimaImportacao } from '../../../services/almoxarifado.service';
 import { ExcelExportService } from '../../../services/excel-export.service';
 import { AuthService } from '../../../services/auth.service';
-import { NotificationService } from '../../../services/toast.service';
+import { NotificationService } from '../../../services/notification.service';
 import { createClientPageItems, createPageNavigation } from '../../../utils/pagination';
 
 type Periodo = 7 | 15 | 30 | 60;

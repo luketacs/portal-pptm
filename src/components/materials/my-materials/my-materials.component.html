@@ -6,7 +6,7 @@
       <p class="text-sm text-gray-500 mt-0.5">Materiais que você cadastrou e o status das solicitações relacionadas.</p>
     </div>
     <a routerLink="/materials/new"
-      class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition text-sm w-fit">
+      class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition text-sm w-fit">
       + Novo Material
     </a>
   </div>
@@ -82,7 +82,7 @@
     <div class="app-card p-10 text-center">
       @if (rows().length === 0) {
         <p class="text-gray-500 mb-4">Você ainda não cadastrou nenhum material.</p>
-        <a routerLink="/materials/new" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition text-sm">
+        <a routerLink="/materials/new" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition text-sm">
           Cadastrar primeiro material
         </a>
       } @else {
