@@ -32,8 +32,8 @@ interface NavGroup {
     }
 
     .icon-slot {
-      width: 1.25rem;
-      height: 1.25rem;
+      width: 1.4rem;
+      height: 1.4rem;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -45,9 +45,9 @@ interface NavGroup {
       width: 100%;
       display: flex;
       align-items: center;
-      padding: 0.64rem 0.72rem;
+      padding: 0.78rem 0.85rem;
       border-radius: 0.66rem;
-      font-size: 0.875rem;
+      font-size: 0.98rem;
       font-weight: 600;
       transition: background-color 0.2s ease, color 0.2s ease;
     }
@@ -89,8 +89,8 @@ interface NavGroup {
     }
 
     .chevron {
-      width: 1rem;
-      height: 1rem;
+      width: 1.1rem;
+      height: 1.1rem;
       color: #94a3b8;
       transition: transform 0.2s ease;
     }
@@ -112,9 +112,9 @@ interface NavGroup {
       display: flex;
       align-items: center;
       gap: 0.45rem;
-      padding: 0.46rem 0.6rem;
+      padding: 0.56rem 0.7rem;
       border-radius: 0.52rem;
-      font-size: 0.81rem;
+      font-size: 0.9rem;
       color: #64748b;
       transition: background-color 0.2s ease, color 0.2s ease;
     }

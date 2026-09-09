@@ -57,7 +57,7 @@ input, button, textarea, select { font: inherit; }
 }
 
 .app-sidebar {
-  width: 260px;
+  width: 288px;
   background: var(--surface);
   color: var(--color-slate-900);
   border-right: 1px solid var(--border);
