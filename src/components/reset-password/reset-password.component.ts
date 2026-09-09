@@ -58,9 +58,13 @@ import { PasswordResetService } from '../../services/password-reset.service';
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <svg class="h-5 w-5 text-slate-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" /></svg>
                 </div>
-                <input type="password" id="password" [(ngModel)]="password" name="password"
-                  class="block w-full pl-10 pr-3 py-3 border border-slate-300 rounded-md leading-5 bg-white placeholder-slate-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                <input [type]="showPassword() ? 'text' : 'password'" id="password" [(ngModel)]="password" name="password"
+                  class="block w-full pl-10 pr-16 py-3 border border-slate-300 rounded-md leading-5 bg-white placeholder-slate-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   placeholder="Digite sua nova senha" required minlength="6" [disabled]="loading()">
+                <button type="button" (click)="showPassword.set(!showPassword())" tabindex="-1" [disabled]="loading()"
+                  class="absolute inset-y-0 right-0 pr-3 flex items-center text-xs font-medium text-blue-600 hover:text-blue-700">
+                  {{ showPassword() ? 'Ocultar' : 'Mostrar' }}
+                </button>
               </div>
               @if (password.length > 0 && password.length < 6) {
                 <p class="mt-1 text-xs text-slate-500">Mínimo de 6 caracteres</p>
@@ -73,9 +77,13 @@ import { PasswordResetService } from '../../services/password-reset.service';
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <svg class="h-5 w-5 text-slate-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" /></svg>
                 </div>
-                <input type="password" id="confirmPassword" [(ngModel)]="confirmPassword" name="confirmPassword"
-                  class="block w-full pl-10 pr-3 py-3 border border-slate-300 rounded-md leading-5 bg-white placeholder-slate-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                <input [type]="showConfirmPassword() ? 'text' : 'password'" id="confirmPassword" [(ngModel)]="confirmPassword" name="confirmPassword"
+                  class="block w-full pl-10 pr-16 py-3 border border-slate-300 rounded-md leading-5 bg-white placeholder-slate-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   placeholder="Confirme sua nova senha" required [disabled]="loading()">
+                <button type="button" (click)="showConfirmPassword.set(!showConfirmPassword())" tabindex="-1" [disabled]="loading()"
+                  class="absolute inset-y-0 right-0 pr-3 flex items-center text-xs font-medium text-blue-600 hover:text-blue-700">
+                  {{ showConfirmPassword() ? 'Ocultar' : 'Mostrar' }}
+                </button>
               </div>
             </div>
 
@@ -114,6 +122,8 @@ import { PasswordResetService } from '../../services/password-reset.service';
 export class ResetPasswordComponent implements OnInit {
   password = '';
   confirmPassword = '';
+  showPassword = signal(false);
+  showConfirmPassword = signal(false);
   loading = signal(false);
   submitted = signal(false);
   message = signal('');

@@ -15,6 +15,7 @@ import { NotificationService } from '../../services/notification.service';
 export class LoginComponent {
   email = signal('');
   password = signal('');
+  showPassword = signal(false);
   error = signal('');
   isLoggingIn = signal(false);
   consentGiven = signal(false);

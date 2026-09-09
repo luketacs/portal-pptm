@@ -26,6 +26,7 @@ export class UserManagementComponent {
   isAddingUser = signal(false);
   isSavingNew = signal(false);
   newUser = signal<NewUserForm>(this.getInitialNewUser());
+  showNewUserPassword = signal(false);
   addUserError = signal<string | null>(null);
 
   deletingUserId = signal<string | null>(null);
@@ -109,6 +110,7 @@ export class UserManagementComponent {
   openAddUserModal(): void {
     this.newUser.set(this.getInitialNewUser());
     this.addUserError.set(null);
+    this.showNewUserPassword.set(false);
     this.isAddingUser.set(true);
   }
 
