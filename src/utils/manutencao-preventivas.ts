@@ -28,7 +28,10 @@ export function preventivaVencendo(proximaData: string | null, inicioSemanaIso: 
   return proximaData === null || (proximaData >= inicioSemanaIso && proximaData <= fimSemanaIso);
 }
 
-function periodicidadeEmDias(valor: number, unidade: PeriodicidadeUnidade): number {
+// Converte a periodicidade pra dias, pra dar pra comparar/ordenar planos de unidades
+// diferentes (ex.: priorizar quem é de 6 meses/1 ano na fila de sugestão — ver
+// preventivasVencendoTodas). Também usada pela tolerância de atraso, abaixo.
+export function periodicidadeEmDias(valor: number, unidade: PeriodicidadeUnidade): number {
   if (unidade === 'Dia(s)') return valor;
   if (unidade === 'Semana(s)') return valor * 7;
   return valor * 30; // Mes(es) — mesma aproximação usada no resto do app pra 1 mês.

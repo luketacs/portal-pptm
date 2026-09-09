@@ -16,7 +16,7 @@ import {
   calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo, encontrarOrdemDuplicada,
   recursosParaEspelho,
 } from '../../../utils/manutencao-regras';
-import { calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva, preventivaVencendo } from '../../../utils/manutencao-preventivas';
+import { calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva, periodicidadeEmDias, preventivaVencendo } from '../../../utils/manutencao-preventivas';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 
@@ -968,8 +968,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // periodicidadeEfetiva). Não afeta o cadastro do plano, só a leitura.
   plantaParadaAtiva = computed(() => this.manutencaoService.paradaAtual() !== null);
 
-  // Todas as vencendo (ordenadas da mais urgente pra menos), antes do corte do lote —
-  // usada só pra saber o total pendente (ver preventivasVencendoLabel).
+  // Todas as vencendo, antes do corte do lote — usada só pra saber o total pendente
+  // (ver preventivasVencendoLabel). Ordenada priorizando quem tem periodicidade maior
+  // (6 meses, 1 ano...) primeiro — decisão combinada com o usuário: não vale a pena
+  // varrer o histórico todo atrás de preventiva antiga não vinculada (ver conversa),
+  // então a mitigação é entrar na fila de sugestão antes as de ciclo mais longo, que
+  // são as que mais pesam esquecer (perder uma anual dói muito mais que perder uma
+  // mensal). Dentro do mesmo ciclo, desempata pela mais urgente (proximaData).
   private preventivasVencendoTodas = computed(() => {
     const diasUteis = this.diasDaSemanaAtual().filter(d => d.label !== 'SAB' && d.label !== 'DOM');
     const inicioSemana = diasUteis[0]?.data;
@@ -984,7 +989,14 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         return { ...p, proximaData: calcularProximaData(p.ultimaExecucao, efetiva.valor, efetiva.unidade) };
       })
       .filter(p => preventivaVencendo(p.proximaData, inicioSemana, fimSemana))
-      .sort((a, b) => (a.proximaData ?? '').localeCompare(b.proximaData ?? ''));
+      .sort((a, b) => {
+        // Periodicidade do CADASTRO (não a "efetiva" da parada de planta) — é sobre a
+        // natureza real da tarefa, não sobre um ajuste temporário de cálculo.
+        const diasA = periodicidadeEmDias(a.periodicidadeValor, a.periodicidadeUnidade);
+        const diasB = periodicidadeEmDias(b.periodicidadeValor, b.periodicidadeUnidade);
+        if (diasA !== diasB) return diasB - diasA;
+        return (a.proximaData ?? '').localeCompare(b.proximaData ?? '');
+      });
   });
 
   preventivasVencendo = computed(() => this.preventivasVencendoTodas().slice(0, this.LOTE_PREVENTIVAS_POR_SEMANA));
