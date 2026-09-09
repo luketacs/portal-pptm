@@ -943,7 +943,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // semana — está tudo atrasado desde antes), o painel mostra só os N mais urgentes por
   // área; conforme vão sendo programados, os próximos da fila aparecem sozinhos —
   // balanceia o ritmo de recuperação do atraso sem sobrecarregar nenhuma semana.
-  private readonly LOTE_PREVENTIVAS_POR_SEMANA = 20;
+  private readonly LOTE_PREVENTIVAS_POR_SEMANA = 25;
 
   private planosPreventivosDaArea = computed(() => {
     const area = this.areaFixa;
