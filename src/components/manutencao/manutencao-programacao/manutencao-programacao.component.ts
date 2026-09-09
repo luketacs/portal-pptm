@@ -1241,10 +1241,42 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // uma OS que já está concluída/cancelada no ERP. `null` = ainda não consultou, ou o
   // número mudou desde a última consulta.
   formNumeroOsStatusSigma = signal<string | null>(null);
-  // Preenchido só quando o formulário foi aberto a partir de "Preventivas da semana"
-  // (ver programarDaPreventiva) — depois que a OS é criada, avança a "última execução"
-  // desse plano (ver confirmarForm).
+  // Preenchido quando o formulário foi aberto a partir de "Preventivas da semana" (ver
+  // programarDaPreventiva) OU vinculado manualmente na busca abaixo (ver vincularPlano)
+  // — depois que a OS é criada/editada, avança a "última execução" desse plano (ver
+  // confirmarForm). Sem isso, uma preventiva lançada por fora da lista sugerida (ex.:
+  // vencia mas ficou de fora do corte de 20/semana) nunca contava nem avançava.
   formPlanoPreventivoId = signal<string | null>(null);
+  // O que o plano já tinha ao abrir a edição — só avança a "última execução" de novo
+  // quando o vínculo muda de fato nessa sessão de edição (ver confirmarForm), pra não
+  // reprocessar toda vez que a OS for reaberta e salva sem mexer nisso.
+  private formPlanoPreventivoIdOriginal = signal<string | null>(null);
+  formVincularPlanoTexto = signal('');
+  formPlanoVinculado = computed<PlanoPreventivo | null>(() => {
+    const id = this.formPlanoPreventivoId();
+    return id ? (this.manutencaoService.planosPreventivos().find(p => p.id === id) ?? null) : null;
+  });
+  // Busca por nome do bem/tarefa, restrita à área da OS sendo lançada — cobre o caso de
+  // uma preventiva real que ficou de fora da lista de sugestões da semana (ver
+  // LOTE_PREVENTIVAS_POR_SEMANA) mas o usuário já sabe que precisa fazer.
+  formPlanosVinculoCandidatos = computed<PlanoPreventivo[]>(() => {
+    const termo = normalizarTexto(this.formVincularPlanoTexto().trim());
+    if (termo.length < 2) return [];
+    const area = this.formArea();
+    return this.manutencaoService.planosPreventivos()
+      .filter(p => p.ativo && p.area === area && normalizarTexto(`${p.nomeBem} ${p.nomeManut}`).includes(termo))
+      .slice(0, 8);
+  });
+
+  vincularPlano(plano: PlanoPreventivo): void {
+    this.formPlanoPreventivoId.set(plano.id);
+    this.formVincularPlanoTexto.set('');
+    if (!this.formTipoServico().trim()) this.formTipoServico.set('PREVENTIVA');
+  }
+
+  desvincularPlano(): void {
+    this.formPlanoPreventivoId.set(null);
+  }
 
   tecnicosDaAreaForm = computed(() => this.tecnicosPorArea(this.formArea()));
 
@@ -1707,6 +1739,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formReuniaoHorario.set('');
     this.formReuniaoLocal.set('');
     this.formPlanoPreventivoId.set(null);
+    this.formPlanoPreventivoIdOriginal.set(null);
+    this.formVincularPlanoTexto.set('');
     this.formAberto.set(true);
   }
 
@@ -1747,7 +1781,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formObservacoes.set(o.observacoes ?? '');
     this.formReuniaoHorario.set(o.reuniaoHorario ?? '');
     this.formReuniaoLocal.set(o.reuniaoLocal ?? '');
-    this.formPlanoPreventivoId.set(null);
+    // Preserva o vínculo já existente com um plano preventivo (ver
+    // formPlanoPreventivoIdOriginal) — antes essa edição sempre zerava o vínculo.
+    this.formPlanoPreventivoId.set(o.planoPreventivoId);
+    this.formPlanoPreventivoIdOriginal.set(o.planoPreventivoId);
+    this.formVincularPlanoTexto.set('');
     this.formAberto.set(true);
   }
 
@@ -2009,12 +2047,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           observacoes: this.formObservacoes().trim() || null,
           reuniaoHorario: ehReuniao ? (this.formReuniaoHorario().trim() || null) : null,
           reuniaoLocal: ehReuniao ? (this.formReuniaoLocal().trim() || null) : null,
+          planoPreventivoId: ehOrdem ? this.formPlanoPreventivoId() : null,
         });
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} atualizada.`);
         if (ehOrdem) {
           await this.criarApoioEquipamentosSeNecessario();
           await this.criarApoioTecnicosSeNecessario();
         }
+        // Vínculo com plano preventivo mudou nessa edição (ex.: vinculado manualmente
+        // via vincularPlano numa OS que não veio da lista sugerida da semana) — avança
+        // a "última execução" só agora, não em toda reabertura sem mudança nenhuma.
+        await this.avancarPreventivaSeVinculoMudou(ehOrdem);
       } else {
         await this.manutencaoService.criarOrdem({
           tipo,
@@ -2043,24 +2086,33 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           await this.criarApoioEquipamentosSeNecessario();
           await this.criarApoioTecnicosSeNecessario();
         }
-        // Preventiva programada a partir de "Preventivas da semana" (ver
-        // programarDaPreventiva) — avança a "última execução" do plano assim que ela é
-        // programada pra alguém, sem esperar confirmação de apontamento no SIGMA.
-        const planoId = this.formPlanoPreventivoId();
-        const primeiroDia = [...this.formDiasSelecionados()].sort()[0];
-        if (ehOrdem && planoId && primeiroDia) {
-          try {
-            await this.manutencaoService.avancarPreventiva(planoId, primeiroDia);
-          } catch (err: unknown) {
-            this.notificationService.showError(err instanceof Error ? err.message : 'OS criada, mas não deu pra atualizar o plano preventivo.');
-          }
-        }
+        // Preventiva vinculada a um plano (lista da semana OU vincularPlano manual) —
+        // avança a "última execução" assim que a OS é criada, sem esperar confirmação
+        // de apontamento no SIGMA.
+        await this.avancarPreventivaSeVinculoMudou(ehOrdem);
       }
       this.fecharForm();
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao salvar OS.');
     } finally {
       this.isProcessando.set(false);
+    }
+  }
+
+  // Avança a "última execução" do plano vinculado (ver formPlanoPreventivoId) só quando
+  // o vínculo é novo/mudou nessa sessão do formulário — cobre tanto criar uma OS a
+  // partir da lista sugerida (programarDaPreventiva) quanto vincular manualmente uma
+  // preventiva que ficou de fora dela (ver vincularPlano). Best-effort: falha aqui não
+  // desfaz a OS já criada/editada, só avisa.
+  private async avancarPreventivaSeVinculoMudou(ehOrdem: boolean): Promise<void> {
+    const planoId = this.formPlanoPreventivoId();
+    if (!ehOrdem || !planoId || planoId === this.formPlanoPreventivoIdOriginal()) return;
+    const primeiroDia = [...this.formDiasSelecionados()].sort()[0];
+    if (!primeiroDia) return;
+    try {
+      await this.manutencaoService.avancarPreventiva(planoId, primeiroDia);
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'OS salva, mas não deu pra atualizar o plano preventivo.');
     }
   }
 

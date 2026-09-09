@@ -184,4 +184,5 @@ export interface EditarManutencaoOrdemRequest {
   observacoes: string | null;
   reuniaoHorario: string | null;
   reuniaoLocal: string | null;
+  planoPreventivoId: string | null;
 }

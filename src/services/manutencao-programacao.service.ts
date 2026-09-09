@@ -375,6 +375,7 @@ export class ManutencaoProgramacaoService {
         observacoes: updates.observacoes?.trim() || null,
         reuniao_horario: updates.reuniaoHorario?.trim() || null,
         reuniao_local: updates.reuniaoLocal?.trim() || null,
+        plano_preventivo_id: updates.planoPreventivoId,
       })
       .eq('id', id);
     if (error) throw new Error(error.message);
