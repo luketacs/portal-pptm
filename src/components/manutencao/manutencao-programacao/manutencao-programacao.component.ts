@@ -1720,9 +1720,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   apoioOrigem = signal<ManutencaoOrdem | null>(null);
   apoioTecnicoNome = signal('');
   apoioTecnicoMatricula = signal('');
-  // Por padrão começa com todos os dias da OS de origem marcados (mesmo comportamento
-  // de antes) — o usuário desmarca só os dias em que não precisa do apoio (ex.: OS de
-  // terça a quinta, apoio só na quarta).
+  // Começa vazio — o usuário marca só o(s) dia(s) em que realmente precisa do apoio
+  // (ex.: OS de segunda a terça, apoio só na terça). Começar com tudo marcado gerava
+  // engano: quem só clicava no dia que precisava (sem notar que os outros já vinham
+  // marcados) acabava confirmando o apoio nos dias errados também.
   apoioDiasSelecionados = signal<string[]>([]);
 
   tecnicosParaApoio = computed(() => {
@@ -1743,7 +1744,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.apoioOrigem.set(o);
     this.apoioTecnicoNome.set('');
     this.apoioTecnicoMatricula.set('');
-    this.apoioDiasSelecionados.set(o.diasPrevistos);
+    // Só pré-marca sozinho quando não há escolha real (1 dia só); com 2+ dias, começa
+    // vazio pra obrigar a escolha consciente (ver comentário em apoioDiasSelecionados).
+    this.apoioDiasSelecionados.set(o.diasPrevistos.length === 1 ? [...o.diasPrevistos] : []);
     this.apoioAberto.set(true);
   }
 
