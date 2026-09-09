@@ -57,14 +57,19 @@ export class MaterialListComponent implements OnInit {
   async loadMaterials(): Promise<void> {
     this.isLoading.set(true);
     this.errorMessage.set('');
-    const { data, error } = await this.materialService.getAllMaterials();
-    if (error) {
-      this.errorMessage.set('Erro ao carregar materiais');
-    } else {
-      this.materials.set(data || []);
-      this.currentPage.set(1);
+    try {
+      const { data, error } = await this.materialService.getAllMaterials();
+      if (error) {
+        this.errorMessage.set('Erro ao carregar materiais');
+      } else {
+        this.materials.set(data || []);
+        this.currentPage.set(1);
+      }
+    } catch (err: unknown) {
+      this.errorMessage.set(err instanceof Error ? err.message : 'Erro ao carregar materiais');
+    } finally {
+      this.isLoading.set(false);
     }
-    this.isLoading.set(false);
   }
 
   /**

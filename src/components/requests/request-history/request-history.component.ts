@@ -44,6 +44,7 @@ export class RequestHistoryComponent implements OnInit, OnDestroy {
     try {
       await this.historyService.addComment(this.requestId, user.id, this.newComment.trim());
       this.newComment = '';
+      this.notificationService.showSuccess('Comentário adicionado.');
     } catch (error) {
       console.error('Error adding comment:', error);
       this.notificationService.showError('Erro ao adicionar comentário.');

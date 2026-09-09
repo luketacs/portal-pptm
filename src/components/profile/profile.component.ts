@@ -4,7 +4,6 @@ import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { AuthService } from '../../services/auth.service';
 import { UserService } from '../../services/user.service';
 import { SupabaseService } from '../../services/supabase.service';
-import { NotificationService } from '../../services/notification.service';
 import { AuditLogService } from '../../services/audit-log.service';
 
 @Component({
@@ -34,7 +33,6 @@ export class ProfileComponent implements OnInit {
     private authService: AuthService,
     private userService: UserService,
     private supabaseService: SupabaseService,
-    private notificationService: NotificationService,
     private auditLogService: AuditLogService
   ) {}
 

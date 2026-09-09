@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { NotificationRealtimeService } from '../../services/notification-realtime.service';
+import { NotificationService } from '../../services/notification.service';
 import { Notification } from '../../models/notification.model';
 
 @Component({
@@ -18,9 +19,10 @@ export class HeaderComponent {
   showNotifications = signal(false);
 
   constructor(
-    private router: Router, 
+    private router: Router,
     public authService: AuthService,
-    public notificationService: NotificationRealtimeService
+    public notificationService: NotificationRealtimeService,
+    private toast: NotificationService
   ) {
     this.currentUser = this.authService.currentUser;
   }
@@ -39,33 +41,34 @@ export class HeaderComponent {
   }
 
   async handleNotificationClick(notification: Notification): Promise<void> {
-    console.log('[Header] Notification clicked');
-    
     // Marcar como lida
     if (!notification.is_read) {
-      console.log('[Header] Marking notification as read:', notification.id);
-      await this.notificationService.markAsRead(notification.id);
-    } else {
-      console.log('[Header] Notification already read');
+      try {
+        await this.notificationService.markAsRead(notification.id);
+      } catch (err: unknown) {
+        this.toast.showError(err instanceof Error ? err.message : 'Erro ao marcar notificação como lida.');
+      }
     }
 
     // Navegar para a solicitação se houver
     if (notification.request_id) {
-      console.log('[Header] Navigating to request:', notification.request_id);
       this.showNotifications.set(false);
       this.router.navigate(['/requests', notification.request_id]);
     }
-    
+
     // Navegar para materiais se houver material_id
     if (notification.material_id) {
-      console.log('[Header] Navigating to materials list');
       this.showNotifications.set(false);
       this.router.navigate(['/materials']);
     }
   }
 
   async markAllAsRead(): Promise<void> {
-    await this.notificationService.markAllAsRead();
+    try {
+      await this.notificationService.markAllAsRead();
+    } catch (err: unknown) {
+      this.toast.showError(err instanceof Error ? err.message : 'Erro ao marcar notificações como lidas.');
+    }
   }
 
   formatNotificationDate(dateString: string): string {

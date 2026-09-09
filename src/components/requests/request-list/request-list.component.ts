@@ -133,6 +133,8 @@ export class RequestListComponent implements OnInit, OnDestroy {
     this.isLoading.set(true);
     try {
       await this.requestService.loadRequests(true);
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao atualizar a lista de solicitações.');
     } finally {
       this.isLoading.set(false);
     }

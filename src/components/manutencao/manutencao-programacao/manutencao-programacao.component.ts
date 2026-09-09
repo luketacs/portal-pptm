@@ -298,6 +298,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         dias: dias.map(d => ({ data: d.data, diaMes: this.diaMesCompacto(d.data), label: d.label })),
         grupos,
       });
+      this.notificationService.showSuccess('Planilha da semana exportada.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao gerar o Excel.');
     } finally {
@@ -625,6 +626,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       await this.manutencaoService.loadApoioCadastros();
     } catch (err) {
       console.error('[ManutencaoProgramacaoComponent] Falha ao carregar cadastros do Apoio:', err);
+      this.notificationService.showError('Não foi possível carregar os cadastros do Apoio (equipes/escala).');
     }
   }
 
@@ -717,6 +719,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.isProcessando.set(true);
     try {
       await this.manutencaoService.excluirFerias(item.id);
+      this.notificationService.showSuccess('Férias removidas.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover férias.');
     } finally {
@@ -737,6 +740,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     try {
       await this.manutencaoService.criarEquipeApoio(this.novaEquipeApoioNome());
       this.novaEquipeApoioNome.set('');
+      this.notificationService.showSuccess('Equipe/empresa adicionada.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao adicionar equipe/empresa.');
     } finally {
@@ -749,6 +753,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.isProcessando.set(true);
     try {
       await this.manutencaoService.excluirEquipeApoio(item.id);
+      this.notificationService.showSuccess('Equipe/empresa removida.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover equipe/empresa.');
     } finally {
@@ -762,6 +767,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     try {
       await this.manutencaoService.criarOperadorEscala(this.novoOperadorNome(), this.novoOperadorEquipe());
       this.novoOperadorNome.set('');
+      this.notificationService.showSuccess('Operador adicionado à escala.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao adicionar operador.');
     } finally {
@@ -774,6 +780,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.isProcessando.set(true);
     try {
       await this.manutencaoService.excluirOperadorEscala(item.id);
+      this.notificationService.showSuccess('Operador removido da escala.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover operador.');
     } finally {
@@ -797,6 +804,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       await this.manutencaoService.criarRecursoEspecial(this.novoRecursoOpcao(), this.novoRecursoEmpresa());
       this.novoRecursoOpcao.set('');
       this.novoRecursoEmpresa.set('');
+      this.notificationService.showSuccess('Recurso adicionado.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao adicionar recurso.');
     } finally {
@@ -809,6 +817,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.isProcessando.set(true);
     try {
       await this.manutencaoService.excluirRecursoEspecial(item.id);
+      this.notificationService.showSuccess('Recurso removido.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover recurso.');
     } finally {
@@ -930,6 +939,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     try {
       if (ativa) await this.manutencaoService.encerrarParadaPlanta();
       else await this.manutencaoService.iniciarParadaPlanta();
+      this.notificationService.showSuccess(ativa
+        ? 'Planta marcada como em operação normal.'
+        : 'Planta marcada como parada.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao atualizar status da planta.');
     } finally {
