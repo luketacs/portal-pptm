@@ -16,7 +16,7 @@ import {
   calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo, encontrarOrdemDuplicada,
   recursosParaEspelho,
 } from '../../../utils/manutencao-regras';
-import { calcularProximaData, periodicidadeEfetiva, preventivaVencendo } from '../../../utils/manutencao-preventivas';
+import { calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva, preventivaVencendo } from '../../../utils/manutencao-preventivas';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 
@@ -1038,6 +1038,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   private readonly hojeInicioSemanaIso = paraIso(segundaFeiraDe(new Date()));
 
+  // Regra combinada: só conta como atrasada de verdade depois de passar a tolerância de
+  // 1/3 do período além da próxima data (ver dataLimiteComTolerancia) — um plano mensal
+  // vencido há 3 dias ainda está dentro do prazo aceitável, não é "atrasado" ainda.
   preventivasAtrasadas = computed(() => {
     const jaProgramados = this.planosJaProgramados();
     const parada = this.plantaParadaAtiva();
@@ -1045,9 +1048,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       .filter(p => !jaProgramados.has(p.id))
       .map(p => {
         const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, parada);
-        return { ...p, proximaData: calcularProximaData(p.ultimaExecucao, efetiva.valor, efetiva.unidade) };
+        const proximaData = calcularProximaData(p.ultimaExecucao, efetiva.valor, efetiva.unidade);
+        const prazoLimite = dataLimiteComTolerancia(proximaData, efetiva.valor, efetiva.unidade);
+        return { ...p, proximaData, prazoLimite };
       })
-      .filter(p => p.proximaData === null || p.proximaData < this.hojeInicioSemanaIso)
+      .filter(p => p.proximaData === null || (p.prazoLimite !== null && p.prazoLimite < this.hojeInicioSemanaIso))
       .sort((a, b) => (a.proximaData ?? '').localeCompare(b.proximaData ?? ''));
   });
 
