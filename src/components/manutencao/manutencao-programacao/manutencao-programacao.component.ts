@@ -1192,14 +1192,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   formRecursosTexto = computed(() => this.formRecursosLista().join(', '));
   // Dias em que os Recursos reconhecidos (técnico/equipamento — ver recursoReconhecido)
   // são espelhados como apoio (ver criarApoioTecnicosSeNecessario/
-  // criarApoioEquipamentosSeNecessario) — independente dos "Dias previstos" da OS
-  // principal, só que sempre um subconjunto deles (ex.: OS de segunda a quarta, apoio
-  // só na terça). Começa vazio — mesma razão do apoioDiasSelecionados do modal "+
-  // Apoio": pré-marcar tudo engana quem só clica no dia que precisa.
+  // criarApoioEquipamentosSeNecessario) — de propósito independente dos "Dias
+  // previstos" da OS principal: tanto pode ser um subconjunto (OS de segunda a quarta,
+  // apoio só na terça) quanto um dia fora do range (andaime montado na segunda pra
+  // atividade que só roda terça/quarta). Começa vazio — mesma razão do
+  // apoioDiasSelecionados do modal "+ Apoio": pré-marcar tudo engana quem só clica no
+  // dia que precisa.
   formApoioDiasSelecionados = signal<string[]>([]);
-  // Só os dias em que a própria OS já está prevista — não faz sentido apoiar num dia em
-  // que a atividade principal nem vai rodar.
-  formApoioDiasDisponiveis = computed(() => this.diasDaSemanaAtual().filter(d => this.formDiasSelecionados().includes(d.data)));
+  // A semana toda, não só os dias da OS principal — um apoio (ex.: andaime) pode
+  // precisar de um dia que a atividade nem cobre (ex.: montagem na segunda pra uma
+  // atividade que só roda terça/quarta).
+  formApoioDiasDisponiveis = computed(() => this.diasDaSemanaAtual());
   // Só mostra/exige o seletor de dias do apoio quando pelo menos um Recurso da lista
   // realmente vai virar uma OS espelhada (nome solto que não bate com ninguém cadastrado
   // não mirra em nada, ver recursoReconhecido — não faz sentido pedir dia pra ele).
@@ -2047,13 +2050,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return mapa;
   });
 
-  // Dias em que os recursos espelhados (equipamento/técnico) entram — o subconjunto
-  // escolhido em "Dias do apoio" (ver formApoioDiasSelecionados), sempre restrito aos
-  // dias em que a OS principal realmente está prevista (evita um dia "solto" caso o
-  // usuário tenha desmarcado algo em "Dias previstos" depois de já ter marcado o apoio).
+  // Dias em que os recursos espelhados (equipamento/técnico) entram — escolhido à parte
+  // em "Dias do apoio" (ver formApoioDiasSelecionados), de propósito independente dos
+  // "Dias previstos" da OS principal: um apoio pode precisar de um dia que a atividade
+  // nem cobre (ex.: andaime montado na segunda pra atividade que só roda terça/quarta).
   private diasParaApoioDeRecursos(): string[] {
-    const diasDaOs = this.formDiasSelecionados();
-    return this.formApoioDiasSelecionados().filter(d => diasDaOs.includes(d));
+    return this.formApoioDiasSelecionados();
   }
 
   // Se o recurso usado for andaime/munck/guindaste, monta automaticamente uma OS
