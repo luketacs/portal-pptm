@@ -10,6 +10,7 @@
 // sabe o andamento de verdade é o SIGMA (ver _sigma-shared.js), por isso a consulta ao
 // cache de OS/apontamentos do SIGMA pra decidir a coluna do Kanban e o % de cumprimento.
 import { createClient } from '@supabase/supabase-js';
+import { createRequire } from 'node:module';
 import { ALLOWED_ORIGINS, normalizarNumeroOs, obterCache } from './_sigma-shared.js';
 
 // O status código do SIGMA (PEND, EXEC, ETEX, CONC...) não é confiável pra dizer se uma
@@ -20,6 +21,36 @@ import { ALLOWED_ORIGINS, normalizarNumeroOs, obterCache } from './_sigma-shared
 // manutencao-programacao.component.ts): a OS só vira "concluída" quando existe um
 // apontamento cuja data cai dentro dos dias em que ela foi programada. O único uso que
 // sobra do status código é excluir OS canceladas (CANC) do quadro.
+//
+// Mas um apontamento "de qualquer um" não basta: se a OS tem 2 técnicos programados e só
+// 1 aponta, a OS não está concluída de verdade (o outro ainda não fez a parte dele). O
+// apontamento do SIGMA só tem a matrícula de quem apontou (campo "Executante"), não o
+// nome — por isso carrega matriculas.json (mesmo arquivo usado pelo seletor de técnico
+// da Programação) pra casar nome ↔ matrícula e conferir o apontamento pessoa a pessoa.
+const require = createRequire(import.meta.url);
+const MATRICULAS = require('../public/matriculas.json');
+
+function normalizarNome(v) {
+  return String(v ?? '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toUpperCase().trim().replace(/\s+/g, ' ');
+}
+const INDICE_MATRICULAS = MATRICULAS.map(c => ({ matricula: String(c.matricula).trim(), nomeNorm: normalizarNome(c.nome) }));
+
+// Acha a matrícula pelo nome digitado na OS — exato primeiro (cobre a imensa maioria,
+// os nomes da Programação batem com matriculas.json a menos de acento); se não achar,
+// tenta um contém o outro (cobre nome parcial tipo só o primeiro nome). `null` = não deu
+// pra identificar a matrícula (nome não cadastrado ou digitado muito diferente) — nesse
+// caso o apontamento dessa pessoa não pode ser confirmado.
+function matricularPorNome(nomeTecnico) {
+  const alvo = normalizarNome(nomeTecnico);
+  if (!alvo) return null;
+  const exato = INDICE_MATRICULAS.find(c => c.nomeNorm === alvo);
+  if (exato) return exato.matricula;
+  if (alvo.length < 4) return null;
+  const parcial = INDICE_MATRICULAS.find(c => c.nomeNorm.includes(alvo) || alvo.includes(c.nomeNorm));
+  return parcial ? parcial.matricula : null;
+}
 
 // Data de "hoje" no fuso de Pecém/CE (America/Fortaleza, sem horário de verão) — a
 // Vercel roda em UTC, então "new Date()" sozinho vira o dia errado à noite.
@@ -118,49 +149,56 @@ export default async function handler(req, res) {
 
     // A mesma OS pode aparecer em várias linhas (apoio/vários técnicos na mesma
     // atividade, ver criarApoioTecnicosSeNecessario/criarApoioEquipamentosSeNecessario
-    // na Programação) — o número da OS é o mesmo, então agrupa numa única linha do
-    // quadro, com a lista de técnicos, em vez de repetir o card por pessoa. Sem número
-    // de OS não dá pra saber com certeza que é "a mesma atividade", então cada linha
-    // vira seu próprio card.
-    const porColunaEChave = { pendente: new Map(), emExecucao: new Map(), concluida: new Map() };
+    // na Programação) — o número da OS é o mesmo, então agrupa ANTES de decidir a
+    // coluna (uma OS só pode estar numa coluna, não dá pra ela "ser" duas linhas em
+    // colunas diferentes). Sem número de OS não dá pra saber com certeza que é "a mesma
+    // atividade", então cada linha vira seu próprio grupo.
+    const gruposPorChave = new Map();
     let semOsIdx = 0;
     for (const o of data) {
-      const chaveOs = o.numero_os ? normalizarNumeroOs(o.numero_os) : null;
+      const chave = o.numero_os ? normalizarNumeroOs(o.numero_os) : `sem-os-${semOsIdx++}`;
+      const lista = gruposPorChave.get(chave);
+      if (lista) lista.push(o); else gruposPorChave.set(chave, [o]);
+    }
+
+    const porColunaEChave = { pendente: new Map(), emExecucao: new Map(), concluida: new Map() };
+    for (const [chave, linhas] of gruposPorChave) {
+      const chaveOs = linhas[0].numero_os ? normalizarNumeroOs(linhas[0].numero_os) : null;
       const info = chaveOs ? osPorNumero.get(chaveOs) : null;
       const statusCodigo = (info?.statusCodigo || '').toUpperCase();
       if (statusCodigo === 'CANC') continue;
 
-      // "Concluída" = existe apontamento (o técnico bateu o ponto) dentro dos dias em
-      // que a OS foi programada — mesmo critério de statusExecucao() na Programação, não
-      // o status bruto do SIGMA. Sem dia previsto cadastrado (raro), aceita qualquer dia
-      // útil da semana atual, igual ao fallback de lá. Se ainda não tem apontamento que
-      // bata: "Em execução" enquanto o dia programado é HOJE, senão volta pra "Pendente"
-      // (dia já passou e ninguém apontou — não fica preso em execução pra sempre).
+      // "Concluída" só quando TODOS os técnicos programados pra essa OS apontaram —
+      // uma OS com 2 pessoas onde só 1 apontou não está concluída de verdade, a outra
+      // parte ainda falta. Cada técnico é conferido com a matrícula DELE (via
+      // matricularPorNome) contra o campo "Executante" do apontamento — não basta
+      // "alguém" ter apontado na OS. Sem dia previsto cadastrado (raro), aceita
+      // qualquer dia útil da semana atual, igual ao fallback do statusExecucao() na
+      // Programação. Sem apontamento batendo pra todo mundo: "Em execução" enquanto o
+      // dia programado inclui HOJE, senão volta pra "Pendente".
       const apontamentosDaOs = chaveOs ? apontamentosPorOs.get(chaveOs) : null;
-      const diasConsiderados = o.dias_previstos && o.dias_previstos.length > 0 ? o.dias_previstos : diasUteisSemana;
-      const executada = !!apontamentosDaOs && apontamentosDaOs.some(a => diasConsiderados.includes(a.data));
+      let algumDiaEHoje = false;
+      const todosApontaram = linhas.every(linha => {
+        const diasPrevistos = linha.dias_previstos && linha.dias_previstos.length > 0 ? linha.dias_previstos : diasUteisSemana;
+        if (diasPrevistos.includes(hoje)) algumDiaEHoje = true;
+        const matricula = matricularPorNome(linha.tecnico_nome);
+        if (!matricula || !apontamentosDaOs) return false;
+        return apontamentosDaOs.some(a => a.executante === matricula && diasPrevistos.includes(a.data));
+      });
 
       let coluna;
-      if (executada) coluna = 'concluida';
-      else if (diasConsiderados.includes(hoje)) coluna = 'emExecucao';
+      if (todosApontaram) coluna = 'concluida';
+      else if (algumDiaEHoje) coluna = 'emExecucao';
       else coluna = 'pendente';
 
-      const chave = chaveOs ?? `sem-os-${semOsIdx++}`;
-
-      const mapa = porColunaEChave[coluna];
-      const existente = mapa.get(chave);
-      if (existente) {
-        existente.tecnicos.push({ nome: o.tecnico_nome, duracaoHoras: o.duracao_horas });
-      } else {
-        mapa.set(chave, {
-          numeroOs: o.numero_os,
-          descricao: o.descricao,
-          equipamento: o.equipamento,
-          area: o.area,
-          loto: o.loto,
-          tecnicos: [{ nome: o.tecnico_nome, duracaoHoras: o.duracao_horas }],
-        });
-      }
+      porColunaEChave[coluna].set(chave, {
+        numeroOs: linhas[0].numero_os,
+        descricao: linhas[0].descricao,
+        equipamento: linhas[0].equipamento,
+        area: linhas[0].area,
+        loto: linhas[0].loto,
+        tecnicos: linhas.map(l => ({ nome: l.tecnico_nome, duracaoHoras: l.duracao_horas })),
+      });
     }
 
     const colunas = {
@@ -202,11 +240,10 @@ export default async function handler(req, res) {
       if (erroProgramados) throw new Error(erroProgramados.message);
       if (erroParada) throw new Error(erroParada.message);
 
-      // % Cumprimento da programação da semana — mesma lógica de atendimentoProgramacao
-      // na Programação: agrupa por número de OS (apoio não conta a mesma OS 2x),
-      // considera executada se algum apontamento do SIGMA caiu dentro dos dias
-      // previstos (união entre as linhas do grupo, ou a semana toda se não tiver dia
-      // marcado).
+      // % Cumprimento da programação da semana — mesmo critério da coluna "Concluída"
+      // do quadro (ver acima): agrupa por número de OS (apoio não conta a mesma OS 2x)
+      // e só considera executada quando TODOS os técnicos da OS têm apontamento deles
+      // batendo com o dia previsto — não "algum apontamento qualquer" na OS.
       const porOs = new Map();
       let semOsIdx2 = 0;
       for (const o of ordensDaSemana) {
@@ -220,12 +257,12 @@ export default async function handler(req, res) {
         const apontamentosDaOs = apontamentosPorOs.get(chave);
         if (!apontamentosDaOs) continue;
         rastreaveis++;
-        const diasUniao = new Set();
-        for (const o of linhas) {
+        const todosApontaram = linhas.every(o => {
           const dias = (o.dias_previstos && o.dias_previstos.length > 0) ? o.dias_previstos : diasUteisSemana;
-          for (const dd of dias) diasUniao.add(dd);
-        }
-        if (apontamentosDaOs.some(a => diasUniao.has(a.data))) executadas++;
+          const matricula = matricularPorNome(o.tecnico_nome);
+          return !!matricula && apontamentosDaOs.some(a => a.executante === matricula && dias.includes(a.data));
+        });
+        if (todosApontaram) executadas++;
       }
       indicadores.cumprimentoProgramacao = {
         executadas, rastreaveis,

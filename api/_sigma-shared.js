@@ -23,7 +23,7 @@ export const OS_COL = {
 };
 // Export "apontamentos" (sem aspas):
 export const APONT_COL = {
-  areaManutencao: 6, statusOperacao: 8, data: 9, osProtheus: 20,
+  executante: 4, areaManutencao: 6, statusOperacao: 8, data: 9, osProtheus: 20,
 };
 
 export const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
@@ -131,7 +131,14 @@ export async function carregarDados() {
     const data = (row[APONT_COL.data] || '').trim();
     if (!data) continue;
     const lista = apontamentosPorOs.get(numeroOs) ?? [];
-    lista.push({ data, status: (row[APONT_COL.statusOperacao] || '').trim() });
+    lista.push({
+      data,
+      status: (row[APONT_COL.statusOperacao] || '').trim(),
+      // Matrícula de quem apontou (coluna "Executante" do export) — precisa pra saber
+      // SE FOI AQUELA PESSOA especificamente que apontou, não só "alguém" na OS (ver
+      // uso em kanban-atividades-publico.js).
+      executante: (row[APONT_COL.executante] || '').trim(),
+    });
     apontamentosPorOs.set(numeroOs, lista);
   }
 
