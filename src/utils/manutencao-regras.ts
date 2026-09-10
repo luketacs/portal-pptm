@@ -6,6 +6,11 @@
 import { FeriasTecnico, ManutencaoOrdem } from '../models/manutencao-programacao.model';
 
 export const HORAS_EXAME_MEDICO = 3.5;
+// Treinamento desconta por dia (customizável por lançamento, ver duracaoHoras) — sem
+// valor informado (lançamentos antigos, de antes desse campo existir pro tipo
+// treinamento, ou quem não preencheu), assume "dia todo".
+export const HORAS_TREINAMENTO_DIA_TODO = 6.5;
+export const HORAS_TREINAMENTO_MEIO_PERIODO = 3.5;
 
 export interface DiaSemana {
   data: string;
@@ -17,15 +22,21 @@ export interface CalcularCapacidadeSemanaParams {
   disponibilidadePorDia: Map<string, number>;
   diasFolga: Set<string>;
   diasExameMedico: Set<string>;
+  // Dia -> horas de treinamento a descontar naquele dia (soma se houver mais de um
+  // lançamento no mesmo dia). Opcional pra não quebrar quem já chama essa função sem
+  // treinamento pra considerar.
+  horasTreinamentoPorDia?: Map<string, number>;
   feriasIntervalo: { dataInicio: string; dataFim: string } | null;
 }
 
 // Soma a disponibilidade base nos dias úteis (SEG-SEX — fim de semana é DSR, ninguém
-// trabalha por padrão). Folga e dias dentro do período de férias tiram o dia inteiro
-// da conta; exame médico (ASO) só desconta HORAS_EXAME_MEDICO daquele dia (o exame não
-// toma o dia todo); qualquer outro compromisso (treinamento/reunião) não desconta nada.
+// trabalha por padrão). Folga e dias dentro do período de férias tiram o dia inteiro da
+// conta; exame médico (ASO) só desconta HORAS_EXAME_MEDICO daquele dia (o exame não toma
+// o dia todo); treinamento desconta o valor de horasTreinamentoPorDia daquele dia
+// (6,5 = dia todo, 3,5 = meio período, ou outro valor customizado no lançamento);
+// reunião não desconta nada (não bloqueia o resto da agenda do dia).
 export function calcularCapacidadeSemana(params: CalcularCapacidadeSemanaParams): number {
-  const { dias, disponibilidadePorDia, diasFolga, diasExameMedico, feriasIntervalo } = params;
+  const { dias, disponibilidadePorDia, diasFolga, diasExameMedico, horasTreinamentoPorDia, feriasIntervalo } = params;
   let total = 0;
   for (const dia of dias) {
     if (dia.label === 'SAB' || dia.label === 'DOM') continue;
@@ -33,6 +44,8 @@ export function calcularCapacidadeSemana(params: CalcularCapacidadeSemanaParams)
     if (feriasIntervalo && dia.data >= feriasIntervalo.dataInicio && dia.data <= feriasIntervalo.dataFim) continue;
     let disponivel = disponibilidadePorDia.get(dia.data) ?? 0;
     if (diasExameMedico.has(dia.data)) disponivel = Math.max(0, disponivel - HORAS_EXAME_MEDICO);
+    const horasTreinamento = horasTreinamentoPorDia?.get(dia.data);
+    if (horasTreinamento) disponivel = Math.max(0, disponivel - horasTreinamento);
     total += disponivel;
   }
   return parseFloat(total.toFixed(2));

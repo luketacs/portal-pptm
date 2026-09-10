@@ -1,6 +1,7 @@
 import { ManutencaoOrdem, FeriasTecnico } from '../models/manutencao-programacao.model';
 import {
-  HORAS_EXAME_MEDICO, calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo,
+  HORAS_EXAME_MEDICO, HORAS_TREINAMENTO_DIA_TODO, HORAS_TREINAMENTO_MEIO_PERIODO,
+  calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo,
   encontrarOrdemDuplicada, recursosParaEspelho,
 } from './manutencao-regras';
 
@@ -83,12 +84,57 @@ describe('calcularCapacidadeSemana', () => {
     expect(total).toBe(26);
   });
 
-  it('treinamento e reunião não descontam nada da capacidade (só folga/férias tiram o dia, exame desconta parcial)', () => {
+  it('reunião não desconta nada da capacidade (não bloqueia o resto da agenda do dia)', () => {
     const disponibilidadePorDia = new Map(DIAS_SEMANA_37.map(d => [d.data, 8]));
     const total = calcularCapacidadeSemana({
       dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), diasExameMedico: new Set(), feriasIntervalo: null,
     });
     expect(total).toBe(40);
+  });
+
+  it('sem horasTreinamentoPorDia (não informado), treinamento não desconta nada', () => {
+    const disponibilidadePorDia = new Map(DIAS_SEMANA_37.map(d => [d.data, 8]));
+    const total = calcularCapacidadeSemana({
+      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), diasExameMedico: new Set(), feriasIntervalo: null,
+    });
+    expect(total).toBe(40);
+  });
+
+  it('reproduz o caso do Moacir: 3 dias de treinamento em dia todo (6,5h), 19,5h descontadas', () => {
+    const disponibilidadePorDia = new Map(DIAS_SEMANA_37.map(d => [d.data, 6.5]));
+    const horasTreinamentoPorDia = new Map([
+      ['2026-09-07', HORAS_TREINAMENTO_DIA_TODO],
+      ['2026-09-08', HORAS_TREINAMENTO_DIA_TODO],
+      ['2026-09-09', HORAS_TREINAMENTO_DIA_TODO],
+    ]);
+    const total = calcularCapacidadeSemana({
+      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), diasExameMedico: new Set(),
+      horasTreinamentoPorDia, feriasIntervalo: null,
+    });
+    // SEG/TER/QUA saem inteiras (6,5h de treinamento = toda a disponibilidade do dia),
+    // sobra só QUI/SEX normais: 2 x 6,5 = 13.
+    expect(total).toBe(13);
+  });
+
+  it('treinamento de meio período (3,5h) desconta só parte do dia', () => {
+    const disponibilidadePorDia = new Map(DIAS_SEMANA_37.map(d => [d.data, 8]));
+    const total = calcularCapacidadeSemana({
+      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), diasExameMedico: new Set(),
+      horasTreinamentoPorDia: new Map([['2026-09-09', HORAS_TREINAMENTO_MEIO_PERIODO]]),
+      feriasIntervalo: null,
+    });
+    expect(total).toBe(40 - HORAS_TREINAMENTO_MEIO_PERIODO);
+  });
+
+  it('não deixa a disponibilidade do dia do treinamento ficar negativa', () => {
+    const disponibilidadePorDia = new Map(DIAS_SEMANA_37.map(d => [d.data, 2]));
+    const total = calcularCapacidadeSemana({
+      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), diasExameMedico: new Set(),
+      horasTreinamentoPorDia: new Map([['2026-09-09', HORAS_TREINAMENTO_DIA_TODO]]),
+      feriasIntervalo: null,
+    });
+    // 4 dias úteis normais (2h cada) + quarta com treinamento afundando em 0, não em -4.5
+    expect(total).toBe(4 * 2 + 0);
   });
 });
 

@@ -14,8 +14,8 @@ import {
 } from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, TURNO_LABEL, turnoNoDia } from '../../../utils/escala-apoio';
 import {
-  calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo, encontrarOrdemDuplicada,
-  recursosParaEspelho,
+  HORAS_TREINAMENTO_DIA_TODO, calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo,
+  encontrarOrdemDuplicada, recursosParaEspelho,
 } from '../../../utils/manutencao-regras';
 import { calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva, periodicidadeEmDias, preventivaVencendo } from '../../../utils/manutencao-preventivas';
 
@@ -507,18 +507,30 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // do Relatório Mensal PCM) nos dias ÚTEIS da semana (SEG-SEX — sábado/domingo é DSR,
   // ninguém trabalha por padrão). Folga/feriado e dias dentro do período de férias
   // tiram o dia inteiro da conta; exame médico (ASO) só desconta HORAS_EXAME_MEDICO
-  // daquele dia (o exame não toma o dia todo); treinamento/reunião não descontam nada.
-  // `null` quando o técnico não está no matriculas.json (não dá pra saber a
-  // disponibilidade dele). Matemática pura em calcularCapacidadeSemana (testada).
+  // daquele dia (o exame não toma o dia todo); treinamento desconta por dia o valor
+  // preenchido no lançamento (duracaoHoras — 6,5 = dia todo, 3,5 = meio período), ou
+  // HORAS_TREINAMENTO_DIA_TODO se não foi preenchido (lançamento antigo); reunião não
+  // desconta nada. `null` quando o técnico não está no matriculas.json (não dá pra saber
+  // a disponibilidade dele). Matemática pura em calcularCapacidadeSemana (testada).
   private capacidadeSemana(tecnicoNome: string, ordensDoTecnico: ManutencaoOrdem[], dias: { data: string; label: string }[]): number | null {
     const colaborador = this.apontamentosService.colaboradores().find(c => c.nome === tecnicoNome);
     if (!colaborador) return null;
+
+    const horasTreinamentoPorDia = new Map<string, number>();
+    for (const o of ordensDoTecnico) {
+      if (o.tipo !== 'treinamento') continue;
+      const horas = o.duracaoHoras ?? HORAS_TREINAMENTO_DIA_TODO;
+      for (const dia of o.diasPrevistos) {
+        horasTreinamentoPorDia.set(dia, (horasTreinamentoPorDia.get(dia) ?? 0) + horas);
+      }
+    }
 
     return calcularCapacidadeSemana({
       dias,
       disponibilidadePorDia: new Map(dias.map(d => [d.data, this.apontamentosService.disponibilidadeNoDia(colaborador, d.data)])),
       diasFolga: new Set(ordensDoTecnico.filter(o => o.tipo === 'folga').flatMap(o => o.diasPrevistos)),
       diasExameMedico: new Set(ordensDoTecnico.filter(o => o.tipo === 'exame_medico').flatMap(o => o.diasPrevistos)),
+      horasTreinamentoPorDia,
       feriasIntervalo: this.feriasNoIntervalo(tecnicoNome, dias.map(d => d.data)),
     });
   }
@@ -2111,6 +2123,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       const tipo = this.formTipo();
       const ehOrdem = tipo === 'ordem';
       const ehReuniao = tipo === 'reuniao';
+      // Treinamento também usa duracaoHoras — quantas horas descontar da capacidade
+      // por dia previsto (6,5 = dia todo, 3,5 = meio período), ver capacidadeSemana().
+      const ehTreinamento = tipo === 'treinamento';
       const idEdicao = this.formIdEdicao();
       if (idEdicao) {
         await this.manutencaoService.editarOrdem(idEdicao, {
@@ -2123,7 +2138,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           recursos: ehOrdem ? (this.formRecursosTexto() || null) : null,
           loto: ehOrdem ? (this.formLoto().trim() || null) : null,
           areaAtuacao: ehOrdem ? (this.formAreaAtuacao().trim() || null) : null,
-          duracaoHoras: ehOrdem ? this.formDuracaoHoras() : null,
+          duracaoHoras: (ehOrdem || ehTreinamento) ? this.formDuracaoHoras() : null,
           tipoServico: ehOrdem ? (this.formTipoServico().trim() || null) : null,
           tecnicoNome: this.formTecnicoNome(),
           tecnicoMatricula: this.formTecnicoMatricula() || null,
@@ -2157,7 +2172,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           recursos: ehOrdem ? (this.formRecursosTexto() || undefined) : undefined,
           loto: ehOrdem ? (this.formLoto().trim() || undefined) : undefined,
           areaAtuacao: ehOrdem ? (this.formAreaAtuacao().trim() || undefined) : undefined,
-          duracaoHoras: ehOrdem ? (this.formDuracaoHoras() ?? undefined) : undefined,
+          duracaoHoras: (ehOrdem || ehTreinamento) ? (this.formDuracaoHoras() ?? undefined) : undefined,
           tipoServico: ehOrdem ? (this.formTipoServico().trim() || undefined) : undefined,
           tecnicoNome: this.formTecnicoNome(),
           tecnicoMatricula: this.formTecnicoMatricula() || undefined,
