@@ -148,7 +148,7 @@
               [style.grid-template-rows]="densidadeEmExecucao().preencher ? ('repeat(' + densidadeEmExecucao().rows + ',minmax(0,1fr))') : null">
               @for (entry of emExecucaoAgrupada(); track entry.item.numeroOs + entry.item.descricao + entry.item.equipamento) {
                 @let item = entry.item;
-                <div class="border border-slate-200 rounded-lg overflow-hidden flex flex-col" [class]="densidadeEmExecucao().cardPadding + ' ' + (entry.grupoPar ? 'bg-white' : 'bg-slate-50')">
+                <div class="border border-slate-200 rounded-lg overflow-hidden flex flex-col" [class]="densidadeEmExecucao().cardPadding + ' ' + (entry.grupoPar ? 'bg-white' : 'bg-slate-100')">
                   <div class="flex items-center justify-between gap-1">
                     <span class="font-bold text-gray-800 truncate" [class]="densidadeEmExecucao().tituloClasse">{{ item.equipamento || 'Sem equipamento' }}</span>
                     @if (item.numeroOs) {
