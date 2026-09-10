@@ -12,19 +12,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { ALLOWED_ORIGINS, normalizarNumeroOs, obterCache } from './_sigma-shared.js';
 
-// Mapeamento do Status Código do SIGMA pra coluna do Kanban — melhor entendimento dos
-// códigos observados (PEND, CANC, EXEC, ETEX, EXPA, NEXE, ETNE, CONC, AREC); sem OS ou
-// sem status ainda cai em "pendente". CANC (cancelada) não entra no quadro.
-// Regra combinada com o usuário: como o SIGMA raramente marca EXEC/ETEX de verdade (na
-// prática quase tudo fica em PEND mesmo já em andamento), o padrão pra qualquer OS que o
-// SIGMA já conhece (tem status código, seja qual for) é "Em execução" — só cai em
-// "Pendente" quem o SIGMA nem tem registro ainda (numero_os sem match nenhum, ou "sem
-// OS"), que é o único caso em que realmente não dá pra dizer que algo começou.
-const STATUS_PARA_COLUNA = {
-  PEND: 'emExecucao', EXPA: 'emExecucao', NEXE: 'emExecucao', ETNE: 'emExecucao',
-  EXEC: 'emExecucao', ETEX: 'emExecucao',
-  CONC: 'concluida', AREC: 'concluida',
-};
+// Status código do SIGMA que realmente significa "concluída" (CONC, AREC) — esses dois
+// valem em qualquer dia, independente da programação. "CANC" (cancelada) não entra no
+// quadro. Os demais códigos (PEND, EXEC, ETEX, EXPA, NEXE, ETNE) o SIGMA raramente marca
+// de forma confiável (na prática quase tudo fica em PEND mesmo já em andamento) — por
+// isso não usamos o código pra decidir "em execução" vs "pendente", só pra saber se a OS
+// já tem algum sinal de vida no SIGMA (ver `coluna` abaixo).
+const STATUS_CONCLUIDA = new Set(['CONC', 'AREC']);
 
 // Data de "hoje" no fuso de Pecém/CE (America/Fortaleza, sem horário de verão) — a
 // Vercel roda em UTC, então "new Date()" sozinho vira o dia errado à noite.
@@ -103,7 +97,7 @@ export default async function handler(req, res) {
 
     const { data, error } = await supabase
       .from('manutencao_programacao')
-      .select('numero_os, descricao, equipamento, tecnico_nome, area, duracao_horas, loto')
+      .select('numero_os, descricao, equipamento, tecnico_nome, area, duracao_horas, loto, dias_previstos')
       .eq('tipo', 'ordem')
       .in('area', ['ELETRICA', 'MECANICA'])
       .overlaps('dias_previstos', diasAcumulados);
@@ -133,7 +127,20 @@ export default async function handler(req, res) {
       const info = o.numero_os ? osPorNumero.get(normalizarNumeroOs(o.numero_os)) : null;
       const statusCodigo = (info?.statusCodigo || '').toUpperCase();
       if (statusCodigo === 'CANC') continue;
-      const coluna = info ? (STATUS_PARA_COLUNA[statusCodigo] || 'emExecucao') : 'pendente';
+
+      // "Em execução" só pra quem está programado pra HOJE (e o SIGMA já tem algum
+      // sinal de vida da OS). Se o dia programado já passou (ontem, anteontem...) e a OS
+      // não concluiu, ela volta pra "Pendente" — não fica presa em "Em execução" pra
+      // sempre só porque o SIGMA abriu um registro PEND uma vez. Sem dia previsto
+      // cadastrado (raro), trata como "de hoje" por falta de outro sinal.
+      let coluna;
+      if (STATUS_CONCLUIDA.has(statusCodigo)) {
+        coluna = 'concluida';
+      } else {
+        const diasPrevistos = o.dias_previstos && o.dias_previstos.length > 0 ? o.dias_previstos : null;
+        const programadaHoje = !diasPrevistos || diasPrevistos.includes(hoje);
+        coluna = programadaHoje && info ? 'emExecucao' : 'pendente';
+      }
       const chave = o.numero_os ? normalizarNumeroOs(o.numero_os) : `sem-os-${semOsIdx++}`;
 
       const mapa = porColunaEChave[coluna];
