@@ -190,6 +190,17 @@ export class KanbanOficinaPublicoComponent implements OnInit, OnDestroy {
   densidadeEmExecucao = computed(() => calcularDensidade(this.colunas().emExecucao.length));
   densidadeConcluida = computed(() => calcularDensidade(this.colunas().concluida.length));
 
+  // "Em execução" é a coluna mais cheia (qualquer OS com registro no SIGMA cai aqui,
+  // ver api/kanban-atividades-publico.js) — agrupar por equipamento (em vez da ordem
+  // crua que vem da API) deixa fácil achar as ordens de uma mesma máquina em vez delas
+  // ficarem espalhadas pela grade.
+  emExecucaoOrdenada = computed(() =>
+    [...this.colunas().emExecucao].sort((a, b) =>
+      (a.equipamento || '').localeCompare(b.equipamento || '', 'pt-BR') ||
+      (a.numeroOs || '').localeCompare(b.numeroOs || '', 'pt-BR')
+    )
+  );
+
   // Maior HH por colaborador/área da semana — usado só pra dimensionar a barrinha das
   // listas da faixa de indicadores (largura relativa ao maior valor, sem depender de um
   // teto fixo que poderia cortar a barra ou deixá-la minúscula demais).
