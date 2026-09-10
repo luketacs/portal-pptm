@@ -1,9 +1,10 @@
 // Endpoint público (sem login) pro Kanban da Oficina — pensado pra ficar aberto numa TV
-// da Elétrica/Mecânica. Só leitura: atividades (tipo='ordem') do dia, Elétrica e
-// Mecânica, agrupadas por status, mais os indicadores da semana (painel lateral). O RLS
-// de manutencao_programacao continua exigindo sessão (auth.uid() IS NOT NULL), então
-// quem decide o que sai daqui é esta function, com a service_role key (só no servidor,
-// nunca chega no cliente) — mesmo padrão de api/fundo-fixo-public-request.js.
+// da Elétrica/Mecânica. Só leitura: atividades (tipo='ordem') acumuladas de segunda até
+// hoje (não só hoje — uma ordem de terça sem executar continua aparecendo na quinta),
+// Elétrica e Mecânica, agrupadas por status, mais os indicadores da semana (faixa no
+// topo). O RLS de manutencao_programacao continua exigindo sessão (auth.uid() IS NOT
+// NULL), então quem decide o que sai daqui é esta function, com a service_role key (só
+// no servidor, nunca chega no cliente) — mesmo padrão de api/fundo-fixo-public-request.js.
 //
 // A coluna `status` da tabela é sempre 'PEND' pra qualquer OS criada pelo Portal — quem
 // sabe o andamento de verdade é o SIGMA (ver _sigma-shared.js), por isso a consulta ao
@@ -46,6 +47,17 @@ function somarDias(dataIso, n) {
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
+// Dias de segunda até hoje (inclusive) — não a semana toda: uma ordem de sexta-feira
+// ainda não "atrasou", só as de dias que já passaram (ou hoje) contam pro quadro.
+function diasDeSegundaAteHoje(segundaIso, hojeIso) {
+  const dias = [];
+  for (let n = 0; n < 8; n++) {
+    const dia = somarDias(segundaIso, n);
+    if (dia > hojeIso) break;
+    dias.push(dia);
+  }
+  return dias;
+}
 
 // Mesmas regras de src/utils/manutencao-preventivas.ts, portadas pra cá porque essa
 // function roda isolada (não importa código Angular) — ver "próxima data" dos planos
@@ -84,13 +96,17 @@ export default async function handler(req, res) {
     const segunda = segundaFeiraIso(hoje);
     const sexta = somarDias(segunda, 4);
     const diasUteisSemana = [0, 1, 2, 3, 4].map(n => somarDias(segunda, n));
+    // O quadro mostra o acumulado da semana até hoje (não só hoje) — pedido do usuário:
+    // se uma ordem de terça ainda não foi executada, ela continua aparecendo na
+    // quinta, em vez de sumir do quadro assim que o dia dela passa.
+    const diasAcumulados = diasDeSegundaAteHoje(segunda, hoje);
 
     const { data, error } = await supabase
       .from('manutencao_programacao')
       .select('numero_os, descricao, equipamento, tecnico_nome, area, duracao_horas, loto')
       .eq('tipo', 'ordem')
       .in('area', ['ELETRICA', 'MECANICA'])
-      .contains('dias_previstos', [hoje]);
+      .overlaps('dias_previstos', diasAcumulados);
     if (error) return res.status(500).json({ success: false, error: error.message });
 
     let osPorNumero = new Map();

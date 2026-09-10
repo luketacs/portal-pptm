@@ -17,6 +17,69 @@
     </div>
   </div>
 
+  <!-- Faixa de indicadores da semana (segunda a domingo) — horizontal, no topo, pra
+       deixar a largura toda livre pras 3 colunas de status abaixo. -->
+  <div class="flex-shrink-0 grid grid-cols-7 gap-2 h-24">
+    <div class="bg-white rounded-xl shadow flex flex-col items-center justify-center px-1">
+      <p class="text-2xl font-bold text-blue-600">{{ indicadores().cumprimentoProgramacao?.percentual ?? '—' }}{{ indicadores().cumprimentoProgramacao ? '%' : '' }}</p>
+      <p class="text-[10px] text-gray-500 text-center leading-tight mt-0.5">Cumprimento da programação</p>
+    </div>
+    <div class="bg-white rounded-xl shadow flex flex-col items-center justify-center px-1">
+      <p class="text-2xl font-bold text-marca-600">{{ indicadores().atendimentoPlanos?.percentual ?? '—' }}{{ indicadores().atendimentoPlanos ? '%' : '' }}</p>
+      <p class="text-[10px] text-gray-500 text-center leading-tight mt-0.5">Atendimento aos planos</p>
+    </div>
+
+    <div class="bg-white rounded-xl shadow p-2 overflow-hidden flex flex-col">
+      <p class="text-[9px] font-bold text-gray-500 uppercase tracking-wide flex-shrink-0">HH por área</p>
+      <div class="flex-1 min-h-0 flex flex-col justify-center gap-1">
+        @for (h of indicadores().hhPorArea; track h.area) {
+          <div>
+            <div class="flex items-center justify-between text-[11px]">
+              <span class="font-semibold text-gray-700">{{ h.area === 'ELETRICA' ? 'Elétrica' : 'Mecânica' }}</span>
+              <span class="font-bold text-gray-600">{{ h.horas }}h</span>
+            </div>
+            <div class="h-1 bg-slate-100 rounded-full overflow-hidden">
+              <div class="h-full bg-blue-600 rounded-full" [style.width.%]="(h.horas / maiorHhArea()) * 100"></div>
+            </div>
+          </div>
+        }
+        @if (indicadores().hhPorArea.length === 0) {
+          <p class="text-[10px] text-gray-400">Sem dados ainda.</p>
+        }
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow p-2 overflow-hidden flex flex-col col-span-2">
+      <p class="text-[9px] font-bold text-gray-500 uppercase tracking-wide flex-shrink-0">HH por colaborador — semana</p>
+      <div class="flex-1 min-h-0 grid grid-cols-2 gap-x-3 content-center">
+        @for (h of topColaboradores(); track h.nome) {
+          <div class="flex items-center justify-between text-[11px] gap-1">
+            <span class="font-semibold text-gray-700 truncate">{{ h.nome }}</span>
+            <span class="font-bold text-gray-600 flex-shrink-0">{{ h.horas }}h</span>
+          </div>
+        }
+        @if (topColaboradores().length === 0) {
+          <p class="text-[10px] text-gray-400">Sem dados ainda.</p>
+        }
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow p-2 overflow-hidden flex flex-col col-span-2">
+      <p class="text-[9px] font-bold text-gray-500 uppercase tracking-wide flex-shrink-0">Mais corretivas — semana</p>
+      <div class="flex-1 min-h-0 grid grid-cols-2 gap-x-3 content-center">
+        @for (e of topCorretivas(); track e.equipamento) {
+          <div class="flex items-center justify-between text-[11px] gap-1">
+            <span class="font-semibold text-gray-700 truncate">{{ e.equipamento }}</span>
+            <span class="font-bold text-gray-600 flex-shrink-0">{{ e.quantidade }}</span>
+          </div>
+        }
+        @if (topCorretivas().length === 0) {
+          <p class="text-[10px] text-gray-400">Nenhuma corretiva essa semana.</p>
+        }
+      </div>
+    </div>
+  </div>
+
   @if (erro() && carregando()) {
     <div class="flex-1 min-h-0 bg-white rounded-xl shadow flex items-center justify-center text-gray-500 text-xl">Carregando quadro...</div>
   } @else {
@@ -24,12 +87,11 @@
       <div class="flex-shrink-0 bg-red-50 border border-red-200 text-red-700 rounded-xl p-2 text-sm">{{ erro() }} — tentando de novo automaticamente.</div>
     }
 
-    <!-- Corpo: colunas de status (esquerda) + painel de indicadores da semana (direita) —
-         tudo com altura travada no viewport (h-screen no container pai), nada aqui pode
-         rolar: é pra ficar aberto numa TV sem ninguém mexendo. -->
-    <div class="flex-1 min-h-0 flex gap-3">
-      <div class="flex-1 min-h-0 min-w-0 grid grid-cols-3 gap-3">
-        <!-- Pendente -->
+    <!-- Colunas de status — tudo com altura travada no viewport (fixed inset-0 no
+         container pai), nada aqui pode rolar: é pra ficar aberto numa TV sem ninguém
+         mexendo. -->
+    <div class="flex-1 min-h-0 min-w-0 grid grid-cols-3 gap-3">
+      <!-- Pendente -->
         <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col min-h-0 min-w-0">
           <div class="bg-blue-600 text-white px-3 py-2 flex items-center justify-between flex-shrink-0">
             <h2 class="text-lg font-bold">Pendente</h2>
@@ -167,80 +229,5 @@
           </div>
         </div>
       </div>
-
-      <!-- Painel de indicadores da semana -->
-      <div class="w-72 flex-shrink-0 min-h-0 flex flex-col gap-2">
-        <div class="grid grid-cols-2 gap-2 flex-shrink-0">
-          <div class="bg-white rounded-xl shadow p-2.5 flex flex-col items-center justify-center">
-            <p class="text-2xl font-bold text-blue-600">{{ indicadores().cumprimentoProgramacao?.percentual ?? '—' }}{{ indicadores().cumprimentoProgramacao ? '%' : '' }}</p>
-            <p class="text-[10px] text-gray-500 text-center leading-tight mt-0.5">Cumprimento da programação</p>
-          </div>
-          <div class="bg-white rounded-xl shadow p-2.5 flex flex-col items-center justify-center">
-            <p class="text-2xl font-bold text-marca-600">{{ indicadores().atendimentoPlanos?.percentual ?? '—' }}{{ indicadores().atendimentoPlanos ? '%' : '' }}</p>
-            <p class="text-[10px] text-gray-500 text-center leading-tight mt-0.5">Atendimento aos planos</p>
-          </div>
-        </div>
-
-        <div class="bg-white rounded-xl shadow p-2.5 flex-shrink-0">
-          <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">HH por área — semana</p>
-          <div class="space-y-1.5">
-            @for (h of indicadores().hhPorArea; track h.area) {
-              <div>
-                <div class="flex items-center justify-between text-xs mb-0.5">
-                  <span class="font-semibold text-gray-700">{{ h.area === 'ELETRICA' ? 'Elétrica' : 'Mecânica' }}</span>
-                  <span class="font-bold text-gray-600">{{ h.horas }}h</span>
-                </div>
-                <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div class="h-full bg-blue-600 rounded-full" [style.width.%]="(h.horas / maiorHhArea()) * 100"></div>
-                </div>
-              </div>
-            }
-            @if (indicadores().hhPorArea.length === 0) {
-              <p class="text-xs text-gray-400">Sem dados ainda.</p>
-            }
-          </div>
-        </div>
-
-        <div class="bg-white rounded-xl shadow p-2.5 flex-1 min-h-0 overflow-hidden flex flex-col">
-          <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1.5 flex-shrink-0">HH por colaborador — semana</p>
-          <div class="space-y-1 overflow-hidden">
-            @for (h of indicadores().hhPorColaborador; track h.nome) {
-              <div>
-                <div class="flex items-center justify-between text-[11px] mb-0.5">
-                  <span class="font-semibold text-gray-700 truncate">{{ h.nome }}</span>
-                  <span class="font-bold text-gray-600 flex-shrink-0 ml-1">{{ h.horas }}h</span>
-                </div>
-                <div class="h-1 bg-slate-100 rounded-full overflow-hidden">
-                  <div class="h-full bg-marca-500 rounded-full" [style.width.%]="(h.horas / maiorHhColaborador()) * 100"></div>
-                </div>
-              </div>
-            }
-            @if (indicadores().hhPorColaborador.length === 0) {
-              <p class="text-xs text-gray-400">Sem dados ainda.</p>
-            }
-          </div>
-        </div>
-
-        <div class="bg-white rounded-xl shadow p-2.5 flex-1 min-h-0 overflow-hidden flex flex-col">
-          <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1.5 flex-shrink-0">Mais corretivas — semana</p>
-          <div class="space-y-1 overflow-hidden">
-            @for (e of indicadores().equipamentosCorretivas; track e.equipamento) {
-              <div>
-                <div class="flex items-center justify-between text-[11px] mb-0.5">
-                  <span class="font-semibold text-gray-700 truncate">{{ e.equipamento }}</span>
-                  <span class="font-bold text-gray-600 flex-shrink-0 ml-1">{{ e.quantidade }}</span>
-                </div>
-                <div class="h-1 bg-slate-100 rounded-full overflow-hidden">
-                  <div class="h-full bg-red-400 rounded-full" [style.width.%]="(e.quantidade / maiorQtdCorretiva()) * 100"></div>
-                </div>
-              </div>
-            }
-            @if (indicadores().equipamentosCorretivas.length === 0) {
-              <p class="text-xs text-gray-400">Nenhuma corretiva essa semana.</p>
-            }
-          </div>
-        </div>
-      </div>
-    </div>
   }
 </div>

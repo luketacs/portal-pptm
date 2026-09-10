@@ -165,12 +165,17 @@ export class KanbanOficinaPublicoComponent implements OnInit, OnDestroy {
   densidadeEmExecucao = computed(() => calcularDensidade(this.colunas().emExecucao.length));
   densidadeConcluida = computed(() => calcularDensidade(this.colunas().concluida.length));
 
-  // Maior HH por colaborador/área do dia — usado só pra dimensionar a barrinha das
-  // listas do painel lateral (largura relativa ao maior valor, sem depender de um teto
-  // fixo que poderia cortar a barra ou deixá-la minúscula demais).
+  // Maior HH por colaborador/área da semana — usado só pra dimensionar a barrinha das
+  // listas da faixa de indicadores (largura relativa ao maior valor, sem depender de um
+  // teto fixo que poderia cortar a barra ou deixá-la minúscula demais).
   maiorHhColaborador = computed(() => Math.max(1, ...this.indicadores().hhPorColaborador.map(h => h.horas)));
   maiorHhArea = computed(() => Math.max(1, ...this.indicadores().hhPorArea.map(h => h.horas)));
   maiorQtdCorretiva = computed(() => Math.max(1, ...this.indicadores().equipamentosCorretivas.map(e => e.quantidade)));
+
+  // A faixa de indicadores agora é horizontal, no topo — top 4 em vez de 8/5 pra caber
+  // numa faixa curta sem precisar de scroll.
+  topColaboradores = computed(() => this.indicadores().hhPorColaborador.slice(0, 4));
+  topCorretivas = computed(() => this.indicadores().equipamentosCorretivas.slice(0, 4));
 
   private intervalId?: ReturnType<typeof setInterval>;
 
