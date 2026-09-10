@@ -193,13 +193,23 @@ export class KanbanOficinaPublicoComponent implements OnInit, OnDestroy {
   // "Em execução" é a coluna mais cheia (qualquer OS com registro no SIGMA cai aqui,
   // ver api/kanban-atividades-publico.js) — agrupar por equipamento (em vez da ordem
   // crua que vem da API) deixa fácil achar as ordens de uma mesma máquina em vez delas
-  // ficarem espalhadas pela grade.
-  emExecucaoOrdenada = computed(() =>
-    [...this.colunas().emExecucao].sort((a, b) =>
+  // ficarem espalhadas pela grade. Com muitos cards o nome do equipamento trunca quase
+  // igual entre máquinas diferentes ("91E...") — por isso cada card carrega também um
+  // "grupoPar" (alterna a cada troca de equipamento) pra dar um leve zebrado no fundo e
+  // marcar visualmente onde um grupo termina e o outro começa, sem gastar espaço extra.
+  emExecucaoAgrupada = computed(() => {
+    const ordenada = [...this.colunas().emExecucao].sort((a, b) =>
       (a.equipamento || '').localeCompare(b.equipamento || '', 'pt-BR') ||
       (a.numeroOs || '').localeCompare(b.numeroOs || '', 'pt-BR')
-    )
-  );
+    );
+    let grupo = 0;
+    let anterior: string | null = null;
+    return ordenada.map(item => {
+      if (anterior !== null && item.equipamento !== anterior) grupo++;
+      anterior = item.equipamento;
+      return { item, grupoPar: grupo % 2 === 0 };
+    });
+  });
 
   // Maior HH por colaborador/área da semana — usado só pra dimensionar a barrinha das
   // listas da faixa de indicadores (largura relativa ao maior valor, sem depender de um
