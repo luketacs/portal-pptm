@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 export interface TecnicoAtividade {
@@ -23,6 +23,41 @@ interface ColunasKanban {
   concluida: CardAtividade[];
 }
 
+interface IndicadorPercentual {
+  percentual: number;
+}
+
+export interface HhArea {
+  area: string;
+  horas: number;
+}
+
+export interface HhColaborador {
+  nome: string;
+  horas: number;
+}
+
+export interface EquipamentoCorretiva {
+  equipamento: string;
+  quantidade: number;
+}
+
+interface IndicadoresSemana {
+  cumprimentoProgramacao: IndicadorPercentual | null;
+  atendimentoPlanos: IndicadorPercentual | null;
+  hhPorArea: HhArea[];
+  hhPorColaborador: HhColaborador[];
+  equipamentosCorretivas: EquipamentoCorretiva[];
+}
+
+const INDICADORES_VAZIOS: IndicadoresSemana = {
+  cumprimentoProgramacao: null,
+  atendimentoPlanos: null,
+  hhPorArea: [],
+  hhPorColaborador: [],
+  equipamentosCorretivas: [],
+};
+
 const RECARREGAR_A_CADA_MS = 60 * 1000;
 
 // Mesmo cálculo de semana ISO 8601 usado na Programação (numeroSemanaISO em
@@ -37,6 +72,60 @@ function numeroSemanaISO(d: Date): number {
   return 1 + Math.round(diffDias / 7);
 }
 
+export interface DensidadeColuna {
+  cols: number;
+  rows: number;
+  gap: string;
+  cardPadding: string;
+  tituloClasse: string;
+  osClasse: string;
+  descClasse: string;
+  tecnicoClasse: string;
+  lotoClasse: string;
+  mostrarDescricao: boolean;
+  maxTecnicos: number;
+}
+
+// A TV nunca pode ter scroll — em vez de um número fixo de colunas de cards (que
+// obrigava rolar quando o dia tinha muita ordem, ver captura de tela que o usuário
+// mandou), a grade de cada coluna de status calcula sozinha quantas colunas/linhas de
+// card precisa pra caber tudo dentro de um teto de linhas (MAX_ROWS) — quanto mais
+// ordens, mais colunas de card (nunca mais linhas do que cabe na tela), e o texto vai
+// encolhendo em níveis conforme o card fica menor. Ver [style.grid-template-*] no
+// template, que usa cols/rows pra montar uma grade de tamanho fixo (sem scroll nunca).
+const MAX_ROWS = 7;
+
+export function calcularDensidade(qtd: number): DensidadeColuna {
+  const cols = qtd <= 1 ? 1 : Math.max(1, Math.ceil(qtd / MAX_ROWS));
+  const rows = qtd === 0 ? 1 : Math.ceil(qtd / cols);
+  if (cols <= 2) {
+    return {
+      cols, rows, gap: 'gap-2', cardPadding: 'p-3',
+      tituloClasse: 'text-base', osClasse: 'text-xs', descClasse: 'text-sm line-clamp-2', tecnicoClasse: 'text-sm',
+      lotoClasse: 'text-[10px] px-2 py-0.5', mostrarDescricao: true, maxTecnicos: 3,
+    };
+  }
+  if (cols <= 4) {
+    return {
+      cols, rows, gap: 'gap-1.5', cardPadding: 'p-2',
+      tituloClasse: 'text-sm', osClasse: 'text-[10px]', descClasse: 'text-xs line-clamp-2', tecnicoClasse: 'text-xs',
+      lotoClasse: 'text-[9px] px-1.5 py-0.5', mostrarDescricao: true, maxTecnicos: 2,
+    };
+  }
+  if (cols <= 6) {
+    return {
+      cols, rows, gap: 'gap-1', cardPadding: 'p-1.5',
+      tituloClasse: 'text-xs', osClasse: 'text-[9px]', descClasse: 'text-[10px] line-clamp-1', tecnicoClasse: 'text-[10px]',
+      lotoClasse: 'text-[8px] px-1 py-px', mostrarDescricao: true, maxTecnicos: 2,
+    };
+  }
+  return {
+    cols, rows, gap: 'gap-0.5', cardPadding: 'p-1',
+    tituloClasse: 'text-[11px]', osClasse: 'text-[8px]', descClasse: 'text-[9px] line-clamp-1', tecnicoClasse: 'text-[9px]',
+    lotoClasse: 'text-[8px] px-1', mostrarDescricao: false, maxTecnicos: 1,
+  };
+}
+
 // Quadro público (sem login) das atividades do dia — Elétrica + Mecânica, pensado pra
 // ficar aberto numa TV da oficina. Só consome /api/kanban-atividades-publico, sem
 // nenhuma dependência de AuthService/ManutencaoProgramacaoService (não precisa de sessão).
@@ -49,11 +138,23 @@ function numeroSemanaISO(d: Date): number {
 })
 export class KanbanOficinaPublicoComponent implements OnInit, OnDestroy {
   colunas = signal<ColunasKanban>({ pendente: [], emExecucao: [], concluida: [] });
+  indicadores = signal<IndicadoresSemana>(INDICADORES_VAZIOS);
   atualizadoEm = signal<number | null>(null);
   erro = signal('');
   carregando = signal(true);
   readonly hojeLabel = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
   readonly numeroSemana = numeroSemanaISO(new Date());
+
+  densidadePendente = computed(() => calcularDensidade(this.colunas().pendente.length));
+  densidadeEmExecucao = computed(() => calcularDensidade(this.colunas().emExecucao.length));
+  densidadeConcluida = computed(() => calcularDensidade(this.colunas().concluida.length));
+
+  // Maior HH por colaborador/área do dia — usado só pra dimensionar a barrinha das
+  // listas do painel lateral (largura relativa ao maior valor, sem depender de um teto
+  // fixo que poderia cortar a barra ou deixá-la minúscula demais).
+  maiorHhColaborador = computed(() => Math.max(1, ...this.indicadores().hhPorColaborador.map(h => h.horas)));
+  maiorHhArea = computed(() => Math.max(1, ...this.indicadores().hhPorArea.map(h => h.horas)));
+  maiorQtdCorretiva = computed(() => Math.max(1, ...this.indicadores().equipamentosCorretivas.map(e => e.quantidade)));
 
   private intervalId?: ReturnType<typeof setInterval>;
 
@@ -72,12 +173,21 @@ export class KanbanOficinaPublicoComponent implements OnInit, OnDestroy {
     return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   }
 
+  tecnicosVisiveis(item: CardAtividade, max: number): TecnicoAtividade[] {
+    return item.tecnicos.slice(0, max);
+  }
+
+  tecnicosExtras(item: CardAtividade, max: number): number {
+    return Math.max(0, item.tecnicos.length - max);
+  }
+
   private async carregar(): Promise<void> {
     try {
       const resp = await fetch('/api/kanban-atividades-publico');
       const body = await resp.json().catch(() => null);
       if (!resp.ok || !body?.success) throw new Error(body?.error || 'Falha ao carregar o quadro.');
       this.colunas.set(body.colunas);
+      this.indicadores.set(body.indicadores ?? INDICADORES_VAZIOS);
       this.atualizadoEm.set(body.atualizadoEm);
       this.erro.set('');
     } catch (err: unknown) {
