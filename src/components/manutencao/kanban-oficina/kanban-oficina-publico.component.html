@@ -23,9 +23,9 @@
          tudo com altura travada no viewport (h-screen no container pai), nada aqui pode
          rolar: é pra ficar aberto numa TV sem ninguém mexendo. -->
     <div class="flex-1 min-h-0 flex gap-3">
-      <div class="flex-1 min-h-0 grid grid-cols-3 gap-3">
+      <div class="flex-1 min-h-0 min-w-0 grid grid-cols-3 gap-3">
         <!-- Pendente -->
-        <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col min-h-0">
+        <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col min-h-0 min-w-0">
           <div class="bg-blue-600 text-white px-3 py-2 flex items-center justify-between flex-shrink-0">
             <h2 class="text-lg font-bold">Pendente</h2>
             <span class="bg-white/20 text-white text-base font-bold px-2.5 py-0.5 rounded-full">{{ colunas().pendente.length }}</span>
@@ -34,9 +34,9 @@
             @if (colunas().pendente.length === 0) {
               <div class="h-full flex items-center justify-center text-gray-400">Nada pendente.</div>
             } @else {
-              <div class="h-full grid" [class]="densidadePendente().gap"
-                [style.grid-template-columns]="'repeat(' + densidadePendente().cols + ',1fr)'"
-                [style.grid-template-rows]="'repeat(' + densidadePendente().rows + ',1fr)'">
+              <div class="h-full grid" [class]="densidadePendente().gap" [class.content-start]="!densidadePendente().preencher"
+                [style.grid-template-columns]="'repeat(' + densidadePendente().cols + ',minmax(0,1fr))'"
+                [style.grid-template-rows]="densidadePendente().preencher ? ('repeat(' + densidadePendente().rows + ',minmax(0,1fr))') : null">
                 @for (item of colunas().pendente; track item.numeroOs + item.descricao + item.equipamento) {
                   <div class="border border-blue-100 rounded-lg bg-blue-50/40 overflow-hidden flex flex-col" [class]="densidadePendente().cardPadding">
                     <div class="flex items-center justify-between gap-1">
@@ -72,7 +72,7 @@
         </div>
 
         <!-- Em execução -->
-        <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col min-h-0">
+        <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col min-h-0 min-w-0">
           <div class="bg-marca-600 text-white px-3 py-2 flex items-center justify-between flex-shrink-0">
             <h2 class="text-lg font-bold">Em execução</h2>
             <span class="bg-white/20 text-white text-base font-bold px-2.5 py-0.5 rounded-full">{{ colunas().emExecucao.length }}</span>
@@ -81,9 +81,9 @@
             @if (colunas().emExecucao.length === 0) {
               <div class="h-full flex items-center justify-center text-gray-400">Nada em execução.</div>
             } @else {
-              <div class="h-full grid" [class]="densidadeEmExecucao().gap"
-                [style.grid-template-columns]="'repeat(' + densidadeEmExecucao().cols + ',1fr)'"
-                [style.grid-template-rows]="'repeat(' + densidadeEmExecucao().rows + ',1fr)'">
+              <div class="h-full grid" [class]="densidadeEmExecucao().gap" [class.content-start]="!densidadeEmExecucao().preencher"
+                [style.grid-template-columns]="'repeat(' + densidadeEmExecucao().cols + ',minmax(0,1fr))'"
+                [style.grid-template-rows]="densidadeEmExecucao().preencher ? ('repeat(' + densidadeEmExecucao().rows + ',minmax(0,1fr))') : null">
                 @for (item of colunas().emExecucao; track item.numeroOs + item.descricao + item.equipamento) {
                   <div class="border border-marca-100 rounded-lg bg-marca-50/60 overflow-hidden flex flex-col" [class]="densidadeEmExecucao().cardPadding">
                     <div class="flex items-center justify-between gap-1">
@@ -119,7 +119,7 @@
         </div>
 
         <!-- Concluída -->
-        <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col min-h-0">
+        <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col min-h-0 min-w-0">
           <div class="bg-green-600 text-white px-3 py-2 flex items-center justify-between flex-shrink-0">
             <h2 class="text-lg font-bold">Concluída</h2>
             <span class="bg-white/20 text-white text-base font-bold px-2.5 py-0.5 rounded-full">{{ colunas().concluida.length }}</span>
@@ -128,9 +128,9 @@
             @if (colunas().concluida.length === 0) {
               <div class="h-full flex items-center justify-center text-gray-400">Nada concluído ainda.</div>
             } @else {
-              <div class="h-full grid" [class]="densidadeConcluida().gap"
-                [style.grid-template-columns]="'repeat(' + densidadeConcluida().cols + ',1fr)'"
-                [style.grid-template-rows]="'repeat(' + densidadeConcluida().rows + ',1fr)'">
+              <div class="h-full grid" [class]="densidadeConcluida().gap" [class.content-start]="!densidadeConcluida().preencher"
+                [style.grid-template-columns]="'repeat(' + densidadeConcluida().cols + ',minmax(0,1fr))'"
+                [style.grid-template-rows]="densidadeConcluida().preencher ? ('repeat(' + densidadeConcluida().rows + ',minmax(0,1fr))') : null">
                 @for (item of colunas().concluida; track item.numeroOs + item.descricao + item.equipamento) {
                   <div class="border border-green-200 rounded-lg bg-green-50 overflow-hidden flex flex-col" [class]="densidadeConcluida().cardPadding">
                     <div class="flex items-center justify-between gap-1">

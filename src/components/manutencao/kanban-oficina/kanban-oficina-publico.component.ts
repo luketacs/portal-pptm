@@ -75,6 +75,10 @@ function numeroSemanaISO(d: Date): number {
 export interface DensidadeColuna {
   cols: number;
   rows: number;
+  // false = poucos itens: cards no tamanho natural, alinhados no topo, sem esticar pra
+  // preencher a coluna inteira. true = grade distribuída pra ocupar exatamente 100% da
+  // altura disponível (nem sobra, nem falta, nunca precisa rolar).
+  preencher: boolean;
   gap: string;
   cardPadding: string;
   tituloClasse: string;
@@ -94,33 +98,45 @@ export interface DensidadeColuna {
 // encolhendo em níveis conforme o card fica menor. Ver [style.grid-template-*] no
 // template, que usa cols/rows pra montar uma grade de tamanho fixo (sem scroll nunca).
 const MAX_ROWS = 7;
+// Até esse tanto de item, não vale a pena esticar os cards pra preencher a coluna
+// (ficava um card gigante e vazio pra 1 ordem só, ver captura de tela que o usuário
+// mandou) — usa o tamanho natural, alinhado no topo, com o espaço sobrando em branco.
+const LIMITE_TAMANHO_NATURAL = 3;
 
 export function calcularDensidade(qtd: number): DensidadeColuna {
-  const cols = qtd <= 1 ? 1 : Math.max(1, Math.ceil(qtd / MAX_ROWS));
-  const rows = qtd === 0 ? 1 : Math.ceil(qtd / cols);
+  if (qtd <= LIMITE_TAMANHO_NATURAL) {
+    return {
+      cols: qtd <= 1 ? 1 : 2, rows: 1, preencher: false,
+      gap: 'gap-2', cardPadding: 'p-3',
+      tituloClasse: 'text-base', osClasse: 'text-xs', descClasse: 'text-sm line-clamp-2', tecnicoClasse: 'text-sm',
+      lotoClasse: 'text-[10px] px-2 py-0.5', mostrarDescricao: true, maxTecnicos: 3,
+    };
+  }
+  const cols = Math.max(1, Math.ceil(qtd / MAX_ROWS));
+  const rows = Math.ceil(qtd / cols);
   if (cols <= 2) {
     return {
-      cols, rows, gap: 'gap-2', cardPadding: 'p-3',
+      cols, rows, preencher: true, gap: 'gap-2', cardPadding: 'p-3',
       tituloClasse: 'text-base', osClasse: 'text-xs', descClasse: 'text-sm line-clamp-2', tecnicoClasse: 'text-sm',
       lotoClasse: 'text-[10px] px-2 py-0.5', mostrarDescricao: true, maxTecnicos: 3,
     };
   }
   if (cols <= 4) {
     return {
-      cols, rows, gap: 'gap-1.5', cardPadding: 'p-2',
+      cols, rows, preencher: true, gap: 'gap-1.5', cardPadding: 'p-2',
       tituloClasse: 'text-sm', osClasse: 'text-[10px]', descClasse: 'text-xs line-clamp-2', tecnicoClasse: 'text-xs',
       lotoClasse: 'text-[9px] px-1.5 py-0.5', mostrarDescricao: true, maxTecnicos: 2,
     };
   }
   if (cols <= 6) {
     return {
-      cols, rows, gap: 'gap-1', cardPadding: 'p-1.5',
+      cols, rows, preencher: true, gap: 'gap-1', cardPadding: 'p-1.5',
       tituloClasse: 'text-xs', osClasse: 'text-[9px]', descClasse: 'text-[10px] line-clamp-1', tecnicoClasse: 'text-[10px]',
-      lotoClasse: 'text-[8px] px-1 py-px', mostrarDescricao: true, maxTecnicos: 2,
+      lotoClasse: 'text-[8px] px-1 py-px', mostrarDescricao: false, maxTecnicos: 2,
     };
   }
   return {
-    cols, rows, gap: 'gap-0.5', cardPadding: 'p-1',
+    cols, rows, preencher: true, gap: 'gap-0.5', cardPadding: 'p-1',
     tituloClasse: 'text-[11px]', osClasse: 'text-[8px]', descClasse: 'text-[9px] line-clamp-1', tecnicoClasse: 'text-[9px]',
     lotoClasse: 'text-[8px] px-1', mostrarDescricao: false, maxTecnicos: 1,
   };
