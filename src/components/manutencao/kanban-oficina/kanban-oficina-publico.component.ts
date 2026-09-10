@@ -86,7 +86,6 @@ export interface DensidadeColuna {
   descClasse: string;
   tecnicoClasse: string;
   lotoClasse: string;
-  mostrarDescricao: boolean;
   maxTecnicos: number;
 }
 
@@ -97,6 +96,9 @@ export interface DensidadeColuna {
 // ordens, mais colunas de card (nunca mais linhas do que cabe na tela), e o texto vai
 // encolhendo em níveis conforme o card fica menor. Ver [style.grid-template-*] no
 // template, que usa cols/rows pra montar uma grade de tamanho fixo (sem scroll nunca).
+// A descrição SEMPRE aparece (é o que diz do que se trata a ordem) — em vez de
+// escondê-la em telas densas, quem cede espaço é a lista de técnicos (menos gente
+// visível, "+N" pro resto).
 const MAX_ROWS = 7;
 // Até esse tanto de item, não vale a pena esticar os cards pra preencher a coluna
 // (ficava um card gigante e vazio pra 1 ordem só, ver captura de tela que o usuário
@@ -109,7 +111,7 @@ export function calcularDensidade(qtd: number): DensidadeColuna {
       cols: qtd <= 1 ? 1 : 2, rows: 1, preencher: false,
       gap: 'gap-2', cardPadding: 'p-3',
       tituloClasse: 'text-base', osClasse: 'text-xs', descClasse: 'text-sm line-clamp-2', tecnicoClasse: 'text-sm',
-      lotoClasse: 'text-[10px] px-2 py-0.5', mostrarDescricao: true, maxTecnicos: 3,
+      lotoClasse: 'text-[10px] px-2 py-0.5', maxTecnicos: 3,
     };
   }
   const cols = Math.max(1, Math.ceil(qtd / MAX_ROWS));
@@ -118,28 +120,51 @@ export function calcularDensidade(qtd: number): DensidadeColuna {
     return {
       cols, rows, preencher: true, gap: 'gap-2', cardPadding: 'p-3',
       tituloClasse: 'text-base', osClasse: 'text-xs', descClasse: 'text-sm line-clamp-2', tecnicoClasse: 'text-sm',
-      lotoClasse: 'text-[10px] px-2 py-0.5', mostrarDescricao: true, maxTecnicos: 3,
+      lotoClasse: 'text-[10px] px-2 py-0.5', maxTecnicos: 3,
     };
   }
   if (cols <= 4) {
     return {
       cols, rows, preencher: true, gap: 'gap-1.5', cardPadding: 'p-2',
       tituloClasse: 'text-sm', osClasse: 'text-[10px]', descClasse: 'text-xs line-clamp-2', tecnicoClasse: 'text-xs',
-      lotoClasse: 'text-[9px] px-1.5 py-0.5', mostrarDescricao: true, maxTecnicos: 2,
+      lotoClasse: 'text-[9px] px-1.5 py-0.5', maxTecnicos: 2,
     };
   }
   if (cols <= 6) {
     return {
       cols, rows, preencher: true, gap: 'gap-1', cardPadding: 'p-1.5',
-      tituloClasse: 'text-xs', osClasse: 'text-[9px]', descClasse: 'text-[10px] line-clamp-1', tecnicoClasse: 'text-[10px]',
-      lotoClasse: 'text-[8px] px-1 py-px', mostrarDescricao: false, maxTecnicos: 2,
+      tituloClasse: 'text-xs', osClasse: 'text-[9px]', descClasse: 'text-[10px] line-clamp-2', tecnicoClasse: 'text-[10px]',
+      lotoClasse: 'text-[8px] px-1 py-px', maxTecnicos: 1,
     };
   }
   return {
     cols, rows, preencher: true, gap: 'gap-0.5', cardPadding: 'p-1',
-    tituloClasse: 'text-[11px]', osClasse: 'text-[8px]', descClasse: 'text-[9px] line-clamp-1', tecnicoClasse: 'text-[9px]',
-    lotoClasse: 'text-[8px] px-1', mostrarDescricao: false, maxTecnicos: 1,
+    tituloClasse: 'text-[11px]', osClasse: 'text-[8px]', descClasse: 'text-[9px] line-clamp-2', tecnicoClasse: 'text-[9px]',
+    lotoClasse: 'text-[8px] px-1', maxTecnicos: 1,
   };
+}
+
+// Mesmo mapeamento de cor do LOTO usado na Programação (LOTO_BADGE em
+// manutencao-programacao.component.ts) — duplicado aqui pela mesma razão do resto deste
+// componente (público/standalone). Vermelho só pra LOTO de verdade (bloqueado);
+// "SEM LOTO" é neutro, "FUNCIONANDO" é verde — mostrar tudo em vermelho (como estava
+// antes) passava a impressão errada de que tudo é urgente.
+const LOTO_COR: Record<string, string> = {
+  LOTO: 'bg-red-100 text-red-700',
+  'SEM LOTO': 'bg-slate-100 text-slate-600',
+  FUNCIONANDO: 'bg-green-100 text-green-700',
+};
+export function lotoBadgeClass(loto: string): string {
+  return LOTO_COR[loto.toUpperCase()] ?? 'bg-slate-100 text-slate-500';
+}
+
+// Mesma regra de cor semântica usada no Dashboard (corPercentual em
+// manutencao-dashboard.component.ts) — o número muda de cor conforme o valor, não tem
+// uma cor fixa "da marca" por indicador.
+export function corIndicador(percentual: number): string {
+  if (percentual >= 80) return 'text-green-600';
+  if (percentual >= 50) return 'text-amber-600';
+  return 'text-red-600';
 }
 
 // Quadro público (sem login) das atividades do dia — Elétrica + Mecânica, pensado pra
@@ -200,6 +225,14 @@ export class KanbanOficinaPublicoComponent implements OnInit, OnDestroy {
 
   tecnicosExtras(item: CardAtividade, max: number): number {
     return Math.max(0, item.tecnicos.length - max);
+  }
+
+  lotoBadgeClass(loto: string): string {
+    return lotoBadgeClass(loto);
+  }
+
+  corIndicador(percentual: number): string {
+    return corIndicador(percentual);
   }
 
   private async carregar(): Promise<void> {

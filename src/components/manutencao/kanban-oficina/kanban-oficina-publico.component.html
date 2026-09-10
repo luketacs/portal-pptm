@@ -17,30 +17,26 @@
     </div>
   </div>
 
-  <!-- Faixa de indicadores da semana (segunda a domingo) — horizontal, no topo, pra
-       deixar a largura toda livre pras 3 colunas de status abaixo. -->
+  <!-- Faixa de indicadores da semana (segunda a domingo) — mesmo padrão de card/cor
+       usado no Dashboard da Programação (.app-card, número colorido pelo valor, não
+       por uma cor fixa "de marca" por indicador — ver corIndicador). -->
   <div class="flex-shrink-0 grid grid-cols-7 gap-2 h-24">
-    <div class="bg-white rounded-xl shadow flex flex-col items-center justify-center px-1">
-      <p class="text-2xl font-bold text-blue-600">{{ indicadores().cumprimentoProgramacao?.percentual ?? '—' }}{{ indicadores().cumprimentoProgramacao ? '%' : '' }}</p>
+    <div class="app-card flex flex-col items-center justify-center px-1">
+      <p class="text-2xl font-bold" [class]="corIndicador(indicadores().cumprimentoProgramacao?.percentual ?? 0)">{{ indicadores().cumprimentoProgramacao?.percentual ?? '—' }}{{ indicadores().cumprimentoProgramacao ? '%' : '' }}</p>
       <p class="text-[10px] text-gray-500 text-center leading-tight mt-0.5">Cumprimento da programação</p>
     </div>
-    <div class="bg-white rounded-xl shadow flex flex-col items-center justify-center px-1">
-      <p class="text-2xl font-bold text-marca-600">{{ indicadores().atendimentoPlanos?.percentual ?? '—' }}{{ indicadores().atendimentoPlanos ? '%' : '' }}</p>
+    <div class="app-card flex flex-col items-center justify-center px-1">
+      <p class="text-2xl font-bold" [class]="corIndicador(indicadores().atendimentoPlanos?.percentual ?? 0)">{{ indicadores().atendimentoPlanos?.percentual ?? '—' }}{{ indicadores().atendimentoPlanos ? '%' : '' }}</p>
       <p class="text-[10px] text-gray-500 text-center leading-tight mt-0.5">Atendimento aos planos</p>
     </div>
 
-    <div class="bg-white rounded-xl shadow p-2 overflow-hidden flex flex-col">
-      <p class="text-[9px] font-bold text-gray-500 uppercase tracking-wide flex-shrink-0">HH por área</p>
+    <div class="app-card p-2 overflow-hidden flex flex-col">
+      <p class="text-[9px] font-semibold text-gray-500 uppercase tracking-wide flex-shrink-0">HH por área</p>
       <div class="flex-1 min-h-0 flex flex-col justify-center gap-1">
         @for (h of indicadores().hhPorArea; track h.area) {
-          <div>
-            <div class="flex items-center justify-between text-[11px]">
-              <span class="font-semibold text-gray-700">{{ h.area === 'ELETRICA' ? 'Elétrica' : 'Mecânica' }}</span>
-              <span class="font-bold text-gray-600">{{ h.horas }}h</span>
-            </div>
-            <div class="h-1 bg-slate-100 rounded-full overflow-hidden">
-              <div class="h-full bg-blue-600 rounded-full" [style.width.%]="(h.horas / maiorHhArea()) * 100"></div>
-            </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-gray-600">{{ h.area === 'ELETRICA' ? 'Elétrica' : 'Mecânica' }}</span>
+            <span class="font-bold text-gray-800">{{ h.horas }}h</span>
           </div>
         }
         @if (indicadores().hhPorArea.length === 0) {
@@ -49,13 +45,13 @@
       </div>
     </div>
 
-    <div class="bg-white rounded-xl shadow p-2 overflow-hidden flex flex-col col-span-2">
-      <p class="text-[9px] font-bold text-gray-500 uppercase tracking-wide flex-shrink-0">HH por colaborador — semana</p>
+    <div class="app-card p-2 overflow-hidden flex flex-col col-span-2">
+      <p class="text-[9px] font-semibold text-gray-500 uppercase tracking-wide flex-shrink-0">HH por colaborador — semana</p>
       <div class="flex-1 min-h-0 grid grid-cols-2 gap-x-3 content-center">
         @for (h of topColaboradores(); track h.nome) {
-          <div class="flex items-center justify-between text-[11px] gap-1">
-            <span class="font-semibold text-gray-700 truncate">{{ h.nome }}</span>
-            <span class="font-bold text-gray-600 flex-shrink-0">{{ h.horas }}h</span>
+          <div class="flex items-center justify-between text-xs gap-1">
+            <span class="text-gray-600 truncate">{{ h.nome }}</span>
+            <span class="font-bold text-gray-800 flex-shrink-0">{{ h.horas }}h</span>
           </div>
         }
         @if (topColaboradores().length === 0) {
@@ -64,13 +60,13 @@
       </div>
     </div>
 
-    <div class="bg-white rounded-xl shadow p-2 overflow-hidden flex flex-col col-span-2">
-      <p class="text-[9px] font-bold text-gray-500 uppercase tracking-wide flex-shrink-0">Mais corretivas — semana</p>
+    <div class="app-card p-2 overflow-hidden flex flex-col col-span-2">
+      <p class="text-[9px] font-semibold text-gray-500 uppercase tracking-wide flex-shrink-0">Mais corretivas — semana</p>
       <div class="flex-1 min-h-0 grid grid-cols-2 gap-x-3 content-center">
         @for (e of topCorretivas(); track e.equipamento) {
-          <div class="flex items-center justify-between text-[11px] gap-1">
-            <span class="font-semibold text-gray-700 truncate">{{ e.equipamento }}</span>
-            <span class="font-bold text-gray-600 flex-shrink-0">{{ e.quantidade }}</span>
+          <div class="flex items-center justify-between text-xs gap-1">
+            <span class="text-gray-600 truncate">{{ e.equipamento }}</span>
+            <span class="font-bold text-gray-800 flex-shrink-0">{{ e.quantidade }}</span>
           </div>
         }
         @if (topCorretivas().length === 0) {
@@ -81,7 +77,7 @@
   </div>
 
   @if (erro() && carregando()) {
-    <div class="flex-1 min-h-0 bg-white rounded-xl shadow flex items-center justify-center text-gray-500 text-xl">Carregando quadro...</div>
+    <div class="flex-1 min-h-0 app-card flex items-center justify-center text-gray-500 text-xl">Carregando quadro...</div>
   } @else {
     @if (erro()) {
       <div class="flex-shrink-0 bg-red-50 border border-red-200 text-red-700 rounded-xl p-2 text-sm">{{ erro() }} — tentando de novo automaticamente.</div>
@@ -89,145 +85,140 @@
 
     <!-- Colunas de status — tudo com altura travada no viewport (fixed inset-0 no
          container pai), nada aqui pode rolar: é pra ficar aberto numa TV sem ninguém
-         mexendo. -->
+         mexendo. A cor de cada coluna é só um acento (borda de cima + selo com a
+         contagem), não um bloco cheio — mesmo espírito discreto do resto do app. -->
     <div class="flex-1 min-h-0 min-w-0 grid grid-cols-3 gap-3">
       <!-- Pendente -->
-        <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col min-h-0 min-w-0">
-          <div class="bg-blue-600 text-white px-3 py-2 flex items-center justify-between flex-shrink-0">
-            <h2 class="text-lg font-bold">Pendente</h2>
-            <span class="bg-white/20 text-white text-base font-bold px-2.5 py-0.5 rounded-full">{{ colunas().pendente.length }}</span>
-          </div>
-          <div class="flex-1 min-h-0 p-2 overflow-hidden">
-            @if (colunas().pendente.length === 0) {
-              <div class="h-full flex items-center justify-center text-gray-400">Nada pendente.</div>
-            } @else {
-              <div class="h-full grid" [class]="densidadePendente().gap" [class.content-start]="!densidadePendente().preencher"
-                [style.grid-template-columns]="'repeat(' + densidadePendente().cols + ',minmax(0,1fr))'"
-                [style.grid-template-rows]="densidadePendente().preencher ? ('repeat(' + densidadePendente().rows + ',minmax(0,1fr))') : null">
-                @for (item of colunas().pendente; track item.numeroOs + item.descricao + item.equipamento) {
-                  <div class="border border-blue-100 rounded-lg bg-blue-50/40 overflow-hidden flex flex-col" [class]="densidadePendente().cardPadding">
-                    <div class="flex items-center justify-between gap-1">
-                      <span class="font-bold text-gray-800 truncate" [class]="densidadePendente().tituloClasse">{{ item.equipamento || 'Sem equipamento' }}</span>
-                      @if (item.numeroOs) {
-                        <span class="text-gray-400 font-semibold flex-shrink-0" [class]="densidadePendente().osClasse">OS {{ item.numeroOs }}</span>
-                      }
-                    </div>
-                    @if (densidadePendente().mostrarDescricao) {
-                      <p class="text-gray-600" [class]="densidadePendente().descClasse">{{ item.descricao }}</p>
-                    }
-                    <div class="mt-auto">
-                      @for (tec of tecnicosVisiveis(item, densidadePendente().maxTecnicos); track tec.nome) {
-                        <div class="flex items-center justify-between gap-1">
-                          <span class="font-semibold text-blue-700 truncate" [class]="densidadePendente().tecnicoClasse">{{ tec.nome }}</span>
-                          @if (tec.duracaoHoras) {
-                            <span class="font-bold text-gray-500 flex-shrink-0" [class]="densidadePendente().tecnicoClasse">{{ tec.duracaoHoras }}h</span>
-                          }
-                        </div>
-                      }
-                      @if (tecnicosExtras(item, densidadePendente().maxTecnicos) > 0) {
-                        <p class="text-gray-400" [class]="densidadePendente().tecnicoClasse">+{{ tecnicosExtras(item, densidadePendente().maxTecnicos) }}</p>
-                      }
-                    </div>
-                    @if (item.loto) {
-                      <span class="inline-block mt-0.5 font-bold rounded-full bg-red-100 text-red-700 w-fit" [class]="densidadePendente().lotoClasse">{{ item.loto }}</span>
-                    }
-                  </div>
-                }
-              </div>
-            }
-          </div>
+      <div class="app-card !p-0 !border-t-4 !border-blue-600 overflow-hidden flex flex-col min-h-0 min-w-0">
+        <div class="px-3 py-2 flex items-center justify-between flex-shrink-0 border-b border-slate-100">
+          <h2 class="text-base font-bold text-gray-800">Pendente</h2>
+          <span class="bg-blue-100 text-blue-700 text-sm font-bold px-2.5 py-0.5 rounded-full">{{ colunas().pendente.length }}</span>
         </div>
-
-        <!-- Em execução -->
-        <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col min-h-0 min-w-0">
-          <div class="bg-marca-600 text-white px-3 py-2 flex items-center justify-between flex-shrink-0">
-            <h2 class="text-lg font-bold">Em execução</h2>
-            <span class="bg-white/20 text-white text-base font-bold px-2.5 py-0.5 rounded-full">{{ colunas().emExecucao.length }}</span>
-          </div>
-          <div class="flex-1 min-h-0 p-2 overflow-hidden">
-            @if (colunas().emExecucao.length === 0) {
-              <div class="h-full flex items-center justify-center text-gray-400">Nada em execução.</div>
-            } @else {
-              <div class="h-full grid" [class]="densidadeEmExecucao().gap" [class.content-start]="!densidadeEmExecucao().preencher"
-                [style.grid-template-columns]="'repeat(' + densidadeEmExecucao().cols + ',minmax(0,1fr))'"
-                [style.grid-template-rows]="densidadeEmExecucao().preencher ? ('repeat(' + densidadeEmExecucao().rows + ',minmax(0,1fr))') : null">
-                @for (item of colunas().emExecucao; track item.numeroOs + item.descricao + item.equipamento) {
-                  <div class="border border-marca-100 rounded-lg bg-marca-50/60 overflow-hidden flex flex-col" [class]="densidadeEmExecucao().cardPadding">
-                    <div class="flex items-center justify-between gap-1">
-                      <span class="font-bold text-gray-800 truncate" [class]="densidadeEmExecucao().tituloClasse">{{ item.equipamento || 'Sem equipamento' }}</span>
-                      @if (item.numeroOs) {
-                        <span class="text-gray-400 font-semibold flex-shrink-0" [class]="densidadeEmExecucao().osClasse">OS {{ item.numeroOs }}</span>
-                      }
-                    </div>
-                    @if (densidadeEmExecucao().mostrarDescricao) {
-                      <p class="text-gray-600" [class]="densidadeEmExecucao().descClasse">{{ item.descricao }}</p>
-                    }
-                    <div class="mt-auto">
-                      @for (tec of tecnicosVisiveis(item, densidadeEmExecucao().maxTecnicos); track tec.nome) {
-                        <div class="flex items-center justify-between gap-1">
-                          <span class="font-semibold text-blue-700 truncate" [class]="densidadeEmExecucao().tecnicoClasse">{{ tec.nome }}</span>
-                          @if (tec.duracaoHoras) {
-                            <span class="font-bold text-gray-500 flex-shrink-0" [class]="densidadeEmExecucao().tecnicoClasse">{{ tec.duracaoHoras }}h</span>
-                          }
-                        </div>
-                      }
-                      @if (tecnicosExtras(item, densidadeEmExecucao().maxTecnicos) > 0) {
-                        <p class="text-gray-400" [class]="densidadeEmExecucao().tecnicoClasse">+{{ tecnicosExtras(item, densidadeEmExecucao().maxTecnicos) }}</p>
-                      }
-                    </div>
-                    @if (item.loto) {
-                      <span class="inline-block mt-0.5 font-bold rounded-full bg-red-100 text-red-700 w-fit" [class]="densidadeEmExecucao().lotoClasse">{{ item.loto }}</span>
+        <div class="flex-1 min-h-0 p-2 overflow-hidden">
+          @if (colunas().pendente.length === 0) {
+            <div class="h-full flex items-center justify-center text-gray-400">Nada pendente.</div>
+          } @else {
+            <div class="h-full grid" [class]="densidadePendente().gap" [class.content-start]="!densidadePendente().preencher"
+              [style.grid-template-columns]="'repeat(' + densidadePendente().cols + ',minmax(0,1fr))'"
+              [style.grid-template-rows]="densidadePendente().preencher ? ('repeat(' + densidadePendente().rows + ',minmax(0,1fr))') : null">
+              @for (item of colunas().pendente; track item.numeroOs + item.descricao + item.equipamento) {
+                <div class="border border-slate-200 rounded-lg bg-white overflow-hidden flex flex-col" [class]="densidadePendente().cardPadding">
+                  <div class="flex items-center justify-between gap-1">
+                    <span class="font-bold text-gray-800 truncate" [class]="densidadePendente().tituloClasse">{{ item.equipamento || 'Sem equipamento' }}</span>
+                    @if (item.numeroOs) {
+                      <span class="text-gray-400 font-semibold flex-shrink-0" [class]="densidadePendente().osClasse">OS {{ item.numeroOs }}</span>
                     }
                   </div>
-                }
-              </div>
-            }
-          </div>
-        </div>
-
-        <!-- Concluída -->
-        <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col min-h-0 min-w-0">
-          <div class="bg-green-600 text-white px-3 py-2 flex items-center justify-between flex-shrink-0">
-            <h2 class="text-lg font-bold">Concluída</h2>
-            <span class="bg-white/20 text-white text-base font-bold px-2.5 py-0.5 rounded-full">{{ colunas().concluida.length }}</span>
-          </div>
-          <div class="flex-1 min-h-0 p-2 overflow-hidden">
-            @if (colunas().concluida.length === 0) {
-              <div class="h-full flex items-center justify-center text-gray-400">Nada concluído ainda.</div>
-            } @else {
-              <div class="h-full grid" [class]="densidadeConcluida().gap" [class.content-start]="!densidadeConcluida().preencher"
-                [style.grid-template-columns]="'repeat(' + densidadeConcluida().cols + ',minmax(0,1fr))'"
-                [style.grid-template-rows]="densidadeConcluida().preencher ? ('repeat(' + densidadeConcluida().rows + ',minmax(0,1fr))') : null">
-                @for (item of colunas().concluida; track item.numeroOs + item.descricao + item.equipamento) {
-                  <div class="border border-green-200 rounded-lg bg-green-50 overflow-hidden flex flex-col" [class]="densidadeConcluida().cardPadding">
-                    <div class="flex items-center justify-between gap-1">
-                      <span class="font-bold text-gray-800 truncate" [class]="densidadeConcluida().tituloClasse">{{ item.equipamento || 'Sem equipamento' }}</span>
-                      @if (item.numeroOs) {
-                        <span class="text-gray-400 font-semibold flex-shrink-0" [class]="densidadeConcluida().osClasse">OS {{ item.numeroOs }}</span>
-                      }
-                    </div>
-                    @if (densidadeConcluida().mostrarDescricao) {
-                      <p class="text-gray-600" [class]="densidadeConcluida().descClasse">{{ item.descricao }}</p>
+                  <p class="text-gray-600" [class]="densidadePendente().descClasse">{{ item.descricao }}</p>
+                  <div class="mt-auto">
+                    @for (tec of tecnicosVisiveis(item, densidadePendente().maxTecnicos); track tec.nome) {
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="font-semibold text-gray-700 truncate" [class]="densidadePendente().tecnicoClasse">{{ tec.nome }}</span>
+                        @if (tec.duracaoHoras) {
+                          <span class="font-bold text-blue-700 flex-shrink-0" [class]="densidadePendente().tecnicoClasse">{{ tec.duracaoHoras }}h</span>
+                        }
+                      </div>
                     }
-                    <div class="mt-auto">
-                      @for (tec of tecnicosVisiveis(item, densidadeConcluida().maxTecnicos); track tec.nome) {
-                        <div class="flex items-center justify-between gap-1">
-                          <span class="font-semibold text-blue-700 truncate" [class]="densidadeConcluida().tecnicoClasse">{{ tec.nome }}</span>
-                          @if (tec.duracaoHoras) {
-                            <span class="font-bold text-gray-500 flex-shrink-0" [class]="densidadeConcluida().tecnicoClasse">{{ tec.duracaoHoras }}h</span>
-                          }
-                        </div>
-                      }
-                      @if (tecnicosExtras(item, densidadeConcluida().maxTecnicos) > 0) {
-                        <p class="text-gray-400" [class]="densidadeConcluida().tecnicoClasse">+{{ tecnicosExtras(item, densidadeConcluida().maxTecnicos) }}</p>
-                      }
-                    </div>
+                    @if (tecnicosExtras(item, densidadePendente().maxTecnicos) > 0) {
+                      <p class="text-gray-400" [class]="densidadePendente().tecnicoClasse">+{{ tecnicosExtras(item, densidadePendente().maxTecnicos) }}</p>
+                    }
                   </div>
-                }
-              </div>
-            }
-          </div>
+                  @if (item.loto) {
+                    <span class="inline-block mt-0.5 font-semibold rounded w-fit" [class]="densidadePendente().lotoClasse + ' ' + lotoBadgeClass(item.loto)">{{ item.loto }}</span>
+                  }
+                </div>
+              }
+            </div>
+          }
         </div>
       </div>
+
+      <!-- Em execução -->
+      <div class="app-card !p-0 !border-t-4 !border-marca-600 overflow-hidden flex flex-col min-h-0 min-w-0">
+        <div class="px-3 py-2 flex items-center justify-between flex-shrink-0 border-b border-slate-100">
+          <h2 class="text-base font-bold text-gray-800">Em execução</h2>
+          <span class="bg-marca-100 text-marca-700 text-sm font-bold px-2.5 py-0.5 rounded-full">{{ colunas().emExecucao.length }}</span>
+        </div>
+        <div class="flex-1 min-h-0 p-2 overflow-hidden">
+          @if (colunas().emExecucao.length === 0) {
+            <div class="h-full flex items-center justify-center text-gray-400">Nada em execução.</div>
+          } @else {
+            <div class="h-full grid" [class]="densidadeEmExecucao().gap" [class.content-start]="!densidadeEmExecucao().preencher"
+              [style.grid-template-columns]="'repeat(' + densidadeEmExecucao().cols + ',minmax(0,1fr))'"
+              [style.grid-template-rows]="densidadeEmExecucao().preencher ? ('repeat(' + densidadeEmExecucao().rows + ',minmax(0,1fr))') : null">
+              @for (item of colunas().emExecucao; track item.numeroOs + item.descricao + item.equipamento) {
+                <div class="border border-slate-200 rounded-lg bg-white overflow-hidden flex flex-col" [class]="densidadeEmExecucao().cardPadding">
+                  <div class="flex items-center justify-between gap-1">
+                    <span class="font-bold text-gray-800 truncate" [class]="densidadeEmExecucao().tituloClasse">{{ item.equipamento || 'Sem equipamento' }}</span>
+                    @if (item.numeroOs) {
+                      <span class="text-gray-400 font-semibold flex-shrink-0" [class]="densidadeEmExecucao().osClasse">OS {{ item.numeroOs }}</span>
+                    }
+                  </div>
+                  <p class="text-gray-600" [class]="densidadeEmExecucao().descClasse">{{ item.descricao }}</p>
+                  <div class="mt-auto">
+                    @for (tec of tecnicosVisiveis(item, densidadeEmExecucao().maxTecnicos); track tec.nome) {
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="font-semibold text-gray-700 truncate" [class]="densidadeEmExecucao().tecnicoClasse">{{ tec.nome }}</span>
+                        @if (tec.duracaoHoras) {
+                          <span class="font-bold text-blue-700 flex-shrink-0" [class]="densidadeEmExecucao().tecnicoClasse">{{ tec.duracaoHoras }}h</span>
+                        }
+                      </div>
+                    }
+                    @if (tecnicosExtras(item, densidadeEmExecucao().maxTecnicos) > 0) {
+                      <p class="text-gray-400" [class]="densidadeEmExecucao().tecnicoClasse">+{{ tecnicosExtras(item, densidadeEmExecucao().maxTecnicos) }}</p>
+                    }
+                  </div>
+                  @if (item.loto) {
+                    <span class="inline-block mt-0.5 font-semibold rounded w-fit" [class]="densidadeEmExecucao().lotoClasse + ' ' + lotoBadgeClass(item.loto)">{{ item.loto }}</span>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Concluída -->
+      <div class="app-card !p-0 !border-t-4 !border-green-600 overflow-hidden flex flex-col min-h-0 min-w-0">
+        <div class="px-3 py-2 flex items-center justify-between flex-shrink-0 border-b border-slate-100">
+          <h2 class="text-base font-bold text-gray-800">Concluída</h2>
+          <span class="bg-green-100 text-green-700 text-sm font-bold px-2.5 py-0.5 rounded-full">{{ colunas().concluida.length }}</span>
+        </div>
+        <div class="flex-1 min-h-0 p-2 overflow-hidden">
+          @if (colunas().concluida.length === 0) {
+            <div class="h-full flex items-center justify-center text-gray-400">Nada concluído ainda.</div>
+          } @else {
+            <div class="h-full grid" [class]="densidadeConcluida().gap" [class.content-start]="!densidadeConcluida().preencher"
+              [style.grid-template-columns]="'repeat(' + densidadeConcluida().cols + ',minmax(0,1fr))'"
+              [style.grid-template-rows]="densidadeConcluida().preencher ? ('repeat(' + densidadeConcluida().rows + ',minmax(0,1fr))') : null">
+              @for (item of colunas().concluida; track item.numeroOs + item.descricao + item.equipamento) {
+                <div class="border border-slate-200 rounded-lg bg-white overflow-hidden flex flex-col" [class]="densidadeConcluida().cardPadding">
+                  <div class="flex items-center justify-between gap-1">
+                    <span class="font-bold text-gray-800 truncate" [class]="densidadeConcluida().tituloClasse">{{ item.equipamento || 'Sem equipamento' }}</span>
+                    @if (item.numeroOs) {
+                      <span class="text-gray-400 font-semibold flex-shrink-0" [class]="densidadeConcluida().osClasse">OS {{ item.numeroOs }}</span>
+                    }
+                  </div>
+                  <p class="text-gray-600" [class]="densidadeConcluida().descClasse">{{ item.descricao }}</p>
+                  <div class="mt-auto">
+                    @for (tec of tecnicosVisiveis(item, densidadeConcluida().maxTecnicos); track tec.nome) {
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="font-semibold text-gray-700 truncate" [class]="densidadeConcluida().tecnicoClasse">{{ tec.nome }}</span>
+                        @if (tec.duracaoHoras) {
+                          <span class="font-bold text-blue-700 flex-shrink-0" [class]="densidadeConcluida().tecnicoClasse">{{ tec.duracaoHoras }}h</span>
+                        }
+                      </div>
+                    }
+                    @if (tecnicosExtras(item, densidadeConcluida().maxTecnicos) > 0) {
+                      <p class="text-gray-400" [class]="densidadeConcluida().tecnicoClasse">+{{ tecnicosExtras(item, densidadeConcluida().maxTecnicos) }}</p>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    </div>
   }
 </div>
