@@ -178,6 +178,20 @@ export class ApontamentosService {
     return null;
   }
 
+  /** Acha o colaborador de uma linha da Programação: primeiro pela matrícula gravada
+   *  (tecnico_matricula, preenchida quando o técnico é escolhido no seletor — não tem
+   *  erro de digitação), só cai pro nome (matchColaborador, com tolerância a
+   *  acento/typo) quando a linha não tem matrícula gravada (dado legado, ou recurso
+   *  terceirizado como "ULTRALIMPO" que nunca teve matrícula mesmo). */
+  matchColaboradorDaOrdem(matricula: string | null | undefined, nome: string): Colaborador | null {
+    const mat = matricula?.trim();
+    if (mat) {
+      const porMatricula = this._colaboradores.find(c => c.matricula === mat);
+      if (porMatricula) return porMatricula;
+    }
+    return this.matchColaborador(nome);
+  }
+
   // ── Apontamentos ─────────────────────────────────────────────────────────
 
   ultimaImportacao = signal<{ importado_em: string; total_registros: number } | null>(null);

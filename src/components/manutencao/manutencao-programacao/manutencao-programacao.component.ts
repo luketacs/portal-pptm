@@ -456,12 +456,25 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     );
   }
 
+  // Agrupa pela matrícula do colaborador (matriculaDaOrdem: prioriza tecnico_matricula
+  // gravada, cai pro nome só se não tiver) — não pelo texto exato de tecnicoNome, senão
+  // um nome digitado com typo/acento diferente (ex.: "Alexandre Rodguires" vs
+  // "Alexandre Rodrigues" cadastrado, mesma matrícula gravada nas duas OS) virava um
+  // "técnico" fantasma separado, duplicando a pessoa em dois grupos na tela. Sem match
+  // nenhum (nem matrícula nem nome batem, ex.: recurso terceirizado tipo "ULTRALIMPO"),
+  // usa o texto como veio mesmo.
+  private chaveTecnico(nome: string, matricula?: string | null): { chave: string; label: string } {
+    const colaborador = this.apontamentosService.matchColaboradorDaOrdem(matricula, nome);
+    return colaborador ? { chave: colaborador.matricula, label: colaborador.nome } : { chave: nome, label: nome };
+  }
+
   private gruposCalc(lista: ManutencaoOrdem[], dias: { data: string; label: string }[]) {
-    const porTecnico = new Map<string, ManutencaoOrdem[]>();
+    const porTecnico = new Map<string, { label: string; ordens: ManutencaoOrdem[] }>();
     for (const o of lista) {
-      const lista2 = porTecnico.get(o.tecnicoNome) ?? [];
-      lista2.push(o);
-      porTecnico.set(o.tecnicoNome, lista2);
+      const { chave, label } = this.chaveTecnico(o.tecnicoNome, o.tecnicoMatricula);
+      const grupo = porTecnico.get(chave);
+      if (grupo) grupo.ordens.push(o);
+      else porTecnico.set(chave, { label, ordens: [o] });
     }
     const diasIso = dias.map(d => d.data);
     // Técnico de férias na semana aparece mesmo sem nenhum lançamento — o objetivo é
@@ -469,12 +482,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const area = this.areaFiltro();
     for (const f of this.manutencaoService.ferias()) {
       if (area !== 'todos' && f.area !== area) continue;
-      if (porTecnico.has(f.tecnicoNome)) continue;
+      const { chave, label } = this.chaveTecnico(f.tecnicoNome, f.tecnicoMatricula);
+      if (porTecnico.has(chave)) continue;
       if (!diasIso.some(d => d >= f.dataInicio && d <= f.dataFim)) continue;
-      porTecnico.set(f.tecnicoNome, []);
+      porTecnico.set(chave, { label, ordens: [] });
     }
-    return Array.from(porTecnico.entries())
-      .map(([tecnico, ordens]) => {
+    return Array.from(porTecnico.values())
+      .map(({ label: tecnico, ordens }) => {
         const ordensOrdenadas = [...ordens].sort((a, b) => this.ordenarPorDiaEAso(a, b));
         const totalHoras = somaHoras(ordensOrdenadas);
         const capacidade = this.capacidadeSemana(tecnico, ordensOrdenadas, dias);
@@ -1459,14 +1473,15 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // intervalo em que a OS foi programada pra rodar. E tem que ser um apontamento DO
   // TÉCNICO dessa linha — um apoio com 2 pessoas onde só 1 aponta não faz a linha da
   // outra pessoa virar "Executada" (o apontamento do SIGMA só tem a matrícula de quem
-  // apontou, casada aqui com o nome via matriculas.json/ApontamentosService).
+  // apontou, casada aqui com a matrícula gravada na linha — tecnicoMatricula — ou, na
+  // falta dela, com o nome via ApontamentosService).
   statusExecucao(o: ManutencaoOrdem, diasSemanaOverride?: string[]): { label: string; class: string; dot: string; title: string } | null {
     if (!o.numeroOs?.trim()) return null;
     const resultado = this.sigmaPorOs()[normalizarNumeroOs(o.numeroOs)];
     if (!resultado) return null;
 
     const diasDaSemana = o.diasPrevistos.length > 0 ? o.diasPrevistos : (diasSemanaOverride ?? this.diasDaSemanaAtual().map(d => d.data));
-    const colaborador = this.apontamentosService.matchColaborador(o.tecnicoNome ?? '');
+    const colaborador = this.apontamentosService.matchColaboradorDaOrdem(o.tecnicoMatricula, o.tecnicoNome ?? '');
     const dentroDaSemana = colaborador
       ? resultado.apontamentos.filter(a => diasDaSemana.includes(a.data) && a.executante === colaborador.matricula)
       : [];
@@ -1521,7 +1536,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       rastreaveis++;
       const todosApontaram = linhas.every(o => {
         const dias = o.diasPrevistos.length > 0 ? o.diasPrevistos : this.diasDaSemanaAtual().map(d => d.data);
-        const colaborador = this.apontamentosService.matchColaborador(o.tecnicoNome ?? '');
+        const colaborador = this.apontamentosService.matchColaboradorDaOrdem(o.tecnicoMatricula, o.tecnicoNome ?? '');
         return !!colaborador && resultado.apontamentos.some(a => a.executante === colaborador.matricula && dias.includes(a.data));
       });
       if (todosApontaram) executadas++;

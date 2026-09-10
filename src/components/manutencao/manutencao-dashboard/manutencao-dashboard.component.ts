@@ -193,7 +193,7 @@ export class ManutencaoDashboardComponent implements OnInit {
       if (!resultado) return false;
       return linhas.every(o => {
         const dias = o.diasPrevistos.length > 0 ? o.diasPrevistos : this.diasDaSemanaAtual().map(d => d.data);
-        const colaborador = this.apontamentosService.matchColaborador(o.tecnicoNome ?? '');
+        const colaborador = this.apontamentosService.matchColaboradorDaOrdem(o.tecnicoMatricula, o.tecnicoNome ?? '');
         return !!colaborador && resultado.apontamentos.some(a => a.executante === colaborador.matricula && dias.includes(a.data));
       });
     });

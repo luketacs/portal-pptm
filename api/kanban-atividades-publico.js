@@ -36,6 +36,7 @@ function normalizarNome(v) {
     .toUpperCase().trim().replace(/\s+/g, ' ');
 }
 const INDICE_MATRICULAS = MATRICULAS.map(c => ({ matricula: String(c.matricula).trim(), nomeNorm: normalizarNome(c.nome) }));
+const NOME_POR_MATRICULA = new Map(MATRICULAS.map(c => [String(c.matricula).trim(), c.nome]));
 
 // Acha a matrícula pelo nome digitado na OS — exato primeiro (cobre a imensa maioria,
 // os nomes da Programação batem com matriculas.json a menos de acento); se não achar,
@@ -50,6 +51,15 @@ function matricularPorNome(nomeTecnico) {
   if (alvo.length < 4) return null;
   const parcial = INDICE_MATRICULAS.find(c => c.nomeNorm.includes(alvo) || alvo.includes(c.nomeNorm));
   return parcial ? parcial.matricula : null;
+}
+
+// A matrícula gravada na linha (tecnico_matricula, preenchida quando o técnico é
+// escolhido no seletor da Programação) é a fonte confiável — não tem erro de
+// digitação, ao contrário do nome digitado. Só cai pro casamento por nome quando a
+// linha não tem matrícula gravada (dado legado, ou recurso terceirizado sem cadastro).
+function matriculaDaLinha(o) {
+  const gravada = String(o.tecnico_matricula || '').trim();
+  return gravada || matricularPorNome(o.tecnico_nome);
 }
 
 // Data de "hoje" no fuso de Pecém/CE (America/Fortaleza, sem horário de verão) — a
@@ -129,7 +139,7 @@ export default async function handler(req, res) {
 
     const { data, error } = await supabase
       .from('manutencao_programacao')
-      .select('numero_os, descricao, equipamento, tecnico_nome, area, duracao_horas, loto, dias_previstos')
+      .select('numero_os, descricao, equipamento, tecnico_nome, tecnico_matricula, area, duracao_horas, loto, dias_previstos')
       .eq('tipo', 'ordem')
       .in('area', ['ELETRICA', 'MECANICA'])
       .overlaps('dias_previstos', diasAcumulados);
@@ -171,17 +181,18 @@ export default async function handler(req, res) {
       // "Concluída" só quando TODOS os técnicos programados pra essa OS apontaram —
       // uma OS com 2 pessoas onde só 1 apontou não está concluída de verdade, a outra
       // parte ainda falta. Cada técnico é conferido com a matrícula DELE (via
-      // matricularPorNome) contra o campo "Executante" do apontamento — não basta
-      // "alguém" ter apontado na OS. Sem dia previsto cadastrado (raro), aceita
-      // qualquer dia útil da semana atual, igual ao fallback do statusExecucao() na
-      // Programação. Sem apontamento batendo pra todo mundo: "Em execução" enquanto o
-      // dia programado inclui HOJE, senão volta pra "Pendente".
+      // matriculaDaLinha — prioriza a matrícula gravada, sem risco de erro de
+      // digitação) contra o campo "Executante" do apontamento — não basta "alguém" ter
+      // apontado na OS. Sem dia previsto cadastrado (raro), aceita qualquer dia útil da
+      // semana atual, igual ao fallback do statusExecucao() na Programação. Sem
+      // apontamento batendo pra todo mundo: "Em execução" enquanto o dia programado
+      // inclui HOJE, senão volta pra "Pendente".
       const apontamentosDaOs = chaveOs ? apontamentosPorOs.get(chaveOs) : null;
       let algumDiaEHoje = false;
       const todosApontaram = linhas.every(linha => {
         const diasPrevistos = linha.dias_previstos && linha.dias_previstos.length > 0 ? linha.dias_previstos : diasUteisSemana;
         if (diasPrevistos.includes(hoje)) algumDiaEHoje = true;
-        const matricula = matricularPorNome(linha.tecnico_nome);
+        const matricula = matriculaDaLinha(linha);
         if (!matricula || !apontamentosDaOs) return false;
         return apontamentosDaOs.some(a => a.executante === matricula && diasPrevistos.includes(a.data));
       });
@@ -225,7 +236,7 @@ export default async function handler(req, res) {
         { data: paradaRows, error: erroParada },
       ] = await Promise.all([
         supabase.from('manutencao_programacao')
-          .select('numero_os, area, tecnico_nome, duracao_horas, tipo_servico, equipamento, dias_previstos, plano_preventivo_id')
+          .select('numero_os, area, tecnico_nome, tecnico_matricula, duracao_horas, tipo_servico, equipamento, dias_previstos, plano_preventivo_id')
           .eq('tipo', 'ordem').in('area', ['ELETRICA', 'MECANICA']).eq('semana_inicio', segunda),
         supabase.from('manutencao_planos_preventivos')
           .select('id, periodicidade_valor, periodicidade_unidade, ultima_execucao')
@@ -259,7 +270,7 @@ export default async function handler(req, res) {
         rastreaveis++;
         const todosApontaram = linhas.every(o => {
           const dias = (o.dias_previstos && o.dias_previstos.length > 0) ? o.dias_previstos : diasUteisSemana;
-          const matricula = matricularPorNome(o.tecnico_nome);
+          const matricula = matriculaDaLinha(o);
           return !!matricula && apontamentosDaOs.some(a => a.executante === matricula && dias.includes(a.data));
         });
         if (todosApontaram) executadas++;
@@ -292,19 +303,28 @@ export default async function handler(req, res) {
 
       // HH por área e por colaborador — soma direto por linha (não agrupa por OS: cada
       // técnico lançou seu próprio esforço, 2 pessoas na mesma OS é HH real somado, não
-      // duplicado).
+      // duplicado). Agrupa por matrícula (não pelo texto de tecnico_nome) pra um nome
+      // digitado com typo/acento diferente não virar uma segunda pessoa fantasma na
+      // lista, com as horas divididas entre as duas grafias.
       const hhAreaMap = new Map();
       const hhColabMap = new Map();
       for (const o of ordensDaSemana) {
         const horas = Number(o.duracao_horas) || 0;
         hhAreaMap.set(o.area, (hhAreaMap.get(o.area) ?? 0) + horas);
-        if (o.tecnico_nome) hhColabMap.set(o.tecnico_nome, (hhColabMap.get(o.tecnico_nome) ?? 0) + horas);
+        if (o.tecnico_nome) {
+          const matricula = matriculaDaLinha(o);
+          const chave = matricula ?? o.tecnico_nome;
+          const nome = matricula ? (NOME_POR_MATRICULA.get(matricula) ?? o.tecnico_nome) : o.tecnico_nome;
+          const atual = hhColabMap.get(chave);
+          if (atual) atual.horas += horas;
+          else hhColabMap.set(chave, { nome, horas });
+        }
       }
       indicadores.hhPorArea = [...hhAreaMap.entries()]
         .map(([area, horas]) => ({ area, horas: Math.round(horas * 10) / 10 }))
         .sort((a, b) => b.horas - a.horas);
-      indicadores.hhPorColaborador = [...hhColabMap.entries()]
-        .map(([nome, horas]) => ({ nome, horas: Math.round(horas * 10) / 10 }))
+      indicadores.hhPorColaborador = [...hhColabMap.values()]
+        .map(c => ({ nome: c.nome, horas: Math.round(c.horas * 10) / 10 }))
         .sort((a, b) => b.horas - a.horas)
         .slice(0, 8);
 
