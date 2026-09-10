@@ -1,4 +1,9 @@
-<div class="h-screen w-screen overflow-hidden bg-slate-50 flex flex-col p-4 gap-3">
+<!-- fixed inset-0 (não h-screen/w-screen): a rota pública compartilha um wrapper
+     (max-w-7xl mx-auto p-4 md:p-8, ver app.component.html) pensado pra formulários
+     centralizados como /publico/fundo-fixo — w-screen/h-screen ficava preso dentro
+     dele (com padding e centralizado), estourando a tela em vez de ocupar ela
+     inteira. "fixed inset-0" tira esse elemento do fluxo normal e gruda direto nas
+     bordas do viewport, ignorando o container pai. --><div class="fixed inset-0 overflow-hidden bg-slate-50 flex flex-col p-4 gap-3">
   <div class="flex items-center justify-between flex-shrink-0">
     <div>
       <h1 class="text-3xl font-bold text-gray-800">Programação Semana {{ numeroSemana }}</h1>
