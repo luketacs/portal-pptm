@@ -12,13 +12,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { ALLOWED_ORIGINS, normalizarNumeroOs, obterCache } from './_sigma-shared.js';
 
-// Status código do SIGMA que realmente significa "concluída" (CONC, AREC) — esses dois
-// valem em qualquer dia, independente da programação. "CANC" (cancelada) não entra no
-// quadro. Os demais códigos (PEND, EXEC, ETEX, EXPA, NEXE, ETNE) o SIGMA raramente marca
-// de forma confiável (na prática quase tudo fica em PEND mesmo já em andamento) — por
-// isso não usamos o código pra decidir "em execução" vs "pendente", só pra saber se a OS
-// já tem algum sinal de vida no SIGMA (ver `coluna` abaixo).
-const STATUS_CONCLUIDA = new Set(['CONC', 'AREC']);
+// O status código do SIGMA (PEND, EXEC, ETEX, CONC...) não é confiável pra dizer se uma
+// OS já foi feita — na prática o SIGMA quase nunca atualiza esses códigos, então uma OS
+// concluída de verdade pode continuar marcada "PEND" pra sempre. A única fonte confiável
+// é o apontamento (o técnico bateu o ponto na OS) — mesmo critério de "Executada" já
+// usado na tela de Programação (ver statusExecucao/atendimentoProgramacao em
+// manutencao-programacao.component.ts): a OS só vira "concluída" quando existe um
+// apontamento cuja data cai dentro dos dias em que ela foi programada. O único uso que
+// sobra do status código é excluir OS canceladas (CANC) do quadro.
 
 // Data de "hoje" no fuso de Pecém/CE (America/Fortaleza, sem horário de verão) — a
 // Vercel roda em UTC, então "new Date()" sozinho vira o dia errado à noite.
@@ -124,24 +125,27 @@ export default async function handler(req, res) {
     const porColunaEChave = { pendente: new Map(), emExecucao: new Map(), concluida: new Map() };
     let semOsIdx = 0;
     for (const o of data) {
-      const info = o.numero_os ? osPorNumero.get(normalizarNumeroOs(o.numero_os)) : null;
+      const chaveOs = o.numero_os ? normalizarNumeroOs(o.numero_os) : null;
+      const info = chaveOs ? osPorNumero.get(chaveOs) : null;
       const statusCodigo = (info?.statusCodigo || '').toUpperCase();
       if (statusCodigo === 'CANC') continue;
 
-      // "Em execução" só pra quem está programado pra HOJE (e o SIGMA já tem algum
-      // sinal de vida da OS). Se o dia programado já passou (ontem, anteontem...) e a OS
-      // não concluiu, ela volta pra "Pendente" — não fica presa em "Em execução" pra
-      // sempre só porque o SIGMA abriu um registro PEND uma vez. Sem dia previsto
-      // cadastrado (raro), trata como "de hoje" por falta de outro sinal.
+      // "Concluída" = existe apontamento (o técnico bateu o ponto) dentro dos dias em
+      // que a OS foi programada — mesmo critério de statusExecucao() na Programação, não
+      // o status bruto do SIGMA. Sem dia previsto cadastrado (raro), aceita qualquer dia
+      // útil da semana atual, igual ao fallback de lá. Se ainda não tem apontamento que
+      // bata: "Em execução" enquanto o dia programado é HOJE, senão volta pra "Pendente"
+      // (dia já passou e ninguém apontou — não fica preso em execução pra sempre).
+      const apontamentosDaOs = chaveOs ? apontamentosPorOs.get(chaveOs) : null;
+      const diasConsiderados = o.dias_previstos && o.dias_previstos.length > 0 ? o.dias_previstos : diasUteisSemana;
+      const executada = !!apontamentosDaOs && apontamentosDaOs.some(a => diasConsiderados.includes(a.data));
+
       let coluna;
-      if (STATUS_CONCLUIDA.has(statusCodigo)) {
-        coluna = 'concluida';
-      } else {
-        const diasPrevistos = o.dias_previstos && o.dias_previstos.length > 0 ? o.dias_previstos : null;
-        const programadaHoje = !diasPrevistos || diasPrevistos.includes(hoje);
-        coluna = programadaHoje && info ? 'emExecucao' : 'pendente';
-      }
-      const chave = o.numero_os ? normalizarNumeroOs(o.numero_os) : `sem-os-${semOsIdx++}`;
+      if (executada) coluna = 'concluida';
+      else if (diasConsiderados.includes(hoje)) coluna = 'emExecucao';
+      else coluna = 'pendente';
+
+      const chave = chaveOs ?? `sem-os-${semOsIdx++}`;
 
       const mapa = porColunaEChave[coluna];
       const existente = mapa.get(chave);
