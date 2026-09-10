@@ -2372,9 +2372,29 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   }
 
   // ── Excluir ────────────────────────────────────────────────────────────
+
+  // Acha outras linhas que são a MESMA OS de verdade (mesmo número, ou mesma
+  // descrição+equipamento quando "sem OS"), só que lançada pra outro técnico/empresa —
+  // apoio (automático via Recursos, ou manual em "+Apoio") não tem um vínculo formal no
+  // banco com a linha do mandante, só essa correlação por número/descrição (mesmo
+  // critério já usado em ordemDuplicada/diasApoioPorRecursoExistentes). Usado em
+  // excluir() pra avisar antes de deixar apoio órfão (serviço cancelado pro mandante,
+  // mas ainda aparecendo pros ajudantes/empresas).
+  private ordensVinculadas(o: ManutencaoOrdem): ManutencaoOrdem[] {
+    const numero = o.numeroOs?.trim();
+    return this.manutencaoService.ordens().filter(x => {
+      if (x.id === o.id || x.tipo !== 'ordem' || x.semanaInicio !== o.semanaInicio) return false;
+      return numero
+        ? !!x.numeroOs?.trim() && normalizarNumeroOs(x.numeroOs) === normalizarNumeroOs(numero)
+        : !x.numeroOs?.trim() && x.descricao === o.descricao && x.equipamento === o.equipamento;
+    });
+  }
+
   async excluir(o: ManutencaoOrdem): Promise<void> {
     if (this.isProcessando()) return;
     if (!(await this.confirmDialogService.confirm(`Excluir "${o.descricao}" (${o.tecnicoNome})?\n\nEsta ação não pode ser desfeita.`, { confirmLabel: 'Excluir', danger: true }))) return;
+
+    const vinculadas = this.ordensVinculadas(o);
 
     this.isProcessando.set(true);
     try {
@@ -2382,8 +2402,30 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       this.notificationService.showSuccess('Excluído.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao excluir.');
-    } finally {
       this.isProcessando.set(false);
+      return;
     }
+    this.isProcessando.set(false);
+
+    if (vinculadas.length === 0) return;
+    const nomes = vinculadas.map(v => v.tecnicoNome).join(', ');
+    const excluirTambem = await this.confirmDialogService.confirm(
+      `Essa OS também está lançada como apoio pra: ${nomes}.\n\nExcluir essas também?`,
+      { confirmLabel: 'Excluir também', cancelLabel: 'Manter', danger: true },
+    );
+    if (!excluirTambem) return;
+
+    this.isProcessando.set(true);
+    let erros = 0;
+    for (const v of vinculadas) {
+      try {
+        await this.manutencaoService.excluir(v.id);
+      } catch {
+        erros++;
+      }
+    }
+    this.isProcessando.set(false);
+    if (erros === 0) this.notificationService.showSuccess('Apoio(s) vinculado(s) excluído(s) também.');
+    else this.notificationService.showError(`${erros} de ${vinculadas.length} vínculo(s) não puderam ser excluídos.`);
   }
 }
