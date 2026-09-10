@@ -135,8 +135,10 @@ export class ApontamentosService {
     );
   }
 
-  /** Busca o colaborador pelo executante (matrícula ou nome — múltiplos formatos) */
-  private matchColaborador(executante: string): Colaborador | null {
+  /** Busca o colaborador pelo executante (matrícula ou nome — múltiplos formatos).
+   *  Público: reaproveitado pela Programação de Manutenção pra casar o apontamento do
+   *  SIGMA (que só tem a matrícula) com o nome do técnico digitado na OS. */
+  matchColaborador(executante: string): Colaborador | null {
     if (!executante?.trim()) return null;
     const exec = executante.trim();
 

@@ -116,6 +116,7 @@ export interface SigmaOrdemInfo {
 export interface SigmaApontamento {
   data: string; // 'YYYY-MM-DD'
   status: string;
+  executante: string; // matrícula de quem apontou (campo "Executante" do export)
 }
 
 export interface ConsultaSigmaResultado {

@@ -1456,14 +1456,20 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // dentro da própria semana programada, ou ainda não. `null` = ou não tem número de
   // OS pra checar, ou a consulta ao SIGMA ainda não voltou. Um apontamento fora da
   // semana (feito em outra semana) conta como "Não executada" — só vale o que caiu no
-  // intervalo em que a OS foi programada pra rodar.
+  // intervalo em que a OS foi programada pra rodar. E tem que ser um apontamento DO
+  // TÉCNICO dessa linha — um apoio com 2 pessoas onde só 1 aponta não faz a linha da
+  // outra pessoa virar "Executada" (o apontamento do SIGMA só tem a matrícula de quem
+  // apontou, casada aqui com o nome via matriculas.json/ApontamentosService).
   statusExecucao(o: ManutencaoOrdem, diasSemanaOverride?: string[]): { label: string; class: string; dot: string; title: string } | null {
     if (!o.numeroOs?.trim()) return null;
     const resultado = this.sigmaPorOs()[normalizarNumeroOs(o.numeroOs)];
     if (!resultado) return null;
 
     const diasDaSemana = o.diasPrevistos.length > 0 ? o.diasPrevistos : (diasSemanaOverride ?? this.diasDaSemanaAtual().map(d => d.data));
-    const dentroDaSemana = resultado.apontamentos.filter(a => diasDaSemana.includes(a.data));
+    const colaborador = this.apontamentosService.matchColaborador(o.tecnicoNome ?? '');
+    const dentroDaSemana = colaborador
+      ? resultado.apontamentos.filter(a => diasDaSemana.includes(a.data) && a.executante === colaborador.matricula)
+      : [];
     if (dentroDaSemana.length > 0) {
       return {
         label: 'Executada', class: 'bg-green-100 text-green-700', dot: 'bg-green-500',
@@ -1491,7 +1497,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   //
   // A mesma OS pode aparecer em mais de uma linha (apoio dividido entre técnicos/áreas,
   // ver abrirApoio/confirmarApoio) — sem agrupar por número, cada apoio contava a OS de
-  // novo, inflando "Y programadas" e podendo contar 1 OS como "executada" duas vezes.
+  // novo, inflando "Y programadas" e podendo contar 1 OS como "executada" duas vezes. E
+  // uma OS com 2+ técnicos só conta como executada quando TODOS apontaram a parte deles
+  // (mesmo critério de statusExecucao() — não "algum apontamento qualquer" na OS).
   atendimentoProgramacao = computed(() => {
     const ordens = this.listaFiltrada().filter(o => o.tipo === 'ordem');
     const porOs = new Map<string, ManutencaoOrdem[]>();
@@ -1511,8 +1519,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       const resultado = sigmaPorOs[chave];
       if (!resultado) continue;
       rastreaveis++;
-      const diasUniao = new Set(linhas.flatMap(o => o.diasPrevistos.length > 0 ? o.diasPrevistos : this.diasDaSemanaAtual().map(d => d.data)));
-      if (resultado.apontamentos.some(a => diasUniao.has(a.data))) executadas++;
+      const todosApontaram = linhas.every(o => {
+        const dias = o.diasPrevistos.length > 0 ? o.diasPrevistos : this.diasDaSemanaAtual().map(d => d.data);
+        const colaborador = this.apontamentosService.matchColaborador(o.tecnicoNome ?? '');
+        return !!colaborador && resultado.apontamentos.some(a => a.executante === colaborador.matricula && dias.includes(a.data));
+      });
+      if (todosApontaram) executadas++;
     }
     const percentual = rastreaveis > 0 ? Math.round((executadas / rastreaveis) * 100) : 0;
     return { executadas, rastreaveis, totalOrdens: porOs.size, percentual };

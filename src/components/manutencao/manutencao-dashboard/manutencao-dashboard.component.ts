@@ -173,8 +173,10 @@ export class ManutencaoDashboardComponent implements OnInit {
   // A mesma OS pode aparecer em mais de uma linha (apoio dividido entre técnicos/áreas,
   // ver "+ Apoio" na Programação) — sem agrupar por número antes de contar, cada apoio
   // contava a OS de novo, inflando "Y programadas" e podendo contar 1 OS como executada
-  // mais de uma vez. Agrupa por número de OS e considera executada se QUALQUER linha do
-  // grupo caiu num apontamento dentro da união dos dias previstos do grupo.
+  // mais de uma vez. Agrupa por número de OS e só considera executada quando TODOS os
+  // técnicos do grupo têm apontamento DELES batendo com o dia previsto — não "qualquer
+  // apontamento" na OS (um apoio de 2 pessoas onde só 1 aponta não está concluído,
+  // mesmo critério de statusExecucao()/atendimentoProgramacao() na Programação).
   private ordemExecutadaAgrupada(ordens: ManutencaoOrdem[]): boolean[] {
     const porOs = new Map<string, ManutencaoOrdem[]>();
     let semOsIdx = 0;
@@ -189,8 +191,11 @@ export class ManutencaoDashboardComponent implements OnInit {
       if (!linhas[0].numeroOs?.trim()) return false;
       const resultado = sigmaPorOs[normalizarNumeroOs(linhas[0].numeroOs!)];
       if (!resultado) return false;
-      const diasUniao = new Set(linhas.flatMap(o => o.diasPrevistos.length > 0 ? o.diasPrevistos : this.diasDaSemanaAtual().map(d => d.data)));
-      return resultado.apontamentos.some(a => diasUniao.has(a.data));
+      return linhas.every(o => {
+        const dias = o.diasPrevistos.length > 0 ? o.diasPrevistos : this.diasDaSemanaAtual().map(d => d.data);
+        const colaborador = this.apontamentosService.matchColaborador(o.tecnicoNome ?? '');
+        return !!colaborador && resultado.apontamentos.some(a => a.executante === colaborador.matricula && dias.includes(a.data));
+      });
     });
   }
 
