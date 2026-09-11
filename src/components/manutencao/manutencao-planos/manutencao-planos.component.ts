@@ -9,8 +9,8 @@ import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import {
   CicloManutencao, ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem, PeriodicidadeUnidade, PlanoManutencao,
 } from '../../../models/manutencao-programacao.model';
-import { dataLimiteComTolerancia } from '../../../utils/manutencao-preventivas';
-import { planosAtrasados, planosComProximaExecucao } from '../../../utils/manutencao-planos';
+import { calcularProximaData, dataLimiteComTolerancia } from '../../../utils/manutencao-preventivas';
+import { planosAtrasados, planosComProximaExecucao, proximaExecucaoPlano } from '../../../utils/manutencao-planos';
 
 const AREA_LABEL: Record<ManutencaoArea, string> = {
   ELETRICA: 'Elétrica',
@@ -390,6 +390,25 @@ export class ManutencaoPlanosComponent implements OnInit {
         return { ciclo, ordem, atrasado, semanaPrevista: this.numeroSemanaISO(ciclo.dataPrevista), apontamentos };
       })
       .sort((a, b) => b.ciclo.dataPrevista.localeCompare(a.ciclo.dataPrevista));
+  });
+
+  // Projeção das próximas ocorrências — nenhuma delas é ordem de verdade ainda (só
+  // aparece em manutencao_ciclos quando alguém programa de fato). Encadeia
+  // calcularProximaData a partir da mesma "próxima execução" já usada na tabela/KPIs,
+  // só que continua avançando N vezes pra dar uma prévia do que vem depois dela também.
+  private readonly QTD_PREVISOES_FUTURAS = 5;
+
+  previsoesFuturas = computed(() => {
+    const plano = this.historicoAberto();
+    if (!plano) return [];
+    const ultimoCiclo = this.manutencaoPlanosService.ultimoCicloDoPlano(plano.id);
+    let data = proximaExecucaoPlano(plano.dataInicial, plano.periodicidadeValor, plano.periodicidadeUnidade, ultimoCiclo);
+    const previsoes: { data: string; semana: number }[] = [];
+    for (let i = 0; i < this.QTD_PREVISOES_FUTURAS; i++) {
+      previsoes.push({ data, semana: this.numeroSemanaISO(data) });
+      data = calcularProximaData(data, plano.periodicidadeValor, plano.periodicidadeUnidade)!;
+    }
+    return previsoes;
   });
 
   async abrirHistorico(plano: PlanoManutencao): Promise<void> {
