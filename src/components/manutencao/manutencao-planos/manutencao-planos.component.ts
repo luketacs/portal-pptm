@@ -10,13 +10,32 @@ import {
   CicloManutencao, ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem, PeriodicidadeUnidade, PlanoManutencao,
 } from '../../../models/manutencao-programacao.model';
 import { calcularProximaData, dataLimiteComTolerancia } from '../../../utils/manutencao-preventivas';
-import { planosAtrasados, planosComProximaExecucao, proximaExecucaoPlano } from '../../../utils/manutencao-planos';
+import {
+  DiaGradeMensal, gerarGradeMensal, planosAtrasados, planosComProximaExecucao, proximaExecucaoPlano,
+} from '../../../utils/manutencao-planos';
 
 const AREA_LABEL: Record<ManutencaoArea, string> = {
   ELETRICA: 'Elétrica',
   MECANICA: 'Mecânica',
   APOIO: 'Apoio',
 };
+
+const MESES_LABEL = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+const DIAS_SEMANA_LABEL = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB', 'DOM'];
+
+// Item do Calendário de Manutenção — 'real' já é ordem de verdade (ciclo com ordem
+// vinculada), 'previsto' é só a próxima execução calculada do plano, ainda sem ciclo
+// nenhum (mesma distinção visual já usada no histórico — borda tracejada pro previsto).
+interface ItemCalendario {
+  data: string;
+  tipo: 'real' | 'previsto';
+  plano: PlanoManutencao;
+  ordem?: ManutencaoOrdem;
+}
 
 function segundaFeiraDe(d: Date): Date {
   const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -161,20 +180,26 @@ export class ManutencaoPlanosComponent implements OnInit {
 
   private planosComExecucaoPorId = computed(() => new Map(this.planosComProximaTodos().map(p => [p.id, p])));
 
-  linhas = computed(() => {
+  // Extraído de linhas() pra reaproveitar no Calendário também — mesmos filtros,
+  // ambas as visões (lista/calendário) mostram exatamente o mesmo recorte de planos.
+  planosFiltrados = computed(() => {
     const termo = normalizarTexto(this.filtroBusca().trim());
     const area = this.filtroArea();
     const status = this.filtroStatus();
     const periodicidade = this.filtroPeriodicidade();
     const responsavel = this.filtroResponsavel();
-    const porId = this.planosComExecucaoPorId();
 
     return this.manutencaoPlanosService.planos()
       .filter(p => area === 'todos' || p.area === area)
       .filter(p => status === 'todos' || (status === 'ativo' ? p.ativo : !p.ativo))
       .filter(p => periodicidade === 'todos' || `${p.periodicidadeValor} ${p.periodicidadeUnidade}` === periodicidade)
       .filter(p => responsavel === 'todos' || p.responsavel === responsavel)
-      .filter(p => termo.length === 0 || normalizarTexto(`${p.codigo} ${p.equipamento} ${p.descricao} ${p.tagKks ?? ''}`).includes(termo))
+      .filter(p => termo.length === 0 || normalizarTexto(`${p.codigo} ${p.equipamento} ${p.descricao} ${p.tagKks ?? ''}`).includes(termo));
+  });
+
+  linhas = computed(() => {
+    const porId = this.planosComExecucaoPorId();
+    return this.planosFiltrados()
       .map(p => {
         const comExecucao = porId.get(p.id);
         const ultimoCiclo = this.manutencaoPlanosService.ultimoCicloDoPlano(p.id);
@@ -433,5 +458,110 @@ export class ManutencaoPlanosComponent implements OnInit {
 
   fecharHistorico(): void {
     this.historicoAberto.set(null);
+  }
+
+  // ── Calendário de Manutenção ─────────────────────────────────────────────
+  // Toggle dentro da própria tela de Planos (não uma aba separada) — reaproveita os
+  // mesmos filtros/dados já carregados (ver planosFiltrados()).
+  visualizacao = signal<'lista' | 'calendario'>('lista');
+  calendarioModo = signal<'semana' | 'mes' | 'ano'>('semana');
+  calendarioAncora = signal<string>(paraIso(new Date()));
+
+  private calendarioAnoAtual = computed(() => Number(this.calendarioAncora().split('-')[0]));
+  private calendarioMesAtual = computed(() => Number(this.calendarioAncora().split('-')[1]));
+
+  // Cada plano filtrado vira dois tipos de item: 'real' (um por dia de cada ordem já
+  // vinculada a um ciclo) e 'previsto' (a próxima execução calculada, ainda sem
+  // ordem/ciclo nenhum). ManutencaoProgramacaoService já está injetado e já carrega
+  // ordens() no ngOnInit (usado pela tela de histórico) — nenhum carregamento novo.
+  itensCalendario = computed<ItemCalendario[]>(() => {
+    const ordensPorId = new Map(this.manutencaoProgramacaoService.ordens().map(o => [o.id, o]));
+    const porId = this.planosComExecucaoPorId();
+    const itens: ItemCalendario[] = [];
+    for (const plano of this.planosFiltrados()) {
+      for (const ciclo of this.manutencaoPlanosService.ciclos().filter(c => c.planoId === plano.id)) {
+        const ordem = ordensPorId.get(ciclo.ordemId);
+        if (!ordem) continue;
+        const dias = ordem.diasPrevistos.length > 0 ? ordem.diasPrevistos : [ordem.semanaInicio];
+        for (const data of dias) itens.push({ data, tipo: 'real', plano, ordem });
+      }
+      const comExecucao = porId.get(plano.id);
+      if (comExecucao) itens.push({ data: comExecucao.proximaData, tipo: 'previsto', plano });
+    }
+    return itens;
+  });
+
+  itensPorDia = computed(() => {
+    const mapa = new Map<string, ItemCalendario[]>();
+    for (const item of this.itensCalendario()) {
+      const lista = mapa.get(item.data) ?? [];
+      lista.push(item);
+      mapa.set(item.data, lista);
+    }
+    return mapa;
+  });
+
+  calendarioDiasSemana = computed(() => {
+    const [ano, mes, dia] = this.calendarioAncora().split('-').map(Number);
+    const segunda = segundaFeiraDe(new Date(ano, mes - 1, dia));
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(segunda);
+      d.setDate(d.getDate() + i);
+      return paraIso(d);
+    });
+  });
+
+  calendarioGradeMensal = computed<DiaGradeMensal[][]>(() =>
+    gerarGradeMensal(this.calendarioAnoAtual(), this.calendarioMesAtual()));
+
+  calendarioMesesDoAno = computed(() => {
+    const ano = this.calendarioAnoAtual();
+    const itensPorDia = this.itensPorDia();
+    return Array.from({ length: 12 }, (_, i) => {
+      const mes = i + 1;
+      const prefixo = `${ano}-${String(mes).padStart(2, '0')}`;
+      let total = 0;
+      for (const [data, itens] of itensPorDia) {
+        if (data.startsWith(prefixo)) total += itens.length;
+      }
+      return { mes, label: MESES_LABEL[i], total };
+    });
+  });
+
+  calendarioLabel = computed(() => {
+    const modo = this.calendarioModo();
+    if (modo === 'ano') return `${this.calendarioAnoAtual()}`;
+    if (modo === 'mes') return `${MESES_LABEL[this.calendarioMesAtual() - 1]} de ${this.calendarioAnoAtual()}`;
+    const dias = this.calendarioDiasSemana();
+    return `Semana de ${this.diaMesLabel(dias[0])} a ${this.diaMesLabel(dias[6])}`;
+  });
+
+  private diaMesLabel(dataIso: string): string {
+    const [, mes, dia] = dataIso.split('-');
+    return `${dia}/${mes}`;
+  }
+
+  diaSemanaLabel(dataIso: string): string {
+    const [ano, mes, dia] = dataIso.split('-').map(Number);
+    return DIAS_SEMANA_LABEL[(new Date(ano, mes - 1, dia).getDay() + 6) % 7];
+  }
+
+  navegarCalendario(direcao: -1 | 1): void {
+    const [ano, mes, dia] = this.calendarioAncora().split('-').map(Number);
+    const d = new Date(ano, mes - 1, dia);
+    const modo = this.calendarioModo();
+    if (modo === 'semana') d.setDate(d.getDate() + direcao * 7);
+    else if (modo === 'mes') d.setMonth(d.getMonth() + direcao);
+    else d.setFullYear(d.getFullYear() + direcao);
+    this.calendarioAncora.set(paraIso(d));
+  }
+
+  irParaHoje(): void {
+    this.calendarioAncora.set(paraIso(new Date()));
+  }
+
+  abrirMesDoAno(mes: number): void {
+    this.calendarioAncora.set(`${this.calendarioAnoAtual()}-${String(mes).padStart(2, '0')}-01`);
+    this.calendarioModo.set('mes');
   }
 }

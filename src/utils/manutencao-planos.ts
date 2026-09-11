@@ -76,3 +76,36 @@ export function planosAtrasados(
     .filter((p): p is PlanoAtrasado => p.prazoLimite !== null && p.prazoLimite < hojeInicioSemanaIso)
     .sort((a, b) => a.proximaData.localeCompare(b.proximaData));
 }
+
+export interface DiaGradeMensal {
+  data: string; // 'YYYY-MM-DD'
+  noMes: boolean; // false = dia de preenchimento do mês anterior/seguinte, pra fechar a semana
+}
+
+function paraIsoLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Grade de calendário mensal (semanas × 7 dias, Seg-Dom) pro Calendário de Manutenção —
+// inclui dias do mês anterior/seguinte pra fechar a primeira/última semana (noMes=false
+// neles, pra ficarem esmaecidos na tela). `mes` é 1-12 (não 0-11 como o Date nativo).
+export function gerarGradeMensal(ano: number, mes: number): DiaGradeMensal[][] {
+  const primeiroDia = new Date(ano, mes - 1, 1);
+  const dowPrimeiro = (primeiroDia.getDay() + 6) % 7; // 0 = segunda
+  const ultimoDia = new Date(ano, mes, 0); // dia 0 do mês seguinte = último dia deste mês
+  const cursor = new Date(ano, mes - 1, 1 - dowPrimeiro);
+
+  const semanas: DiaGradeMensal[][] = [];
+  // A cada volta, `cursor` é a segunda-feira da próxima semana ainda não processada —
+  // continua enquanto essa segunda cair dentro (ou antes) do último dia do mês, pra
+  // garantir cobrir a semana que contém o último dia, sem sobrar uma semana em branco.
+  while (cursor.getTime() <= ultimoDia.getTime()) {
+    const semana: DiaGradeMensal[] = [];
+    for (let i = 0; i < 7; i++) {
+      semana.push({ data: paraIsoLocal(cursor), noMes: cursor.getMonth() === mes - 1 });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    semanas.push(semana);
+  }
+  return semanas;
+}

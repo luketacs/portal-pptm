@@ -1,5 +1,5 @@
 import { PlanoManutencao } from '../models/manutencao-programacao.model';
-import { planosAtrasados, planosComProximaExecucao, proximaExecucaoPlano, sugestoesDaSemana } from './manutencao-planos';
+import { gerarGradeMensal, planosAtrasados, planosComProximaExecucao, proximaExecucaoPlano, sugestoesDaSemana } from './manutencao-planos';
 
 function plano(overrides: Partial<PlanoManutencao> = {}): PlanoManutencao {
   return {
@@ -122,5 +122,54 @@ describe('planosAtrasados', () => {
     const planos = planosComProximaExecucao([plano({ id: 'p1', dataInicial: '2026-08-01', periodicidadeValor: 30, periodicidadeUnidade: 'Dia(s)' })], new Map(), false);
     const resultado = planosAtrasados(planos, '2026-08-15', false);
     expect(resultado.map(p => p.id)).toEqual(['p1']);
+  });
+});
+
+describe('gerarGradeMensal', () => {
+  it('toda semana tem exatamente 7 dias, e cada semana começa numa segunda-feira', () => {
+    const grade = gerarGradeMensal(2026, 9);
+    for (const semana of grade) {
+      expect(semana).toHaveLength(7);
+      const [ano, mes, dia] = semana[0].data.split('-').map(Number);
+      expect(new Date(ano, mes - 1, dia).getDay()).toBe(1); // 1 = segunda
+    }
+  });
+
+  it('cobre o primeiro e o último dia do mês, marcados como noMes=true', () => {
+    const grade = gerarGradeMensal(2026, 9);
+    const todosDias = grade.flat();
+    expect(todosDias.find(d => d.data === '2026-09-01')).toEqual({ data: '2026-09-01', noMes: true });
+    expect(todosDias.find(d => d.data === '2026-09-30')).toEqual({ data: '2026-09-30', noMes: true });
+  });
+
+  it('dias de preenchimento do mês anterior/seguinte vêm marcados como noMes=false', () => {
+    const grade = gerarGradeMensal(2026, 9);
+    const todosDias = grade.flat();
+    const foraDoMes = todosDias.filter(d => !d.noMes);
+    expect(foraDoMes.length).toBeGreaterThan(0);
+    for (const dia of foraDoMes) {
+      const [, mes] = dia.data.split('-').map(Number);
+      expect(mes).not.toBe(9);
+    }
+  });
+
+  it('não duplica nem pula dia nenhum — a grade é uma sequência contínua', () => {
+    const grade = gerarGradeMensal(2026, 9);
+    const todosDias = grade.flat().map(d => d.data);
+    for (let i = 1; i < todosDias.length; i++) {
+      const anterior = new Date(todosDias[i - 1] + 'T00:00:00');
+      const atual = new Date(todosDias[i] + 'T00:00:00');
+      expect((atual.getTime() - anterior.getTime()) / 86400000).toBe(1);
+    }
+  });
+
+  it('funciona na virada de ano (dezembro -> janeiro)', () => {
+    const grade = gerarGradeMensal(2026, 12);
+    const todosDias = grade.flat();
+    expect(todosDias.find(d => d.data === '2026-12-31')).toEqual({ data: '2026-12-31', noMes: true });
+    // A última semana de dezembro pode incluir dias de janeiro/2027 — confirma que o
+    // ano vira certo (formato 'YYYY-MM-DD' correto, sem erro de cálculo).
+    const ultimoDiaGrade = todosDias[todosDias.length - 1].data;
+    expect(ultimoDiaGrade >= '2026-12-31' || ultimoDiaGrade.startsWith('2027-01')).toBe(true);
   });
 });

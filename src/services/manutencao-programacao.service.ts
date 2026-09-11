@@ -404,6 +404,36 @@ export class ManutencaoProgramacaoService {
     await this.load();
   }
 
+  // Move uma ordem pra outra semana — diferente de editarOrdem, que nunca mexe em
+  // semana_inicio (a tela inteira opera sobre a semana filtrada no momento). Barra as
+  // DUAS semanas (origem e destino): nenhuma pode estar fechada pra reprogramação
+  // valer.
+  async reprogramarOrdem(id: string, novaSemanaInicio: string, novosDiasPrevistos: string[]): Promise<void> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+    const item = this.getById(id);
+    if (item) this.garantirSemanaAberta(item.semanaInicio);
+    this.garantirSemanaAberta(novaSemanaInicio);
+
+    const { error } = await this.supabaseService.client
+      .from('manutencao_programacao')
+      .update({ semana_inicio: novaSemanaInicio, dias_previstos: novosDiasPrevistos })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'manutencao_programacao_reprogramada',
+      resource_type: 'manutencao_programacao',
+      resource_id: id,
+      description: `${user.name} reprogramou "${item?.descricao ?? ''}" (${item?.tecnicoNome ?? ''}) de ${item?.semanaInicio ?? '?'} pra ${novaSemanaInicio}`,
+      metadata: { semana_origem: item?.semanaInicio, semana_destino: novaSemanaInicio },
+    });
+
+    await this.load();
+  }
+
   // Consulta as exportações do SIGMA (descrição da OS + apontamentos/execução) via
   // /api/sigma-ordens-proxy — usado tanto pra preencher a descrição sozinha quando a
   // pessoa digita o número da OS, quanto pra conferir se ela foi executada dentro da

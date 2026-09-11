@@ -295,4 +295,18 @@ export class ManutencaoPlanosService {
     if (error && error.code !== '23505') throw new Error(error.message);
     await this.load();
   }
+
+  // Usado só quando a pessoa reprograma uma ordem e marca "recalcular as próximas
+  // datas" (ver reprogramarOrdem/confirmarReprogramar na Programação) — sem isso, o
+  // default (não marcar) já funciona sozinho: o ciclo mantém a data_prevista original,
+  // então a cadência do plano não muda por causa de uma reprogramação pontual. Não é
+  // Admin-only, mesmo motivo de registrarCiclo/salvarNumeroOsReservado.
+  async recalcularCiclo(cicloId: string, novaDataPrevista: string): Promise<void> {
+    const { error } = await this.supabaseService.client
+      .from('manutencao_ciclos')
+      .update({ data_prevista: novaDataPrevista })
+      .eq('id', cicloId);
+    if (error) throw new Error(error.message);
+    await this.load();
+  }
 }
