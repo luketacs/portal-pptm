@@ -8,6 +8,7 @@ import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { ApontamentosService } from '../../../services/apontamentos.service';
 import { ExcelExportService, ProgramacaoSemanalGrupo } from '../../../services/excel-export.service';
+import { AlmoxarifadoService, Movimentacao, Solicitacao } from '../../../services/almoxarifado.service';
 import {
   ConsultaSigmaResultado, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo,
   OperadorEscalaApoio, PlanoPreventivo, RecursoEspecialItem, SigmaBacklogItem,
@@ -18,6 +19,7 @@ import {
   encontrarOrdemDuplicada, recursosParaEspelho,
 } from '../../../utils/manutencao-regras';
 import { calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva, periodicidadeEmDias, preventivaVencendo } from '../../../utils/manutencao-preventivas';
+import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 
@@ -948,6 +950,99 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
   }
 
+  // ── Materiais disponíveis pra execução (cruza Almoxarifado × backlog do SIGMA) ──
+  // Mesma ideia do Backlog do SIGMA acima, mas filtrado só pras OS's cujo material já
+  // chegou no Almoxarifado (ver ordensComMaterialTotalmenteDisponivel) — o Almoxarifado
+  // não guarda descrição/equipamento da OS, só material, então o texto que aparece na
+  // tela vem do mesmo backlog do SIGMA (cruzado por número de OS normalizado). Só uma
+  // pendência de material RESOLVIDA A 100% tira a OS da lista de bloqueadas — se faltar
+  // qualquer material (mesmo que só um dos vários), ela não aparece aqui ainda. Vale só
+  // a partir da semana 39/2026 (mesmo corte de "regrasNovasValemNaSemana" já usado nas
+  // preventivas), a pedido do usuário.
+  materiaisDisponiveisAberto = signal(false);
+  materiaisDisponiveisCarregando = signal(false);
+  materiaisDisponiveisErro = signal('');
+  private almoxSasAbertas = signal<Solicitacao[]>([]);
+  private almoxMovimentacoes = signal<Movimentacao[]>([]);
+  private materiaisDisponiveisSigma = signal<SigmaBacklogItem[]>([]);
+  materiaisDisponiveisAtualizadoEm = signal<number | null>(null);
+
+  materiaisDisponiveisFiltrado = computed<Array<OrdemComMaterialDisponivel & { descricao: string; equipamento: string; tipoServico: string; statusCodigo: string }>>(() => {
+    if (!this.areaFixa || this.areaFixa === 'APOIO') return [];
+    if (!this.regrasNovasValemNaSemana()) return [];
+    const { comSA } = this.almoxarifadoService.calcularAguardandoRetirada(this.almoxMovimentacoes(), this.almoxSasAbertas());
+    const prontas = ordensComMaterialTotalmenteDisponivel(this.almoxSasAbertas(), comSA, normalizarNumeroOs);
+    if (prontas.length === 0) return [];
+    const sigmaPorNumero = new Map(this.materiaisDisponiveisSigma().map(item => [normalizarNumeroOs(item.numeroOs), item]));
+    const jaProgramados = this.numerosOsJaProgramados();
+    const resultado: Array<OrdemComMaterialDisponivel & { descricao: string; equipamento: string; tipoServico: string; statusCodigo: string }> = [];
+    for (const p of prontas) {
+      if (jaProgramados.has(p.numeroOs)) continue;
+      // Sem match no backlog aberto do SIGMA = já concluída/cancelada, ou de outra
+      // área/empresa — o material chegou, mas não é mais (ou nunca foi) uma OS
+      // programável por aqui, então não faz sentido sugerir.
+      const sigma = sigmaPorNumero.get(p.numeroOs);
+      if (!sigma) continue;
+      resultado.push({ ...p, descricao: sigma.descricao, equipamento: sigma.equipamento, tipoServico: sigma.tipoServico, statusCodigo: sigma.statusCodigo });
+    }
+    return resultado;
+  });
+
+  // Texto explicando por que a lista está vazia quando é por causa do corte de semana
+  // (não confundir com "nenhuma OS pronta ainda", que é uma situação normal do dia a
+  // dia) — só assim que faz sentido escolher a mensagem certa no template.
+  materiaisDisponiveisMensagemBloqueio(): string | null {
+    return this.regrasNovasValemNaSemana() ? null : 'Essa funcionalidade vale a partir da semana 39/2026.';
+  }
+
+  materiaisDisponiveisAtualizadoEmLabel(): string {
+    const ts = this.materiaisDisponiveisAtualizadoEm();
+    if (!ts) return '';
+    return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  async toggleMateriaisDisponiveis(): Promise<void> {
+    const abrir = !this.materiaisDisponiveisAberto();
+    this.materiaisDisponiveisAberto.set(abrir);
+    if (abrir) {
+      await this.carregarMateriaisDisponiveis();
+    }
+  }
+
+  async carregarMateriaisDisponiveis(): Promise<void> {
+    if (!this.areaFixa || this.areaFixa === 'APOIO') return;
+    this.materiaisDisponiveisCarregando.set(true);
+    this.materiaisDisponiveisErro.set('');
+    try {
+      const [sas, movs, backlog] = await Promise.all([
+        this.almoxarifadoService.getSolicitacoes(),
+        this.almoxarifadoService.getMovimentacoes(),
+        this.manutencaoService.consultarBacklogSigma(this.areaFixa),
+      ]);
+      this.almoxSasAbertas.set(sas);
+      this.almoxMovimentacoes.set(movs);
+      this.materiaisDisponiveisSigma.set(backlog.itens);
+      this.materiaisDisponiveisAtualizadoEm.set(backlog.atualizadoEm);
+    } catch (err: unknown) {
+      this.materiaisDisponiveisErro.set(err instanceof Error ? err.message : 'Erro ao consultar materiais disponíveis.');
+    } finally {
+      this.materiaisDisponiveisCarregando.set(false);
+    }
+  }
+
+  // Mesma ideia do programarDoBacklog — pré-preenche "Novo lançamento" com o que o
+  // SIGMA sabe da OS. Sem plano_preventivo_id (isso é OS avulsa, não recorrente); a
+  // observação deixa registrado de onde veio o número, é só um texto sugerido, dá pra
+  // editar/apagar.
+  programarDeMaterialDisponivel(item: OrdemComMaterialDisponivel & { descricao: string; equipamento: string; tipoServico: string }): void {
+    this.abrirCriar();
+    this.formNumeroOs.set(item.numeroOs);
+    this.formDescricao.set(item.descricao);
+    if (this.equipamentos().includes(item.equipamento)) this.formEquipamento.set(item.equipamento);
+    if (this.tipoServicoOpcoes.includes(item.tipoServico)) this.formTipoServico.set(item.tipoServico);
+    this.formObservacoes.set(`Material disponível pra retirada: ${item.materiais.join(', ')}.`);
+  }
+
   // ── Preventivas da semana (cadastro nativo — ver PlanoPreventivo) ────────────
   // Mesma ideia do Backlog do SIGMA acima, mas a fonte não é mais o SIGMA (a análise
   // desta conversa provou que ele parou de gerar OS preventiva de forma confiável) —
@@ -1445,6 +1540,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     private apontamentosService: ApontamentosService,
     private excelExportService: ExcelExportService,
     private confirmDialogService: ConfirmDialogService,
+    private almoxarifadoService: AlmoxarifadoService,
   ) {
     const area = this.route.snapshot.data['area'] as ManutencaoArea | undefined;
     if (area) {
