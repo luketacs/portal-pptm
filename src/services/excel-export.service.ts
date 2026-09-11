@@ -698,6 +698,19 @@ export class ExcelExportService {
     return { top: estilo, bottom: estilo, left: estilo, right: estilo };
   }
 
+  // O Excel não recalcula a altura da linha sozinho pra texto quebrado (wrapText)
+  // quando o arquivo é gerado por fora do Excel — Descrição/Recursos/LOTO longos (várias
+  // pessoas/empresas na mesma OS, ex.: "ULTRALIMPO, ANDAIME, Alexandre Rodguires")
+  // ficavam cortados ou desenhados por cima da linha de baixo. Calcula a altura certa a
+  // partir de quantas linhas o texto realmente precisa — aproximação: 1 unidade de
+  // largura de coluna ≈ 1 caractere da fonte padrão (não é exato, mas errar pra mais
+  // altura é sempre melhor do que cortar texto).
+  private estimarLinhas(texto: string | null | undefined, larguraColuna: number): number {
+    if (!texto) return 1;
+    const charsPorLinha = Math.max(1, Math.floor(larguraColuna));
+    return texto.split('\n').reduce((total, linha) => total + Math.max(1, Math.ceil(linha.length / charsPorLinha)), 0);
+  }
+
   private tabelaTecnicoExcelJs(
     ws: ExcelJS.Worksheet, rowInicial: number, NC: number, grupo: ProgramacaoSemanalGrupo, dias: ProgramacaoSemanalDia[],
   ): number {
@@ -771,6 +784,19 @@ export class ExcelExportService {
           cel.font = { bold: true, size: 10, color: { argb: cor.texto } };
           cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor.bg } };
         } else {
+          // Altura explícita pra caber o texto de todas as colunas que podem quebrar
+          // linha (Descrição, Recursos, LOTO) — ver estimarLinhas.
+          const larguraDesc = (ws.getColumn(2).width as number | undefined) ?? 46;
+          const larguraRec = (ws.getColumn(5).width as number | undefined) ?? 24;
+          const larguraLoto = (ws.getColumn(6).width as number | undefined) ?? 12;
+          const linhasNecessarias = Math.max(
+            this.estimarLinhas(linha.descricao, larguraDesc),
+            this.estimarLinhas(linha.recursos, larguraRec),
+            this.estimarLinhas(linha.loto, larguraLoto),
+            1,
+          );
+          ws.getRow(row).height = Math.max(15, linhasNecessarias * 13);
+
           const cOs = ws.getCell(row, 1);
           cOs.value = numeroLabel;
           cOs.font = fonteBase;
@@ -807,7 +833,7 @@ export class ExcelExportService {
           const cLoto = ws.getCell(row, 6);
           cLoto.value = linha.loto;
           cLoto.font = fonteBase;
-          cLoto.alignment = { horizontal: 'center', vertical: 'middle' };
+          cLoto.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
           if (zebra) cLoto.fill = zebra;
 
           const cArea = ws.getCell(row, 7);
@@ -898,7 +924,7 @@ export class ExcelExportService {
 
     ws.columns = [
       { width: 13 }, { width: 46 }, { width: 9 }, { width: 16 }, { width: 24 },
-      { width: 10 }, { width: 20 },
+      { width: 12 }, { width: 20 },
       { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 },
     ];
 
