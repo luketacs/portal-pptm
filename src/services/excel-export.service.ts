@@ -44,6 +44,30 @@ export interface ProgramacaoSemanalDia {
   label: string;  // "SEG"
 }
 
+// Export da tela de Planos de Manutenção (Ativo/Inativo, uma linha por plano — não tem
+// nada de dia/semana em grade, é lista simples) — campos já formatados como texto
+// (datas 'DD/MM/AAAA', "S38" pra semana, "—" pra vazio) porque quem usa isso não é
+// código, é o time revisando/repassando a planilha por fora do Portal.
+export interface PlanoManutencaoExportLinha {
+  codigo: string;
+  nome: string;
+  equipamento: string;
+  tagKks: string;
+  area: string;
+  especialidade: string;
+  descricao: string;
+  periodicidade: string;
+  responsavel: string;
+  dataInicial: string;
+  ultimaExecucao: string;
+  proximaExecucao: string;
+  semanaPrevista: string;
+  status: 'Ativo' | 'Inativo';
+  tempoEstimadoHoras: string;
+  hhEstimado: string;
+  observacoes: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ExcelExportService {
 
@@ -1013,6 +1037,117 @@ export class ExcelExportService {
     const a = document.createElement('a');
     a.href = url;
     a.download = this.nomeArquivoProgramacao(tituloPlanilha);
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Export da tela de Planos de Manutenção — lista simples (sem grade de dias/semana),
+  // uma linha por plano, mesmo padrão visual (logo, cor da marca) do export de
+  // Programação. `titulo` já vem pronto do componente (ex.: "Planos de Manutenção —
+  // Mecânica"), pra cobrir tanto exportar tudo quanto só a área filtrada na tela.
+  async exportarPlanos(params: { titulo: string; linhas: PlanoManutencaoExportLinha[] }): Promise<void> {
+    const colunas: { header: string; width: number }[] = [
+      { header: 'Código', width: 10 },
+      { header: 'Nome', width: 42 },
+      { header: 'Equipamento', width: 24 },
+      { header: 'TAG/KKS', width: 14 },
+      { header: 'Área', width: 12 },
+      { header: 'Especialidade', width: 20 },
+      { header: 'Descrição', width: 36 },
+      { header: 'Periodicidade', width: 16 },
+      { header: 'Responsável', width: 18 },
+      { header: 'Data Inicial', width: 12 },
+      { header: 'Última Execução', width: 14 },
+      { header: 'Próxima Execução', width: 15 },
+      { header: 'Semana', width: 9 },
+      { header: 'Status', width: 10 },
+      { header: 'Tempo Estimado (h)', width: 12 },
+      { header: 'HH Estimado', width: 10 },
+      { header: 'Observações', width: 32 },
+    ];
+    const NC = colunas.length;
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Portal PPTM';
+    wb.created = new Date();
+    const ws = wb.addWorksheet(this.nomeAbaSeguro(params.titulo), {
+      pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+      views: [{ state: 'frozen', ySplit: 4, showGridLines: false }],
+    });
+    ws.columns = colunas.map(c => ({ width: c.width }));
+
+    const logoBuffer = await this.carregarLogoBuffer();
+    if (logoBuffer) {
+      const logoId = wb.addImage({ buffer: logoBuffer, extension: 'png' });
+      ws.addImage(logoId, { tl: { col: 0.15, row: 0.12 }, ext: { width: 210, height: 63 } });
+    }
+
+    ws.getRow(1).height = 28;
+    ws.getRow(2).height = 18;
+    ws.getRow(3).height = 6;
+
+    ws.mergeCells(1, 3, 1, NC);
+    const cTitulo = ws.getCell(1, 3);
+    cTitulo.value = params.titulo;
+    cTitulo.font = { bold: true, size: 16, color: { argb: this.PROG_AZUL_TEXTO } };
+    cTitulo.alignment = { horizontal: 'left', vertical: 'middle' };
+
+    ws.mergeCells(2, 3, 2, NC);
+    const cSub = ws.getCell(2, 3);
+    cSub.value = `${params.linhas.length} plano(s) — gerado em ${this.nowStr()}`;
+    cSub.font = { size: 10, color: { argb: 'FF555555' } };
+    cSub.alignment = { horizontal: 'left', vertical: 'middle' };
+
+    for (let c = 1; c <= NC; c++) {
+      ws.getCell(2, c).border = { bottom: { style: 'thin', color: { argb: 'FFB9C1FD' } } };
+    }
+
+    let row = 4;
+    const headerRow = ws.getRow(row);
+    headerRow.height = 24;
+    colunas.forEach((c, i) => {
+      const cel = headerRow.getCell(i + 1);
+      cel.value = c.header;
+      cel.font = { bold: true, size: 9, color: { argb: 'FFFFFFFF' } };
+      cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL } };
+      cel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    });
+    row++;
+
+    const colunasComQuebra = new Set([2, 7, 17]); // Nome, Descrição, Observações
+    for (const linha of params.linhas) {
+      const valores = [
+        linha.codigo, linha.nome, linha.equipamento, linha.tagKks, linha.area, linha.especialidade,
+        linha.descricao, linha.periodicidade, linha.responsavel, linha.dataInicial, linha.ultimaExecucao,
+        linha.proximaExecucao, linha.semanaPrevista, linha.status, linha.tempoEstimadoHoras, linha.hhEstimado,
+        linha.observacoes,
+      ];
+      valores.forEach((v, i) => {
+        const c = i + 1;
+        const cel = ws.getCell(row, c);
+        cel.value = v;
+        cel.font = c === 14
+          ? { size: 9, bold: true, color: { argb: linha.status === 'Ativo' ? 'FF15803D' : 'FF64748B' } }
+          : { size: 9 };
+        cel.alignment = { vertical: 'top', wrapText: colunasComQuebra.has(c), horizontal: c === 14 ? 'center' : 'left' };
+        cel.border = this.bordaFina();
+      });
+      const alturaLinhas = Math.max(
+        this.estimarLinhas(linha.nome, 42), this.estimarLinhas(linha.descricao, 36), this.estimarLinhas(linha.observacoes, 32),
+      );
+      ws.getRow(row).height = Math.max(16, alturaLinhas * 14);
+      row++;
+    }
+
+    ws.pageSetup.margins = { left: 0.3, right: 0.3, top: 0.5, bottom: 0.4, header: 0.2, footer: 0.2 };
+    ws.pageSetup.printTitlesRow = '4:4';
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${params.titulo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_')}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
   }

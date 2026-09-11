@@ -6,6 +6,7 @@ import { ManutencaoProgramacaoService } from '../../../services/manutencao-progr
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
+import { ExcelExportService } from '../../../services/excel-export.service';
 import {
   CicloManutencao, ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem, PeriodicidadeUnidade, PlanoManutencao,
 } from '../../../models/manutencao-programacao.model';
@@ -90,6 +91,7 @@ export class ManutencaoPlanosComponent implements OnInit {
     private authService: AuthService,
     private notificationService: NotificationService,
     private confirmDialogService: ConfirmDialogService,
+    private excelExportService: ExcelExportService,
   ) {}
 
   async ngOnInit(): Promise<void> {
@@ -219,6 +221,56 @@ export class ManutencaoPlanosComponent implements OnInit {
     const valores = new Set(this.manutencaoPlanosService.planos().map(p => `${p.periodicidadeValor} ${p.periodicidadeUnidade}`));
     return Array.from(valores).sort();
   });
+
+  private formatarDataBr(dataIso: string): string {
+    const [ano, mes, dia] = dataIso.split('-');
+    return `${dia}/${mes}/${ano}`;
+  }
+
+  // Exporta exatamente o que está na tela (linhas() já aplica todos os filtros ativos)
+  // — pra mandar só a Mecânica, por exemplo, basta filtrar por Área antes de exportar.
+  exportando = signal(false);
+
+  async exportarExcel(): Promise<void> {
+    if (this.exportando()) return;
+    const linhas = this.linhas();
+    if (linhas.length === 0) {
+      this.notificationService.showError('Nenhum plano pra exportar com esses filtros.');
+      return;
+    }
+    this.exportando.set(true);
+    try {
+      const area = this.filtroArea();
+      const tituloArea = area === 'todos' ? 'Todas as Áreas' : this.areaLabel[area];
+      await this.excelExportService.exportarPlanos({
+        titulo: `Planos de Manutenção — ${tituloArea}`,
+        linhas: linhas.map(l => ({
+          codigo: l.plano.codigo,
+          nome: l.plano.nome,
+          equipamento: l.plano.equipamento,
+          tagKks: l.plano.tagKks || '—',
+          area: this.areaLabel[l.plano.area],
+          especialidade: l.plano.especialidade || '—',
+          descricao: l.plano.descricao,
+          periodicidade: `${l.plano.periodicidadeValor} ${l.plano.periodicidadeUnidade}`,
+          responsavel: l.plano.responsavel || '—',
+          dataInicial: this.formatarDataBr(l.plano.dataInicial),
+          ultimaExecucao: l.ultimaExecucao ? this.formatarDataBr(l.ultimaExecucao) : '—',
+          proximaExecucao: this.formatarDataBr(l.proximaData),
+          semanaPrevista: `S${l.semanaPrevista}`,
+          status: l.plano.ativo ? 'Ativo' : 'Inativo',
+          tempoEstimadoHoras: l.plano.tempoEstimadoHoras != null ? String(l.plano.tempoEstimadoHoras) : '—',
+          hhEstimado: l.plano.hhEstimado != null ? String(l.plano.hhEstimado) : '—',
+          observacoes: l.plano.observacoes || '—',
+        })),
+      });
+      this.notificationService.showSuccess('Planilha exportada.');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao exportar.');
+    } finally {
+      this.exportando.set(false);
+    }
+  }
 
   // ── Ativar/Desativar/Excluir ────────────────────────────────────────────────
   async toggleAtivo(plano: PlanoManutencao): Promise<void> {
