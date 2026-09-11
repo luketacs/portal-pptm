@@ -119,8 +119,8 @@
             @for (linha of linhas(); track linha.plano.id) {
               <tr [class.opacity-50]="!linha.plano.ativo">
                 <td class="py-2 pr-3 font-mono text-xs text-gray-600 whitespace-nowrap">{{ linha.plano.codigo }}</td>
-                <td class="py-2 pr-3 text-gray-800 max-w-[220px]"><span class="block truncate" [title]="linha.plano.nome">{{ linha.plano.nome }}</span></td>
-                <td class="py-2 pr-3 text-gray-600 max-w-[160px]"><span class="block truncate" [title]="linha.plano.equipamento">{{ linha.plano.equipamento }}</span></td>
+                <td class="py-2 pr-3 text-gray-800 min-w-[220px] max-w-[320px]">{{ linha.plano.nome }}</td>
+                <td class="py-2 pr-3 text-gray-600 min-w-[160px] max-w-[240px]">{{ linha.plano.equipamento }}</td>
                 <td class="py-2 pr-3 text-gray-600 whitespace-nowrap">{{ linha.plano.tagKks || '—' }}</td>
                 <td class="py-2 pr-3 text-gray-600 whitespace-nowrap">{{ areaLabel[linha.plano.area] }}</td>
                 <td class="py-2 pr-3 text-gray-600 whitespace-nowrap">{{ linha.plano.periodicidadeValor }} {{ linha.plano.periodicidadeUnidade }}</td>
