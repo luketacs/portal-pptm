@@ -8,6 +8,9 @@
 -- manutencao-programacao.component.ts).
 -- RLS permissiva a nível SQL, mesmo padrão do resto da Programação de Manutenção: quem
 -- pode editar de fato (Admin, pro cadastro de plano) é decidido no app.
+-- Script idempotente de propósito (seguro rodar de novo do zero): usa DROP POLICY IF
+-- EXISTS antes de cada CREATE POLICY, e TRUNCATE antes do INSERT final -- útil se uma
+-- tentativa anterior falhou no meio e deixou o banco num estado parcial.
 -- Execute no Supabase SQL Editor: https://supabase.com/dashboard/project/_/sql
 
 CREATE SEQUENCE IF NOT EXISTS manutencao_planos_codigo_seq;
@@ -44,12 +47,16 @@ CREATE INDEX IF NOT EXISTS idx_planos_area        ON manutencao_planos (area);
 
 ALTER TABLE manutencao_planos ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "auth_read_planos" ON manutencao_planos;
 CREATE POLICY "auth_read_planos" ON manutencao_planos
   FOR SELECT USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "auth_insert_planos" ON manutencao_planos;
 CREATE POLICY "auth_insert_planos" ON manutencao_planos
   FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "auth_update_planos" ON manutencao_planos;
 CREATE POLICY "auth_update_planos" ON manutencao_planos
   FOR UPDATE USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "auth_delete_planos" ON manutencao_planos;
 CREATE POLICY "auth_delete_planos" ON manutencao_planos
   FOR DELETE USING (auth.uid() IS NOT NULL);
 
@@ -72,8 +79,10 @@ CREATE INDEX IF NOT EXISTS idx_ciclos_plano ON manutencao_ciclos (plano_id);
 
 ALTER TABLE manutencao_ciclos ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "auth_read_ciclos" ON manutencao_ciclos;
 CREATE POLICY "auth_read_ciclos" ON manutencao_ciclos
   FOR SELECT USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "auth_insert_ciclos" ON manutencao_ciclos;
 CREATE POLICY "auth_insert_ciclos" ON manutencao_ciclos
   FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 
@@ -82,27 +91,31 @@ CREATE POLICY "auth_insert_ciclos" ON manutencao_ciclos
 ALTER TABLE manutencao_programacao
   ADD COLUMN IF NOT EXISTS checklist TEXT[];
 
--- Repontar o vínculo existente: plano_preventivo_id referenciava a tabela antiga: a
--- tabela antiga fica no banco intacta (não usada, não apagada -- reversível se algo
--- der errado), o vínculo passa a apontar pra manutencao_planos. Nome do constraint é o
--- default do Postgres pra FK sem nome explícito, criada em
--- 028_manutencao_planos_preventivos.sql.
-ALTER TABLE manutencao_programacao
-  DROP CONSTRAINT IF EXISTS manutencao_programacao_plano_preventivo_id_fkey;
-ALTER TABLE manutencao_programacao
-  ADD CONSTRAINT manutencao_programacao_plano_preventivo_id_fkey
-  FOREIGN KEY (plano_preventivo_id) REFERENCES manutencao_planos(id) ON DELETE SET NULL;
+-- Migra os planos já cadastrados (import do SIGMA) pro modelo novo, preservando o id
+-- original de cada linha -- essencial: ordens já criadas (manutencao_programacao.
+-- plano_preventivo_id) apontam pra esses ids, então gerar ids novos aqui quebraria
+-- esse vínculo assim que o FK for repontado logo abaixo (foi exatamente isso que
+-- causou uma violação de FK numa tentativa anterior deste script, quando o id era
+-- deixado pro DEFAULT gen_random_uuid()). Roda ANTES de repontar o FK de propósito:
+-- nesse momento ainda não existe nenhuma referência de manutencao_programacao pra
+-- manutencao_planos, então o TRUNCATE abaixo não precisa (e não deve) de CASCADE --
+-- com CASCADE, um TRUNCATE depois do FK existir arrastaria manutencao_programacao
+-- inteira junto (qualquer tabela com FK apontando pra uma tabela truncada também é
+-- truncada em cascata). TRUNCATE + reset da sequence garantem que rodar esse script de
+-- novo (ex.: depois de uma falha no meio) não duplica nem deixa código gap. codigo sai
+-- da sequence (DEFAULT da coluna), em ordem determinística por área/bem/serviço/
+-- sequência. Sem campo de nome/descrição livre na tabela antiga -- nome_manut cobre os
+-- dois por enquanto, editável depois pelo cadastro novo.
+TRUNCATE manutencao_ciclos, manutencao_planos;
+ALTER SEQUENCE manutencao_planos_codigo_seq RESTART WITH 1;
 
--- Migra os planos já cadastrados (import do SIGMA) pro modelo novo. codigo sai da
--- sequence acima (ordem determinística por área/bem/serviço/sequência). Sem campo de
--- nome/descrição livre na tabela antiga -- nome_manut cobre os dois por enquanto,
--- editável depois pelo cadastro novo.
 INSERT INTO manutencao_planos (
-  nome, equipamento, tag_kks, area, especialidade, descricao,
+  id, nome, equipamento, tag_kks, area, especialidade, descricao,
   periodicidade_valor, periodicidade_unidade, data_inicial, responsavel,
   ativo, numero_os_reservado, criado_por_id, criado_por_nome, created_at
 )
 SELECT
+  id,
   nome_manut,
   nome_bem,
   bem,
@@ -120,3 +133,15 @@ SELECT
   created_at
 FROM manutencao_planos_preventivos
 ORDER BY area, bem, servico, sequencia;
+
+-- Repontar o vínculo existente: plano_preventivo_id referenciava a tabela antiga; a
+-- tabela antiga fica no banco intacta (não usada, não apagada -- reversível se algo
+-- der errado), o vínculo passa a apontar pra manutencao_planos. Nome do constraint é o
+-- default do Postgres pra FK sem nome explícito, criada em
+-- 028_manutencao_planos_preventivos.sql. Só funciona porque manutencao_planos já foi
+-- populada (INSERT acima) com os MESMOS ids da tabela antiga antes de chegar aqui.
+ALTER TABLE manutencao_programacao
+  DROP CONSTRAINT IF EXISTS manutencao_programacao_plano_preventivo_id_fkey;
+ALTER TABLE manutencao_programacao
+  ADD CONSTRAINT manutencao_programacao_plano_preventivo_id_fkey
+  FOREIGN KEY (plano_preventivo_id) REFERENCES manutencao_planos(id) ON DELETE SET NULL;
