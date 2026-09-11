@@ -655,7 +655,7 @@ export class ExcelExportService {
   private readonly PROG_AZUL = 'FF2039F9';
   private readonly PROG_AZUL_TEXTO = 'FF0620E5';
   private readonly PROG_AZUL_CLARO = 'FFF0F2FF';
-  private readonly PROG_AZUL_DIA = 'FFDCE0FE';
+  private readonly PROG_AZUL_DIA = 'FF8895FC';
   private readonly PROG_BORDA = 'FFD9D9D9';
   private readonly PROG_ZEBRA = 'FFF7F8FC';
   private readonly PROG_LARANJA_BG = 'FFFDF6F2';
