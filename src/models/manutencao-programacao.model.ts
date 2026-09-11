@@ -33,8 +33,11 @@ export interface ManutencaoOrdem {
   reuniaoHorario: string | null; // 'HH:mm', só pra tipo 'reuniao'
   reuniaoLocal: string | null;
   // Preenchido só quando a OS nasceu do painel "Preventivas da semana" — liga essa OS
-  // ao plano preventivo que ela cumpre (ver PlanoPreventivo). null pra grande maioria.
+  // ao plano preventivo que ela cumpre (ver PlanoManutencao). null pra grande maioria.
   planoPreventivoId: string | null;
+  // Checklist copiado do plano preventivo no momento da programação (ver
+  // PlanoManutencao.atividades) — null pra OS que não nasceu de um plano.
+  checklist: string[] | null;
   criadoPorId: string | null;
   criadoPorNome: string;
   createdAt: Date;
@@ -61,6 +64,7 @@ export interface CreateManutencaoOrdemRequest {
   reuniaoHorario?: string;
   reuniaoLocal?: string;
   planoPreventivoId?: string;
+  checklist?: string[];
 }
 
 // Periodicidade dos planos de manutenção preventiva — mesmos textos usados no export
@@ -68,29 +72,86 @@ export interface CreateManutencaoOrdemRequest {
 // de exibir.
 export type PeriodicidadeUnidade = 'Dia(s)' | 'Semana(s)' | 'Mes(es)';
 
-// Plano mestre de manutenção preventiva — cadastro nativo (ver migration 028),
-// populado 1x a partir do export do SIGMA. "Última execução" avança quando a OS é
-// programada no Portal (ver ManutencaoProgramacaoService.avancarPreventiva), não
-// depende do SIGMA confirmar apontamento.
-export interface PlanoPreventivo {
+// Plano mestre de manutenção preventiva (ver migration 032) — substitui o antigo
+// PlanoPreventivo (import bruto do SIGMA em manutencao_planos_preventivos). "Última
+// execução" não é mais um campo mutável aqui: é derivada do ciclo mais recente em
+// CicloManutencao (ver proximaExecucaoPlano em utils/manutencao-planos.ts).
+export interface PlanoManutencao {
   id: string;
-  bem: string;
-  nomeBem: string;
-  servico: string;
-  nomeServico: string;
-  sequencia: string;
-  nomeManut: string;
+  codigo: string; // gerado no banco, "PM-0001"
+  nome: string;
+  equipamento: string;
+  tagKks: string | null;
   area: ManutencaoArea;
-  // Só preenchido quando area='APOIO': 'SERVPLEX' (ex-REFR) ou 'OPERAÇÃO' (ex-OPER) —
-  // única opção real de "técnico" (equipe) do Apoio pra esse plano.
-  tecnicoApoio: string | null;
+  especialidade: string | null;
+  descricao: string;
+  atividades: string[]; // checklist
   periodicidadeValor: number;
   periodicidadeUnidade: PeriodicidadeUnidade;
-  ultimaExecucao: string | null; // 'YYYY-MM-DD', null = nunca executada
+  dataInicial: string; // 'YYYY-MM-DD'
+  responsavel: string | null;
+  tempoEstimadoHoras: number | null;
+  hhEstimado: number | null;
+  observacoes: string | null;
   ativo: boolean;
   // Número da OS já aberta/reservada no SIGMA pra esse plano, anotado antes dele ser
   // programado de fato (ver programarDaPreventiva) — some assim que vira uma OS real.
   numeroOsReservado: string | null;
+  criadoPorId: string | null;
+  criadoPorNome: string;
+  createdAt: Date;
+  atualizadoPorId: string | null;
+  atualizadoPorNome: string | null;
+  atualizadoEm: Date;
+}
+
+export interface CreatePlanoManutencaoRequest {
+  nome: string;
+  equipamento: string;
+  tagKks?: string;
+  area: ManutencaoArea;
+  especialidade?: string;
+  descricao: string;
+  atividades?: string[];
+  periodicidadeValor: number;
+  periodicidadeUnidade: PeriodicidadeUnidade;
+  dataInicial: string;
+  responsavel?: string;
+  tempoEstimadoHoras?: number;
+  hhEstimado?: number;
+  observacoes?: string;
+  ativo?: boolean; // default true no service
+}
+
+export interface EditarPlanoManutencaoRequest {
+  nome: string;
+  equipamento: string;
+  tagKks: string | null;
+  area: ManutencaoArea;
+  especialidade: string | null;
+  descricao: string;
+  atividades: string[];
+  periodicidadeValor: number;
+  periodicidadeUnidade: PeriodicidadeUnidade;
+  dataInicial: string;
+  responsavel: string | null;
+  tempoEstimadoHoras: number | null;
+  hhEstimado: number | null;
+  observacoes: string | null;
+  ativo: boolean;
+}
+
+// Ledger de duplicidade — uma linha por ocorrência já programada de um plano (ver
+// migration 032). UNIQUE(planoId, dataPrevista) é o que impede gerar duas ordens pro
+// mesmo ciclo. Só é gravado depois que a ordem já existe (ver
+// ManutencaoPlanosService.registrarCiclo) — não modela um lifecycle de status (isso
+// fica pra uma fase 2, junto com reprogramação avançada).
+export interface CicloManutencao {
+  id: string;
+  planoId: string;
+  dataPrevista: string; // 'YYYY-MM-DD'
+  ordemId: string;
+  createdAt: Date;
 }
 
 // Período em que a planta ficou parada (a empresa não opera 24h/dia) — enquanto
@@ -186,4 +247,5 @@ export interface EditarManutencaoOrdemRequest {
   reuniaoHorario: string | null;
   reuniaoLocal: string | null;
   planoPreventivoId: string | null;
+  checklist: string[] | null;
 }

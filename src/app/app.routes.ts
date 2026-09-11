@@ -185,6 +185,14 @@ export const APP_ROUTES: Routes = [
     title: 'Dashboard da Programação',
   },
   {
+    path: 'manutencao/planos',
+    loadComponent: () =>
+      import('../components/manutencao/manutencao-planos/manutencao-planos.component').then(m => m.ManutencaoPlanosComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Planos de Manutenção',
+  },
+  {
     path: 'manutencao/programacao',
     loadComponent: () =>
       import('../components/manutencao/manutencao-programacao/manutencao-programacao.component').then(m => m.ManutencaoProgramacaoComponent),

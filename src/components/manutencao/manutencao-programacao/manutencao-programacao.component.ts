@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { ManutencaoProgramacaoService } from '../../../services/manutencao-programacao.service';
+import { ManutencaoPlanosService } from '../../../services/manutencao-planos.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
@@ -11,14 +12,14 @@ import { ExcelExportService, ProgramacaoSemanalGrupo, ProgramacaoSemanalLinha } 
 import { AlmoxarifadoService, Movimentacao, Solicitacao } from '../../../services/almoxarifado.service';
 import {
   ConsultaSigmaResultado, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo,
-  OperadorEscalaApoio, PlanoPreventivo, RecursoEspecialItem, SigmaBacklogItem,
+  OperadorEscalaApoio, PlanoManutencao, RecursoEspecialItem, SigmaBacklogItem,
 } from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, TURNO_LABEL, turnoNoDia } from '../../../utils/escala-apoio';
 import {
   HORAS_TREINAMENTO_DIA_TODO, calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo,
   encontrarOrdemDuplicada, podeEditarSemanaFechada, recursosParaEspelho,
 } from '../../../utils/manutencao-regras';
-import { calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva, periodicidadeEmDias, preventivaVencendo } from '../../../utils/manutencao-preventivas';
+import { PlanoComProximaData, planosAtrasados, planosComProximaExecucao, proximaExecucaoPlano, sugestoesDaSemana } from '../../../utils/manutencao-planos';
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
@@ -1043,13 +1044,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formObservacoes.set(`Material disponível pra retirada: ${item.materiais.join(', ')}.`);
   }
 
-  // ── Preventivas da semana (cadastro nativo — ver PlanoPreventivo) ────────────
+  // ── Preventivas da semana (ver PlanoManutencao/ManutencaoPlanosService) ──────
   // Mesma ideia do Backlog do SIGMA acima, mas a fonte não é mais o SIGMA (a análise
   // desta conversa provou que ele parou de gerar OS preventiva de forma confiável) —
-  // é o plano mestre importado 1x pro Portal, com a "próxima data" calculada em
-  // runtime (calcularProximaData) a partir da última execução registrada. Card fixo
-  // (sempre visível, não fica escondido atrás de um clique em "Mais ações") — é
-  // consultado com frequência suficiente pra merecer esse destaque.
+  // é o cadastro de planos do Portal, com a "próxima data" derivada em runtime do
+  // último ciclo já registrado (ver proximaExecucaoPlano em utils/manutencao-planos.ts).
+  // Card fixo (sempre visível, não fica escondido atrás de um clique em "Mais ações") —
+  // é consultado com frequência suficiente pra merecer esse destaque.
 
   // Admin-only: liga/desliga a parada da planta (ver plantaParadaAtiva acima).
   async togglePlantaParada(): Promise<void> {
@@ -1094,22 +1095,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   private loteePreventivasPorSemana = computed(() =>
     this.regrasNovasValemNaSemana() ? this.LOTE_PREVENTIVAS_POR_SEMANA_NOVO : this.LOTE_PREVENTIVAS_POR_SEMANA_ANTIGO);
 
-  private planosPreventivosDaArea = computed(() => {
+  // Planos da área, cada um já com a próxima execução calculada a partir do ciclo mais
+  // recente (ver planosComProximaExecucao em utils/manutencao-planos.ts) — substitui o
+  // antigo planosPreventivosDaArea+planosJaProgramados: não precisa mais de uma lista de
+  // exclusão separada, porque a próxima data já avança sozinha a cada ciclo registrado
+  // (não fica presa depois da primeira programação, como o sistema antigo ficava).
+  private planosComProximaDaArea = computed<PlanoComProximaData[]>(() => {
     const area = this.areaFixa;
     if (!area) return [];
-    return this.manutencaoService.planosPreventivos().filter(p => p.area === area && p.ativo);
-  });
-
-  // Planos já programados essa semana (têm uma OS ligada via plano_preventivo_id) —
-  // saem da lista pra não sugerir de novo o que já foi resolvido.
-  private planosJaProgramados = computed(() => {
-    const area = this.areaFixa;
-    if (!area) return new Set<string>();
-    return new Set(
-      this.manutencaoService.ordens()
-        .filter(o => o.area === area && o.planoPreventivoId)
-        .map(o => o.planoPreventivoId!),
-    );
+    const planosDaArea = this.manutencaoPlanosService.planos().filter(p => p.area === area);
+    const ultimoCicloPorPlano = new Map(planosDaArea.map(p => [p.id, this.manutencaoPlanosService.ultimoCicloDoPlano(p.id)]));
+    return planosComProximaExecucao(planosDaArea, ultimoCicloPorPlano, this.plantaParadaAtiva());
   });
 
   // Parada da planta (Admin-only, ver "Gerenciar" no menu) — enquanto ativa, ciclo
@@ -1163,24 +1159,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const inicioSemana = diasUteis[0]?.data;
     const fimSemana = diasUteis[diasUteis.length - 1]?.data;
     if (!inicioSemana || !fimSemana) return [];
-    const jaProgramados = this.planosJaProgramados();
-    const parada = this.plantaParadaAtiva();
-    return this.planosPreventivosDaArea()
-      .filter(p => !jaProgramados.has(p.id))
-      .map(p => {
-        const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, parada);
-        return { ...p, proximaData: calcularProximaData(p.ultimaExecucao, efetiva.valor, efetiva.unidade) };
-      })
-      .filter(p => preventivaVencendo(p.proximaData, inicioSemana, fimSemana))
-      .sort((a, b) => {
-        if (!this.regrasNovasValemNaSemana()) return (a.proximaData ?? '').localeCompare(b.proximaData ?? '');
-        // Periodicidade do CADASTRO (não a "efetiva" da parada de planta) — é sobre a
-        // natureza real da tarefa, não sobre um ajuste temporário de cálculo.
-        const diasA = periodicidadeEmDias(a.periodicidadeValor, a.periodicidadeUnidade);
-        const diasB = periodicidadeEmDias(b.periodicidadeValor, b.periodicidadeUnidade);
-        if (diasA !== diasB) return diasB - diasA;
-        return (a.proximaData ?? '').localeCompare(b.proximaData ?? '');
-      });
+    return sugestoesDaSemana(this.planosComProximaDaArea(), inicioSemana, fimSemana, this.regrasNovasValemNaSemana());
   });
 
   preventivasVencendo = computed(() => this.preventivasVencendoTodas().slice(0, this.loteePreventivasPorSemana()));
@@ -1237,20 +1216,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Regra combinada: só conta como atrasada de verdade depois de passar a tolerância de
   // 1/3 do período além da próxima data (ver dataLimiteComTolerancia) — um plano mensal
   // vencido há 3 dias ainda está dentro do prazo aceitável, não é "atrasado" ainda.
-  preventivasAtrasadas = computed(() => {
-    const jaProgramados = this.planosJaProgramados();
-    const parada = this.plantaParadaAtiva();
-    return this.planosPreventivosDaArea()
-      .filter(p => !jaProgramados.has(p.id))
-      .map(p => {
-        const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, parada);
-        const proximaData = calcularProximaData(p.ultimaExecucao, efetiva.valor, efetiva.unidade);
-        const prazoLimite = dataLimiteComTolerancia(proximaData, efetiva.valor, efetiva.unidade);
-        return { ...p, proximaData, prazoLimite };
-      })
-      .filter(p => p.proximaData === null || (p.prazoLimite !== null && p.prazoLimite < this.hojeInicioSemanaIso))
-      .sort((a, b) => (a.proximaData ?? '').localeCompare(b.proximaData ?? ''));
-  });
+  preventivasAtrasadas = computed(() =>
+    planosAtrasados(this.planosComProximaDaArea(), this.hojeInicioSemanaIso, this.plantaParadaAtiva()));
 
   // Abre "Novo lançamento" já preenchido a partir de um plano preventivo vencendo —
   // mesma ideia do programarDoBacklog, mas o "Nome Bem" do plano mestre quase nunca
@@ -1258,18 +1225,21 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // informação real, vale mais que ficar em branco). Técnico/dias ficam pro usuário
   // escolher, exceto no Apoio, onde já existe só uma equipe real pro plano
   // (SERVPLEX/OPERAÇÃO) — pré-selecionada, mas continua editável.
-  programarDaPreventiva(plano: PlanoPreventivo): void {
+  programarDaPreventiva(plano: PlanoComProximaData): void {
     this.abrirCriar();
     this.formArea.set(plano.area);
-    this.formDescricao.set(plano.nomeManut);
-    this.formEquipamento.set(plano.nomeBem);
+    this.formDescricao.set(plano.nome);
+    this.formEquipamento.set(plano.equipamento);
     this.formTipoServico.set('PREVENTIVA');
     this.formPlanoPreventivoId.set(plano.id);
-    // Se o número da OS já foi reservado com antecedência (ver reservarNumeroOsPreventiva),
-    // vem pré-preenchido — some do plano quando a OS for confirmada (avancarPreventiva).
+    this.formPlanoPreventivoDataPrevista.set(plano.proximaData);
+    this.formChecklist.set(plano.atividades);
+    // Se o número da OS já foi reservado com antecedência (ver salvarNumeroOsReservado
+    // abaixo), vem pré-preenchido — some do plano quando a OS for confirmada (ver
+    // registrarCicloSeVinculoMudou).
     if (plano.numeroOsReservado) this.formNumeroOs.set(plano.numeroOsReservado);
-    if (plano.area === 'APOIO' && plano.tecnicoApoio) {
-      this.formTecnicoNome.set(plano.tecnicoApoio);
+    if (plano.area === 'APOIO' && plano.responsavel) {
+      this.formTecnicoNome.set(plano.responsavel);
     }
   }
 
@@ -1277,10 +1247,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // semana"/"atrasadas" — deixa anotar o número assim que a OS é aberta/reservada no
   // SIGMA, sem precisar abrir o formulário de programar. Best-effort: erro não trava a
   // tela, só avisa.
-  async salvarNumeroOsReservado(plano: PlanoPreventivo, valor: string): Promise<void> {
+  async salvarNumeroOsReservado(plano: PlanoComProximaData, valor: string): Promise<void> {
     if (valor.trim() === (plano.numeroOsReservado ?? '')) return;
     try {
-      await this.manutencaoService.reservarNumeroOsPreventiva(plano.id, valor);
+      await this.manutencaoPlanosService.salvarNumeroOsReservado(plano.id, valor);
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao salvar o número da OS reservada.');
     }
@@ -1459,31 +1429,45 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // quando o vínculo muda de fato nessa sessão de edição (ver confirmarForm), pra não
   // reprocessar toda vez que a OS for reaberta e salva sem mexer nisso.
   private formPlanoPreventivoIdOriginal = signal<string | null>(null);
+  // Data prevista (ciclo) que essa programação está cumprindo — capturada no momento em
+  // que o vínculo é feito (ver programarDaPreventiva/vincularPlano), não recalculada na
+  // hora de salvar: é ela que vira a chave do ciclo em registrarCicloSeVinculoMudou.
+  private formPlanoPreventivoDataPrevista = signal<string | null>(null);
+  // Checklist copiado do plano no momento do vínculo (ver PlanoManutencao.atividades) —
+  // vai junto na OS (ver ManutencaoOrdem.checklist).
+  formChecklist = signal<string[]>([]);
   formVincularPlanoTexto = signal('');
-  formPlanoVinculado = computed<PlanoPreventivo | null>(() => {
+  formPlanoVinculado = computed<PlanoManutencao | null>(() => {
     const id = this.formPlanoPreventivoId();
-    return id ? (this.manutencaoService.planosPreventivos().find(p => p.id === id) ?? null) : null;
+    return id ? (this.manutencaoPlanosService.getById(id) ?? null) : null;
   });
-  // Busca por nome do bem/tarefa, restrita à área da OS sendo lançada — cobre o caso de
+  // Busca por nome/equipamento, restrita à área da OS sendo lançada — cobre o caso de
   // uma preventiva real que ficou de fora da lista de sugestões da semana (ver
   // LOTE_PREVENTIVAS_POR_SEMANA) mas o usuário já sabe que precisa fazer.
-  formPlanosVinculoCandidatos = computed<PlanoPreventivo[]>(() => {
+  formPlanosVinculoCandidatos = computed<PlanoManutencao[]>(() => {
     const termo = normalizarTexto(this.formVincularPlanoTexto().trim());
     if (termo.length < 2) return [];
     const area = this.formArea();
-    return this.manutencaoService.planosPreventivos()
-      .filter(p => p.ativo && p.area === area && normalizarTexto(`${p.nomeBem} ${p.nomeManut}`).includes(termo))
+    return this.manutencaoPlanosService.planos()
+      .filter(p => p.ativo && p.area === area && normalizarTexto(`${p.equipamento} ${p.nome}`).includes(termo))
       .slice(0, 8);
   });
 
-  vincularPlano(plano: PlanoPreventivo): void {
+  vincularPlano(plano: PlanoManutencao): void {
     this.formPlanoPreventivoId.set(plano.id);
+    this.formPlanoPreventivoDataPrevista.set(proximaExecucaoPlano(
+      plano.dataInicial, plano.periodicidadeValor, plano.periodicidadeUnidade,
+      this.manutencaoPlanosService.ultimoCicloDoPlano(plano.id),
+    ));
+    this.formChecklist.set(plano.atividades);
     this.formVincularPlanoTexto.set('');
     if (!this.formTipoServico().trim()) this.formTipoServico.set('PREVENTIVA');
   }
 
   desvincularPlano(): void {
     this.formPlanoPreventivoId.set(null);
+    this.formPlanoPreventivoDataPrevista.set(null);
+    this.formChecklist.set([]);
   }
 
   tecnicosDaAreaForm = computed(() => this.tecnicosPorArea(this.formArea()));
@@ -1569,6 +1553,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   constructor(
     private route: ActivatedRoute,
     private manutencaoService: ManutencaoProgramacaoService,
+    private manutencaoPlanosService: ManutencaoPlanosService,
     private authService: AuthService,
     private notificationService: NotificationService,
     private apontamentosService: ApontamentosService,
@@ -1775,9 +1760,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       console.error('[ManutencaoProgramacaoComponent] Falha ao carregar recursos especiais:', err);
     }
     try {
-      await this.manutencaoService.loadPlanosPreventivos();
+      await this.manutencaoPlanosService.load();
     } catch (err) {
-      console.error('[ManutencaoProgramacaoComponent] Falha ao carregar planos preventivos:', err);
+      console.error('[ManutencaoProgramacaoComponent] Falha ao carregar planos de manutenção:', err);
     }
     try {
       await this.manutencaoService.loadParadaAtual();
@@ -1977,6 +1962,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formReuniaoLocal.set('');
     this.formPlanoPreventivoId.set(null);
     this.formPlanoPreventivoIdOriginal.set(null);
+    this.formPlanoPreventivoDataPrevista.set(null);
+    this.formChecklist.set([]);
     this.formVincularPlanoTexto.set('');
     this.formAberto.set(true);
   }
@@ -2022,6 +2009,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     // formPlanoPreventivoIdOriginal) — antes essa edição sempre zerava o vínculo.
     this.formPlanoPreventivoId.set(o.planoPreventivoId);
     this.formPlanoPreventivoIdOriginal.set(o.planoPreventivoId);
+    this.formPlanoPreventivoDataPrevista.set(null);
+    this.formChecklist.set(o.checklist ?? []);
     this.formVincularPlanoTexto.set('');
     this.formAberto.set(true);
   }
@@ -2288,6 +2277,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           reuniaoHorario: ehReuniao ? (this.formReuniaoHorario().trim() || null) : null,
           reuniaoLocal: ehReuniao ? (this.formReuniaoLocal().trim() || null) : null,
           planoPreventivoId: ehOrdem ? this.formPlanoPreventivoId() : null,
+          checklist: ehOrdem ? this.formChecklist() : null,
         });
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} atualizada.`);
         if (ehOrdem) {
@@ -2295,11 +2285,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           await this.criarApoioTecnicosSeNecessario();
         }
         // Vínculo com plano preventivo mudou nessa edição (ex.: vinculado manualmente
-        // via vincularPlano numa OS que não veio da lista sugerida da semana) — avança
-        // a "última execução" só agora, não em toda reabertura sem mudança nenhuma.
-        await this.avancarPreventivaSeVinculoMudou(ehOrdem);
+        // via vincularPlano numa OS que não veio da lista sugerida da semana) — registra
+        // o ciclo só agora, não em toda reabertura sem mudança nenhuma.
+        await this.registrarCicloSeVinculoMudou(ehOrdem, idEdicao);
       } else {
-        await this.manutencaoService.criarOrdem({
+        const novoId = await this.manutencaoService.criarOrdem({
           tipo,
           area: this.formArea(),
           semanaInicio: this.semanaFiltro(),
@@ -2320,6 +2310,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           reuniaoHorario: ehReuniao ? (this.formReuniaoHorario().trim() || undefined) : undefined,
           reuniaoLocal: ehReuniao ? (this.formReuniaoLocal().trim() || undefined) : undefined,
           planoPreventivoId: ehOrdem ? (this.formPlanoPreventivoId() ?? undefined) : undefined,
+          checklist: ehOrdem ? this.formChecklist() : undefined,
         });
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} adicionada à programação.`);
         if (ehOrdem) {
@@ -2327,9 +2318,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           await this.criarApoioTecnicosSeNecessario();
         }
         // Preventiva vinculada a um plano (lista da semana OU vincularPlano manual) —
-        // avança a "última execução" assim que a OS é criada, sem esperar confirmação
-        // de apontamento no SIGMA.
-        await this.avancarPreventivaSeVinculoMudou(ehOrdem);
+        // registra o ciclo assim que a OS é criada, sem esperar confirmação de
+        // apontamento no SIGMA.
+        await this.registrarCicloSeVinculoMudou(ehOrdem, novoId);
       }
       this.fecharForm();
     } catch (err: unknown) {
@@ -2339,18 +2330,18 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
   }
 
-  // Avança a "última execução" do plano vinculado (ver formPlanoPreventivoId) só quando
-  // o vínculo é novo/mudou nessa sessão do formulário — cobre tanto criar uma OS a
-  // partir da lista sugerida (programarDaPreventiva) quanto vincular manualmente uma
-  // preventiva que ficou de fora dela (ver vincularPlano). Best-effort: falha aqui não
-  // desfaz a OS já criada/editada, só avisa.
-  private async avancarPreventivaSeVinculoMudou(ehOrdem: boolean): Promise<void> {
+  // Registra o ciclo do plano vinculado (ver formPlanoPreventivoId) só quando o vínculo
+  // é novo/mudou nessa sessão do formulário — cobre tanto criar uma OS a partir da
+  // lista sugerida (programarDaPreventiva) quanto vincular manualmente uma preventiva
+  // que ficou de fora dela (ver vincularPlano). Best-effort: falha aqui não desfaz a OS
+  // já criada/editada, só avisa.
+  private async registrarCicloSeVinculoMudou(ehOrdem: boolean, ordemId: string): Promise<void> {
     const planoId = this.formPlanoPreventivoId();
     if (!ehOrdem || !planoId || planoId === this.formPlanoPreventivoIdOriginal()) return;
-    const primeiroDia = [...this.formDiasSelecionados()].sort()[0];
-    if (!primeiroDia) return;
+    const dataPrevista = this.formPlanoPreventivoDataPrevista() ?? [...this.formDiasSelecionados()].sort()[0];
+    if (!dataPrevista) return;
     try {
-      await this.manutencaoService.avancarPreventiva(planoId, primeiroDia);
+      await this.manutencaoPlanosService.registrarCiclo(planoId, dataPrevista, ordemId);
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'OS salva, mas não deu pra atualizar o plano preventivo.');
     }

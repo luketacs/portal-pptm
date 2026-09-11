@@ -5,8 +5,8 @@ import { AuditLogService } from './audit-log.service';
 import { podeEditarSemanaFechada } from '../utils/manutencao-regras';
 import {
   ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest, EquipeApoioItem, FeriasTecnico,
-  ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, ParadaPlanta, PeriodicidadeUnidade,
-  PlanoPreventivo, RecursoEspecialItem, SigmaBacklogItem,
+  ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, ParadaPlanta,
+  RecursoEspecialItem, SigmaBacklogItem,
 } from '../models/manutencao-programacao.model';
 
 interface ManutencaoOrdemRow {
@@ -31,45 +31,10 @@ interface ManutencaoOrdemRow {
   reuniao_horario: string | null;
   reuniao_local: string | null;
   plano_preventivo_id: string | null;
+  checklist: string[] | null;
   criado_por_id: string | null;
   criado_por_nome: string;
   created_at: string;
-}
-
-interface PlanoPreventivoRow {
-  id: string;
-  bem: string;
-  nome_bem: string;
-  servico: string;
-  nome_servico: string;
-  sequencia: string;
-  nome_manut: string;
-  area: string;
-  tecnico_apoio: string | null;
-  periodicidade_valor: number;
-  periodicidade_unidade: string;
-  ultima_execucao: string | null;
-  ativo: boolean;
-  numero_os_reservado: string | null;
-}
-
-function mapPlanoPreventivoRow(r: PlanoPreventivoRow): PlanoPreventivo {
-  return {
-    id: r.id,
-    bem: r.bem,
-    nomeBem: r.nome_bem,
-    servico: r.servico,
-    nomeServico: r.nome_servico,
-    sequencia: r.sequencia,
-    nomeManut: r.nome_manut,
-    area: r.area as ManutencaoArea,
-    tecnicoApoio: r.tecnico_apoio,
-    periodicidadeValor: Number(r.periodicidade_valor),
-    periodicidadeUnidade: r.periodicidade_unidade as PeriodicidadeUnidade,
-    ultimaExecucao: r.ultima_execucao,
-    ativo: r.ativo,
-    numeroOsReservado: r.numero_os_reservado,
-  };
 }
 
 const AREA_LABEL_LOG: Record<ManutencaoArea, string> = {
@@ -101,6 +66,7 @@ function mapRow(r: ManutencaoOrdemRow): ManutencaoOrdem {
     reuniaoHorario: r.reuniao_horario,
     reuniaoLocal: r.reuniao_local,
     planoPreventivoId: r.plano_preventivo_id,
+    checklist: r.checklist,
     criadoPorId: r.criado_por_id,
     criadoPorNome: r.criado_por_nome,
     createdAt: new Date(r.created_at),
@@ -136,11 +102,6 @@ export class ManutencaoProgramacaoService {
   // de deploy pra cadastrar uma empresa/pessoa nova.
   private _recursosEspeciais = signal<RecursoEspecialItem[]>([]);
   recursosEspeciais = this._recursosEspeciais.asReadonly();
-
-  // Plano mestre de manutenção preventiva (cadastro nativo, ver migration 028) —
-  // alimenta o painel "Preventivas da semana" na Programação.
-  private _planosPreventivos = signal<PlanoPreventivo[]>([]);
-  planosPreventivos = this._planosPreventivos.asReadonly();
 
   // Parada da planta (Admin-only, ver migration 029) — enquanto ativa, planos
   // preventivos de ciclo curto são calculados como mensais. `null` = operando normal.
@@ -190,7 +151,7 @@ export class ManutencaoProgramacaoService {
     return this._ordens().find(o => o.id === id);
   }
 
-  async criarOrdem(req: CreateManutencaoOrdemRequest): Promise<void> {
+  async criarOrdem(req: CreateManutencaoOrdemRequest): Promise<string> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
     this.garantirSemanaAberta(req.semanaInicio);
@@ -217,11 +178,16 @@ export class ManutencaoProgramacaoService {
       reuniao_horario: req.reuniaoHorario?.trim() || null,
       reuniao_local: req.reuniaoLocal?.trim() || null,
       plano_preventivo_id: req.planoPreventivoId ?? null,
+      checklist: req.checklist ?? null,
       criado_por_id: user.id,
       criado_por_nome: user.name,
     };
 
-    const { error } = await this.supabaseService.client.from('manutencao_programacao').insert(payload);
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_programacao')
+      .insert(payload)
+      .select('id')
+      .single();
     if (error) throw new Error(error.message);
 
     const acaoLabel = req.tipo === 'folga' ? 'lançou folga'
@@ -239,6 +205,7 @@ export class ManutencaoProgramacaoService {
     });
 
     await this.load();
+    return data.id as string;
   }
 
   // Lança folga (ex.: feriado) pra vários técnicos de uma vez, num único insert —
@@ -390,6 +357,7 @@ export class ManutencaoProgramacaoService {
         reuniao_horario: updates.reuniaoHorario?.trim() || null,
         reuniao_local: updates.reuniaoLocal?.trim() || null,
         plano_preventivo_id: updates.planoPreventivoId,
+        checklist: updates.checklist,
       })
       .eq('id', id);
     if (error) throw new Error(error.message);
@@ -544,44 +512,6 @@ export class ManutencaoProgramacaoService {
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) throw new Error('Não foi possível excluir (permissão do banco).');
     await this.loadRecursosEspeciais();
-  }
-
-  // ── Planos de manutenção preventiva (cadastro nativo) ────────────────────────
-
-  async loadPlanosPreventivos(): Promise<void> {
-    const { data, error } = await this.supabaseService.client
-      .from('manutencao_planos_preventivos')
-      .select('*')
-      .eq('ativo', true)
-      .order('nome_bem');
-    if (error) throw new Error(error.message);
-    this._planosPreventivos.set((data ?? []).map(mapPlanoPreventivoRow));
-  }
-
-  // Avança a "última execução" do plano — chamada assim que a preventiva é programada
-  // pra alguém na Programação (não espera confirmação de apontamento no SIGMA, ver
-  // criarOrdem/plano_preventivo_id). Também limpa o número de OS reservado (ver
-  // reservarNumeroOsPreventiva): uma vez virada OS de verdade, o número já está na
-  // Programação, não precisa mais ficar guardado no plano.
-  async avancarPreventiva(id: string, dataExecucaoIso: string): Promise<void> {
-    const { error } = await this.supabaseService.client
-      .from('manutencao_planos_preventivos')
-      .update({ ultima_execucao: dataExecucaoIso, numero_os_reservado: null, atualizado_em: new Date().toISOString() })
-      .eq('id', id);
-    if (error) throw new Error(error.message);
-    await this.loadPlanosPreventivos();
-  }
-
-  // Anota (ou limpa, se numeroOs vier vazio) o número da OS já aberta/reservada no
-  // SIGMA pra esse plano, antes dele ser efetivamente programado — ver
-  // programarDaPreventiva, que usa isso pra pré-preencher o formulário.
-  async reservarNumeroOsPreventiva(id: string, numeroOs: string): Promise<void> {
-    const { error } = await this.supabaseService.client
-      .from('manutencao_planos_preventivos')
-      .update({ numero_os_reservado: numeroOs.trim() || null, atualizado_em: new Date().toISOString() })
-      .eq('id', id);
-    if (error) throw new Error(error.message);
-    await this.loadPlanosPreventivos();
   }
 
   // ── Parada da planta (Admin-only) ────────────────────────────────────────────
