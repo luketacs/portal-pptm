@@ -44,6 +44,26 @@ export interface ProgramacaoSemanalDia {
   label: string;  // "SEG"
 }
 
+// Mesmo formato que ManutencaoProgramacaoComponent.quadroLotoCalc() já produz pra tela
+// (ver quadroLoto/copiarQuadroLoto) — reaproveitado aqui pra virar tabela HTML no corpo
+// do e-mail de fechamento da semana, em vez de reimplementar o cálculo de novo.
+export interface QuadroLotoItem {
+  status: string;
+  descricao: string;
+  tecnicos: string[];
+  numeroOs: string | null;
+}
+export interface QuadroLotoDiaCel {
+  data: string;
+  itens: QuadroLotoItem[];
+  conflito: boolean;
+}
+export interface QuadroLotoLinha {
+  equipamento: string;
+  dias: QuadroLotoDiaCel[];
+  temConflito: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ExcelExportService {
 
@@ -902,13 +922,16 @@ export class ExcelExportService {
     return row;
   }
 
-  async exportarProgramacaoSemanal(params: {
+  // Monta o workbook em si (sem baixar) — separado de exportarProgramacaoSemanal pra
+  // poder reaproveitar o mesmo Excel tanto no botão "Exportar" (baixa direto) quanto no
+  // e-mail de fechamento da semana (vira anexo de um .eml, ver gerarEmailFechamentoSemana).
+  private async construirWorkbookProgramacao(params: {
     semanaLabel: string;
     numeroSemana: number;
     areaLabel: string;
     dias: ProgramacaoSemanalDia[];
     grupos: ProgramacaoSemanalGrupo[];
-  }): Promise<void> {
+  }): Promise<{ wb: ExcelJS.Workbook; tituloPlanilha: string }> {
     const NC = 14;
     // Convenção fixa de nome (aba, título e arquivo): "Programação {Área} Semana {N}".
     const tituloPlanilha = `Programação ${params.areaLabel} Semana ${params.numeroSemana}`;
@@ -990,12 +1013,170 @@ export class ExcelExportService {
     // muitos técnicos (várias páginas) saía com as páginas 2+ sem nome de coluna nenhum.
     ws.pageSetup.printTitlesRow = '4:4';
 
+    return { wb, tituloPlanilha };
+  }
+
+  private nomeArquivoProgramacao(tituloPlanilha: string): string {
+    return `${tituloPlanilha.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_')}.xlsx`;
+  }
+
+  async exportarProgramacaoSemanal(params: {
+    semanaLabel: string;
+    numeroSemana: number;
+    areaLabel: string;
+    dias: ProgramacaoSemanalDia[];
+    grupos: ProgramacaoSemanalGrupo[];
+  }): Promise<void> {
+    const { wb, tituloPlanilha } = await this.construirWorkbookProgramacao(params);
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${tituloPlanilha.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_')}.xlsx`;
+    a.download = this.nomeArquivoProgramacao(tituloPlanilha);
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Mesmo Excel de exportarProgramacaoSemanal, só que devolve o buffer em vez de
+  // baixar — usado pra anexar no .eml de fechamento da semana (ver
+  // gerarEmailFechamentoSemana), que precisa dos 3 arquivos (Mecânica/Elétrica/Apoio)
+  // prontos antes de montar o e-mail, não um download avulso por área.
+  async gerarBufferProgramacaoSemanal(params: {
+    semanaLabel: string;
+    numeroSemana: number;
+    areaLabel: string;
+    dias: ProgramacaoSemanalDia[];
+    grupos: ProgramacaoSemanalGrupo[];
+  }): Promise<{ buffer: ArrayBuffer; nomeArquivo: string }> {
+    const { wb, tituloPlanilha } = await this.construirWorkbookProgramacao(params);
+    const buffer = await wb.xlsx.writeBuffer();
+    return { buffer: buffer as ArrayBuffer, nomeArquivo: this.nomeArquivoProgramacao(tituloPlanilha) };
+  }
+
+  // ── E-mail de fechamento da semana (.eml com as 3 planilhas anexadas) ───────────
+  // O navegador não tem como anexar arquivo num rascunho do Outlook via mailto: (não
+  // existe essa API em nenhum browser) — o jeito que funciona de verdade é gerar um
+  // arquivo .eml (formato de e-mail bruto, com anexo em MIME de verdade) e baixar; a
+  // pessoa clica duas vezes nele e o Outlook abre como rascunho pronto (destinatário em
+  // branco — de propósito, quem usa preenche à mão), ela confere e manda. Nada é
+  // enviado por aqui, só o rascunho é montado.
+
+  private arrayBufferParaBase64(buffer: ArrayBuffer): string {
+    let binario = '';
+    const bytes = new Uint8Array(buffer);
+    const tamanhoBloco = 0x8000;
+    for (let i = 0; i < bytes.length; i += tamanhoBloco) {
+      binario += String.fromCharCode(...bytes.subarray(i, i + tamanhoBloco));
+    }
+    return btoa(binario);
+  }
+
+  // Quebra em linhas de 76 caracteres — padrão MIME (RFC 2045), a maioria dos clientes
+  // tolera sem isso mas é o jeito correto de gerar o arquivo.
+  private base64EmLinhas(b64: string): string {
+    return b64.replace(/(.{76})/g, '$1\r\n');
+  }
+
+  private textoParaBase64Utf8(texto: string): string {
+    return this.base64EmLinhas(this.arrayBufferParaBase64(new TextEncoder().encode(texto).buffer as ArrayBuffer));
+  }
+
+  // Cabeçalho de e-mail (Subject) é ASCII por padrão — com acento/travessão (ex.:
+  // "Programação... — Semana 37") precisa do encoded-word do RFC 2047, senão cliente
+  // de e-mail rigoroso pode exibir o texto corrompido. Sem quebra de linha aqui (só o
+  // corpo/anexo usam base64EmLinhas) — um encoded-word tem que ficar num token só.
+  private assuntoCodificadoRfc2047(texto: string): string {
+    const b64 = this.arrayBufferParaBase64(new TextEncoder().encode(texto).buffer as ArrayBuffer);
+    return `=?UTF-8?B?${b64}?=`;
+  }
+
+  // Mesma paleta semântica de LOTO usada na tela (ver LOTO_COR em
+  // kanban-oficina-publico.component.ts) — cor com propósito (vermelho = bloqueado de
+  // verdade, cinza = neutro, verde = liberado), não decoração.
+  private corStatusLoto(status: string): { bg: string; texto: string } {
+    const s = status.toUpperCase();
+    if (s === 'LOTO') return { bg: '#FEE2E2', texto: '#B91C1C' };
+    if (s === 'FUNCIONANDO') return { bg: '#DCFCE7', texto: '#15803D' };
+    return { bg: '#F1F5F9', texto: '#475569' };
+  }
+
+  private construirTabelaLotoHtml(quadroLoto: QuadroLotoLinha[], dias: ProgramacaoSemanalDia[]): string {
+    if (quadroLoto.length === 0) {
+      return '<p style="font-size:13px;color:#6b7280;">Nenhum bloqueio (LOTO) registrado nessa semana.</p>';
+    }
+    const th = (texto: string) => `<th style="background:#2039F9;color:#fff;font-size:11px;padding:6px 8px;border:1px solid #d9d9d9;text-align:center;">${texto}</th>`;
+    const cabecalho = `<tr>${th('Equipamento')}${dias.map(d => th(`${d.label}<br>${d.diaMes}`)).join('')}</tr>`;
+    const linhas = quadroLoto.map(linha => {
+      const cEquip = `<td style="font-weight:bold;font-size:12px;padding:6px 8px;border:1px solid #d9d9d9;background:${linha.temConflito ? '#FEF3C7' : '#F0F2FF'};">${linha.equipamento}${linha.temConflito ? ' ⚠️' : ''}</td>`;
+      const cDias = linha.dias.map(cel => {
+        if (cel.itens.length === 0) return '<td style="padding:6px 8px;border:1px solid #d9d9d9;"></td>';
+        const conteudo = cel.itens.map(item => {
+          const cor = this.corStatusLoto(item.status);
+          return `<div style="margin-bottom:2px;"><span style="background:${cor.bg};color:${cor.texto};font-weight:bold;font-size:10px;padding:1px 5px;border-radius:8px;">${item.status}</span><br>` +
+            `<span style="font-size:10px;color:#374151;">${item.descricao} (${item.tecnicos.join(', ')})</span></div>`;
+        }).join('');
+        const fundoConflito = cel.conflito ? 'background:#FEF3C7;' : '';
+        return `<td style="padding:6px 8px;border:1px solid #d9d9d9;vertical-align:top;${fundoConflito}">${cel.conflito ? '<div style="color:#B45309;font-weight:bold;font-size:10px;">⚠️ CONFLITO</div>' : ''}${conteudo}</td>`;
+      }).join('');
+      return `<tr>${cEquip}${cDias}</tr>`;
+    }).join('');
+    return `<table style="border-collapse:collapse;width:100%;font-family:Calibri,Arial,sans-serif;">${cabecalho}${linhas}</table>`;
+  }
+
+  private construirCorpoEmailFechamento(params: {
+    numeroSemana: number;
+    semanaLabel: string;
+    quadroLoto: QuadroLotoLinha[];
+    dias: ProgramacaoSemanalDia[];
+  }): string {
+    const tabelaLoto = this.construirTabelaLotoHtml(params.quadroLoto, params.dias);
+    return `<html><body style="font-family:Calibri,Arial,sans-serif;font-size:13px;color:#1f2937;">
+<p>Prezados,<br>Boa tarde!</p>
+<p>Encaminho anexo a programação da manutenção referente à Semana ${params.numeroSemana} (${params.semanaLabel}), considerando os bloqueios (LOTO) da semana abaixo.</p>
+${tabelaLoto}
+<p>Atenciosamente,</p>
+</body></html>`;
+  }
+
+  async gerarEmailFechamentoSemana(params: {
+    numeroSemana: number;
+    semanaLabel: string;
+    quadroLoto: QuadroLotoLinha[];
+    dias: ProgramacaoSemanalDia[];
+    anexos: Array<{ buffer: ArrayBuffer; nomeArquivo: string }>;
+  }): Promise<void> {
+    const boundary = `----PortalPPTM${Date.now().toString(36)}`;
+    const assunto = `Programação de Manutenção — Semana ${params.numeroSemana}`;
+    const corpoHtml = this.construirCorpoEmailFechamento(params);
+
+    const partes: string[] = [];
+    partes.push(`Subject: ${this.assuntoCodificadoRfc2047(assunto)}`);
+    partes.push('MIME-Version: 1.0');
+    partes.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+    partes.push('');
+    partes.push(`--${boundary}`);
+    partes.push('Content-Type: text/html; charset="UTF-8"');
+    partes.push('Content-Transfer-Encoding: base64');
+    partes.push('');
+    partes.push(this.textoParaBase64Utf8(corpoHtml));
+
+    for (const anexo of params.anexos) {
+      partes.push(`--${boundary}`);
+      partes.push(`Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; name="${anexo.nomeArquivo}"`);
+      partes.push('Content-Transfer-Encoding: base64');
+      partes.push(`Content-Disposition: attachment; filename="${anexo.nomeArquivo}"`);
+      partes.push('');
+      partes.push(this.base64EmLinhas(this.arrayBufferParaBase64(anexo.buffer)));
+    }
+    partes.push(`--${boundary}--`);
+
+    const eml = partes.join('\r\n');
+    const blob = new Blob([eml], { type: 'message/rfc822' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `programacao_semana_${params.numeroSemana}.eml`;
     a.click();
     URL.revokeObjectURL(url);
   }

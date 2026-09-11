@@ -7,7 +7,7 @@ import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { ApontamentosService } from '../../../services/apontamentos.service';
-import { ExcelExportService, ProgramacaoSemanalGrupo } from '../../../services/excel-export.service';
+import { ExcelExportService, ProgramacaoSemanalGrupo, ProgramacaoSemanalLinha } from '../../../services/excel-export.service';
 import { AlmoxarifadoService, Movimentacao, Solicitacao } from '../../../services/almoxarifado.service';
 import {
   ConsultaSigmaResultado, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo,
@@ -263,22 +263,43 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   exportandoSemana = signal(false);
 
+  // Extraído de exportarSemana() pra ser reaproveitado também no fechamento da semana
+  // (gruposParaAreaExport), que monta o Excel das 3 áreas de uma vez, não só a que
+  // está com o filtro ativo no momento.
+  private linhaParaExport(o: ManutencaoOrdem): ProgramacaoSemanalLinha {
+    return {
+      tipo: o.tipo,
+      numeroOs: o.numeroOs,
+      semOs: o.semOs,
+      descricao: o.descricao,
+      duracaoHoras: o.duracaoHoras,
+      equipamento: o.equipamento || '—',
+      recursos: o.tipo === 'reuniao' ? [o.reuniaoHorario, o.reuniaoLocal].filter(Boolean).join(' · ') || '—' : (o.recursos || '—'),
+      loto: o.loto || '—',
+      areaAtuacao: o.areaAtuacao || '—',
+      diasPrevistos: o.diasPrevistos,
+    };
+  }
+
+  // Monta os grupos de uma área específica da semana atual, direto de
+  // manutencaoService.ordens() (não de listaFiltrada()/grupos(), que respeitam
+  // busca/técnico/status do filtro na tela) — o fechamento da semana precisa da
+  // programação inteira das 3 áreas, não só do que está sendo visualizado agora.
+  private gruposParaAreaExport(area: ManutencaoArea): ProgramacaoSemanalGrupo[] {
+    const semana = this.semanaFiltro();
+    const ordensDaArea = this.manutencaoService.ordens().filter(o => o.area === area && o.semanaInicio === semana);
+    return this.gruposCalc(ordensDaArea, this.diasDaSemanaAtual()).map(g => ({
+      tecnico: g.tecnico,
+      feriasAte: g.ferias ? this.formatarDataBr(g.ferias.dataFim) : undefined,
+      linhas: g.ordens.map(o => this.linhaParaExport(o)),
+    }));
+  }
+
   async exportarSemana(): Promise<void> {
     const grupos: ProgramacaoSemanalGrupo[] = this.grupos().map(g => ({
       tecnico: g.tecnico,
       feriasAte: g.ferias ? this.formatarDataBr(g.ferias.dataFim) : undefined,
-      linhas: g.ordens.map(o => ({
-        tipo: o.tipo,
-        numeroOs: o.numeroOs,
-        semOs: o.semOs,
-        descricao: o.descricao,
-        duracaoHoras: o.duracaoHoras,
-        equipamento: o.equipamento || '—',
-        recursos: o.tipo === 'reuniao' ? [o.reuniaoHorario, o.reuniaoLocal].filter(Boolean).join(' · ') || '—' : (o.recursos || '—'),
-        loto: o.loto || '—',
-        areaAtuacao: o.areaAtuacao || '—',
-        diasPrevistos: o.diasPrevistos,
-      })),
+      linhas: g.ordens.map(o => this.linhaParaExport(o)),
     }));
 
     if (grupos.length === 0) {
@@ -1132,18 +1153,56 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const fechada = this.semanaFechada();
     const mensagem = fechada
       ? 'Reabrir a programação dessa semana? Solicitante volta a poder criar/editar/excluir lançamento nela.'
-      : 'Fechar a programação dessa semana? Só Admin consegue criar/editar/excluir lançamento nela até reabrir.';
+      : 'Fechar a programação dessa semana? Gera as 3 planilhas (Mecânica/Elétrica/Apoio) e um e-mail pronto pra revisar no Outlook, e só Admin consegue criar/editar/excluir lançamento nela até reabrir.';
     if (!(await this.confirmDialogService.confirm(mensagem, fechada ? undefined : { confirmLabel: 'Fechar', danger: true }))) return;
     this.isProcessando.set(true);
     try {
-      if (fechada) await this.manutencaoService.reabrirSemana(semana);
-      else await this.manutencaoService.fecharSemana(semana);
-      this.notificationService.showSuccess(fechada ? 'Semana reaberta.' : 'Semana fechada.');
+      if (fechada) {
+        await this.manutencaoService.reabrirSemana(semana);
+        this.notificationService.showSuccess('Semana reaberta.');
+      } else {
+        await this.manutencaoService.fecharSemana(semana);
+        await this.gerarEmailFechamento();
+        this.notificationService.showSuccess('Semana fechada — confira o e-mail baixado (.eml) e envie pelo Outlook.');
+      }
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao atualizar o fechamento da semana.');
     } finally {
       this.isProcessando.set(false);
     }
+  }
+
+  // Gera as 3 planilhas da semana (Mecânica/Elétrica/Apoio, direto de
+  // manutencaoService.ordens() — não do filtro ativo na tela) + o quadro de LOTO, e
+  // monta o .eml pra baixar. Chamado só depois que a semana já foi fechada com sucesso
+  // (ver toggleFecharSemana) — se der erro aqui, a semana já ficou fechada mesmo assim
+  // (dá pra gerar o e-mail de novo reabrindo/fechando, ou é só rodar essa parte nas
+  // próximas versões se vira um problema recorrente).
+  private async gerarEmailFechamento(): Promise<void> {
+    const dias = this.diasDaSemanaAtual();
+    const numeroSemana = this.numeroSemanaISO(this.semanaFiltro());
+    const intervaloSemana = `${this.diaMesPadded(dias[0].data)} a ${this.diaMesPadded(dias[6].data)}`;
+    const semanaLabelPlanilha = `Semana ${numeroSemana} (${intervaloSemana})`;
+    const diasExport = dias.map(d => ({ data: d.data, diaMes: this.diaMesCompacto(d.data), label: d.label }));
+
+    const areas: ManutencaoArea[] = ['MECANICA', 'ELETRICA', 'APOIO'];
+    const anexos = await Promise.all(areas.map(area =>
+      this.excelExportService.gerarBufferProgramacaoSemanal({
+        semanaLabel: semanaLabelPlanilha,
+        numeroSemana,
+        areaLabel: this.areaLabel[area],
+        dias: diasExport,
+        grupos: this.gruposParaAreaExport(area),
+      }),
+    ));
+
+    await this.excelExportService.gerarEmailFechamentoSemana({
+      numeroSemana,
+      semanaLabel: intervaloSemana,
+      quadroLoto: this.quadroLoto(),
+      dias: diasExport,
+      anexos,
+    });
   }
 
   // Todas as vencendo, antes do corte do lote — usada só pra saber o total pendente
