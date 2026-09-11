@@ -1308,6 +1308,31 @@
         </div>
 
         <div class="mb-4">
+          <label class="block text-sm font-medium text-slate-700 mb-1">Outros equipamentos no Quadro de LOTO</label>
+          @if (formEquipamentosRelacionadosLista().length > 0) {
+            <div class="flex flex-wrap gap-1.5 mb-1.5">
+              @for (eq of formEquipamentosRelacionadosLista(); track eq) {
+                <span class="inline-flex items-center gap-1 text-xs font-semibold pl-2 pr-1 py-1 rounded-full bg-amber-50 text-amber-700">
+                  {{ eq }}
+                  <button type="button" (click)="removerEquipamentoRelacionado(eq)" title="Remover" class="hover:bg-black/10 rounded-full p-0.5">
+                    <svg class="h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </span>
+              }
+            </div>
+          }
+          <div class="flex gap-1.5">
+            <input type="text" [ngModel]="formEquipamentosRelacionadosDigitando()" (ngModelChange)="formEquipamentosRelacionadosDigitando.set($event)"
+              (keydown.enter)="$event.preventDefault(); adicionarEquipamentoRelacionado(formEquipamentosRelacionadosDigitando())"
+              placeholder="Outro equipamento (ex.: esteira relacionada)"
+              class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <button type="button" (click)="adicionarEquipamentoRelacionado(formEquipamentosRelacionadosDigitando())" title="Adicionar"
+              class="px-3 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-semibold">+</button>
+          </div>
+          <p class="text-[11px] text-gray-400 mt-1">Só preencha se esse serviço exige mais de um equipamento com o mesmo status de LOTO ao mesmo tempo — cada um entra no Quadro de LOTO junto com "{{ formEquipamento() || 'Equipamento' }}".</p>
+        </div>
+
+        <div class="mb-4">
           <label class="block text-sm font-medium text-slate-700 mb-1">Plano preventivo</label>
           @if (formPlanoVinculado(); as plano) {
             <div class="flex items-center justify-between gap-2 rounded-lg bg-green-50 border border-green-200 px-3 py-2">

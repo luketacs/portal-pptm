@@ -20,6 +20,11 @@ export interface ManutencaoOrdem {
   semOs: boolean;
   descricao: string;
   equipamento: string | null;
+  // Outros equipamentos que devem entrar no Quadro de LOTO com o MESMO status desta
+  // OS (ex.: teste que exige mais de um equipamento rodando junto) — texto livre
+  // separado por vírgula, mesmo padrão de `recursos`. null/vazio = só o campo
+  // `equipamento` acima entra no quadro (comportamento de sempre).
+  equipamentosRelacionados: string | null;
   recursos: string | null;
   loto: string | null;
   areaAtuacao: string | null;
@@ -51,6 +56,7 @@ export interface CreateManutencaoOrdemRequest {
   semOs?: boolean;
   descricao: string;
   equipamento?: string;
+  equipamentosRelacionados?: string;
   recursos?: string;
   loto?: string;
   areaAtuacao?: string;
@@ -102,6 +108,10 @@ export interface PlanoManutencao {
   // programarDaPreventiva), mesmas opções de LOTO_OPCOES ('LOTO'|'SEM LOTO'|
   // 'FUNCIONANDO'). null = sem padrão, continua em branco pra escolher na hora.
   lotoPadrao: string | null;
+  // Outros equipamentos que devem entrar no Quadro de LOTO junto com o principal
+  // sempre que esse plano for programado (ex.: teste que envolve vários equipamentos
+  // ao mesmo tempo) — texto livre separado por vírgula, pré-preenche a Nova OS.
+  equipamentosRelacionados: string | null;
   criadoPorId: string | null;
   criadoPorNome: string;
   createdAt: Date;
@@ -127,6 +137,7 @@ export interface CreatePlanoManutencaoRequest {
   observacoes?: string;
   ativo?: boolean; // default true no service
   lotoPadrao?: string;
+  equipamentosRelacionados?: string;
 }
 
 export interface EditarPlanoManutencaoRequest {
@@ -146,6 +157,7 @@ export interface EditarPlanoManutencaoRequest {
   observacoes: string | null;
   ativo: boolean;
   lotoPadrao: string | null;
+  equipamentosRelacionados: string | null;
 }
 
 // Ledger de duplicidade — uma linha por ocorrência já programada de um plano (ver
@@ -241,6 +253,7 @@ export interface EditarManutencaoOrdemRequest {
   semOs: boolean;
   descricao: string;
   equipamento: string | null;
+  equipamentosRelacionados: string | null;
   recursos: string | null;
   loto: string | null;
   areaAtuacao: string | null;

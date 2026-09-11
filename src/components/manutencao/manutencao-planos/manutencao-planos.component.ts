@@ -336,6 +336,27 @@ export class ManutencaoPlanosComponent implements OnInit {
   // equipamento rodando) — pré-preenche o campo LOTO da Nova OS ao programar (ver
   // programarDaPreventiva na Programação). '' = sem padrão.
   formLotoPadrao = signal('');
+  // Outros equipamentos que devem entrar no Quadro de LOTO junto com o principal
+  // sempre que esse plano for programado (ex.: teste que envolve vários equipamentos
+  // ao mesmo tempo) — mesmo padrão de chips salvo como texto (join por vírgula).
+  formEquipamentosRelacionadosLista = signal<string[]>([]);
+  formEquipamentosRelacionadosDigitando = signal('');
+  formEquipamentosRelacionadosTexto = computed(() => this.formEquipamentosRelacionadosLista().join(', '));
+
+  adicionarEquipamentoRelacionado(valor: string): void {
+    const v = valor.trim();
+    if (!v) return;
+    if (this.formEquipamentosRelacionadosLista().some(e => e.toUpperCase() === v.toUpperCase())) {
+      this.formEquipamentosRelacionadosDigitando.set('');
+      return;
+    }
+    this.formEquipamentosRelacionadosLista.update(lista => [...lista, v]);
+    this.formEquipamentosRelacionadosDigitando.set('');
+  }
+
+  removerEquipamentoRelacionado(valor: string): void {
+    this.formEquipamentosRelacionadosLista.update(lista => lista.filter(e => e !== valor));
+  }
 
   personalizadaSelecionada = computed(() => this.formPeriodicidadePreset() === 'Personalizada');
 
@@ -367,6 +388,8 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formObservacoes.set('');
     this.formAtivo.set(true);
     this.formLotoPadrao.set('');
+    this.formEquipamentosRelacionadosLista.set([]);
+    this.formEquipamentosRelacionadosDigitando.set('');
     this.formAberto.set(true);
   }
 
@@ -390,6 +413,8 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formObservacoes.set(plano.observacoes ?? '');
     this.formAtivo.set(plano.ativo);
     this.formLotoPadrao.set(plano.lotoPadrao ?? '');
+    this.formEquipamentosRelacionadosLista.set((plano.equipamentosRelacionados ?? '').split(',').map(e => e.trim()).filter(Boolean));
+    this.formEquipamentosRelacionadosDigitando.set('');
     this.formAberto.set(true);
   }
 
@@ -425,6 +450,7 @@ export class ManutencaoPlanosComponent implements OnInit {
           observacoes: this.formObservacoes().trim() || null,
           ativo: this.formAtivo(),
           lotoPadrao: this.formLotoPadrao() || null,
+          equipamentosRelacionados: this.formEquipamentosRelacionadosTexto() || null,
         });
         this.notificationService.showSuccess('Plano atualizado.');
       } else {
@@ -445,6 +471,7 @@ export class ManutencaoPlanosComponent implements OnInit {
           observacoes: this.formObservacoes().trim() || undefined,
           ativo: this.formAtivo(),
           lotoPadrao: this.formLotoPadrao() || undefined,
+          equipamentosRelacionados: this.formEquipamentosRelacionadosTexto() || undefined,
         });
         this.notificationService.showSuccess('Plano cadastrado.');
       }

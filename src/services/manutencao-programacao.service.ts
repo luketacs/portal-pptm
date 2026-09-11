@@ -18,6 +18,7 @@ interface ManutencaoOrdemRow {
   sem_os: boolean;
   descricao: string;
   equipamento: string | null;
+  equipamentos_relacionados: string | null;
   recursos: string | null;
   loto: string | null;
   area_atuacao: string | null;
@@ -53,6 +54,7 @@ function mapRow(r: ManutencaoOrdemRow): ManutencaoOrdem {
     semOs: r.sem_os,
     descricao: r.descricao,
     equipamento: r.equipamento,
+    equipamentosRelacionados: r.equipamentos_relacionados,
     recursos: r.recursos,
     loto: r.loto,
     areaAtuacao: r.area_atuacao,
@@ -164,6 +166,7 @@ export class ManutencaoProgramacaoService {
       sem_os: req.semOs ?? false,
       descricao: req.descricao.trim(),
       equipamento: req.equipamento?.trim() || null,
+      equipamentos_relacionados: req.equipamentosRelacionados?.trim() || null,
       recursos: req.recursos?.trim() || null,
       loto: req.loto?.trim() || null,
       area_atuacao: req.areaAtuacao?.trim() || null,
@@ -344,6 +347,7 @@ export class ManutencaoProgramacaoService {
         sem_os: updates.semOs,
         descricao: updates.descricao.trim(),
         equipamento: updates.equipamento?.trim() || null,
+        equipamentos_relacionados: updates.equipamentosRelacionados?.trim() || null,
         recursos: updates.recursos?.trim() || null,
         loto: updates.loto?.trim() || null,
         area_atuacao: updates.areaAtuacao?.trim() || null,

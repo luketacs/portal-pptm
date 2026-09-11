@@ -1242,6 +1242,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     // Plano com LOTO padrão (ex.: teste que precisa do equipamento rodando) já vem
     // com o campo preenchido — evita esquecer de marcar manualmente toda vez.
     if (plano.lotoPadrao) this.formLoto.set(plano.lotoPadrao);
+    if (plano.equipamentosRelacionados) {
+      this.formEquipamentosRelacionadosLista.set(plano.equipamentosRelacionados.split(',').map(e => e.trim()).filter(Boolean));
+    }
     if (plano.area === 'APOIO' && plano.responsavel) {
       this.formTecnicoNome.set(plano.responsavel);
     }
@@ -1272,17 +1275,26 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const porEquipamento = new Map<string, Map<string, { status: string; descricao: string; tecnico: string; area: ManutencaoArea; numeroOs: string | null }[]>>();
 
     for (const o of ordensDaSemana) {
-      const equipamento = o.equipamento?.trim();
       const loto = o.loto?.trim();
-      if (!equipamento || !loto) continue;
+      if (!loto) continue;
+      // Normalmente só o campo "equipamento" entra no quadro — mas alguns testes
+      // envolvem mais de um equipamento ao mesmo tempo (ex.: precisa do stacker E das
+      // esteiras relacionadas rodando juntos), daí equipamentosRelacionados soma mais
+      // entradas com o MESMO status/descrição/técnico dessa mesma ordem.
+      const equipamentos = [o.equipamento, ...(o.equipamentosRelacionados ?? '').split(',')]
+        .map(e => e?.trim())
+        .filter((e): e is string => !!e);
+      if (equipamentos.length === 0) continue;
 
       const diasDaOrdem = o.diasPrevistos.length > 0 ? o.diasPrevistos.filter(d => dias.includes(d)) : dias;
-      if (!porEquipamento.has(equipamento)) porEquipamento.set(equipamento, new Map());
-      const porDia = porEquipamento.get(equipamento)!;
-      for (const dia of diasDaOrdem) {
-        const lista = porDia.get(dia) ?? [];
-        lista.push({ status: loto, descricao: o.descricao, tecnico: o.tecnicoNome, area: o.area, numeroOs: o.numeroOs?.trim() || null });
-        porDia.set(dia, lista);
+      for (const equipamento of equipamentos) {
+        if (!porEquipamento.has(equipamento)) porEquipamento.set(equipamento, new Map());
+        const porDia = porEquipamento.get(equipamento)!;
+        for (const dia of diasDaOrdem) {
+          const lista = porDia.get(dia) ?? [];
+          lista.push({ status: loto, descricao: o.descricao, tecnico: o.tecnicoNome, area: o.area, numeroOs: o.numeroOs?.trim() || null });
+          porDia.set(dia, lista);
+        }
       }
     }
 
@@ -1373,6 +1385,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   formSemOs = signal(false);
   formDescricao = signal('');
   formEquipamento = signal('');
+  // Outros equipamentos que entram no Quadro de LOTO com o mesmo status desta OS (ex.:
+  // teste que envolve mais de um equipamento rodando junto) — mesma ideia de chips dos
+  // Recursos abaixo, salvo como texto (join por vírgula), sem precisar de TEXT[].
+  formEquipamentosRelacionadosLista = signal<string[]>([]);
+  formEquipamentosRelacionadosDigitando = signal('');
+  formEquipamentosRelacionadosTexto = computed(() => this.formEquipamentosRelacionadosLista().join(', '));
   // Recursos vira uma lista de "chips" (outros técnicos e/ou equipamentos) em vez de um
   // texto livre único — permite marcar vários ajudantes numa OS só. Continua salvo como
   // texto (join por vírgula) no banco, sem precisar mudar o schema.
@@ -1467,6 +1485,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formVincularPlanoTexto.set('');
     if (!this.formTipoServico().trim()) this.formTipoServico.set('PREVENTIVA');
     if (plano.lotoPadrao && !this.formLoto().trim()) this.formLoto.set(plano.lotoPadrao);
+    if (plano.equipamentosRelacionados && this.formEquipamentosRelacionadosLista().length === 0) {
+      this.formEquipamentosRelacionadosLista.set(plano.equipamentosRelacionados.split(',').map(e => e.trim()).filter(Boolean));
+    }
   }
 
   desvincularPlano(): void {
@@ -1530,6 +1551,21 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   removerRecurso(valor: string): void {
     this.formRecursosLista.update(lista => lista.filter(r => r !== valor));
     this.formApoioDiasPorRecurso.update(({ [valor]: _removido, ...resto }) => resto);
+  }
+
+  adicionarEquipamentoRelacionado(valor: string): void {
+    const v = valor.trim();
+    if (!v) return;
+    if (this.formEquipamentosRelacionadosLista().some(e => e.toUpperCase() === v.toUpperCase())) {
+      this.formEquipamentosRelacionadosDigitando.set('');
+      return;
+    }
+    this.formEquipamentosRelacionadosLista.update(lista => [...lista, v]);
+    this.formEquipamentosRelacionadosDigitando.set('');
+  }
+
+  removerEquipamentoRelacionado(valor: string): void {
+    this.formEquipamentosRelacionadosLista.update(lista => lista.filter(e => e !== valor));
   }
 
   // ── Integração com o SIGMA (mesmos links que a planilha "Fechamento Semanal.2"
@@ -1952,6 +1988,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formSemOs.set(false);
     this.formDescricao.set('');
     this.formEquipamento.set('');
+    this.formEquipamentosRelacionadosLista.set([]);
+    this.formEquipamentosRelacionadosDigitando.set('');
     this.formRecursosLista.set([]);
     this.formRecursosDigitando.set('');
     this.formApoioDiasPorRecurso.set({});
@@ -1993,6 +2031,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formSemOs.set(o.semOs);
     this.formDescricao.set(o.descricao);
     this.formEquipamento.set(o.equipamento ?? '');
+    this.formEquipamentosRelacionadosLista.set((o.equipamentosRelacionados ?? '').split(',').map(e => e.trim()).filter(Boolean));
+    this.formEquipamentosRelacionadosDigitando.set('');
     this.formRecursosLista.set((o.recursos ?? '').split(',').map(r => r.trim()).filter(Boolean));
     this.formRecursosDigitando.set('');
     // Reconstrói os dias de cada recurso já espelhado, procurando a OS-espelho dele
@@ -2267,6 +2307,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           semOs: ehOrdem && this.formSemOs(),
           descricao: this.descricaoParaEnvio(),
           equipamento: ehOrdem ? (this.formEquipamento().trim() || null) : null,
+          equipamentosRelacionados: ehOrdem ? (this.formEquipamentosRelacionadosTexto() || null) : null,
           recursos: ehOrdem ? (this.formRecursosTexto() || null) : null,
           loto: ehOrdem ? (this.formLoto().trim() || null) : null,
           areaAtuacao: ehOrdem ? (this.formAreaAtuacao().trim() || null) : null,
@@ -2302,6 +2343,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           semOs: ehOrdem && this.formSemOs(),
           descricao: this.descricaoParaEnvio(),
           equipamento: ehOrdem ? (this.formEquipamento().trim() || undefined) : undefined,
+          equipamentosRelacionados: ehOrdem ? (this.formEquipamentosRelacionadosTexto() || undefined) : undefined,
           recursos: ehOrdem ? (this.formRecursosTexto() || undefined) : undefined,
           loto: ehOrdem ? (this.formLoto().trim() || undefined) : undefined,
           areaAtuacao: ehOrdem ? (this.formAreaAtuacao().trim() || undefined) : undefined,
