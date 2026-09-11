@@ -70,6 +70,14 @@ export class ExcelExportService {
     return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
   }
 
+  // Nome de aba do Excel tem limite de 31 caracteres e não aceita : \ / ? * [ ] — nomes
+  // como "Programação Mecânica Semana 37" cabem tranquilo, mas corta em segurança pra
+  // não quebrar o export se algum dia o texto vier maior (ex.: "Geral" combinando duas
+  // áreas com nome mais longo).
+  private nomeAbaSeguro(nome: string): string {
+    return nome.replace(/[:\\/?*[\]]/g, '').slice(0, 31);
+  }
+
   // ── Estilos ────────────────────────────────────────────────────────────────
 
   private sTitle(): CellStyle {
@@ -637,33 +645,33 @@ export class ExcelExportService {
   // divisor leve, não um banner repetido — bem menos poluído que a réplica
   // anterior, mas mantém a mesma informação da planilha que o time já usava.
 
-  private readonly PROG_NAVY = 'FF1F4E79';
-  private readonly PROG_NAVY_CLARO = 'FFEBF1F8';
+  // Paleta da marca Diamante (manual DD-0099-26 — mesmos tons de tailwind.config.cjs:
+  // azul Pantone 300C #2039F9, laranja Pantone 1505C #DE7128), não uma paleta genérica
+  // inventada pro Excel. Cor com propósito, não decoração: azul estrutura o documento
+  // (cabeçalho, título, divisor de técnico, dia com OS marcada); laranja sinaliza
+  // "indisponível" (folga/treinamento/exame médico/DSR — o mesmo conceito, só a cor
+  // muda de intensidade pro fim de semana ficar um pouco mais discreto que o resto da
+  // semana); cinza neutro pra reunião (é aviso, não ausência) e bordas. Sem paleta
+  // arco-íris com uma cor nova por categoria.
+  private readonly PROG_AZUL = 'FF2039F9';
+  private readonly PROG_AZUL_TEXTO = 'FF0620E5';
+  private readonly PROG_AZUL_CLARO = 'FFF0F2FF';
+  private readonly PROG_AZUL_DIA = 'FFDCE0FE';
   private readonly PROG_BORDA = 'FFD9D9D9';
-  private readonly PROG_DIA_ORDEM = 'FFDCE6F1';
-  // DSR (fim de semana sem lançamento) — fundo claro, sem chamar mais atenção que o
-  // resto da planilha.
-  private readonly PROG_AUSENCIA_BG = 'FFFDE9D9';
-  private readonly PROG_AUSENCIA_TEXTO = 'FFC0392B';
-  // Cores por tipo de ausência — mesma paleta (fundo claro + texto colorido) usada na
-  // tela do Portal pros badges de Folga/Treinamento/Exame Médico/Reunião, só que em
-  // hex pro Excel. Nada de fundo sólido saturado — fica pesado numa planilha inteira.
-  private readonly PROG_FOLGA_BG = 'FFFEE2E2';
-  private readonly PROG_FOLGA_TEXTO = 'FFB91C1C';
-  private readonly PROG_TREINAMENTO_BG = 'FFE0E7FF';
-  private readonly PROG_TREINAMENTO_TEXTO = 'FF4338CA';
-  private readonly PROG_EXAME_BG = 'FFCCFBF1';
-  private readonly PROG_EXAME_TEXTO = 'FF0F766E';
-  private readonly PROG_REUNIAO_BG = 'FFE0F2FE';
-  private readonly PROG_REUNIAO_TEXTO = 'FF0369A1';
+  private readonly PROG_ZEBRA = 'FFF7F8FC';
+  private readonly PROG_LARANJA_BG = 'FFFDF6F2';
+  private readonly PROG_LARANJA_TEXTO = 'FFBE5E1E';
+  // DSR (fim de semana sem lançamento) — mesma família laranja, só um tico mais claro
+  // (o próprio fundo já é uma faixa vertical grande, não precisa competir por atenção).
+  private readonly PROG_DSR_BG = 'FFFAEAE0';
+  private readonly PROG_DSR_TEXTO = 'FFBE5E1E';
+  private readonly PROG_CINZA_BG = 'FFF1F5F9';
+  private readonly PROG_CINZA_TEXTO = 'FF475569';
+  private readonly PROG_VERDE_TEXTO = 'FF15803D';
 
   private corAusenciaPorTipo(tipo: string): { bg: string; texto: string } {
-    switch (tipo) {
-      case 'folga': return { bg: this.PROG_FOLGA_BG, texto: this.PROG_FOLGA_TEXTO };
-      case 'treinamento': return { bg: this.PROG_TREINAMENTO_BG, texto: this.PROG_TREINAMENTO_TEXTO };
-      case 'exame_medico': return { bg: this.PROG_EXAME_BG, texto: this.PROG_EXAME_TEXTO };
-      default: return { bg: this.PROG_REUNIAO_BG, texto: this.PROG_REUNIAO_TEXTO }; // reuniao
-    }
+    if (tipo === 'reuniao') return { bg: this.PROG_CINZA_BG, texto: this.PROG_CINZA_TEXTO };
+    return { bg: this.PROG_LARANJA_BG, texto: this.PROG_LARANJA_TEXTO }; // folga/treinamento/exame_medico
   }
 
   // Feriado e folga pessoal (atestado, banco de horas etc.) usam o mesmo tipo 'folga'
@@ -707,8 +715,8 @@ export class ExcelExportService {
     if (totalHoras > 0) partes.push(`${totalHoras.toFixed(2)}h programadas`);
     if (grupo.feriasAte) partes.push(`Férias até ${grupo.feriasAte}`);
     celDivisor.value = partes.join('   ·   ');
-    celDivisor.font = { bold: true, size: 10, color: { argb: this.PROG_NAVY } };
-    celDivisor.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_NAVY_CLARO } };
+    celDivisor.font = { bold: true, size: 10, color: { argb: this.PROG_AZUL_TEXTO } };
+    celDivisor.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL_CLARO } };
     celDivisor.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
     row++;
 
@@ -721,7 +729,7 @@ export class ExcelExportService {
       cel.font = { italic: true, size: 9, color: { argb: 'FF999999' } };
       row++;
     } else {
-      linhas.forEach(linha => {
+      linhas.forEach((linha, idx) => {
         const numeroLabel = linha.tipo === 'folga' ? this.labelFolga(linha.descricao)
           : linha.tipo === 'treinamento' ? 'TREINAMENTO'
           : linha.tipo === 'exame_medico' ? 'EXAME MÉDICO'
@@ -731,6 +739,12 @@ export class ExcelExportService {
           : 'CRIAR OS';
 
         const fonteBase: Partial<ExcelJS.Font> = { size: 9, color: { argb: 'FF333333' } };
+        // Zebrado bem sutil (cinza ~3%) só nas linhas de ordem — ajuda a escanear um
+        // bloco com várias OS sem competir com as cores com propósito (laranja/cinza
+        // dos banners, azul do dia marcado). Banners de ausência já têm cor própria,
+        // não entram no zebrado.
+        const zebra: ExcelJS.Fill | undefined = idx % 2 === 1
+          ? { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_ZEBRA } } : undefined;
         // Sem altura fixa aqui — deixa o Excel calcular sozinho quando a descrição
         // quebra em mais de uma linha (wrapText), senão o texto fica cortado.
 
@@ -738,8 +752,8 @@ export class ExcelExportService {
         // de espalhar campos vazios pelas 7 primeiras colunas, vira uma faixa única com
         // o rótulo centralizado, fácil de bater o olho na semana inteira. Fundo claro
         // (mesma paleta da tela), não sólido saturado — fica pesado numa planilha
-        // inteira. Reunião ainda carrega o título e o horário/local no mesmo texto,
-        // senão essa informação se perde (não tem coluna própria pra isso).
+        // inteira. Reunião ganha uma segunda linha (wrapText) pro horário/local não
+        // ficar espremido junto do título.
         const ehAusenciaComBanner = linha.tipo === 'folga' || linha.tipo === 'treinamento'
           || linha.tipo === 'exame_medico' || linha.tipo === 'reuniao';
 
@@ -747,22 +761,29 @@ export class ExcelExportService {
           const cor = this.corAusenciaPorTipo(linha.tipo);
           ws.mergeCells(row, 1, row, 7);
           const cel = ws.getCell(row, 1);
-          cel.value = linha.tipo === 'reuniao'
-            ? `${numeroLabel} — ${linha.descricao}${linha.recursos && linha.recursos !== '—' ? ' (' + linha.recursos + ')' : ''}`
-            : numeroLabel;
+          const detalheReuniao = [linha.recursos && linha.recursos !== '—' ? linha.recursos : null].filter(Boolean).join(' · ');
+          if (linha.tipo === 'reuniao') {
+            cel.value = detalheReuniao ? `${linha.descricao}\n${detalheReuniao}` : linha.descricao;
+            cel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            ws.getRow(row).height = 28; // Excel não estica altura sozinho em célula mesclada
+          } else {
+            cel.value = numeroLabel;
+            cel.alignment = { horizontal: 'center', vertical: 'middle' };
+          }
           cel.font = { bold: true, size: 10, color: { argb: cor.texto } };
           cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor.bg } };
-          cel.alignment = { horizontal: 'center', vertical: 'middle' };
         } else {
           const cOs = ws.getCell(row, 1);
           cOs.value = numeroLabel;
           cOs.font = fonteBase;
           cOs.alignment = { horizontal: 'center', vertical: 'middle' };
+          if (zebra) cOs.fill = zebra;
 
           const cDesc = ws.getCell(row, 2);
           cDesc.value = linha.descricao;
           cDesc.font = fonteBase;
           cDesc.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+          if (zebra) cDesc.fill = zebra;
 
           const cDur = ws.getCell(row, 3);
           if (linha.duracaoHoras !== null) {
@@ -771,34 +792,42 @@ export class ExcelExportService {
           }
           cDur.font = fonteBase;
           cDur.alignment = { horizontal: 'center', vertical: 'middle' };
+          if (zebra) cDur.fill = zebra;
 
           const cEquip = ws.getCell(row, 4);
           cEquip.value = linha.equipamento;
           cEquip.font = fonteBase;
           cEquip.alignment = { horizontal: 'left', vertical: 'middle' };
+          if (zebra) cEquip.fill = zebra;
 
           const cRec = ws.getCell(row, 5);
           cRec.value = linha.recursos;
           cRec.font = fonteBase;
           cRec.alignment = { horizontal: 'left', vertical: 'middle' };
+          if (zebra) cRec.fill = zebra;
 
           const cLoto = ws.getCell(row, 6);
           cLoto.value = linha.loto;
           cLoto.font = fonteBase;
           cLoto.alignment = { horizontal: 'center', vertical: 'middle' };
+          if (zebra) cLoto.fill = zebra;
 
           const cArea = ws.getCell(row, 7);
           cArea.value = linha.areaAtuacao;
           cArea.font = fonteBase;
           cArea.alignment = { horizontal: 'left', vertical: 'middle' };
+          if (zebra) cArea.fill = zebra;
         }
 
         dias.forEach((dia, i) => {
           const cel = ws.getCell(row, 8 + i);
           cel.alignment = { horizontal: 'center', vertical: 'middle' };
-          if (!linha.diasPrevistos.includes(dia.data)) return;
+          if (!linha.diasPrevistos.includes(dia.data)) {
+            if (!ehAusenciaComBanner && zebra) cel.fill = zebra;
+            return;
+          }
           if (linha.tipo === 'ordem') {
-            cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_DIA_ORDEM } };
+            cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL_DIA } };
           } else {
             const cor = this.corAusenciaPorTipo(linha.tipo);
             cel.value = linha.tipo === 'folga' ? this.labelFolga(linha.descricao) : linha.tipo === 'treinamento' ? 'TREINO' : linha.tipo === 'reuniao' ? 'REUNIÃO' : 'ASO';
@@ -807,10 +836,17 @@ export class ExcelExportService {
           }
         });
 
+        // Execução real (apontamento por técnico no SIGMA), não o status bruto — que é
+        // sempre "PEND" pra toda OS criada pelo Portal e não diz nada (ver
+        // statusExecucao() na Programação, mesmo critério usado aqui). Verde só pra
+        // quem já executou de verdade; o resto fica neutro, sem alarmar.
         const cStatus = ws.getCell(row, 15);
         cStatus.value = linha.status;
-        cStatus.font = fonteBase;
+        cStatus.font = linha.status === 'Executada'
+          ? { ...fonteBase, bold: true, color: { argb: this.PROG_VERDE_TEXTO } }
+          : fonteBase;
         cStatus.alignment = { horizontal: 'center', vertical: 'middle' };
+        if (zebra && !ehAusenciaComBanner) cStatus.fill = zebra;
 
         for (let c = 1; c <= NC; c++) ws.getCell(row, c).border = this.bordaFina();
         row++;
@@ -818,10 +854,10 @@ export class ExcelExportService {
     }
 
     // DSR nos fins de semana em que o técnico não tem nenhum lançamento marcado —
-    // fundo claro (mesmo tom pastel do resto), mesclado numa célula só ao longo do
-    // bloco dele. Se ele precisar trabalhar no sábado/domingo (tem algo em
-    // diasPrevistos naquele dia), não mexe — os marcadores normais da linha
-    // continuam valendo.
+    // fundo claro (mesma família laranja do resto, um tico mais claro), mesclado numa
+    // célula só ao longo do bloco dele. Se ele precisar trabalhar no sábado/domingo
+    // (tem algo em diasPrevistos naquele dia), não mexe — os marcadores normais da
+    // linha continuam valendo.
     const ultimaLinhaRow = row - 1;
     dias.forEach((dia, i) => {
       if (dia.label !== 'SAB' && dia.label !== 'DOM') return;
@@ -833,8 +869,8 @@ export class ExcelExportService {
       }
       const cel = ws.getCell(primeiraLinhaRow, col);
       cel.value = 'DSR';
-      cel.font = { bold: true, size: 8, color: { argb: this.PROG_AUSENCIA_TEXTO } };
-      cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AUSENCIA_BG } };
+      cel.font = { bold: true, size: 8, color: { argb: this.PROG_DSR_TEXTO } };
+      cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_DSR_BG } };
       cel.alignment = { horizontal: 'center', vertical: 'middle' };
       for (let r = primeiraLinhaRow; r <= ultimaLinhaRow; r++) {
         ws.getCell(r, col).border = this.bordaFina();
@@ -847,15 +883,18 @@ export class ExcelExportService {
 
   async exportarProgramacaoSemanal(params: {
     semanaLabel: string;
+    numeroSemana: number;
     areaLabel: string;
     dias: ProgramacaoSemanalDia[];
     grupos: ProgramacaoSemanalGrupo[];
   }): Promise<void> {
     const NC = 15;
+    // Convenção fixa de nome (aba, título e arquivo): "Programação {Área} Semana {N}".
+    const tituloPlanilha = `Programação ${params.areaLabel} Semana ${params.numeroSemana}`;
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Portal PPTM';
     wb.created = new Date();
-    const ws = wb.addWorksheet('Programação', {
+    const ws = wb.addWorksheet(this.nomeAbaSeguro(tituloPlanilha), {
       pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
       views: [{ state: 'frozen', ySplit: 5 }],
     });
@@ -873,15 +912,15 @@ export class ExcelExportService {
       ws.addImage(logoId, { tl: { col: 0.15, row: 0.15 }, ext: { width: 150, height: 45 } });
     }
 
-    ws.getRow(1).height = 22;
+    ws.getRow(1).height = 24;
     ws.getRow(2).height = 16;
-    ws.getRow(3).height = 14;
-    ws.getRow(4).height = 8;
+    ws.getRow(3).height = 16;
+    ws.getRow(4).height = 6;
 
     ws.mergeCells(1, 3, 1, NC);
     const cTitulo = ws.getCell(1, 3);
-    cTitulo.value = `Programação de Manutenção — ${params.areaLabel}`;
-    cTitulo.font = { bold: true, size: 14, color: { argb: this.PROG_NAVY } };
+    cTitulo.value = tituloPlanilha;
+    cTitulo.font = { bold: true, size: 15, color: { argb: this.PROG_AZUL_TEXTO } };
     cTitulo.alignment = { horizontal: 'left', vertical: 'middle' };
 
     ws.mergeCells(2, 3, 2, NC);
@@ -894,7 +933,14 @@ export class ExcelExportService {
     const cGerado = ws.getCell(3, 3);
     cGerado.value = `Gerado em ${this.nowStr()}`;
     cGerado.font = { size: 8, italic: true, color: { argb: 'FF999999' } };
-    cGerado.alignment = { horizontal: 'left', vertical: 'middle' };
+    cGerado.alignment = { horizontal: 'left', vertical: 'bottom' };
+
+    // Régua fina fechando a "área de letterhead" (logo + título) antes da tabela
+    // começar — sem isso o cabeçalho ficava meio solto, sem nada delimitando onde a
+    // planilha de fato começa.
+    for (let c = 1; c <= NC; c++) {
+      ws.getCell(3, c).border = { bottom: { style: 'thin', color: { argb: 'FFB9C1FD' } } };
+    }
 
     let row = 5;
     const headerRow = ws.getRow(row);
@@ -904,7 +950,7 @@ export class ExcelExportService {
     ];
     const estiloHeader = (cel: ExcelJS.Cell) => {
       cel.font = { bold: true, size: 9, color: { argb: 'FFFFFFFF' } };
-      cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_NAVY } };
+      cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL } };
       cel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
     };
     headersFixos.forEach(([label, c]) => {
@@ -918,8 +964,11 @@ export class ExcelExportService {
       estiloHeader(cel);
       cel.font = { ...cel.font, size: 8 };
     });
+    // "Execução" (não "Status") — o valor que chega aqui já é Executada/Não executada
+    // por técnico (ver statusExecucao() no componente), não o status bruto do SIGMA
+    // (sempre "PEND", não dizia nada).
     const cStatusHeader = headerRow.getCell(15);
-    cStatusHeader.value = 'Status';
+    cStatusHeader.value = 'Execução';
     estiloHeader(cStatusHeader);
     row++;
 
@@ -928,13 +977,17 @@ export class ExcelExportService {
     }
 
     ws.pageSetup.margins = { left: 0.3, right: 0.3, top: 0.5, bottom: 0.4, header: 0.2, footer: 0.2 };
+    // Repete a linha de cabeçalho (linha 5) em toda página impressa — sem isso, uma
+    // semana com muitos técnicos (várias páginas) saía com as páginas 2+ sem nome de
+    // coluna nenhum.
+    ws.pageSetup.printTitlesRow = '5:5';
 
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `programacao_${params.areaLabel.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_')}_${this.todayStr()}.xlsx`;
+    a.download = `${tituloPlanilha.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_')}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
   }

@@ -276,7 +276,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         loto: o.loto || '—',
         areaAtuacao: o.areaAtuacao || '—',
         diasPrevistos: o.diasPrevistos,
-        status: o.tipo === 'ordem' ? o.status : '',
+        // Execução real por técnico (apontamento do SIGMA batendo com o dia
+        // programado — ver statusExecucao()), não o status bruto (sempre "PEND" pra
+        // qualquer OS criada pelo Portal, não diz nada numa coluna inteira repetida).
+        // Sem SIGMA ainda ter respondido (statusExecucao null), cai pro status bruto
+        // mesmo, só pra não deixar a célula em branco.
+        status: o.tipo === 'ordem' ? (this.statusExecucao(o)?.label ?? o.status) : '',
       })),
     }));
 
@@ -288,13 +293,18 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const semana = this.semanaFiltro();
     const [ano] = semana.split('-').map(Number);
     const dias = this.diasDaSemanaAtual();
-    const semanaLabel = `S${this.numeroSemanaISO(semana)} ${ano} (${this.diaMesPadded(dias[0].data)} À ${this.diaMesPadded(dias[6].data)})`;
+    const numeroSemana = this.numeroSemanaISO(semana);
+    const semanaLabel = `S${numeroSemana} ${ano} (${this.diaMesPadded(dias[0].data)} À ${this.diaMesPadded(dias[6].data)})`;
 
     this.exportandoSemana.set(true);
     try {
       await this.excelExportService.exportarProgramacaoSemanal({
         semanaLabel,
-        areaLabel: this.areaFixa ? this.areaLabel[this.areaFixa] : 'Elétrica + Mecânica',
+        numeroSemana,
+        // "Geral" só quando as duas áreas aparecem juntas (tela combinada, sem rota
+        // travada) — nos 3 casos que importam (Mecânica/Elétrica/Apoio, cada um com
+        // rota própria) o nome vem exatamente como cadastrado em AREA_LABEL.
+        areaLabel: this.areaFixa ? this.areaLabel[this.areaFixa] : 'Geral',
         dias: dias.map(d => ({ data: d.data, diaMes: this.diaMesCompacto(d.data), label: d.label })),
         grupos,
       });
