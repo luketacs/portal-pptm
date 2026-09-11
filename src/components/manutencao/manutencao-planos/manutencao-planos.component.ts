@@ -470,10 +470,14 @@ export class ManutencaoPlanosComponent implements OnInit {
   private calendarioAnoAtual = computed(() => Number(this.calendarioAncora().split('-')[0]));
   private calendarioMesAtual = computed(() => Number(this.calendarioAncora().split('-')[1]));
 
-  // Cada plano filtrado vira dois tipos de item: 'real' (um por dia de cada ordem já
-  // vinculada a um ciclo) e 'previsto' (a próxima execução calculada, ainda sem
-  // ordem/ciclo nenhum). ManutencaoProgramacaoService já está injetado e já carrega
-  // ordens() no ngOnInit (usado pela tela de histórico) — nenhum carregamento novo.
+  // Cada plano filtrado vira dois tipos de item: 'real' (um por ciclo já vinculado a
+  // uma ordem) e 'previsto' (a próxima execução calculada, ainda sem ordem/ciclo
+  // nenhum). Um item 'real' só conta UMA vez por ciclo, ancorado no primeiro dia de
+  // diasPrevistos — não um item por dia (uma ordem que dura a semana toda tem vários
+  // dias previstos; contar um item por dia inflava a contagem em até 5x no mês, já que
+  // a mesma manutenção "aparecia" repetida em cada dia dela). ManutencaoProgramacaoService
+  // já está injetado e já carrega ordens() no ngOnInit (usado pela tela de histórico) —
+  // nenhum carregamento novo.
   itensCalendario = computed<ItemCalendario[]>(() => {
     const ordensPorId = new Map(this.manutencaoProgramacaoService.ordens().map(o => [o.id, o]));
     const porId = this.planosComExecucaoPorId();
@@ -482,8 +486,8 @@ export class ManutencaoPlanosComponent implements OnInit {
       for (const ciclo of this.manutencaoPlanosService.ciclos().filter(c => c.planoId === plano.id)) {
         const ordem = ordensPorId.get(ciclo.ordemId);
         if (!ordem) continue;
-        const dias = ordem.diasPrevistos.length > 0 ? ordem.diasPrevistos : [ordem.semanaInicio];
-        for (const data of dias) itens.push({ data, tipo: 'real', plano, ordem });
+        const data = ordem.diasPrevistos.length > 0 ? [...ordem.diasPrevistos].sort()[0] : ordem.semanaInicio;
+        itens.push({ data, tipo: 'real', plano, ordem });
       }
       const comExecucao = porId.get(plano.id);
       if (comExecucao) itens.push({ data: comExecucao.proximaData, tipo: 'previsto', plano });
