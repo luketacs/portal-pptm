@@ -97,6 +97,11 @@ export interface PlanoManutencao {
   // Número da OS já aberta/reservada no SIGMA pra esse plano, anotado antes dele ser
   // programado de fato (ver programarDaPreventiva) — some assim que vira uma OS real.
   numeroOsReservado: string | null;
+  // Status de LOTO que essa manutenção sempre exige (ex.: teste que precisa do
+  // equipamento rodando) — pré-preenche o campo LOTO da Nova OS ao programar (ver
+  // programarDaPreventiva), mesmas opções de LOTO_OPCOES ('LOTO'|'SEM LOTO'|
+  // 'FUNCIONANDO'). null = sem padrão, continua em branco pra escolher na hora.
+  lotoPadrao: string | null;
   criadoPorId: string | null;
   criadoPorNome: string;
   createdAt: Date;
@@ -121,6 +126,7 @@ export interface CreatePlanoManutencaoRequest {
   hhEstimado?: number;
   observacoes?: string;
   ativo?: boolean; // default true no service
+  lotoPadrao?: string;
 }
 
 export interface EditarPlanoManutencaoRequest {
@@ -139,6 +145,7 @@ export interface EditarPlanoManutencaoRequest {
   hhEstimado: number | null;
   observacoes: string | null;
   ativo: boolean;
+  lotoPadrao: string | null;
 }
 
 // Ledger de duplicidade — uma linha por ocorrência já programada de um plano (ver

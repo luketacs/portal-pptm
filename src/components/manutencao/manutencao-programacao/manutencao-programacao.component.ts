@@ -1239,6 +1239,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     // abaixo), vem pré-preenchido — some do plano quando a OS for confirmada (ver
     // registrarCicloSeVinculoMudou).
     if (plano.numeroOsReservado) this.formNumeroOs.set(plano.numeroOsReservado);
+    // Plano com LOTO padrão (ex.: teste que precisa do equipamento rodando) já vem
+    // com o campo preenchido — evita esquecer de marcar manualmente toda vez.
+    if (plano.lotoPadrao) this.formLoto.set(plano.lotoPadrao);
     if (plano.area === 'APOIO' && plano.responsavel) {
       this.formTecnicoNome.set(plano.responsavel);
     }
@@ -1463,6 +1466,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formChecklist.set(plano.atividades);
     this.formVincularPlanoTexto.set('');
     if (!this.formTipoServico().trim()) this.formTipoServico.set('PREVENTIVA');
+    if (plano.lotoPadrao && !this.formLoto().trim()) this.formLoto.set(plano.lotoPadrao);
   }
 
   desvincularPlano(): void {

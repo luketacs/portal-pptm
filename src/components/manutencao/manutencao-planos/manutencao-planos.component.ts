@@ -54,6 +54,10 @@ function normalizarTexto(v: string): string {
   return v.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
 }
 
+// Mesmas 3 opções de LOTO_OPCOES em manutencao-programacao.component.ts (convenção do
+// projeto: duplicar constante pequena em vez de criar um util só pra isso).
+const LOTO_OPCOES = ['LOTO', 'SEM LOTO', 'FUNCIONANDO'];
+
 interface PeriodicidadePreset {
   label: string;
   valor: number | null; // null = Personalizada (usuário define)
@@ -82,6 +86,7 @@ const PERIODICIDADE_PRESETS: PeriodicidadePreset[] = [
 export class ManutencaoPlanosComponent implements OnInit {
   readonly areaLabel = AREA_LABEL;
   readonly periodicidadePresets = PERIODICIDADE_PRESETS;
+  readonly lotoOpcoes = LOTO_OPCOES;
   errorMessage = signal('');
   isProcessando = signal(false);
 
@@ -327,6 +332,10 @@ export class ManutencaoPlanosComponent implements OnInit {
   formHhEstimado = signal<number | null>(null);
   formObservacoes = signal('');
   formAtivo = signal(true);
+  // Status de LOTO que essa manutenção sempre exige (ex.: teste que precisa do
+  // equipamento rodando) — pré-preenche o campo LOTO da Nova OS ao programar (ver
+  // programarDaPreventiva na Programação). '' = sem padrão.
+  formLotoPadrao = signal('');
 
   personalizadaSelecionada = computed(() => this.formPeriodicidadePreset() === 'Personalizada');
 
@@ -357,6 +366,7 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formHhEstimado.set(null);
     this.formObservacoes.set('');
     this.formAtivo.set(true);
+    this.formLotoPadrao.set('');
     this.formAberto.set(true);
   }
 
@@ -379,6 +389,7 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formHhEstimado.set(plano.hhEstimado);
     this.formObservacoes.set(plano.observacoes ?? '');
     this.formAtivo.set(plano.ativo);
+    this.formLotoPadrao.set(plano.lotoPadrao ?? '');
     this.formAberto.set(true);
   }
 
@@ -413,6 +424,7 @@ export class ManutencaoPlanosComponent implements OnInit {
           hhEstimado: this.formHhEstimado(),
           observacoes: this.formObservacoes().trim() || null,
           ativo: this.formAtivo(),
+          lotoPadrao: this.formLotoPadrao() || null,
         });
         this.notificationService.showSuccess('Plano atualizado.');
       } else {
@@ -432,6 +444,7 @@ export class ManutencaoPlanosComponent implements OnInit {
           hhEstimado: this.formHhEstimado() ?? undefined,
           observacoes: this.formObservacoes().trim() || undefined,
           ativo: this.formAtivo(),
+          lotoPadrao: this.formLotoPadrao() || undefined,
         });
         this.notificationService.showSuccess('Plano cadastrado.');
       }

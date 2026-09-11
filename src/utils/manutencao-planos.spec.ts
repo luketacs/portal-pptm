@@ -21,6 +21,7 @@ function plano(overrides: Partial<PlanoManutencao> = {}): PlanoManutencao {
     observacoes: null,
     ativo: true,
     numeroOsReservado: null,
+    lotoPadrao: null,
     criadoPorId: null,
     criadoPorNome: 'Teste',
     createdAt: new Date('2026-08-01'),
