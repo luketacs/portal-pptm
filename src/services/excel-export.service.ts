@@ -788,7 +788,7 @@ export class ExcelExportService {
           // linha (Descrição, Recursos, LOTO) — ver estimarLinhas.
           const larguraDesc = (ws.getColumn(2).width as number | undefined) ?? 46;
           const larguraRec = (ws.getColumn(5).width as number | undefined) ?? 24;
-          const larguraLoto = (ws.getColumn(6).width as number | undefined) ?? 12;
+          const larguraLoto = (ws.getColumn(6).width as number | undefined) ?? 15;
           const linhasNecessarias = Math.max(
             this.estimarLinhas(linha.descricao, larguraDesc),
             this.estimarLinhas(linha.recursos, larguraRec),
@@ -924,7 +924,7 @@ export class ExcelExportService {
 
     ws.columns = [
       { width: 13 }, { width: 46 }, { width: 9 }, { width: 16 }, { width: 24 },
-      { width: 12 }, { width: 20 },
+      { width: 15 }, { width: 20 },
       { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 },
     ];
 
