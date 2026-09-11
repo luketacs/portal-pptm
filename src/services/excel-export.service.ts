@@ -903,8 +903,7 @@ export class ExcelExportService {
   }
 
   // Monta o workbook em si (sem baixar) — separado de exportarProgramacaoSemanal pra
-  // poder reaproveitar o mesmo Excel tanto no botão "Exportar" (baixa direto) quanto no
-  // e-mail de fechamento da semana (vira anexo de um .eml, ver gerarEmailFechamentoSemana).
+  // reusar o mesmo builder se aparecer outro consumidor do Excel além do download direto.
   private async construirWorkbookProgramacao(params: {
     semanaLabel: string;
     numeroSemana: number;
@@ -1018,116 +1017,4 @@ export class ExcelExportService {
     URL.revokeObjectURL(url);
   }
 
-  // Mesmo Excel de exportarProgramacaoSemanal, só que devolve o buffer em vez de
-  // baixar — usado pra anexar no .eml de fechamento da semana (ver
-  // gerarEmailFechamentoSemana), que precisa dos 3 arquivos (Mecânica/Elétrica/Apoio)
-  // prontos antes de montar o e-mail, não um download avulso por área.
-  async gerarBufferProgramacaoSemanal(params: {
-    semanaLabel: string;
-    numeroSemana: number;
-    areaLabel: string;
-    dias: ProgramacaoSemanalDia[];
-    grupos: ProgramacaoSemanalGrupo[];
-  }): Promise<{ buffer: ArrayBuffer; nomeArquivo: string }> {
-    const { wb, tituloPlanilha } = await this.construirWorkbookProgramacao(params);
-    const buffer = await wb.xlsx.writeBuffer();
-    return { buffer: buffer as ArrayBuffer, nomeArquivo: this.nomeArquivoProgramacao(tituloPlanilha) };
-  }
-
-  // ── E-mail de fechamento da semana (.eml com as 3 planilhas anexadas) ───────────
-  // O navegador não tem como anexar arquivo num rascunho do Outlook via mailto: (não
-  // existe essa API em nenhum browser) — o jeito que funciona de verdade é gerar um
-  // arquivo .eml (formato de e-mail bruto, com anexo em MIME de verdade) e baixar; a
-  // pessoa clica duas vezes nele e o Outlook abre como rascunho pronto (destinatário em
-  // branco — de propósito, quem usa preenche à mão), ela confere e manda. Nada é
-  // enviado por aqui, só o rascunho é montado.
-
-  private arrayBufferParaBase64(buffer: ArrayBuffer): string {
-    let binario = '';
-    const bytes = new Uint8Array(buffer);
-    const tamanhoBloco = 0x8000;
-    for (let i = 0; i < bytes.length; i += tamanhoBloco) {
-      binario += String.fromCharCode(...bytes.subarray(i, i + tamanhoBloco));
-    }
-    return btoa(binario);
-  }
-
-  // Quebra em linhas de 76 caracteres — padrão MIME (RFC 2045), a maioria dos clientes
-  // tolera sem isso mas é o jeito correto de gerar o arquivo.
-  private base64EmLinhas(b64: string): string {
-    return b64.replace(/(.{76})/g, '$1\r\n');
-  }
-
-  private textoParaBase64Utf8(texto: string): string {
-    return this.base64EmLinhas(this.arrayBufferParaBase64(new TextEncoder().encode(texto).buffer as ArrayBuffer));
-  }
-
-  // Cabeçalho de e-mail (Subject) é ASCII por padrão — com acento/travessão (ex.:
-  // "Programação... — Semana 37") precisa do encoded-word do RFC 2047, senão cliente
-  // de e-mail rigoroso pode exibir o texto corrompido. Sem quebra de linha aqui (só o
-  // corpo/anexo usam base64EmLinhas) — um encoded-word tem que ficar num token só.
-  private assuntoCodificadoRfc2047(texto: string): string {
-    const b64 = this.arrayBufferParaBase64(new TextEncoder().encode(texto).buffer as ArrayBuffer);
-    return `=?UTF-8?B?${b64}?=`;
-  }
-
-  // Corpo simples — sem quadro/tabela nenhuma. O quadro de LOTO já existe na tela do
-  // Portal (pra quem tem acesso); tentar reproduzi-lo em HTML dentro do e-mail só
-  // esbarrava no motor de renderização do Outlook desktop (é o Word, não um navegador:
-  // ignora border-radius/flex e lida mal com tabela densa) sem ficar legível de
-  // verdade. O detalhe completo da semana vai nas 3 planilhas anexadas.
-  private construirCorpoEmailFechamento(params: { numeroSemana: number; semanaLabel: string }): string {
-    return `<html><body style="font-family:Calibri,Arial,sans-serif;font-size:14px;color:#1f2937;line-height:1.5;">
-<p>Prezados,<br>Boa tarde!</p>
-<p>Encaminho anexo a programação da manutenção referente à Semana ${params.numeroSemana} (${params.semanaLabel}).</p>
-<p>Atenciosamente,</p>
-</body></html>`;
-  }
-
-  async gerarEmailFechamentoSemana(params: {
-    numeroSemana: number;
-    semanaLabel: string;
-    anexos: Array<{ buffer: ArrayBuffer; nomeArquivo: string }>;
-  }): Promise<void> {
-    const boundary = `----PortalPPTM${Date.now().toString(36)}`;
-    const assunto = `Programação de Manutenção — Semana ${params.numeroSemana}`;
-    const corpoHtml = this.construirCorpoEmailFechamento(params);
-
-    const partes: string[] = [];
-    // Sem esse header, o Outlook abre o .eml como mensagem recebida — só leitura,
-    // sem campo de destinatário/assunto editável. Com "X-Unsent: 1" ele abre como
-    // rascunho novo (igual um e-mail em branco que você começou a escrever), com tudo
-    // editável e o botão Enviar ativo. É o comportamento documentado do Outlook
-    // desktop pra esse cenário (não existe alternativa via mailto:, que não aceita
-    // anexo).
-    partes.push('X-Unsent: 1');
-    partes.push(`Subject: ${this.assuntoCodificadoRfc2047(assunto)}`);
-    partes.push('MIME-Version: 1.0');
-    partes.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
-    partes.push('');
-    partes.push(`--${boundary}`);
-    partes.push('Content-Type: text/html; charset="UTF-8"');
-    partes.push('Content-Transfer-Encoding: base64');
-    partes.push('');
-    partes.push(this.textoParaBase64Utf8(corpoHtml));
-
-    for (const anexo of params.anexos) {
-      partes.push(`--${boundary}`);
-      partes.push(`Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; name="${anexo.nomeArquivo}"`);
-      partes.push('Content-Transfer-Encoding: base64');
-      partes.push(`Content-Disposition: attachment; filename="${anexo.nomeArquivo}"`);
-      partes.push('');
-      partes.push(this.base64EmLinhas(this.arrayBufferParaBase64(anexo.buffer)));
-    }
-    partes.push(`--${boundary}--`);
-
-    const eml = partes.join('\r\n');
-    const blob = new Blob([eml], { type: 'message/rfc822' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `programacao_semana_${params.numeroSemana}.eml`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
 }
