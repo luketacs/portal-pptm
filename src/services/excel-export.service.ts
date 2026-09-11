@@ -15,10 +15,10 @@ export interface FechamentoFundoFixoLinha {
 
 // Layout do export replica o Excel que o time já usava (ex.: "PROGRAMAÇÃO ELÉTRICA
 // JUL.xlsx") — cabeçalho ORDEM/DESCRIÇÃO/DURAÇÃO/EQUIPAMENTO/RECURSOS/LOTO/ÁREA DE
-// ATUAÇÃO, 7 colunas de dia (datas reais + SEG..DOM) e STATUS, um bloco por técnico
-// com o nome mesclado na lateral. Não replica marcadores manuais que a planilha
-// original tinha (DSR, "trab", "BH") porque o Portal não rastreia esses códigos —
-// só marca os dias em que a linha está prevista.
+// ATUAÇÃO, 7 colunas de dia (datas reais + SEG..DOM), um bloco por técnico com o nome
+// mesclado na lateral. Não replica marcadores manuais que a planilha original tinha
+// (DSR, "trab", "BH") porque o Portal não rastreia esses códigos — só marca os dias em
+// que a linha está prevista. Sem coluna de status/execução — pedido do usuário.
 export interface ProgramacaoSemanalLinha {
   tipo: 'ordem' | 'folga' | 'treinamento' | 'exame_medico' | 'reuniao';
   numeroOs: string | null;
@@ -30,7 +30,6 @@ export interface ProgramacaoSemanalLinha {
   loto: string;
   areaAtuacao: string;
   diasPrevistos: string[]; // datas ISO ('YYYY-MM-DD') dentro da semana exportada
-  status: string;
 }
 
 export interface ProgramacaoSemanalGrupo {
@@ -667,7 +666,6 @@ export class ExcelExportService {
   private readonly PROG_DSR_TEXTO = 'FFBE5E1E';
   private readonly PROG_CINZA_BG = 'FFF1F5F9';
   private readonly PROG_CINZA_TEXTO = 'FF475569';
-  private readonly PROG_VERDE_TEXTO = 'FF15803D';
 
   private corAusenciaPorTipo(tipo: string): { bg: string; texto: string } {
     if (tipo === 'reuniao') return { bg: this.PROG_CINZA_BG, texto: this.PROG_CINZA_TEXTO };
@@ -717,7 +715,7 @@ export class ExcelExportService {
     celDivisor.value = partes.join('   ·   ');
     celDivisor.font = { bold: true, size: 10, color: { argb: this.PROG_AZUL_TEXTO } };
     celDivisor.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL_CLARO } };
-    celDivisor.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    celDivisor.alignment = { horizontal: 'center', vertical: 'middle' };
     row++;
 
     const linhas = grupo.linhas.length > 0 ? grupo.linhas : null;
@@ -797,13 +795,13 @@ export class ExcelExportService {
           const cEquip = ws.getCell(row, 4);
           cEquip.value = linha.equipamento;
           cEquip.font = fonteBase;
-          cEquip.alignment = { horizontal: 'left', vertical: 'middle' };
+          cEquip.alignment = { horizontal: 'center', vertical: 'middle' };
           if (zebra) cEquip.fill = zebra;
 
           const cRec = ws.getCell(row, 5);
           cRec.value = linha.recursos;
           cRec.font = fonteBase;
-          cRec.alignment = { horizontal: 'left', vertical: 'middle' };
+          cRec.alignment = { horizontal: 'center', vertical: 'middle' };
           if (zebra) cRec.fill = zebra;
 
           const cLoto = ws.getCell(row, 6);
@@ -815,7 +813,7 @@ export class ExcelExportService {
           const cArea = ws.getCell(row, 7);
           cArea.value = linha.areaAtuacao;
           cArea.font = fonteBase;
-          cArea.alignment = { horizontal: 'left', vertical: 'middle' };
+          cArea.alignment = { horizontal: 'center', vertical: 'middle' };
           if (zebra) cArea.fill = zebra;
         }
 
@@ -830,23 +828,20 @@ export class ExcelExportService {
             cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL_DIA } };
           } else {
             const cor = this.corAusenciaPorTipo(linha.tipo);
-            cel.value = linha.tipo === 'folga' ? this.labelFolga(linha.descricao) : linha.tipo === 'treinamento' ? 'TREINO' : linha.tipo === 'reuniao' ? 'REUNIÃO' : 'ASO';
-            cel.font = { bold: true, size: 7, color: { argb: cor.texto } };
+            // Treinamento não repete rótulo dia a dia — o banner da linha já diz
+            // "TREINAMENTO" uma vez só; "TREINO" em cada dia marcado era redundante
+            // (pedido do usuário). A cor de fundo sozinha já mostra quais dias são.
+            const rotuloDia = linha.tipo === 'folga' ? this.labelFolga(linha.descricao)
+              : linha.tipo === 'treinamento' ? null
+              : linha.tipo === 'reuniao' ? 'REUNIÃO'
+              : 'ASO';
+            if (rotuloDia) {
+              cel.value = rotuloDia;
+              cel.font = { bold: true, size: 7, color: { argb: cor.texto } };
+            }
             cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor.bg } };
           }
         });
-
-        // Execução real (apontamento por técnico no SIGMA), não o status bruto — que é
-        // sempre "PEND" pra toda OS criada pelo Portal e não diz nada (ver
-        // statusExecucao() na Programação, mesmo critério usado aqui). Verde só pra
-        // quem já executou de verdade; o resto fica neutro, sem alarmar.
-        const cStatus = ws.getCell(row, 15);
-        cStatus.value = linha.status;
-        cStatus.font = linha.status === 'Executada'
-          ? { ...fonteBase, bold: true, color: { argb: this.PROG_VERDE_TEXTO } }
-          : fonteBase;
-        cStatus.alignment = { horizontal: 'center', vertical: 'middle' };
-        if (zebra && !ehAusenciaComBanner) cStatus.fill = zebra;
 
         for (let c = 1; c <= NC; c++) ws.getCell(row, c).border = this.bordaFina();
         row++;
@@ -888,39 +883,39 @@ export class ExcelExportService {
     dias: ProgramacaoSemanalDia[];
     grupos: ProgramacaoSemanalGrupo[];
   }): Promise<void> {
-    const NC = 15;
+    const NC = 14;
     // Convenção fixa de nome (aba, título e arquivo): "Programação {Área} Semana {N}".
     const tituloPlanilha = `Programação ${params.areaLabel} Semana ${params.numeroSemana}`;
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Portal PPTM';
     wb.created = new Date();
+    // showGridLines: false — sem as linhas de grade padrão do Excel por trás de tudo;
+    // só as bordas finas que a gente desenha (bordaFina) marcam as células.
     const ws = wb.addWorksheet(this.nomeAbaSeguro(tituloPlanilha), {
       pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
-      views: [{ state: 'frozen', ySplit: 5 }],
+      views: [{ state: 'frozen', ySplit: 4, showGridLines: false }],
     });
 
     ws.columns = [
       { width: 13 }, { width: 46 }, { width: 9 }, { width: 16 }, { width: 12 },
       { width: 10 }, { width: 20 },
       { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 },
-      { width: 10 },
     ];
 
     const logoBuffer = await this.carregarLogoBuffer();
     if (logoBuffer) {
       const logoId = wb.addImage({ buffer: logoBuffer, extension: 'png' });
-      ws.addImage(logoId, { tl: { col: 0.15, row: 0.15 }, ext: { width: 150, height: 45 } });
+      ws.addImage(logoId, { tl: { col: 0.15, row: 0.12 }, ext: { width: 210, height: 63 } });
     }
 
-    ws.getRow(1).height = 24;
-    ws.getRow(2).height = 16;
-    ws.getRow(3).height = 16;
-    ws.getRow(4).height = 6;
+    ws.getRow(1).height = 28;
+    ws.getRow(2).height = 18;
+    ws.getRow(3).height = 6;
 
     ws.mergeCells(1, 3, 1, NC);
     const cTitulo = ws.getCell(1, 3);
     cTitulo.value = tituloPlanilha;
-    cTitulo.font = { bold: true, size: 15, color: { argb: this.PROG_AZUL_TEXTO } };
+    cTitulo.font = { bold: true, size: 16, color: { argb: this.PROG_AZUL_TEXTO } };
     cTitulo.alignment = { horizontal: 'left', vertical: 'middle' };
 
     ws.mergeCells(2, 3, 2, NC);
@@ -929,20 +924,14 @@ export class ExcelExportService {
     cSub.font = { size: 10, color: { argb: 'FF555555' } };
     cSub.alignment = { horizontal: 'left', vertical: 'middle' };
 
-    ws.mergeCells(3, 3, 3, NC);
-    const cGerado = ws.getCell(3, 3);
-    cGerado.value = `Gerado em ${this.nowStr()}`;
-    cGerado.font = { size: 8, italic: true, color: { argb: 'FF999999' } };
-    cGerado.alignment = { horizontal: 'left', vertical: 'bottom' };
-
     // Régua fina fechando a "área de letterhead" (logo + título) antes da tabela
     // começar — sem isso o cabeçalho ficava meio solto, sem nada delimitando onde a
     // planilha de fato começa.
     for (let c = 1; c <= NC; c++) {
-      ws.getCell(3, c).border = { bottom: { style: 'thin', color: { argb: 'FFB9C1FD' } } };
+      ws.getCell(2, c).border = { bottom: { style: 'thin', color: { argb: 'FFB9C1FD' } } };
     }
 
-    let row = 5;
+    let row = 4;
     const headerRow = ws.getRow(row);
     headerRow.height = 26;
     const headersFixos: Array<[string, number]> = [
@@ -964,12 +953,6 @@ export class ExcelExportService {
       estiloHeader(cel);
       cel.font = { ...cel.font, size: 8 };
     });
-    // "Execução" (não "Status") — o valor que chega aqui já é Executada/Não executada
-    // por técnico (ver statusExecucao() no componente), não o status bruto do SIGMA
-    // (sempre "PEND", não dizia nada).
-    const cStatusHeader = headerRow.getCell(15);
-    cStatusHeader.value = 'Execução';
-    estiloHeader(cStatusHeader);
     row++;
 
     for (const grupo of params.grupos) {
@@ -977,10 +960,9 @@ export class ExcelExportService {
     }
 
     ws.pageSetup.margins = { left: 0.3, right: 0.3, top: 0.5, bottom: 0.4, header: 0.2, footer: 0.2 };
-    // Repete a linha de cabeçalho (linha 5) em toda página impressa — sem isso, uma
-    // semana com muitos técnicos (várias páginas) saía com as páginas 2+ sem nome de
-    // coluna nenhum.
-    ws.pageSetup.printTitlesRow = '5:5';
+    // Repete a linha de cabeçalho em toda página impressa — sem isso, uma semana com
+    // muitos técnicos (várias páginas) saía com as páginas 2+ sem nome de coluna nenhum.
+    ws.pageSetup.printTitlesRow = '4:4';
 
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });

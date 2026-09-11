@@ -276,12 +276,6 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         loto: o.loto || '—',
         areaAtuacao: o.areaAtuacao || '—',
         diasPrevistos: o.diasPrevistos,
-        // Execução real por técnico (apontamento do SIGMA batendo com o dia
-        // programado — ver statusExecucao()), não o status bruto (sempre "PEND" pra
-        // qualquer OS criada pelo Portal, não diz nada numa coluna inteira repetida).
-        // Sem SIGMA ainda ter respondido (statusExecucao null), cai pro status bruto
-        // mesmo, só pra não deixar a célula em branco.
-        status: o.tipo === 'ordem' ? (this.statusExecucao(o)?.label ?? o.status) : '',
       })),
     }));
 
@@ -291,10 +285,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
 
     const semana = this.semanaFiltro();
-    const [ano] = semana.split('-').map(Number);
     const dias = this.diasDaSemanaAtual();
     const numeroSemana = this.numeroSemanaISO(semana);
-    const semanaLabel = `S${numeroSemana} ${ano} (${this.diaMesPadded(dias[0].data)} À ${this.diaMesPadded(dias[6].data)})`;
+    const semanaLabel = `Semana ${numeroSemana} (${this.diaMesPadded(dias[0].data)} a ${this.diaMesPadded(dias[6].data)})`;
 
     this.exportandoSemana.set(true);
     try {
