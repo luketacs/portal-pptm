@@ -94,3 +94,13 @@ export function encontrarOrdemDuplicada(
 export function recursosParaEspelho(recursosOriginais: string[], ehODestinatario: (recurso: string) => boolean, mandante: string): string {
   return [...recursosOriginais.filter(r => !ehODestinatario(r)), mandante].join(', ');
 }
+
+// Semana fechada (ver "Fechar programação da semana", migration 031) — só Admin
+// consegue criar/editar/excluir lançamento numa semana fechada; pra todo mundo mais
+// vira somente leitura. Mesma regra usada tanto pro guard que bloqueia a mutação no
+// serviço (garantirSemanaAberta) quanto pra decidir se mostra os botões habilitados na
+// tela (podeEditarSemana no componente) — uma função só, pra nunca divergir entre os
+// dois lugares.
+export function podeEditarSemanaFechada(semanaFechada: boolean, ehAdmin: boolean): boolean {
+  return !semanaFechada || ehAdmin;
+}

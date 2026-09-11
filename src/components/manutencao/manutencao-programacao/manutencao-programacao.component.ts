@@ -16,7 +16,7 @@ import {
 import { EquipeApoio, Turno, TURNO_LABEL, turnoNoDia } from '../../../utils/escala-apoio';
 import {
   HORAS_TREINAMENTO_DIA_TODO, calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo,
-  encontrarOrdemDuplicada, recursosParaEspelho,
+  encontrarOrdemDuplicada, podeEditarSemanaFechada, recursosParaEspelho,
 } from '../../../utils/manutencao-regras';
 import { calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva, periodicidadeEmDias, preventivaVencendo } from '../../../utils/manutencao-preventivas';
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
@@ -1117,6 +1117,35 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // periodicidadeEfetiva). Não afeta o cadastro do plano, só a leitura.
   plantaParadaAtiva = computed(() => this.manutencaoService.paradaAtual() !== null);
 
+  // Semana fechada (Admin-only, ver "Fechar semana" no menu) — trava criação/edição/
+  // exclusão de lançamento pra quem não é Admin (garantirSemanaAberta faz a checagem
+  // de verdade no serviço; aqui é só pra habilitar/desabilitar botão e mostrar o
+  // banner). regrasNovasValemNaSemana não entra aqui — fechar semana vale sempre,
+  // independente do corte de semana 39.
+  semanaFechada = computed(() => this.manutencaoService.semanaEstaFechada(this.semanaFiltro()));
+  infoSemanaFechada = computed(() => this.manutencaoService.infoSemanaFechada(this.semanaFiltro()));
+  podeEditarSemana = computed(() => this.podeEditar() && podeEditarSemanaFechada(this.semanaFechada(), this.isAdmin()));
+
+  async toggleFecharSemana(): Promise<void> {
+    if (this.isProcessando()) return;
+    const semana = this.semanaFiltro();
+    const fechada = this.semanaFechada();
+    const mensagem = fechada
+      ? 'Reabrir a programação dessa semana? Solicitante volta a poder criar/editar/excluir lançamento nela.'
+      : 'Fechar a programação dessa semana? Só Admin consegue criar/editar/excluir lançamento nela até reabrir.';
+    if (!(await this.confirmDialogService.confirm(mensagem, fechada ? undefined : { confirmLabel: 'Fechar', danger: true }))) return;
+    this.isProcessando.set(true);
+    try {
+      if (fechada) await this.manutencaoService.reabrirSemana(semana);
+      else await this.manutencaoService.fecharSemana(semana);
+      this.notificationService.showSuccess(fechada ? 'Semana reaberta.' : 'Semana fechada.');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao atualizar o fechamento da semana.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
   // Todas as vencendo, antes do corte do lote — usada só pra saber o total pendente
   // (ver preventivasVencendoLabel). Ordenada priorizando quem tem periodicidade maior
   // (6 meses, 1 ano...) primeiro — decisão combinada com o usuário: não vale a pena
@@ -1749,6 +1778,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       await this.manutencaoService.loadParadaAtual();
     } catch (err) {
       console.error('[ManutencaoProgramacaoComponent] Falha ao carregar status de parada da planta:', err);
+    }
+    try {
+      await this.manutencaoService.loadSemanasFechadas();
+    } catch (err) {
+      console.error('[ManutencaoProgramacaoComponent] Falha ao carregar semanas fechadas:', err);
     }
   }
 

@@ -2,7 +2,7 @@ import { ManutencaoOrdem, FeriasTecnico } from '../models/manutencao-programacao
 import {
   HORAS_EXAME_MEDICO, HORAS_TREINAMENTO_DIA_TODO, HORAS_TREINAMENTO_MEIO_PERIODO,
   calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo,
-  encontrarOrdemDuplicada, recursosParaEspelho,
+  encontrarOrdemDuplicada, podeEditarSemanaFechada, recursosParaEspelho,
 } from './manutencao-regras';
 
 const DIAS_SEMANA_37 = [
@@ -222,5 +222,20 @@ describe('recursosParaEspelho', () => {
       'Técnico Mandante',
     );
     expect(texto).toBe('Técnico Mandante');
+  });
+});
+
+describe('podeEditarSemanaFechada', () => {
+  it('libera edição quando a semana não está fechada, pra qualquer papel', () => {
+    expect(podeEditarSemanaFechada(false, false)).toBe(true);
+    expect(podeEditarSemanaFechada(false, true)).toBe(true);
+  });
+
+  it('bloqueia edição quando a semana está fechada e o usuário não é Admin', () => {
+    expect(podeEditarSemanaFechada(true, false)).toBe(false);
+  });
+
+  it('Admin continua editando mesmo com a semana fechada', () => {
+    expect(podeEditarSemanaFechada(true, true)).toBe(true);
   });
 });

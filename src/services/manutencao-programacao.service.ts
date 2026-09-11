@@ -2,6 +2,7 @@ import { Injectable, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
+import { podeEditarSemanaFechada } from '../utils/manutencao-regras';
 import {
   ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest, EquipeApoioItem, FeriasTecnico,
   ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, ParadaPlanta, PeriodicidadeUnidade,
@@ -146,6 +147,14 @@ export class ManutencaoProgramacaoService {
   private _paradaAtual = signal<ParadaPlanta | null>(null);
   paradaAtual = this._paradaAtual.asReadonly();
 
+  // Semanas fechadas (Admin-only, ver migration 031 e "Fechar programação da semana") —
+  // enquanto uma semana está nesse mapa, só Admin consegue criar/editar/excluir
+  // lançamento nela (garantirSemanaAberta, chamado no início de toda mutação de
+  // manutencao_programacao). Chave = semana_inicio ('YYYY-MM-DD'); valor guarda quem/
+  // quando fechou, pro banner da tela poder mostrar isso.
+  private _semanasFechadas = signal<Map<string, { fechadoPorNome: string; fechadoEm: string }>>(new Map());
+  semanasFechadas = this._semanasFechadas.asReadonly();
+
   constructor(
     private supabaseService: SupabaseService,
     private authService: AuthService,
@@ -184,6 +193,7 @@ export class ManutencaoProgramacaoService {
   async criarOrdem(req: CreateManutencaoOrdemRequest): Promise<void> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
+    this.garantirSemanaAberta(req.semanaInicio);
 
     const payload = {
       tipo: req.tipo ?? 'ordem',
@@ -244,6 +254,7 @@ export class ManutencaoProgramacaoService {
     if (params.tecnicos.length === 0) throw new Error('Nenhum técnico encontrado.');
 
     const semanaInicio = this.semanaDoDia(params.diasPrevistos[0]);
+    this.garantirSemanaAberta(semanaInicio);
     const descricao = params.motivo.trim() || 'Feriado';
 
     const payload = params.tecnicos.map(t => ({
@@ -297,6 +308,7 @@ export class ManutencaoProgramacaoService {
     if (params.tecnicos.length === 0) throw new Error('Nenhum técnico encontrado.');
 
     const semanaInicio = this.semanaDoDia(params.diasPrevistos[0]);
+    this.garantirSemanaAberta(semanaInicio);
     const descricao = params.titulo.trim() || 'Reunião';
     const horario = params.horario.trim() || null;
     const local = params.local.trim() || null;
@@ -353,6 +365,8 @@ export class ManutencaoProgramacaoService {
   async editarOrdem(id: string, updates: EditarManutencaoOrdemRequest): Promise<void> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
+    const existente = this.getById(id);
+    if (existente) this.garantirSemanaAberta(existente.semanaInicio);
 
     const { error } = await this.supabaseService.client
       .from('manutencao_programacao')
@@ -397,6 +411,7 @@ export class ManutencaoProgramacaoService {
     if (!user) throw new Error('Sessão expirada.');
 
     const item = this.getById(id);
+    if (item) this.garantirSemanaAberta(item.semanaInicio);
     const { data, error } = await this.supabaseService.client
       .from('manutencao_programacao')
       .delete()
@@ -602,6 +617,76 @@ export class ManutencaoProgramacaoService {
       .eq('id', atual.id);
     if (error) throw new Error(error.message);
     await this.loadParadaAtual();
+  }
+
+  // ── Semanas fechadas (Admin-only) ────────────────────────────────────────────
+
+  async loadSemanasFechadas(): Promise<void> {
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_semanas_fechadas')
+      .select('semana_inicio, fechado_por_nome, fechado_em');
+    if (error) throw new Error(error.message);
+    this._semanasFechadas.set(new Map((data ?? []).map(r => [
+      r.semana_inicio as string,
+      { fechadoPorNome: r.fechado_por_nome as string, fechadoEm: r.fechado_em as string },
+    ])));
+  }
+
+  semanaEstaFechada(semanaInicio: string): boolean {
+    return this._semanasFechadas().has(semanaInicio);
+  }
+
+  infoSemanaFechada(semanaInicio: string): { fechadoPorNome: string; fechadoEm: string } | null {
+    return this._semanasFechadas().get(semanaInicio) ?? null;
+  }
+
+  // Chamado no início de toda mutação de manutencao_programacao (criar/editar/excluir)
+  // — único ponto de checagem, em vez de repetir a trava em cada botão da tela (mais
+  // fácil de esquecer um lugar do que garantir aqui uma vez só). Quem já é Admin passa
+  // direto mesmo com a semana fechada — é exatamente quem pode alterar.
+  private garantirSemanaAberta(semanaInicio: string): void {
+    const ehAdmin = this.authService.currentUser()?.role === 'Admin';
+    if (podeEditarSemanaFechada(this.semanaEstaFechada(semanaInicio), ehAdmin)) return;
+    throw new Error('Essa semana está fechada. Só um Admin pode alterar.');
+  }
+
+  async fecharSemana(semanaInicio: string): Promise<void> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+    if (user.role !== 'Admin') throw new Error('Só Admin pode fechar a semana.');
+    const { error } = await this.supabaseService.client
+      .from('manutencao_semanas_fechadas')
+      .insert({ semana_inicio: semanaInicio, fechado_por_id: user.id, fechado_por_nome: user.name });
+    if (error) throw new Error(error.message);
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'manutencao_semana_fechada',
+      resource_type: 'manutencao_semanas_fechadas',
+      description: `${user.name} fechou a programação da semana de ${semanaInicio}`,
+      metadata: { semana_inicio: semanaInicio },
+    });
+    await this.loadSemanasFechadas();
+  }
+
+  async reabrirSemana(semanaInicio: string): Promise<void> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+    if (user.role !== 'Admin') throw new Error('Só Admin pode reabrir a semana.');
+    const { error } = await this.supabaseService.client
+      .from('manutencao_semanas_fechadas')
+      .delete()
+      .eq('semana_inicio', semanaInicio);
+    if (error) throw new Error(error.message);
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'manutencao_semana_reaberta',
+      resource_type: 'manutencao_semanas_fechadas',
+      description: `${user.name} reabriu a programação da semana de ${semanaInicio}`,
+      metadata: { semana_inicio: semanaInicio },
+    });
+    await this.loadSemanasFechadas();
   }
 
   async criarOperadorEscala(nome: string, equipe: 'A' | 'B' | 'C' | 'D'): Promise<void> {
