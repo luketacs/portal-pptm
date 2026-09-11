@@ -1101,27 +1101,52 @@ export class ExcelExportService {
     return { bg: '#F1F5F9', texto: '#475569' };
   }
 
+  // Lista agrupada por equipamento (um bloco por equipamento, uma linha por dia
+  // dentro dele) — mesma ordem de leitura do texto de copiarQuadroLoto(), só que em
+  // tabela HTML. Evitado de propósito: matriz equipamento×dia (muita coisa espremida
+  // em coluna estreita) e badge com border-radius (Outlook desktop renderiza HTML com
+  // o motor do Word, que ignora border-radius/flex — sai tudo quadrado e apertado).
   private construirTabelaLotoHtml(quadroLoto: QuadroLotoLinha[], dias: ProgramacaoSemanalDia[]): string {
     if (quadroLoto.length === 0) {
-      return '<p style="font-size:13px;color:#6b7280;">Nenhum bloqueio (LOTO) registrado nessa semana.</p>';
+      return '<p style="font-size:14px;color:#6b7280;">Nenhum bloqueio (LOTO) registrado nessa semana.</p>';
     }
-    const th = (texto: string) => `<th style="background:#2039F9;color:#fff;font-size:11px;padding:6px 8px;border:1px solid #d9d9d9;text-align:center;">${texto}</th>`;
-    const cabecalho = `<tr>${th('Equipamento')}${dias.map(d => th(`${d.label}<br>${d.diaMes}`)).join('')}</tr>`;
-    const linhas = quadroLoto.map(linha => {
-      const cEquip = `<td style="font-weight:bold;font-size:12px;padding:6px 8px;border:1px solid #d9d9d9;background:${linha.temConflito ? '#FEF3C7' : '#F0F2FF'};">${linha.equipamento}${linha.temConflito ? ' ⚠️' : ''}</td>`;
-      const cDias = linha.dias.map(cel => {
-        if (cel.itens.length === 0) return '<td style="padding:6px 8px;border:1px solid #d9d9d9;"></td>';
-        const conteudo = cel.itens.map(item => {
+    const diaLabel = new Map(dias.map(d => [d.data, `${d.label} ${d.diaMes}`]));
+    const badge = (texto: string, bg: string, cor: string) =>
+      `<span style="background-color:${bg};color:${cor};font-weight:bold;font-size:12px;padding:3px 10px;">${texto}</span>`;
+
+    const th = (texto: string, alinhar = 'left') =>
+      `<th style="background-color:#2039F9;color:#ffffff;font-size:13px;padding:8px 10px;border:1px solid #1c30c7;text-align:${alinhar};">${texto}</th>`;
+    const linhaCabecalho = `<tr>${th('Dia')}${th('Status')}${th('Descrição / Técnico')}</tr>`;
+
+    const blocos = quadroLoto.map(linha => {
+      const tituloEquip = `<tr><td colspan="3" style="background-color:${linha.temConflito ? '#FEF3C7' : '#E8EBFC'};font-weight:bold;font-size:14px;padding:8px 10px;border:1px solid #d9d9d9;color:#1f2937;">${linha.equipamento}${linha.temConflito ? ' — possui conflito de LOTO' : ''}</td></tr>`;
+
+      const linhasDias = linha.dias.filter(cel => cel.itens.length > 0).map(cel => {
+        const dia = diaLabel.get(cel.data) ?? cel.data;
+        const cTd = (html: string, extra = '') => `<td style="padding:7px 10px;border:1px solid #d9d9d9;vertical-align:top;${extra}">${html}</td>`;
+        const fundoConflito = cel.conflito ? 'background-color:#FEF3C7;' : '';
+        const cDia = cTd(`<span style="font-size:13px;white-space:nowrap;">${dia}</span>`, fundoConflito);
+
+        if (cel.conflito) {
+          const resumo = cel.itens.map(i => `${i.status} (${i.tecnicos.join(', ')})`).join(' &nbsp;×&nbsp; ');
+          const cStatus = cTd(badge('CONFLITO', '#FEF3C7', '#B45309'), fundoConflito);
+          const cDesc = cTd(`<span style="font-size:13px;color:#92400E;font-weight:bold;">${resumo}</span>`, fundoConflito);
+          return `<tr>${cDia}${cStatus}${cDesc}</tr>`;
+        }
+
+        return cel.itens.map(item => {
           const cor = this.corStatusLoto(item.status);
-          return `<div style="margin-bottom:2px;"><span style="background:${cor.bg};color:${cor.texto};font-weight:bold;font-size:10px;padding:1px 5px;border-radius:8px;">${item.status}</span><br>` +
-            `<span style="font-size:10px;color:#374151;">${item.descricao} (${item.tecnicos.join(', ')})</span></div>`;
+          const cStatus = cTd(badge(item.status, cor.bg, cor.texto));
+          const os = item.numeroOs ? ` (OS ${item.numeroOs})` : '';
+          const cDesc = cTd(`<span style="font-size:13px;color:#374151;">${item.descricao} — ${item.tecnicos.join(', ')}${os}</span>`);
+          return `<tr>${cDia}${cStatus}${cDesc}</tr>`;
         }).join('');
-        const fundoConflito = cel.conflito ? 'background:#FEF3C7;' : '';
-        return `<td style="padding:6px 8px;border:1px solid #d9d9d9;vertical-align:top;${fundoConflito}">${cel.conflito ? '<div style="color:#B45309;font-weight:bold;font-size:10px;">⚠️ CONFLITO</div>' : ''}${conteudo}</td>`;
       }).join('');
-      return `<tr>${cEquip}${cDias}</tr>`;
+
+      return tituloEquip + linhasDias;
     }).join('');
-    return `<table style="border-collapse:collapse;width:100%;font-family:Calibri,Arial,sans-serif;">${cabecalho}${linhas}</table>`;
+
+    return `<table style="border-collapse:collapse;width:100%;font-family:Calibri,Arial,sans-serif;">${linhaCabecalho}${blocos}</table>`;
   }
 
   private construirCorpoEmailFechamento(params: {
@@ -1131,9 +1156,10 @@ export class ExcelExportService {
     dias: ProgramacaoSemanalDia[];
   }): string {
     const tabelaLoto = this.construirTabelaLotoHtml(params.quadroLoto, params.dias);
-    return `<html><body style="font-family:Calibri,Arial,sans-serif;font-size:13px;color:#1f2937;">
+    return `<html><body style="font-family:Calibri,Arial,sans-serif;font-size:14px;color:#1f2937;line-height:1.5;">
 <p>Prezados,<br>Boa tarde!</p>
 <p>Encaminho anexo a programação da manutenção referente à Semana ${params.numeroSemana} (${params.semanaLabel}), considerando os bloqueios (LOTO) da semana abaixo.</p>
+<p style="font-weight:bold;font-size:15px;color:#2039F9;margin-bottom:6px;">Quadro de LOTO</p>
 ${tabelaLoto}
 <p>Atenciosamente,</p>
 </body></html>`;
@@ -1151,6 +1177,13 @@ ${tabelaLoto}
     const corpoHtml = this.construirCorpoEmailFechamento(params);
 
     const partes: string[] = [];
+    // Sem esse header, o Outlook abre o .eml como mensagem recebida — só leitura,
+    // sem campo de destinatário/assunto editável. Com "X-Unsent: 1" ele abre como
+    // rascunho novo (igual um e-mail em branco que você começou a escrever), com tudo
+    // editável e o botão Enviar ativo. É o comportamento documentado do Outlook
+    // desktop pra esse cenário (não existe alternativa via mailto:, que não aceita
+    // anexo).
+    partes.push('X-Unsent: 1');
     partes.push(`Subject: ${this.assuntoCodificadoRfc2047(assunto)}`);
     partes.push('MIME-Version: 1.0');
     partes.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
