@@ -2,10 +2,14 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@a
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ManutencaoPlanosService } from '../../../services/manutencao-planos.service';
+import { ManutencaoProgramacaoService } from '../../../services/manutencao-programacao.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
-import { ManutencaoArea, PeriodicidadeUnidade, PlanoManutencao } from '../../../models/manutencao-programacao.model';
+import {
+  CicloManutencao, ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem, PeriodicidadeUnidade, PlanoManutencao,
+} from '../../../models/manutencao-programacao.model';
+import { dataLimiteComTolerancia } from '../../../utils/manutencao-preventivas';
 import { planosAtrasados, planosComProximaExecucao } from '../../../utils/manutencao-planos';
 
 const AREA_LABEL: Record<ManutencaoArea, string> = {
@@ -63,6 +67,7 @@ export class ManutencaoPlanosComponent implements OnInit {
 
   constructor(
     private manutencaoPlanosService: ManutencaoPlanosService,
+    private manutencaoProgramacaoService: ManutencaoProgramacaoService,
     private authService: AuthService,
     private notificationService: NotificationService,
     private confirmDialogService: ConfirmDialogService,
@@ -70,7 +75,9 @@ export class ManutencaoPlanosComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      await this.manutencaoPlanosService.load();
+      // Carrega as ordens junto (não só os planos) — a tela de histórico precisa delas
+      // pra juntar cada ciclo com a ordem que ele gerou.
+      await Promise.all([this.manutencaoPlanosService.load(), this.manutencaoProgramacaoService.load()]);
     } catch {
       this.errorMessage.set('Erro ao carregar os planos de manutenção.');
     }
@@ -357,5 +364,55 @@ export class ManutencaoPlanosComponent implements OnInit {
     } finally {
       this.isProcessando.set(false);
     }
+  }
+
+  // ── Histórico do plano ───────────────────────────────────────────────────
+  // Aberto ao clicar no plano (código ou nome) — mostra todos os ciclos já gerados,
+  // cruzados com a ordem que cada um virou. Datas executadas/executante vêm do SIGMA de
+  // verdade (mesma consulta que a Programação já usa), não do status guardado na ordem
+  // (que fica "PEND" desde a criação — quem diz se executou é o apontamento no SIGMA).
+  historicoAberto = signal<PlanoManutencao | null>(null);
+  historicoCarregando = signal(false);
+  private historicoSigma = signal<Record<string, ConsultaSigmaResultado>>({});
+
+  historicoLinhas = computed(() => {
+    const plano = this.historicoAberto();
+    if (!plano) return [];
+    const ordensPorId = new Map(this.manutencaoProgramacaoService.ordens().map(o => [o.id, o]));
+    const sigma = this.historicoSigma();
+    return this.manutencaoPlanosService.ciclos()
+      .filter(c => c.planoId === plano.id)
+      .map((ciclo: CicloManutencao) => {
+        const ordem: ManutencaoOrdem | undefined = ordensPorId.get(ciclo.ordemId);
+        const prazoLimite = dataLimiteComTolerancia(ciclo.dataPrevista, plano.periodicidadeValor, plano.periodicidadeUnidade);
+        const atrasado = !!ordem && !!prazoLimite && ordem.semanaInicio > prazoLimite;
+        const apontamentos = ordem?.numeroOs ? (sigma[ordem.numeroOs]?.apontamentos ?? []) : [];
+        return { ciclo, ordem, atrasado, semanaPrevista: this.numeroSemanaISO(ciclo.dataPrevista), apontamentos };
+      })
+      .sort((a, b) => b.ciclo.dataPrevista.localeCompare(a.ciclo.dataPrevista));
+  });
+
+  async abrirHistorico(plano: PlanoManutencao): Promise<void> {
+    this.historicoAberto.set(plano);
+    this.historicoSigma.set({});
+    const ordensPorId = new Map(this.manutencaoProgramacaoService.ordens().map(o => [o.id, o]));
+    const numerosOs = this.manutencaoPlanosService.ciclos()
+      .filter(c => c.planoId === plano.id)
+      .map(c => ordensPorId.get(c.ordemId)?.numeroOs)
+      .filter((n): n is string => !!n);
+    if (numerosOs.length === 0) return;
+    this.historicoCarregando.set(true);
+    try {
+      this.historicoSigma.set(await this.manutencaoProgramacaoService.consultarOrdensSigma(numerosOs));
+    } catch {
+      // Best-effort — sem execução do SIGMA a tela de histórico continua útil só com
+      // ciclo/ordem/semana, que já vêm do banco.
+    } finally {
+      this.historicoCarregando.set(false);
+    }
+  }
+
+  fecharHistorico(): void {
+    this.historicoAberto.set(null);
   }
 }
