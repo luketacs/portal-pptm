@@ -44,26 +44,6 @@ export interface ProgramacaoSemanalDia {
   label: string;  // "SEG"
 }
 
-// Mesmo formato que ManutencaoProgramacaoComponent.quadroLotoCalc() já produz pra tela
-// (ver quadroLoto/copiarQuadroLoto) — reaproveitado aqui pra virar tabela HTML no corpo
-// do e-mail de fechamento da semana, em vez de reimplementar o cálculo de novo.
-export interface QuadroLotoItem {
-  status: string;
-  descricao: string;
-  tecnicos: string[];
-  numeroOs: string | null;
-}
-export interface QuadroLotoDiaCel {
-  data: string;
-  itens: QuadroLotoItem[];
-  conflito: boolean;
-}
-export interface QuadroLotoLinha {
-  equipamento: string;
-  dias: QuadroLotoDiaCel[];
-  temConflito: boolean;
-}
-
 @Injectable({ providedIn: 'root' })
 export class ExcelExportService {
 
@@ -1091,60 +1071,15 @@ export class ExcelExportService {
     return `=?UTF-8?B?${b64}?=`;
   }
 
-  // Mesma paleta semântica de LOTO usada na tela (ver LOTO_COR em
-  // kanban-oficina-publico.component.ts) — cor com propósito (vermelho = bloqueado de
-  // verdade, cinza = neutro, verde = liberado), não decoração.
-  private corStatusLoto(status: string): { bg: string; texto: string } {
-    const s = status.toUpperCase();
-    if (s === 'LOTO') return { bg: '#FEE2E2', texto: '#B91C1C' };
-    if (s === 'FUNCIONANDO') return { bg: '#DCFCE7', texto: '#15803D' };
-    return { bg: '#F1F5F9', texto: '#475569' };
-  }
-
-  // Grade só de status (equipamento × dia, uma palavra por célula) — igual ao
-  // espírito da tabela manual antiga (D/P/R/E), só que automática. Descrição/técnico/OS
-  // fica de fora de propósito: essa informação já está inteira nas 3 planilhas
-  // anexadas, repetir tudo aqui (como a v1 fazia) deixa a célula cheia de texto e
-  // ilegível no Outlook. Cor com propósito (ver corStatusLoto), sem border-radius
-  // (Outlook desktop renderiza com o motor do Word, que ignora border-radius/flex).
-  private construirTabelaLotoHtml(quadroLoto: QuadroLotoLinha[], dias: ProgramacaoSemanalDia[]): string {
-    if (quadroLoto.length === 0) {
-      return '<p style="font-size:14px;color:#6b7280;">Nenhum bloqueio (LOTO) registrado nessa semana.</p>';
-    }
-    const th = (texto: string) =>
-      `<th style="background-color:#2039F9;color:#ffffff;font-size:12px;padding:8px 6px;border:1px solid #1c30c7;text-align:center;">${texto}</th>`;
-    const cabecalho = `<tr>${th('Equipamento')}${dias.map(d => th(`${d.label}<br>${d.diaMes}`)).join('')}</tr>`;
-
-    const linhas = quadroLoto.map(linha => {
-      const cEquip = `<td style="font-weight:bold;font-size:13px;padding:8px 10px;border:1px solid #d9d9d9;background-color:${linha.temConflito ? '#FEF3C7' : '#ffffff'};color:#1f2937;">${linha.equipamento}</td>`;
-      const cDias = linha.dias.map(cel => {
-        if (cel.itens.length === 0) {
-          return '<td style="padding:8px 6px;border:1px solid #d9d9d9;"></td>';
-        }
-        if (cel.conflito) {
-          return `<td style="padding:8px 6px;border:1px solid #d9d9d9;text-align:center;background-color:#FEF3C7;color:#B45309;font-weight:bold;font-size:12px;">CONFLITO</td>`;
-        }
-        const cor = this.corStatusLoto(cel.itens[0].status);
-        return `<td style="padding:8px 6px;border:1px solid #d9d9d9;text-align:center;background-color:${cor.bg};color:${cor.texto};font-weight:bold;font-size:12px;">${cel.itens[0].status.toUpperCase()}</td>`;
-      }).join('');
-      return `<tr>${cEquip}${cDias}</tr>`;
-    }).join('');
-
-    return `<table style="border-collapse:collapse;width:100%;font-family:Calibri,Arial,sans-serif;">${cabecalho}${linhas}</table>`;
-  }
-
-  private construirCorpoEmailFechamento(params: {
-    numeroSemana: number;
-    semanaLabel: string;
-    quadroLoto: QuadroLotoLinha[];
-    dias: ProgramacaoSemanalDia[];
-  }): string {
-    const tabelaLoto = this.construirTabelaLotoHtml(params.quadroLoto, params.dias);
+  // Corpo simples — sem quadro/tabela nenhuma. O quadro de LOTO já existe na tela do
+  // Portal (pra quem tem acesso); tentar reproduzi-lo em HTML dentro do e-mail só
+  // esbarrava no motor de renderização do Outlook desktop (é o Word, não um navegador:
+  // ignora border-radius/flex e lida mal com tabela densa) sem ficar legível de
+  // verdade. O detalhe completo da semana vai nas 3 planilhas anexadas.
+  private construirCorpoEmailFechamento(params: { numeroSemana: number; semanaLabel: string }): string {
     return `<html><body style="font-family:Calibri,Arial,sans-serif;font-size:14px;color:#1f2937;line-height:1.5;">
 <p>Prezados,<br>Boa tarde!</p>
-<p>Encaminho anexo a programação da manutenção referente à Semana ${params.numeroSemana} (${params.semanaLabel}), considerando os bloqueios (LOTO) da semana abaixo.</p>
-<p style="font-weight:bold;font-size:15px;color:#2039F9;margin-bottom:6px;">Quadro de LOTO</p>
-${tabelaLoto}
+<p>Encaminho anexo a programação da manutenção referente à Semana ${params.numeroSemana} (${params.semanaLabel}).</p>
 <p>Atenciosamente,</p>
 </body></html>`;
   }
@@ -1152,8 +1087,6 @@ ${tabelaLoto}
   async gerarEmailFechamentoSemana(params: {
     numeroSemana: number;
     semanaLabel: string;
-    quadroLoto: QuadroLotoLinha[];
-    dias: ProgramacaoSemanalDia[];
     anexos: Array<{ buffer: ArrayBuffer; nomeArquivo: string }>;
   }): Promise<void> {
     const boundary = `----PortalPPTM${Date.now().toString(36)}`;

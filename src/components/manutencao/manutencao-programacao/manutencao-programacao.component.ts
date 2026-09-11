@@ -1147,13 +1147,16 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   infoSemanaFechada = computed(() => this.manutencaoService.infoSemanaFechada(this.semanaFiltro()));
   podeEditarSemana = computed(() => this.podeEditar() && podeEditarSemanaFechada(this.semanaFechada(), this.isAdmin()));
 
+  // Fechar/reabrir semana e gerar o e-mail são ações independentes — cada uma tem seu
+  // próprio botão no menu (ver enviarEmailFechamento) e pode ser usada em qualquer
+  // ordem, uma não depende da outra.
   async toggleFecharSemana(): Promise<void> {
     if (this.isProcessando()) return;
     const semana = this.semanaFiltro();
     const fechada = this.semanaFechada();
     const mensagem = fechada
       ? 'Reabrir a programação dessa semana? Solicitante volta a poder criar/editar/excluir lançamento nela.'
-      : 'Fechar a programação dessa semana? Gera as 3 planilhas (Mecânica/Elétrica/Apoio) e um e-mail pronto pra revisar no Outlook, e só Admin consegue criar/editar/excluir lançamento nela até reabrir.';
+      : 'Fechar a programação dessa semana? Só Admin consegue criar/editar/excluir lançamento nela até reabrir.';
     if (!(await this.confirmDialogService.confirm(mensagem, fechada ? undefined : { confirmLabel: 'Fechar', danger: true }))) return;
     this.isProcessando.set(true);
     try {
@@ -1162,8 +1165,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         this.notificationService.showSuccess('Semana reaberta.');
       } else {
         await this.manutencaoService.fecharSemana(semana);
-        await this.gerarEmailFechamento();
-        this.notificationService.showSuccess('Semana fechada — confira o e-mail baixado (.eml) e envie pelo Outlook.');
+        this.notificationService.showSuccess('Semana fechada.');
       }
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao atualizar o fechamento da semana.');
@@ -1173,36 +1175,42 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   }
 
   // Gera as 3 planilhas da semana (Mecânica/Elétrica/Apoio, direto de
-  // manutencaoService.ordens() — não do filtro ativo na tela) + o quadro de LOTO, e
-  // monta o .eml pra baixar. Chamado só depois que a semana já foi fechada com sucesso
-  // (ver toggleFecharSemana) — se der erro aqui, a semana já ficou fechada mesmo assim
-  // (dá pra gerar o e-mail de novo reabrindo/fechando, ou é só rodar essa parte nas
-  // próximas versões se vira um problema recorrente).
-  private async gerarEmailFechamento(): Promise<void> {
-    const dias = this.diasDaSemanaAtual();
-    const numeroSemana = this.numeroSemanaISO(this.semanaFiltro());
-    const intervaloSemana = `${this.diaMesPadded(dias[0].data)} a ${this.diaMesPadded(dias[6].data)}`;
-    const semanaLabelPlanilha = `Semana ${numeroSemana} (${intervaloSemana})`;
-    const diasExport = dias.map(d => ({ data: d.data, diaMes: this.diaMesCompacto(d.data), label: d.label }));
+  // manutencaoService.ordens() — não do filtro ativo na tela) e monta o .eml pra
+  // baixar, com corpo padrão (sem destinatário — ver gerarEmailFechamentoSemana).
+  // Independente do fechamento da semana: dá pra gerar/reenviar o e-mail quantas vezes
+  // precisar, com a semana aberta ou fechada.
+  async enviarEmailFechamento(): Promise<void> {
+    if (this.isProcessando()) return;
+    this.isProcessando.set(true);
+    try {
+      const dias = this.diasDaSemanaAtual();
+      const numeroSemana = this.numeroSemanaISO(this.semanaFiltro());
+      const intervaloSemana = `${this.diaMesPadded(dias[0].data)} a ${this.diaMesPadded(dias[6].data)}`;
+      const semanaLabelPlanilha = `Semana ${numeroSemana} (${intervaloSemana})`;
+      const diasExport = dias.map(d => ({ data: d.data, diaMes: this.diaMesCompacto(d.data), label: d.label }));
 
-    const areas: ManutencaoArea[] = ['MECANICA', 'ELETRICA', 'APOIO'];
-    const anexos = await Promise.all(areas.map(area =>
-      this.excelExportService.gerarBufferProgramacaoSemanal({
-        semanaLabel: semanaLabelPlanilha,
+      const areas: ManutencaoArea[] = ['MECANICA', 'ELETRICA', 'APOIO'];
+      const anexos = await Promise.all(areas.map(area =>
+        this.excelExportService.gerarBufferProgramacaoSemanal({
+          semanaLabel: semanaLabelPlanilha,
+          numeroSemana,
+          areaLabel: this.areaLabel[area],
+          dias: diasExport,
+          grupos: this.gruposParaAreaExport(area),
+        }),
+      ));
+
+      await this.excelExportService.gerarEmailFechamentoSemana({
         numeroSemana,
-        areaLabel: this.areaLabel[area],
-        dias: diasExport,
-        grupos: this.gruposParaAreaExport(area),
-      }),
-    ));
-
-    await this.excelExportService.gerarEmailFechamentoSemana({
-      numeroSemana,
-      semanaLabel: intervaloSemana,
-      quadroLoto: this.quadroLoto(),
-      dias: diasExport,
-      anexos,
-    });
+        semanaLabel: intervaloSemana,
+        anexos,
+      });
+      this.notificationService.showSuccess('E-mail baixado (.eml) — abra e envie pelo Outlook.');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao gerar o e-mail.');
+    } finally {
+      this.isProcessando.set(false);
+    }
   }
 
   // Todas as vencendo, antes do corte do lote — usada só pra saber o total pendente
