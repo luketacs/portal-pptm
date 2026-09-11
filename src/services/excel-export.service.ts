@@ -801,7 +801,7 @@ export class ExcelExportService {
           const cRec = ws.getCell(row, 5);
           cRec.value = linha.recursos;
           cRec.font = fonteBase;
-          cRec.alignment = { horizontal: 'center', vertical: 'middle' };
+          cRec.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
           if (zebra) cRec.fill = zebra;
 
           const cLoto = ws.getCell(row, 6);
@@ -897,7 +897,7 @@ export class ExcelExportService {
     });
 
     ws.columns = [
-      { width: 13 }, { width: 46 }, { width: 9 }, { width: 16 }, { width: 12 },
+      { width: 13 }, { width: 46 }, { width: 9 }, { width: 16 }, { width: 24 },
       { width: 10 }, { width: 20 },
       { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 }, { width: 7 },
     ];
