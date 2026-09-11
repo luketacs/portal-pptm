@@ -1101,52 +1101,36 @@ export class ExcelExportService {
     return { bg: '#F1F5F9', texto: '#475569' };
   }
 
-  // Lista agrupada por equipamento (um bloco por equipamento, uma linha por dia
-  // dentro dele) — mesma ordem de leitura do texto de copiarQuadroLoto(), só que em
-  // tabela HTML. Evitado de propósito: matriz equipamento×dia (muita coisa espremida
-  // em coluna estreita) e badge com border-radius (Outlook desktop renderiza HTML com
-  // o motor do Word, que ignora border-radius/flex — sai tudo quadrado e apertado).
+  // Grade só de status (equipamento × dia, uma palavra por célula) — igual ao
+  // espírito da tabela manual antiga (D/P/R/E), só que automática. Descrição/técnico/OS
+  // fica de fora de propósito: essa informação já está inteira nas 3 planilhas
+  // anexadas, repetir tudo aqui (como a v1 fazia) deixa a célula cheia de texto e
+  // ilegível no Outlook. Cor com propósito (ver corStatusLoto), sem border-radius
+  // (Outlook desktop renderiza com o motor do Word, que ignora border-radius/flex).
   private construirTabelaLotoHtml(quadroLoto: QuadroLotoLinha[], dias: ProgramacaoSemanalDia[]): string {
     if (quadroLoto.length === 0) {
       return '<p style="font-size:14px;color:#6b7280;">Nenhum bloqueio (LOTO) registrado nessa semana.</p>';
     }
-    const diaLabel = new Map(dias.map(d => [d.data, `${d.label} ${d.diaMes}`]));
-    const badge = (texto: string, bg: string, cor: string) =>
-      `<span style="background-color:${bg};color:${cor};font-weight:bold;font-size:12px;padding:3px 10px;">${texto}</span>`;
+    const th = (texto: string) =>
+      `<th style="background-color:#2039F9;color:#ffffff;font-size:12px;padding:8px 6px;border:1px solid #1c30c7;text-align:center;">${texto}</th>`;
+    const cabecalho = `<tr>${th('Equipamento')}${dias.map(d => th(`${d.label}<br>${d.diaMes}`)).join('')}</tr>`;
 
-    const th = (texto: string, alinhar = 'left') =>
-      `<th style="background-color:#2039F9;color:#ffffff;font-size:13px;padding:8px 10px;border:1px solid #1c30c7;text-align:${alinhar};">${texto}</th>`;
-    const linhaCabecalho = `<tr>${th('Dia')}${th('Status')}${th('Descrição / Técnico')}</tr>`;
-
-    const blocos = quadroLoto.map(linha => {
-      const tituloEquip = `<tr><td colspan="3" style="background-color:${linha.temConflito ? '#FEF3C7' : '#E8EBFC'};font-weight:bold;font-size:14px;padding:8px 10px;border:1px solid #d9d9d9;color:#1f2937;">${linha.equipamento}${linha.temConflito ? ' — possui conflito de LOTO' : ''}</td></tr>`;
-
-      const linhasDias = linha.dias.filter(cel => cel.itens.length > 0).map(cel => {
-        const dia = diaLabel.get(cel.data) ?? cel.data;
-        const cTd = (html: string, extra = '') => `<td style="padding:7px 10px;border:1px solid #d9d9d9;vertical-align:top;${extra}">${html}</td>`;
-        const fundoConflito = cel.conflito ? 'background-color:#FEF3C7;' : '';
-        const cDia = cTd(`<span style="font-size:13px;white-space:nowrap;">${dia}</span>`, fundoConflito);
-
-        if (cel.conflito) {
-          const resumo = cel.itens.map(i => `${i.status} (${i.tecnicos.join(', ')})`).join(' &nbsp;×&nbsp; ');
-          const cStatus = cTd(badge('CONFLITO', '#FEF3C7', '#B45309'), fundoConflito);
-          const cDesc = cTd(`<span style="font-size:13px;color:#92400E;font-weight:bold;">${resumo}</span>`, fundoConflito);
-          return `<tr>${cDia}${cStatus}${cDesc}</tr>`;
+    const linhas = quadroLoto.map(linha => {
+      const cEquip = `<td style="font-weight:bold;font-size:13px;padding:8px 10px;border:1px solid #d9d9d9;background-color:${linha.temConflito ? '#FEF3C7' : '#ffffff'};color:#1f2937;">${linha.equipamento}</td>`;
+      const cDias = linha.dias.map(cel => {
+        if (cel.itens.length === 0) {
+          return '<td style="padding:8px 6px;border:1px solid #d9d9d9;"></td>';
         }
-
-        return cel.itens.map(item => {
-          const cor = this.corStatusLoto(item.status);
-          const cStatus = cTd(badge(item.status, cor.bg, cor.texto));
-          const os = item.numeroOs ? ` (OS ${item.numeroOs})` : '';
-          const cDesc = cTd(`<span style="font-size:13px;color:#374151;">${item.descricao} — ${item.tecnicos.join(', ')}${os}</span>`);
-          return `<tr>${cDia}${cStatus}${cDesc}</tr>`;
-        }).join('');
+        if (cel.conflito) {
+          return `<td style="padding:8px 6px;border:1px solid #d9d9d9;text-align:center;background-color:#FEF3C7;color:#B45309;font-weight:bold;font-size:12px;">CONFLITO</td>`;
+        }
+        const cor = this.corStatusLoto(cel.itens[0].status);
+        return `<td style="padding:8px 6px;border:1px solid #d9d9d9;text-align:center;background-color:${cor.bg};color:${cor.texto};font-weight:bold;font-size:12px;">${cel.itens[0].status.toUpperCase()}</td>`;
       }).join('');
-
-      return tituloEquip + linhasDias;
+      return `<tr>${cEquip}${cDias}</tr>`;
     }).join('');
 
-    return `<table style="border-collapse:collapse;width:100%;font-family:Calibri,Arial,sans-serif;">${linhaCabecalho}${blocos}</table>`;
+    return `<table style="border-collapse:collapse;width:100%;font-family:Calibri,Arial,sans-serif;">${cabecalho}${linhas}</table>`;
   }
 
   private construirCorpoEmailFechamento(params: {
