@@ -2206,6 +2206,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       await this.manutencaoService.criarOrdem({
         tipo: 'ordem',
         area: origem.area,
+        // Copia a classificação da OS de origem — sem isso, todo apoio de uma OS de
+        // Apoio nascia com categoriaIndicador em branco (categoria_indicador só é
+        // auto-preenchida pelo service pra Mecânica/Elétrica, nunca pra Apoio) e caía
+        // em "Não classificado" no indicador, mesmo a OS original estando classificada.
+        categoriaIndicador: origem.categoriaIndicador ?? undefined,
         semanaInicio: origem.semanaInicio,
         numeroOs: origem.numeroOs ?? undefined,
         semOs: origem.semOs,
@@ -2515,6 +2520,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         await this.manutencaoService.criarOrdem({
           tipo: 'ordem',
           area: 'APOIO',
+          // Mesma categoria da OS principal (ver comentário equivalente em
+          // confirmarApoio()) — este espelho é a mesma atividade, só que na agenda da
+          // empresa de apoio, então conta pro mesmo indicador que a OS mandante.
+          categoriaIndicador: this.categoriaIndicadorParaEnviar() ?? undefined,
           semanaInicio: this.semanaFiltro(),
           numeroOs: numero || undefined,
           semOs: this.formSemOs(),
@@ -2575,6 +2584,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         await this.manutencaoService.criarOrdem({
           tipo: 'ordem',
           area: tecnico.area,
+          // Mesma categoria da OS principal (ver comentário equivalente em
+          // confirmarApoio()) — este espelho é a mesma atividade, só que na agenda do
+          // ajudante, então conta pro mesmo indicador que a OS mandante.
+          categoriaIndicador: this.categoriaIndicadorParaEnviar() ?? undefined,
           semanaInicio: this.semanaFiltro(),
           numeroOs: numero || undefined,
           semOs: this.formSemOs(),
