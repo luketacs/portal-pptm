@@ -455,6 +455,26 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     return [...eletrica, ...mecanica].sort((a, b) => b.totalHoras - a.totalHoras || b.totalOS - a.totalOS);
   });
 
+  // Largura da barra em % da própria Hora Disponível do técnico (referência = 100%) —
+  // capada em 100 pra não estourar o container quando apontado/programado > disponível.
+  percentualBarraHoras(valor: number, disponivel: number): number {
+    return disponivel > 0 ? Math.min(100, Math.round((valor / disponivel) * 100)) : 0;
+  }
+
+  // TEMP DEBUG — remover depois de achar por que a seção "Horas Apontadas por Técnico"
+  // aparece com todo mundo zerado mesmo com apontamento real no período, segundo o
+  // usuário. Mostra o funil sem precisar de acesso ao banco.
+  debugApontamentos = computed(() => ({
+    modoPeriodo: this.modoPeriodo(),
+    semanaFiltro: this.semanaFiltro(),
+    mesFiltro: this.mesFiltro(),
+    erroServico: this.apontamentosService.error(),
+    totalCarregado: this.apontamentosTodos().length,
+    totalNoPeriodo: this.apontamentosDoPeriodo().length,
+    primeirasDatasCarregadas: this.apontamentosTodos().slice(0, 3).map(a => a.data),
+    ultimasDatasCarregadas: this.apontamentosTodos().slice(-3).map(a => a.data),
+  }));
+
   imprimir(): void {
     window.print();
   }
