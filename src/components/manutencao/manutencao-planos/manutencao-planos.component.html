@@ -304,11 +304,6 @@
             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <div class="sm:col-span-2">
-          <label class="block text-sm font-medium text-slate-700 mb-1">Descrição</label>
-          <textarea [ngModel]="formDescricao()" (ngModelChange)="formDescricao.set($event)" rows="2"
-            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
-        </div>
-        <div class="sm:col-span-2">
           <label class="block text-sm font-medium text-slate-700 mb-1">Atividades / checklist (uma por linha)</label>
           <textarea [ngModel]="formAtividadesTexto()" (ngModelChange)="formAtividadesTexto.set($event)" rows="3"
             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>

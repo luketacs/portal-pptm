@@ -207,7 +207,7 @@ export class ManutencaoPlanosComponent implements OnInit {
       .filter(p => status === 'todos' || (status === 'ativo' ? p.ativo : !p.ativo))
       .filter(p => periodicidade === 'todos' || `${p.periodicidadeValor} ${p.periodicidadeUnidade}` === periodicidade)
       .filter(p => responsavel === 'todos' || p.responsavel === responsavel)
-      .filter(p => termo.length === 0 || normalizarTexto(`${p.codigo} ${p.equipamento} ${p.descricao} ${p.tagKks ?? ''}`).includes(termo));
+      .filter(p => termo.length === 0 || normalizarTexto(`${p.codigo} ${p.equipamento} ${p.nome} ${p.tagKks ?? ''}`).includes(termo));
   });
 
   linhas = computed(() => {
@@ -327,7 +327,6 @@ export class ManutencaoPlanosComponent implements OnInit {
   formTagKks = signal('');
   formArea = signal<ManutencaoArea>('ELETRICA');
   formEspecialidade = signal('');
-  formDescricao = signal('');
   formAtividadesTexto = signal(''); // uma atividade por linha
   formPeriodicidadePreset = signal<string>('Mensal');
   formPeriodicidadeValor = signal(1);
@@ -389,7 +388,6 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formTagKks.set('');
     this.formArea.set('ELETRICA');
     this.formEspecialidade.set('');
-    this.formDescricao.set('');
     this.formAtividadesTexto.set('');
     this.formPeriodicidadePreset.set('Mensal');
     this.formPeriodicidadeValor.set(1);
@@ -413,7 +411,6 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formTagKks.set(plano.tagKks ?? '');
     this.formArea.set(plano.area);
     this.formEspecialidade.set(plano.especialidade ?? '');
-    this.formDescricao.set(plano.descricao);
     this.formAtividadesTexto.set(plano.atividades.join('\n'));
     const preset = PERIODICIDADE_PRESETS.find(p => p.valor === plano.periodicidadeValor && p.unidade === plano.periodicidadeUnidade);
     this.formPeriodicidadePreset.set(preset ? preset.label : 'Personalizada');
@@ -437,7 +434,7 @@ export class ManutencaoPlanosComponent implements OnInit {
 
   podeConfirmar = computed(() =>
     !this.isProcessando() && this.formNome().trim().length > 0 && this.formEquipamento().trim().length > 0
-    && this.formDescricao().trim().length > 0 && this.formPeriodicidadeValor() > 0 && !!this.formDataInicial());
+    && this.formPeriodicidadeValor() > 0 && !!this.formDataInicial());
 
   async confirmarForm(): Promise<void> {
     if (!this.podeConfirmar()) return;
@@ -452,7 +449,12 @@ export class ManutencaoPlanosComponent implements OnInit {
           tagKks: this.formTagKks().trim() || null,
           area: this.formArea(),
           especialidade: this.formEspecialidade().trim() || null,
-          descricao: this.formDescricao().trim(),
+          // descricao é um campo legado que só duplicava nome (866 dos 874 planos tinham
+          // os dois idênticos; os únicos 8 diferentes eram exatamente uma dessincronia
+          // causada por editar só o Nome e esquecer o campo Descrição, que gerava busca
+          // incorreta — ver migration 042). Mantém sempre igual ao nome pra eliminar essa
+          // possibilidade, sem precisar tirar a coluna do banco (ainda usada no Excel).
+          descricao: this.formNome().trim(),
           atividades,
           periodicidadeValor: this.formPeriodicidadeValor(),
           periodicidadeUnidade: this.formPeriodicidadeUnidade(),
@@ -473,7 +475,12 @@ export class ManutencaoPlanosComponent implements OnInit {
           tagKks: this.formTagKks().trim() || undefined,
           area: this.formArea(),
           especialidade: this.formEspecialidade().trim() || undefined,
-          descricao: this.formDescricao().trim(),
+          // descricao é um campo legado que só duplicava nome (866 dos 874 planos tinham
+          // os dois idênticos; os únicos 8 diferentes eram exatamente uma dessincronia
+          // causada por editar só o Nome e esquecer o campo Descrição, que gerava busca
+          // incorreta — ver migration 042). Mantém sempre igual ao nome pra eliminar essa
+          // possibilidade, sem precisar tirar a coluna do banco (ainda usada no Excel).
+          descricao: this.formNome().trim(),
           atividades,
           periodicidadeValor: this.formPeriodicidadeValor(),
           periodicidadeUnidade: this.formPeriodicidadeUnidade(),

@@ -1,0 +1,13 @@
+-- "descricao" nunca teve propósito distinto de "nome" na prática: 866 dos 874 planos
+-- ativos têm os dois campos idênticos (a origem SIGMA sempre preencheu ambos com o mesmo
+-- valor, nome_manut). Os únicos 8 diferentes eram uma dessincronia real — o usuário
+-- editou o campo "Nome" pra reclassificar alguns planos de Mecânica pra Lubrificação
+-- (prefixo "D-M" → "D-L"), mas o campo "Descrição" (textarea separada no formulário,
+-- fácil de não perceber) continuou com o valor antigo. Como a busca da tela de Planos
+-- comparava contra "descricao", planos já renomeados pra "D-L" continuavam aparecendo ao
+-- buscar "D-M".
+--
+-- O formulário deixou de expor "descricao" como campo editável separado (sempre grava
+-- igual a "nome" a partir de agora — ver manutencao-planos.component.ts) e a busca passou
+-- a comparar contra "nome". Esta migration só sincroniza o que já ficou pra trás.
+UPDATE manutencao_planos SET descricao = nome WHERE descricao <> nome;
