@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, effect, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, WritableSignal, computed, effect, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ManutencaoProgramacaoService } from '../../../services/manutencao-programacao.service';
@@ -96,6 +96,30 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       if (numeros.length === 0) return;
       this.buscarExecucaoSigma(numeros);
     });
+
+    // Contador animado (0 -> valor) só nos dois números mais destacados da tela — dá a
+    // sensação de "preencher" ao abrir/trocar de semana, sem animar todo número da
+    // tabela (ficaria cansativo). Reage de novo sempre que o valor real mudar (troca de
+    // semana, SIGMA respondendo).
+    effect(() => this.animarContador(this.indicadores().geral.atendimento, this.atendimentoAnimado));
+    effect(() => this.animarContador(this.indicadores().cumprimentoPlano.atendimento, this.cumprimentoAnimado));
+  }
+
+  atendimentoAnimado = signal(0);
+  cumprimentoAnimado = signal(0);
+
+  private animarContador(alvo: number, destino: WritableSignal<number>): void {
+    const inicio = destino();
+    if (Math.abs(inicio - alvo) < 0.05) { destino.set(alvo); return; }
+    const duracaoMs = 900;
+    const t0 = performance.now();
+    const passo = (agora: number) => {
+      const progresso = Math.min(1, (agora - t0) / duracaoMs);
+      const suavizado = 1 - Math.pow(1 - progresso, 3); // ease-out cúbico
+      destino.set(Math.round((inicio + (alvo - inicio) * suavizado) * 10) / 10);
+      if (progresso < 1) requestAnimationFrame(passo);
+    };
+    requestAnimationFrame(passo);
   }
 
   private matchColaborador = (matricula: string | null, nome: string) =>

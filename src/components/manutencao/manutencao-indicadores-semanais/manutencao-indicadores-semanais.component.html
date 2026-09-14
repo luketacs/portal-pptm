@@ -95,12 +95,12 @@
       <div class="pcm-cards">
         <div class="pcm-card pcm-card--green">
           <div class="pcm-card-title">Atendimento à Programação</div>
-          <div class="pcm-card-value">{{ indicadores().geral.atendimento }}%</div>
+          <div class="pcm-card-value">{{ atendimentoAnimado() }}%</div>
           <div class="pcm-card-meta">Meta: {{ metaAtendimento }}%</div>
         </div>
         <div class="pcm-card pcm-card--blue">
           <div class="pcm-card-title">Cumprimento do Plano</div>
-          <div class="pcm-card-value">{{ indicadores().cumprimentoPlano.atendimento }}%</div>
+          <div class="pcm-card-value">{{ cumprimentoAnimado() }}%</div>
           <div class="pcm-card-meta">Meta: {{ metaCumprimento }}%</div>
         </div>
         <div class="pcm-card pcm-card--purple">
@@ -161,8 +161,8 @@
           @for (item of hhPorEquipamentoTop10(); track item.equipamento) {
             <div class="flex items-center gap-2 text-sm">
               <span class="w-40 sm:w-56 truncate text-gray-700 flex-shrink-0" [title]="item.equipamento">{{ item.equipamento }}</span>
-              <div class="flex-1 bg-slate-100 rounded-full h-4 overflow-hidden">
-                <div class="bg-blue-500 h-4 rounded-full" [style.width.%]="hhPorEquipamentoMax() > 0 ? (item.horas / hhPorEquipamentoMax() * 100) : 0"></div>
+              <div class="flex-1 bg-slate-100 rounded-full h-4 pcm-hh-barra-fundo">
+                <div class="h-4 rounded-full pcm-hh-barra-fill" [style.width.%]="hhPorEquipamentoMax() > 0 ? (item.horas / hhPorEquipamentoMax() * 100) : 0"></div>
               </div>
               <span class="w-14 text-right text-gray-600 font-semibold flex-shrink-0">{{ item.horas }}h</span>
             </div>
@@ -279,8 +279,8 @@
             @for (l of lt.eixoX; track l.label) {
               <text [attr.x]="l.posicao" [attr.y]="lt.altura - 8" class="pcm-linha-tempo-eixo-x">{{ l.label }}</text>
             }
-            <polyline [attr.points]="lt.linhaCumprimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
-            <polyline [attr.points]="lt.linhaAtendimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
+            <polyline [attr.points]="lt.linhaCumprimento" pathLength="1" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
+            <polyline [attr.points]="lt.linhaAtendimento" pathLength="1" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
             @for (p of lt.pontosCumprimento; track $index) {
               <circle [attr.cx]="p.x" [attr.cy]="p.y" r="3" class="pcm-linha-tempo-ponto--cumprimento" />
             }
@@ -313,8 +313,8 @@
                 @for (l of lt.eixoX; track l.label) {
                   <text [attr.x]="l.posicao" [attr.y]="lt.altura - 8" class="pcm-linha-tempo-eixo-x">{{ l.label }}</text>
                 }
-                <polyline [attr.points]="lt.linhaCumprimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
-                <polyline [attr.points]="lt.linhaAtendimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
+                <polyline [attr.points]="lt.linhaCumprimento" pathLength="1" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
+                <polyline [attr.points]="lt.linhaAtendimento" pathLength="1" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
                 @for (p of lt.pontosCumprimento; track $index) {
                   <circle [attr.cx]="p.x" [attr.cy]="p.y" r="2.5" class="pcm-linha-tempo-ponto--cumprimento" />
                 }

@@ -1,3 +1,39 @@
-/* Reaproveita a mesma linha do tempo SVG (geometria + estilo) já usada nos relatórios
-   Semanal/Mensal PCM — só a fonte dos pontos muda (cálculo ao vivo, não planilha). */
+/* Reaproveita a linha do tempo SVG dos relatórios PCM — só a fonte dos pontos muda. */
 @import '../../../styles/pcm-report-shared.css';
+
+/* Modernização só desta tela — sem 3D real (distorce leitura de valor). */
+.pcm-card {
+  background: linear-gradient(160deg, #fff 0%, #fafbff 100%);
+  animation: pcm-entrada .5s cubic-bezier(.16, 1, .3, 1) backwards;
+}
+.pcm-cards > .pcm-card:nth-child(2) { animation-delay: .08s; }
+.pcm-cards > .pcm-card:nth-child(n+3) { animation-delay: .16s; }
+
+@keyframes pcm-entrada {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.pcm-section { animation: pcm-entrada .5s cubic-bezier(.16, 1, .3, 1) backwards; }
+.pcm-section:nth-of-type(2) { animation-delay: .06s; }
+.pcm-section:nth-of-type(n+3) { animation-delay: .12s; }
+
+/* Linha "desenhando" ao entrar; pathLength="1" no SVG normaliza o comprimento pra 1. */
+.pcm-linha-tempo-linha {
+  stroke-dasharray: 1;
+  animation: pcm-desenhar-linha 1.1s cubic-bezier(.16, 1, .3, 1) backwards;
+  animation-delay: .3s;
+}
+
+@keyframes pcm-desenhar-linha {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* Barra de HH nasce em 0% (antes do SIGMA responder) e transiciona pro valor real
+   sozinha quando o computed recalcula — sem JS extra. */
+.pcm-hh-barra-fundo { overflow: hidden; }
+.pcm-hh-barra-fill {
+  transition: width 1s cubic-bezier(.16, 1, .3, 1);
+  background: linear-gradient(90deg, #60a5fa 0%, #2563eb 100%);
+}
