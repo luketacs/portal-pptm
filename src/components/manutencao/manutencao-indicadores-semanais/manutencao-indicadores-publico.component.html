@@ -2,7 +2,7 @@
   <div class="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-3">
     <div>
       <h1 class="text-2xl font-bold text-gray-800">{{ tituloPagina() }}</h1>
-      <p class="text-sm text-gray-500 mt-0.5">Atendimento à Programação e Cumprimento do Plano, calculados ao vivo a partir da execução apontada no SIGMA.</p>
+      <p class="text-sm text-gray-500 mt-0.5">Atendimento à Programação e Cumprimento do Plano, calculados ao vivo a partir da execução apontada no SIGMA. Visualização pública — somente leitura.</p>
     </div>
   </div>
 
@@ -45,58 +45,21 @@
         </select>
       </div>
     }
-    <button type="button" (click)="atualizar()" [disabled]="sigmaAtualizando()"
+    <button type="button" (click)="atualizar()" [disabled]="carregando()"
       class="text-sm text-blue-600 hover:text-blue-700 font-semibold disabled:opacity-50">
-      @if (sigmaAtualizando()) {
-        Atualizando execução...
+      @if (carregando()) {
+        Atualizando...
       } @else {
-        Atualizar execução (SIGMA)
+        Atualizar
       }
     </button>
     @if (ultimaAtualizacaoEm(); as data) {
       <span class="text-xs text-gray-400">Atualizado às {{ data | date: 'HH:mm' }} — atualiza sozinho a cada poucos minutos</span>
     }
-    <button type="button" (click)="copiarLinkPublico()" class="ml-auto text-sm font-semibold text-slate-600 hover:text-slate-800 border border-slate-300 px-4 py-2 rounded-lg">
-      Copiar link público
-    </button>
-    <button type="button" (click)="imprimir()" class="text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
+    <button type="button" (click)="imprimir()" class="ml-auto text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
       Gerar Relatório (Imprimir / Salvar PDF)
     </button>
-    @if (isAdmin()) {
-      <button type="button" (click)="importarAberto.set(!importarAberto())" class="text-sm text-slate-600 hover:text-slate-800 font-semibold">
-        {{ importarAberto() ? 'Fechar importar histórico' : 'Importar histórico (Excel)' }}
-      </button>
-    }
   </div>
-
-  @if (isAdmin() && importarAberto()) {
-    <div class="no-print app-card p-4 space-y-3 max-w-xl">
-      <div>
-        <p class="text-sm font-medium text-slate-700">Planilha "Painel de Indicadores de PCM" (.xlsx)</p>
-        <p class="text-xs text-gray-400 mt-0.5">Aba "Indicadores Semanais" — preenche as semanas de antes da Programação nativa existir (antes da S37/2026), que ficam gravadas e entram na Evolução/Consolidado do Ano junto com as semanas calculadas ao vivo.</p>
-      </div>
-      <div class="flex flex-wrap items-end gap-3">
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Arquivo</label>
-          <label class="cursor-pointer inline-block">
-            <input type="file" accept=".xlsx" class="hidden" (change)="onArquivoImportacaoSelecionado($event)" />
-            <span class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
-              {{ arquivoImportacao()?.name ?? 'Selecionar planilha' }}
-            </span>
-          </label>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Ano</label>
-          <input type="number" min="2020" max="2035" [ngModel]="anoImportacao()" (ngModelChange)="anoImportacao.set($event)"
-            class="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <button type="button" (click)="confirmarImportarHistorico()" [disabled]="!arquivoImportacao() || importando()"
-          class="rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 disabled:opacity-50">
-          {{ importando() ? 'Importando...' : 'Importar' }}
-        </button>
-      </div>
-    </div>
-  }
 
   @if (errorMessage()) {
     <div class="no-print app-card p-4 text-sm text-red-600">{{ errorMessage() }}</div>
@@ -305,7 +268,7 @@
                   <td class="pcm-area-name">
                     {{ a.categoria ? categoriaLabel[a.categoria] : 'Não classificado' }}
                     @if (!a.categoria) {
-                      <span class="ml-1 text-xs text-amber-600" title="Ordem de Apoio sem categoria escolhida — editar e classificar">⚠</span>
+                      <span class="ml-1 text-xs text-amber-600" title="Ordem de Apoio sem categoria escolhida">⚠</span>
                     }
                   </td>
                   <td>{{ a.programadas }}</td>

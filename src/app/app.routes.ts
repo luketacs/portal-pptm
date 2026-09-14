@@ -175,6 +175,12 @@ export const APP_ROUTES: Routes = [
       import('../components/manutencao/kanban-oficina/kanban-oficina-publico.component').then(m => m.KanbanOficinaPublicoComponent),
     title: 'Kanban da Oficina',
   },
+  {
+    path: 'publico/indicadores-manutencao',
+    loadComponent: () =>
+      import('../components/manutencao/manutencao-indicadores-semanais/manutencao-indicadores-publico.component').then(m => m.ManutencaoIndicadoresPublicoComponent),
+    title: 'Indicadores de Manutenção',
+  },
 
   {
     path: 'manutencao/indicadores-semanais',
