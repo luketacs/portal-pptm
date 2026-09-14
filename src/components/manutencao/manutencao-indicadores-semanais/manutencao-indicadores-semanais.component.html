@@ -83,7 +83,7 @@
         <div class="pcm-report-title">Acompanhamento de Indicadores Semanais — PPTM</div>
       </div>
       <div class="pcm-report-info">
-        <div><strong>SEMANA:</strong> {{ semanaFiltro() }}</div>
+        <div class="pcm-periodo-info">{{ semanaLabel() }}</div>
         <div class="pcm-status-badge" [style.background-color]="statusCor(indicadores().statusGeral)">
           STATUS GERAL: {{ indicadores().statusGeral }}
         </div>
@@ -93,61 +93,32 @@
     <section class="pcm-section">
       <h2 class="pcm-section-title">Resumo Executivo</h2>
       <div class="pcm-cards">
-        <div class="pcm-card pcm-card--green">
-          <div class="pcm-card-title">Atendimento à Programação</div>
-          <div class="pcm-card-value">{{ atendimentoAnimado() }}%</div>
-          <div class="pcm-card-meta">Meta: {{ metaAtendimento }}%</div>
-        </div>
-        <div class="pcm-card pcm-card--blue">
-          <div class="pcm-card-title">Cumprimento do Plano</div>
-          <div class="pcm-card-value">{{ cumprimentoAnimado() }}%</div>
-          <div class="pcm-card-meta">Meta: {{ metaCumprimento }}%</div>
-        </div>
-        <div class="pcm-card pcm-card--purple">
-          <div class="pcm-card-title">OS's Executadas</div>
-          <div class="pcm-card-value">{{ indicadores().geral.executadas }}/{{ indicadores().geral.programadas }}</div>
-        </div>
-        <div class="pcm-card pcm-card--orange">
-          <div class="pcm-card-title">OS's Não Executadas</div>
-          <div class="pcm-card-value">{{ indicadores().geral.naoExecutadas }}</div>
-        </div>
-        <div class="pcm-card pcm-card--teal">
-          <div class="pcm-card-title">OS's Planejadas Plano</div>
-          <div class="pcm-card-value">{{ indicadores().cumprimentoPlano.programadas }}</div>
-          <div class="pcm-card-meta">{{ indicadores().cumprimentoPlano.executadas }} executadas do plano</div>
-        </div>
+        @for (c of cardsResumoExecutivo(); track c.titulo) {
+          <div class="pcm-card" [class]="'pcm-card--' + c.cor">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="pcm-card-icone" [class]="'pcm-card-icone--' + c.cor">
+              <path [attr.d]="icones[c.icone]" />
+            </svg>
+            <div class="pcm-card-title">{{ c.titulo }}</div>
+            <div class="pcm-card-value">{{ c.valor }}</div>
+            @if (c.meta) { <div class="pcm-card-meta">{{ c.meta }}</div> }
+          </div>
+        }
       </div>
     </section>
 
     <section class="pcm-section">
       <h2 class="pcm-section-title">Corretivas, Preventivas e Disponibilidade</h2>
       <div class="pcm-cards">
-        <div class="pcm-card pcm-card--purple">
-          <div class="pcm-card-title">Corretivas</div>
-          <div class="pcm-card-value">{{ kpiCorretivas().percentual }}%</div>
-          <div class="pcm-card-meta">{{ kpiCorretivas().executadas }} de {{ kpiCorretivas().programadas }} executadas</div>
-        </div>
-        <div class="pcm-card pcm-card--teal">
-          <div class="pcm-card-title">Preventivas</div>
-          <div class="pcm-card-value">{{ kpiPreventivas().percentual }}%</div>
-          <div class="pcm-card-meta">{{ kpiPreventivas().executadas }} de {{ kpiPreventivas().programadas }} executadas</div>
-        </div>
-        <div class="pcm-card pcm-card--orange">
-          <div class="pcm-card-title">Exames Médicos</div>
-          <div class="pcm-card-value">{{ qtdExames() }}</div>
-        </div>
-        <div class="pcm-card pcm-card--orange">
-          <div class="pcm-card-title">Folgas</div>
-          <div class="pcm-card-value">{{ qtdFolgas() }}</div>
-        </div>
-        <div class="pcm-card pcm-card--green">
-          <div class="pcm-card-title">HH Disponível</div>
-          <div class="pcm-card-value">{{ hhTotais().disponivel }}h</div>
-        </div>
-        <div class="pcm-card pcm-card--red">
-          <div class="pcm-card-title">HH Indisponível</div>
-          <div class="pcm-card-value">{{ hhTotais().indisponivel }}h</div>
-        </div>
+        @for (c of cardsCorretivasPreventivas(); track c.titulo) {
+          <div class="pcm-card" [class]="'pcm-card--' + c.cor">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="pcm-card-icone" [class]="'pcm-card-icone--' + c.cor">
+              <path [attr.d]="icones[c.icone]" />
+            </svg>
+            <div class="pcm-card-title">{{ c.titulo }}</div>
+            <div class="pcm-card-value">{{ c.valor }}</div>
+            @if (c.meta) { <div class="pcm-card-meta">{{ c.meta }}</div> }
+          </div>
+        }
       </div>
       <p class="text-xs text-gray-400 mt-2">HH disponível/indisponível soma Elétrica + Mecânica (Apoio programa por equipe/empresa, não tem disponibilidade individual cadastrada).</p>
     </section>
@@ -212,7 +183,7 @@
                   <td><strong class="pcm-percentage">{{ a.atendimento }}%</strong></td>
                   <td>
                     <span class="pcm-status-indicator" [class.pcm-status-meta]="a.atendimento >= metaAtendimento" [class.pcm-status-alert]="a.atendimento < metaAtendimento">
-                      {{ a.atendimento >= metaAtendimento ? 'Meta' : (a.atendimento + '%') }}
+                      <span class="pcm-status-dot"></span>{{ a.atendimento >= metaAtendimento ? 'Meta' : 'Abaixo' }}
                     </span>
                   </td>
                   <td>{{ a.cumprimentoPlano.programadas }}</td>
@@ -221,7 +192,7 @@
                   <td><strong class="pcm-percentage">{{ a.cumprimentoPlano.atendimento }}%</strong></td>
                   <td>
                     <span class="pcm-status-indicator" [class.pcm-status-meta]="a.cumprimentoPlano.atendimento >= metaCumprimento" [class.pcm-status-alert]="a.cumprimentoPlano.atendimento < metaCumprimento">
-                      {{ a.cumprimentoPlano.atendimento >= metaCumprimento ? 'Meta' : (a.cumprimentoPlano.atendimento + '%') }}
+                      <span class="pcm-status-dot"></span>{{ a.cumprimentoPlano.atendimento >= metaCumprimento ? 'Meta' : 'Abaixo' }}
                     </span>
                   </td>
                 </tr>
@@ -250,20 +221,20 @@
     <section class="pcm-section">
       <h2 class="pcm-section-title">Consolidado do Ano</h2>
       <div class="pcm-cards">
-        <div class="pcm-card pcm-card--green">
-          <div class="pcm-card-title">Atendimento à Programação</div>
-          <div class="pcm-card-value">{{ consolidadoAno().geral.atendimento }}%</div>
-          <div class="pcm-card-meta">{{ consolidadoAno().geral.executadas }} de {{ consolidadoAno().geral.programadas }} executadas no ano</div>
-        </div>
-        <div class="pcm-card pcm-card--blue">
-          <div class="pcm-card-title">Cumprimento do Plano</div>
-          <div class="pcm-card-value">{{ consolidadoAno().cumprimentoPlano.atendimento }}%</div>
-          <div class="pcm-card-meta">{{ consolidadoAno().cumprimentoPlano.executadas }} de {{ consolidadoAno().cumprimentoPlano.programadas }} planejadas do Plano</div>
-        </div>
-        <div class="pcm-card pcm-card--teal">
-          <div class="pcm-card-title">Status Geral do Ano</div>
-          <div class="pcm-card-value" [style.color]="statusCor(consolidadoAno().statusGeral)" style="font-size: 1.1rem;">{{ consolidadoAno().statusGeral }}</div>
-        </div>
+        @for (c of cardsConsolidadoAno(); track c.titulo) {
+          <div class="pcm-card" [class]="'pcm-card--' + c.cor">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="pcm-card-icone" [class]="'pcm-card-icone--' + c.cor">
+              <path [attr.d]="icones[c.icone]" />
+            </svg>
+            <div class="pcm-card-title">{{ c.titulo }}</div>
+            @if (c.titulo === 'Status Geral do Ano') {
+              <div class="pcm-card-value" style="font-size: 1.1rem;" [style.color]="statusCor(consolidadoAno().statusGeral)">{{ c.valor }}</div>
+            } @else {
+              <div class="pcm-card-value">{{ c.valor }}</div>
+            }
+            @if (c.meta) { <div class="pcm-card-meta">{{ c.meta }}</div> }
+          </div>
+        }
       </div>
     </section>
 

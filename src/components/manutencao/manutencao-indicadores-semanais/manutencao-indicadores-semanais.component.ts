@@ -29,6 +29,31 @@ const AREA_PCM_PARA_CATEGORIA: Record<string, CategoriaIndicador> = {
 
 const DIAS_SEMANA_LABEL = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB', 'DOM'];
 
+// Ícones de linha simples (viewBox 24x24, stroke=currentColor) pros cards de KPI — um
+// <path> por ícone, com vários subcaminhos "M..." quando precisa de mais de um traço.
+const ICONES: Record<string, string> = {
+  check: 'M12 3a9 9 0 100 18 9 9 0 000-18z M8 12.3l2.5 2.5L16 9.3',
+  calendario: 'M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z M4 9.5h16 M8 4v3 M16 4v3 M9.3 14.8l1.7 1.7 3.7-3.9',
+  lista: 'M8 6.5h11 M8 12h11 M8 17.5h11 M4 6.5h.01 M4 12h.01 M4 17.5h.01',
+  alerta: 'M12 3.5l8.5 15H3.5z M12 9.5v4 M12 16.7v.1',
+  prancheta: 'M9 3.5h6a1 1 0 011 1v1h1a1 1 0 011 1v13.5a1 1 0 01-1 1H7a1 1 0 01-1-1V6.5a1 1 0 011-1h1v-1a1 1 0 011-1z M9 11h6 M9 14.6h6',
+  raio: 'M13 2L4.5 14h5.5l-1 8 8.5-12H12z',
+  escudo: 'M12 3l7 3v6c0 4.4-3 8-7 9-4-1-7-4.6-7-9V6z M9 12l2 2 4-4',
+  cruz: 'M12 4.5v15 M4.5 12h15',
+  lua: 'M20 14.7A8 8 0 119.3 4 6.4 6.4 0 0020 14.7z',
+  relogio: 'M12 21a9 9 0 100-18 9 9 0 000 18z M12 7.5v5l3.5 2',
+  relogioX: 'M12 21a9 9 0 100-18 9 9 0 000 18z M9.5 9.5l5 5 M14.5 9.5l-5 5',
+  bandeira: 'M5 21V4 M5 5h13l-2.5 3.2L18 11.5H5',
+};
+
+interface CardIndicador {
+  titulo: string;
+  valor: string;
+  meta?: string;
+  cor: 'green' | 'blue' | 'purple' | 'orange' | 'teal' | 'red';
+  icone: string;
+}
+
 // Mesmos helpers de semana do Dashboard da Programação (manutencao-dashboard.component.ts)
 // — não extraídos pra util compartilhado porque cada tela hoje mantém a própria cópia
 // (mesmo padrão já existente entre Dashboard/Programação).
@@ -77,6 +102,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   readonly categoriaLabel = CATEGORIA_LABEL;
   readonly metaAtendimento = META_ATENDIMENTO;
   readonly metaCumprimento = META_CUMPRIMENTO;
+  readonly icones = ICONES;
   errorMessage = signal('');
   private pollId: ReturnType<typeof setInterval> | null = null;
 
@@ -188,6 +214,18 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
 
   diasDaSemanaAtual = computed(() => diasDaSemana(this.semanaFiltro()));
 
+  // Cabeçalho do relatório mostrava a data ISO crua (ex. "2026-09-14") — formata como
+  // "SEMANA 38 · 14/09 a 20/09/2026", igual ao padrão já usado no dropdown de semana.
+  semanaLabel = computed(() => {
+    const semana = this.semanaFiltro();
+    const dias = this.diasDaSemanaAtual();
+    const inicio = dias[0]?.data ?? semana;
+    const fim = dias[dias.length - 1]?.data ?? semana;
+    const [anoFim] = fim.split('-');
+    const fmt = (iso: string) => { const [, m, d] = iso.split('-'); return `${d}/${m}`; };
+    return `SEMANA ${this.numeroSemanaISO(semana)} · ${fmt(inicio)} a ${fmt(fim)}/${anoFim}`;
+  });
+
   // Todas as ordens de verdade já carregadas (ManutencaoProgramacaoService.load() traz
   // o histórico inteiro, sem filtro de data) — ponto de partida tanto pra semana
   // selecionada quanto pra Evolução/Consolidado do Ano.
@@ -295,6 +333,37 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   imprimir(): void {
     window.print();
   }
+
+  // ── Cards dos KPIs, dirigidos por config (em vez de bloco repetido por card no
+  // template) — cada seção vira um @for só, mais fácil de manter e de adicionar ícone. ──
+  cardsResumoExecutivo = computed<CardIndicador[]>(() => {
+    const ind = this.indicadores();
+    return [
+      { titulo: 'Atendimento à Programação', valor: `${this.atendimentoAnimado()}%`, meta: `Meta: ${this.metaAtendimento}%`, cor: 'green', icone: 'check' },
+      { titulo: 'Cumprimento do Plano', valor: `${this.cumprimentoAnimado()}%`, meta: `Meta: ${this.metaCumprimento}%`, cor: 'blue', icone: 'calendario' },
+      { titulo: "OS's Executadas", valor: `${ind.geral.executadas}/${ind.geral.programadas}`, cor: 'purple', icone: 'lista' },
+      { titulo: "OS's Não Executadas", valor: `${ind.geral.naoExecutadas}`, cor: 'orange', icone: 'alerta' },
+      { titulo: "OS's Planejadas Plano", valor: `${ind.cumprimentoPlano.programadas}`, meta: `${ind.cumprimentoPlano.executadas} executadas do plano`, cor: 'teal', icone: 'prancheta' },
+    ];
+  });
+
+  cardsCorretivasPreventivas = computed<CardIndicador[]>(() => [
+    { titulo: 'Corretivas', valor: `${this.kpiCorretivas().percentual}%`, meta: `${this.kpiCorretivas().executadas} de ${this.kpiCorretivas().programadas} executadas`, cor: 'purple', icone: 'raio' },
+    { titulo: 'Preventivas', valor: `${this.kpiPreventivas().percentual}%`, meta: `${this.kpiPreventivas().executadas} de ${this.kpiPreventivas().programadas} executadas`, cor: 'teal', icone: 'escudo' },
+    { titulo: 'Exames Médicos', valor: `${this.qtdExames()}`, cor: 'orange', icone: 'cruz' },
+    { titulo: 'Folgas', valor: `${this.qtdFolgas()}`, cor: 'orange', icone: 'lua' },
+    { titulo: 'HH Disponível', valor: `${this.hhTotais().disponivel}h`, cor: 'green', icone: 'relogio' },
+    { titulo: 'HH Indisponível', valor: `${this.hhTotais().indisponivel}h`, cor: 'red', icone: 'relogioX' },
+  ]);
+
+  cardsConsolidadoAno = computed<CardIndicador[]>(() => {
+    const ano = this.consolidadoAno();
+    return [
+      { titulo: 'Atendimento à Programação', valor: `${ano.geral.atendimento}%`, meta: `${ano.geral.executadas} de ${ano.geral.programadas} executadas no ano`, cor: 'green', icone: 'check' },
+      { titulo: 'Cumprimento do Plano', valor: `${ano.cumprimentoPlano.atendimento}%`, meta: `${ano.cumprimentoPlano.executadas} de ${ano.cumprimentoPlano.programadas} planejadas do Plano`, cor: 'blue', icone: 'calendario' },
+      { titulo: 'Status Geral do Ano', valor: ano.statusGeral, cor: 'teal', icone: 'bandeira' },
+    ];
+  });
 
   // ── Evolução ao Longo do Ano + Consolidado do Ano ──────────────────────
 

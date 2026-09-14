@@ -82,7 +82,11 @@ export function calcularLinhaTempo(
   const passo = Math.max(1, Math.ceil(n / maxRotulos));
   const indices: number[] = [];
   for (let i = 0; i < n - 1; i += passo) indices.push(i);
-  if (indices.length === 0 || n - 1 - indices[indices.length - 1] < passo / 2) {
+  // Qualquer gap menor que um passo inteiro ainda fica visualmente colado (ex.: passo=2,
+  // gap=1 — pontos adjacentes, ~17px de distância num gráfico de 38 semanas) — por isso
+  // "< passo", não "< passo/2" (que deixava passar gap=1 quando passo=2, grudando os dois
+  // últimos rótulos, ex. "S37S38").
+  if (indices.length === 0 || n - 1 - indices[indices.length - 1] < passo) {
     if (indices.length > 0) indices.pop();
   }
   indices.push(n - 1);

@@ -3,11 +3,21 @@
 
 /* Modernização só desta tela — sem 3D real (distorce leitura de valor). */
 .pcm-card {
+  position: relative;
   background: linear-gradient(160deg, #fff 0%, #fafbff 100%);
   animation: pcm-entrada .5s cubic-bezier(.16, 1, .3, 1) backwards;
 }
 .pcm-cards > .pcm-card:nth-child(2) { animation-delay: .08s; }
 .pcm-cards > .pcm-card:nth-child(n+3) { animation-delay: .16s; }
+
+.pcm-card-icone { position: absolute; top: 14px; right: 14px; width: 22px; height: 22px; opacity: .5; }
+.pcm-card-title { padding-right: 26px; }
+.pcm-card-icone--green  { color: #4CAF50; }
+.pcm-card-icone--blue   { color: #2196F3; }
+.pcm-card-icone--purple { color: #9C27B0; }
+.pcm-card-icone--orange { color: #FF9800; }
+.pcm-card-icone--red    { color: #F44336; }
+.pcm-card-icone--teal   { color: #009688; }
 
 @keyframes pcm-entrada {
   from { opacity: 0; transform: translateY(14px); }
@@ -40,6 +50,9 @@
   from { r: 5; opacity: .35; }
   to   { r: 13; opacity: 0; }
 }
+
+.pcm-table tbody tr:hover { background-color: #eef2ff !important; }
+.pcm-status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; background: currentColor; }
 
 /* Barra de HH nasce em 0% (antes do SIGMA responder) e transiciona sozinha. */
 .pcm-hh-barra-fundo { overflow: hidden; }

@@ -101,6 +101,18 @@ describe('calcularLinhaTempo', () => {
     const geo = calcularLinhaTempo(pontosSemanas(20), { maxRotulosEixoX: 5 })!;
     expect(geo.eixoX.length).toBeLessThanOrEqual(6);
   });
+
+  it('nunca deixa os dois ultimos rotulos em pontos adjacentes (ficariam colados, ex. "S37S38")', () => {
+    // Regressão: com 38 pontos e maxRotulosEixoX padrão (20), passo=2 fazia o penúltimo
+    // rótulo cair no índice 36 (S37) e o último no 37 (S38) — só 1 índice de distância,
+    // ilegível lado a lado num gráfico estreito.
+    const geo = calcularLinhaTempo(pontosSemanas(38))!;
+    const penultimo = geo.eixoX[geo.eixoX.length - 2];
+    const ultimo = geo.eixoX[geo.eixoX.length - 1];
+    const indicePenultimo = Number(penultimo.label.replace('S', ''));
+    const indiceUltimo = Number(ultimo.label.replace('S', ''));
+    expect(indiceUltimo - indicePenultimo).toBeGreaterThanOrEqual(2);
+  });
 });
 
 describe('suavizarPath', () => {
