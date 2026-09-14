@@ -21,6 +21,8 @@
 /* Linha "desenhando" ao entrar; pathLength="1" no SVG normaliza o comprimento pra 1. */
 .pcm-linha-tempo-linha {
   stroke-dasharray: 1;
+  stroke-linecap: round;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .12));
   animation: pcm-desenhar-linha 1.1s cubic-bezier(.16, 1, .3, 1) backwards;
   animation-delay: .3s;
 }
@@ -30,8 +32,16 @@
   to   { stroke-dashoffset: 0; }
 }
 
-/* Barra de HH nasce em 0% (antes do SIGMA responder) e transiciona pro valor real
-   sozinha quando o computed recalcula — sem JS extra. */
+.pcm-linha-tempo-grid { stroke-dasharray: 3 4; }
+.pcm-linha-tempo-ponto--final { stroke: #fff; stroke-width: 1.5; }
+.pcm-linha-tempo-destaque { fill: #4CAF50; opacity: .3; animation: pcm-pulso 2.2s ease-out infinite; }
+
+@keyframes pcm-pulso {
+  from { r: 5; opacity: .35; }
+  to   { r: 13; opacity: 0; }
+}
+
+/* Barra de HH nasce em 0% (antes do SIGMA responder) e transiciona sozinha. */
 .pcm-hh-barra-fundo { overflow: hidden; }
 .pcm-hh-barra-fill {
   transition: width 1s cubic-bezier(.16, 1, .3, 1);

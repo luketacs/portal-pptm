@@ -11,7 +11,7 @@ import { CategoriaIndicador, ConsultaSigmaResultado, ImportarIndicadorHistoricoI
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO, calcularIndicadoresSemana,
 } from '../../../utils/manutencao-indicadores';
-import { PontoLinhaTempo, calcularLinhaTempo } from '../../../utils/relatorio-linha-tempo';
+import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, suavizarAreaPath, suavizarPath } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoSemanas, extrairHistoricoSemanasPorArea } from '../../../utils/relatorio-semanal-pcm';
 import { HhEquipamento, KpiExecucao, calcularHhTecnico, calcularKpiExecucao, hhPorEquipamento, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
 import { encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
@@ -359,18 +359,32 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     return resultado;
   });
 
-  // Geometria SVG pronta pro <polyline>/<circle> (mesmo util do Relatório Semanal/
-  // Mensal PCM, src/utils/relatorio-linha-tempo.ts — só troca a fonte dos pontos: em
-  // vez de ler célula de planilha, vem do histórico importado + cálculo ao vivo acima).
-  linhaTempoGeral = computed(() => calcularLinhaTempo(
+  // Geometria SVG (mesmo util do Relatório Semanal/Mensal PCM,
+  // src/utils/relatorio-linha-tempo.ts — só troca a fonte dos pontos: em vez de ler
+  // célula de planilha, vem do histórico importado + cálculo ao vivo acima). Enriquece
+  // com path suavizado (curva, não segmento reto) + área de preenchimento sob a linha
+  // de Atendimento — só essa, pra não empilhar duas áreas semitransparentes uma sobre a
+  // outra quando as duas séries andam coladas (visual mais limpo).
+  private enriquecerGeometria(geo: LinhaTempoGeometria | null) {
+    if (!geo) return null;
+    const baseY = geo.altura - geo.margem.baixo;
+    return {
+      ...geo,
+      pathAtendimento: suavizarPath(geo.pontosAtendimento),
+      pathCumprimento: suavizarPath(geo.pontosCumprimento),
+      areaAtendimento: suavizarAreaPath(geo.pontosAtendimento, baseY),
+    };
+  }
+
+  linhaTempoGeral = computed(() => this.enriquecerGeometria(calcularLinhaTempo(
     this.pontosEvolucaoGeral().map(p => ({ label: `S${this.numeroSemanaISO(p.semana)}`, atendimento: p.atendimento, cumprimento: p.cumprimento })),
-  ));
+  )));
 
   linhaTempoPorArea = computed(() => CATEGORIAS_INDICADOR.map(categoria => {
     const pontos = [...(this.pontosEvolucaoPorArea().get(categoria) ?? new Map()).entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([semana, v]): PontoLinhaTempo => ({ label: `S${this.numeroSemanaISO(semana)}`, atendimento: v.atendimento, cumprimento: v.cumprimento }));
-    return { categoria, label: CATEGORIA_LABEL[categoria], geometria: calcularLinhaTempo(pontos) };
+    return { categoria, label: CATEGORIA_LABEL[categoria], geometria: this.enriquecerGeometria(calcularLinhaTempo(pontos)) };
   }));
 
   // Soma todas as semanas do ano corrente (não o histórico inteiro, que pode cruzar

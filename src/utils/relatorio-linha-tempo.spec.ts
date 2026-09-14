@@ -1,4 +1,4 @@
-import { calcularLinhaTempo } from './relatorio-linha-tempo';
+import { calcularLinhaTempo, suavizarAreaPath, suavizarPath } from './relatorio-linha-tempo';
 
 describe('calcularLinhaTempo', () => {
   it('retorna null quando nao ha pontos', () => {
@@ -100,5 +100,39 @@ describe('calcularLinhaTempo', () => {
   it('respeita um maxRotulosEixoX customizado (grafico menor precisa de menos rotulos)', () => {
     const geo = calcularLinhaTempo(pontosSemanas(20), { maxRotulosEixoX: 5 })!;
     expect(geo.eixoX.length).toBeLessThanOrEqual(6);
+  });
+});
+
+describe('suavizarPath', () => {
+  it('retorna vazio sem pontos', () => {
+    expect(suavizarPath([])).toBe('');
+  });
+
+  it('com 1 ponto, so move pra ele (sem curva)', () => {
+    expect(suavizarPath([{ x: 5, y: 10 }])).toBe('M 5,10');
+  });
+
+  it('comeca com M no primeiro ponto e usa um segmento C por par de pontos', () => {
+    const path = suavizarPath([{ x: 0, y: 0 }, { x: 10, y: 5 }, { x: 20, y: 0 }]);
+    expect(path.startsWith('M 0,0')).toBe(true);
+    expect(path.match(/C /g)).toHaveLength(2); // 3 pontos = 2 segmentos
+  });
+
+  it('termina exatamente no ultimo ponto (a curva sempre passa pelos pontos reais)', () => {
+    const path = suavizarPath([{ x: 0, y: 0 }, { x: 10, y: 5 }, { x: 20, y: 8 }]);
+    expect(path.endsWith('20,8')).toBe(true);
+  });
+});
+
+describe('suavizarAreaPath', () => {
+  it('retorna vazio sem pontos', () => {
+    expect(suavizarAreaPath([], 100)).toBe('');
+  });
+
+  it('fecha o path descendo do ultimo ponto ate a base, voltando ao X do primeiro ponto, e fecha com Z', () => {
+    const path = suavizarAreaPath([{ x: 0, y: 0 }, { x: 10, y: 5 }], 100);
+    expect(path).toContain('L 10,100'); // desce do ultimo ponto ate a base
+    expect(path).toContain('L 0,100');  // volta pro X do primeiro ponto, na base
+    expect(path.endsWith('Z')).toBe(true);
   });
 });

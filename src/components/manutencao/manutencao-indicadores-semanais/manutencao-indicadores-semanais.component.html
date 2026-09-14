@@ -272,6 +272,12 @@
       @if (linhaTempoGeral(); as lt) {
         <div class="pcm-linha-tempo-bloco">
           <svg [attr.viewBox]="'0 0 ' + lt.largura + ' ' + lt.altura" class="pcm-linha-tempo-svg">
+            <defs>
+              <linearGradient id="pcm-grad-area-geral" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#4CAF50" stop-opacity="0.28" />
+                <stop offset="100%" stop-color="#4CAF50" stop-opacity="0" />
+              </linearGradient>
+            </defs>
             @for (g of lt.eixoY; track g.label) {
               <line [attr.x1]="lt.margem.esquerda" [attr.x2]="lt.largura - lt.margem.direita" [attr.y1]="g.posicao" [attr.y2]="g.posicao" class="pcm-linha-tempo-grid" />
               <text [attr.x]="lt.margem.esquerda - 6" [attr.y]="g.posicao" class="pcm-linha-tempo-eixo-y">{{ g.label }}</text>
@@ -279,13 +285,19 @@
             @for (l of lt.eixoX; track l.label) {
               <text [attr.x]="l.posicao" [attr.y]="lt.altura - 8" class="pcm-linha-tempo-eixo-x">{{ l.label }}</text>
             }
-            <polyline [attr.points]="lt.linhaCumprimento" pathLength="1" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
-            <polyline [attr.points]="lt.linhaAtendimento" pathLength="1" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
+            <path [attr.d]="lt.areaAtendimento" fill="url(#pcm-grad-area-geral)" stroke="none" />
+            <path [attr.d]="lt.pathCumprimento" pathLength="1" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
+            <path [attr.d]="lt.pathAtendimento" pathLength="1" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
             @for (p of lt.pontosCumprimento; track $index) {
-              <circle [attr.cx]="p.x" [attr.cy]="p.y" r="3" class="pcm-linha-tempo-ponto--cumprimento" />
+              <circle [attr.cx]="p.x" [attr.cy]="p.y" r="2" class="pcm-linha-tempo-ponto--cumprimento" />
             }
             @for (p of lt.pontosAtendimento; track $index) {
-              <circle [attr.cx]="p.x" [attr.cy]="p.y" r="3" class="pcm-linha-tempo-ponto--atendimento" />
+              <circle [attr.cx]="p.x" [attr.cy]="p.y" r="2" class="pcm-linha-tempo-ponto--atendimento" />
+            }
+            @if (lt.pontosAtendimento.length > 0) {
+              <circle [attr.cx]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].x" [attr.cy]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].y" r="10" class="pcm-linha-tempo-destaque pcm-linha-tempo-destaque--atendimento" />
+              <circle [attr.cx]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].x" [attr.cy]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].y" r="4.5" class="pcm-linha-tempo-ponto--atendimento pcm-linha-tempo-ponto--final" />
+              <circle [attr.cx]="lt.pontosCumprimento[lt.pontosCumprimento.length-1].x" [attr.cy]="lt.pontosCumprimento[lt.pontosCumprimento.length-1].y" r="4.5" class="pcm-linha-tempo-ponto--cumprimento pcm-linha-tempo-ponto--final" />
             }
           </svg>
           <div class="pcm-linha-tempo-legenda">
@@ -306,6 +318,12 @@
             <h4 class="pcm-horas-grafico-area-titulo">{{ item.label }}</h4>
             @if (item.geometria; as lt) {
               <svg [attr.viewBox]="'0 0 ' + lt.largura + ' ' + lt.altura" class="pcm-linha-tempo-svg">
+                <defs>
+                  <linearGradient [attr.id]="'pcm-grad-area-' + item.categoria" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#4CAF50" stop-opacity="0.25" />
+                    <stop offset="100%" stop-color="#4CAF50" stop-opacity="0" />
+                  </linearGradient>
+                </defs>
                 @for (g of lt.eixoY; track g.label) {
                   <line [attr.x1]="lt.margem.esquerda" [attr.x2]="lt.largura - lt.margem.direita" [attr.y1]="g.posicao" [attr.y2]="g.posicao" class="pcm-linha-tempo-grid" />
                   <text [attr.x]="lt.margem.esquerda - 6" [attr.y]="g.posicao" class="pcm-linha-tempo-eixo-y">{{ g.label }}</text>
@@ -313,13 +331,18 @@
                 @for (l of lt.eixoX; track l.label) {
                   <text [attr.x]="l.posicao" [attr.y]="lt.altura - 8" class="pcm-linha-tempo-eixo-x">{{ l.label }}</text>
                 }
-                <polyline [attr.points]="lt.linhaCumprimento" pathLength="1" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
-                <polyline [attr.points]="lt.linhaAtendimento" pathLength="1" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
+                <path [attr.d]="lt.areaAtendimento" [attr.fill]="'url(#pcm-grad-area-' + item.categoria + ')'" stroke="none" />
+                <path [attr.d]="lt.pathCumprimento" pathLength="1" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
+                <path [attr.d]="lt.pathAtendimento" pathLength="1" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
                 @for (p of lt.pontosCumprimento; track $index) {
-                  <circle [attr.cx]="p.x" [attr.cy]="p.y" r="2.5" class="pcm-linha-tempo-ponto--cumprimento" />
+                  <circle [attr.cx]="p.x" [attr.cy]="p.y" r="1.6" class="pcm-linha-tempo-ponto--cumprimento" />
                 }
                 @for (p of lt.pontosAtendimento; track $index) {
-                  <circle [attr.cx]="p.x" [attr.cy]="p.y" r="2.5" class="pcm-linha-tempo-ponto--atendimento" />
+                  <circle [attr.cx]="p.x" [attr.cy]="p.y" r="1.6" class="pcm-linha-tempo-ponto--atendimento" />
+                }
+                @if (lt.pontosAtendimento.length > 0) {
+                  <circle [attr.cx]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].x" [attr.cy]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].y" r="3.5" class="pcm-linha-tempo-ponto--atendimento pcm-linha-tempo-ponto--final" />
+                  <circle [attr.cx]="lt.pontosCumprimento[lt.pontosCumprimento.length-1].x" [attr.cy]="lt.pontosCumprimento[lt.pontosCumprimento.length-1].y" r="3.5" class="pcm-linha-tempo-ponto--cumprimento pcm-linha-tempo-ponto--final" />
                 }
               </svg>
             } @else {
