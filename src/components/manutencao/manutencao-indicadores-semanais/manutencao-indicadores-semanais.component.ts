@@ -273,7 +273,6 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   indicadores = computed<IndicadoresSemana>(() => calcularIndicadoresSemana({
     ordens: this.ordensDaSemana(),
     sigmaPorOs: this.sigmaPorOs(),
-    diasSemanaFallback: this.diasDaSemanaAtual().map(d => d.data),
     matchColaborador: this.matchColaborador,
   }));
 
@@ -281,7 +280,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // manutencao-dashboard/) — essa tela substitui o Dashboard, então essas métricas
   // (Corretivas/Preventivas, Exames/Folgas, HH) vêm pra cá antes dele ser removido.
   private ordemExecutadaAgrupadaLocal(ordens: ManutencaoOrdem[]): boolean[] {
-    return ordemExecutadaAgrupada(ordens, this.sigmaPorOs(), this.diasDaSemanaAtual().map(d => d.data), this.matchColaborador);
+    return ordemExecutadaAgrupada(ordens, this.sigmaPorOs(), this.matchColaborador);
   }
 
   kpiCorretivas = computed<KpiExecucao>(() =>
@@ -392,7 +391,6 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       indicadores: calcularIndicadoresSemana({
         ordens: ordensTipo.filter(o => o.semanaInicio === semana),
         sigmaPorOs,
-        diasSemanaFallback: diasDaSemana(semana).map(d => d.data),
         matchColaborador: this.matchColaborador,
       }),
     }));
@@ -462,14 +460,12 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   consolidadoAno = computed<IndicadoresSemana>(() => {
     const anoAtual = new Date().getFullYear();
     const semanasDoAno = new Set(this.semanasHistoricoIso().filter(s => Number(s.slice(0, 4)) === anoAtual));
+    // ordemExecutadaAgrupada usa a semanaInicio de cada ordem pra achar a janela certa
+    // (não um "dia da semana" único externo) — funciona sem ambiguidade mesmo somando
+    // ordens de várias semanas diferentes num agregado só.
     return calcularIndicadoresSemana({
       ordens: this.ordensTipo().filter(o => semanasDoAno.has(o.semanaInicio)),
       sigmaPorOs: this.sigmaPorOs(),
-      // Cada ordem já carrega os próprios diasPrevistos quase sempre — sem um "dia da
-      // semana" único fazendo sentido pra um agregado de várias semanas, uma ordem sem
-      // diasPrevistos aqui conta como não executada (mesmo raciocínio conservador do
-      // fallback vazio: não afirma execução sem data pra comparar).
-      diasSemanaFallback: [],
       matchColaborador: this.matchColaborador,
     });
   });

@@ -1,8 +1,9 @@
 // Fórmulas puras do Acompanhamento de Indicadores Semanais — substitui a leitura de
 // planilha do antigo Relatório Semanal PCM (src/utils/relatorio-semanal-pcm.ts) por
 // cálculo ao vivo em cima das ordens do Portal. Reaproveita a mesma metas/regra de
-// status daquele relatório e o mesmo critério de "executada" do Dashboard
-// (ordemExecutadaAgrupada), sem duplicar nenhum dos dois.
+// status daquele relatório e o mesmo critério de "executada" (ordemExecutadaAgrupada,
+// que considera qualquer apontamento do técnico dentro da SEMANA da ordem, não só nos
+// dias originalmente previstos), sem duplicar nenhum dos dois.
 import { CategoriaIndicador, ConsultaSigmaResultado, ManutencaoOrdem } from '../models/manutencao-programacao.model';
 import { ordemExecutadaAgrupada } from './manutencao-dashboard';
 
@@ -26,9 +27,9 @@ export interface ContagemExecucao {
 
 function contarExecucao(
   ordens: ManutencaoOrdem[], sigmaPorOs: Record<string, ConsultaSigmaResultado>,
-  diasSemanaFallback: string[], matchColaborador: MatchColaborador,
+  matchColaborador: MatchColaborador,
 ): ContagemExecucao {
-  const executadaPorGrupo = ordemExecutadaAgrupada(ordens, sigmaPorOs, diasSemanaFallback, matchColaborador);
+  const executadaPorGrupo = ordemExecutadaAgrupada(ordens, sigmaPorOs, matchColaborador);
   const programadas = executadaPorGrupo.length;
   const executadas = executadaPorGrupo.filter(Boolean).length;
   return {
@@ -64,11 +65,10 @@ export interface IndicadoresSemana {
 export function calcularIndicadoresSemana(params: {
   ordens: ManutencaoOrdem[];
   sigmaPorOs: Record<string, ConsultaSigmaResultado>;
-  diasSemanaFallback: string[];
   matchColaborador: MatchColaborador;
 }): IndicadoresSemana {
-  const { ordens, sigmaPorOs, diasSemanaFallback, matchColaborador } = params;
-  const calc = (subset: ManutencaoOrdem[]) => contarExecucao(subset, sigmaPorOs, diasSemanaFallback, matchColaborador);
+  const { ordens, sigmaPorOs, matchColaborador } = params;
+  const calc = (subset: ManutencaoOrdem[]) => contarExecucao(subset, sigmaPorOs, matchColaborador);
 
   const geral = calc(ordens);
 

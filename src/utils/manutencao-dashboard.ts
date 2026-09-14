@@ -9,19 +9,30 @@ function normalizarNumeroOs(v: string): string {
   return /^\d+$/.test(s) ? s.padStart(6, '0') : s.toUpperCase();
 }
 
+// Domingo da semana que começa em `segundaIso` ('YYYY-MM-DD' + 6 dias) — usado pra
+// checar se um apontamento caiu dentro da semana da ordem, sem precisar de diasPrevistos.
+function domingoDaSemana(segundaIso: string): string {
+  const d = new Date(segundaIso + 'T00:00:00');
+  d.setDate(d.getDate() + 6);
+  return d.toISOString().slice(0, 10);
+}
+
 // A mesma OS pode aparecer em mais de uma linha (apoio dividido entre técnicos/áreas,
 // ver "+ Apoio" na Programação) — sem agrupar por número antes de contar, cada apoio
 // contava a OS de novo, inflando "Y programadas" e podendo contar 1 OS como executada
 // mais de uma vez. Agrupa por número de OS e só considera executada quando TODOS os
-// técnicos do grupo têm apontamento DELES batendo com o dia previsto — não "qualquer
-// apontamento" na OS (um apoio de 2 pessoas onde só 1 aponta não está concluído,
-// mesmo critério de statusExecucao()/atendimentoProgramacao() na Programação).
-// `matchColaborador` é injetado (em vez de ApontamentosService direto) pra manter esta
-// função pura/testável sem Angular.
+// técnicos do grupo têm apontamento DELES dentro da SEMANA da ordem (semanaInicio até
+// domingo) — não "qualquer apontamento" na OS (um apoio de 2 pessoas onde só 1 aponta
+// não está concluído), mesmo critério de statusExecucao()/atendimentoProgramacao() na
+// Programação. Antes exigia que a data do apontamento batesse com um dos dias
+// PREVISTOS especificamente (diasPrevistos) — na prática, quando o técnico trocava de
+// dia dentro da mesma semana (execução real em dia diferente do planejado), o
+// apontamento existia mas nunca contava como "executada". `matchColaborador` é
+// injetado (em vez de ApontamentosService direto) pra manter esta função pura/testável
+// sem Angular.
 export function ordemExecutadaAgrupada(
   ordens: ManutencaoOrdem[],
   sigmaPorOs: Record<string, ConsultaSigmaResultado>,
-  diasSemanaFallback: string[],
   matchColaborador: (matricula: string | null, nome: string) => { matricula: string } | null,
 ): boolean[] {
   const porOs = new Map<string, ManutencaoOrdem[]>();
@@ -37,9 +48,10 @@ export function ordemExecutadaAgrupada(
     const resultado = sigmaPorOs[normalizarNumeroOs(linhas[0].numeroOs!)];
     if (!resultado) return false;
     return linhas.every(o => {
-      const dias = o.diasPrevistos.length > 0 ? o.diasPrevistos : diasSemanaFallback;
+      const domingo = domingoDaSemana(o.semanaInicio);
       const colaborador = matchColaborador(o.tecnicoMatricula, o.tecnicoNome ?? '');
-      return !!colaborador && resultado.apontamentos.some(a => a.executante === colaborador.matricula && dias.includes(a.data));
+      return !!colaborador && resultado.apontamentos.some(a =>
+        a.executante === colaborador.matricula && a.data >= o.semanaInicio && a.data <= domingo);
     });
   });
 }

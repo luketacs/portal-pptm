@@ -25,22 +25,34 @@ function sigma(numeroOs: string, executantes: { matricula: string; data: string 
 
 describe('calcularIndicadoresSemana', () => {
   it('sem nenhuma ordem, tudo zerado e status "Abaixo da Meta" (zero não bate meta nenhuma)', () => {
-    const r = calcularIndicadoresSemana({ ordens: [], sigmaPorOs: {}, diasSemanaFallback: [], matchColaborador });
+    const r = calcularIndicadoresSemana({ ordens: [], sigmaPorOs: {}, matchColaborador });
     expect(r.geral).toEqual({ programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 0 });
     expect(r.porArea).toEqual([]);
     expect(r.statusGeral).toBe('Abaixo da Meta');
   });
 
-  it('conta executada só quando o apontamento do SIGMA bate com a matrícula e o dia previsto', () => {
+  it('conta executada quando o apontamento bate com a matrícula, mesmo em dia diferente do previsto (mesma semana)', () => {
+    // Regressão: técnico troca de dia dentro da mesma semana (executa numa data
+    // diferente da planejada) — antes disso só valia bater com um dia de
+    // diasPrevistos especificamente, então o apontamento real nunca contava.
     const ordens = [
-      ordem({ id: 'a', numeroOs: '1', tecnicoMatricula: '111', diasPrevistos: ['2026-09-21'] }),
-      ordem({ id: 'b', numeroOs: '2', tecnicoMatricula: '222', diasPrevistos: ['2026-09-21'] }),
+      ordem({ id: 'a', numeroOs: '1', tecnicoMatricula: '111', semanaInicio: '2026-09-21', diasPrevistos: ['2026-09-21'] }),
+    ];
+    const sigmaPorOs = sigma('000001', [{ matricula: '111', data: '2026-09-24' }]); // quinta, não estava em diasPrevistos, mas é da mesma semana
+    const r = calcularIndicadoresSemana({ ordens, sigmaPorOs, matchColaborador });
+    expect(r.geral).toEqual({ programadas: 1, executadas: 1, naoExecutadas: 0, atendimento: 100 });
+  });
+
+  it('não conta como executada quando o apontamento cai fora da semana da ordem', () => {
+    const ordens = [
+      ordem({ id: 'a', numeroOs: '1', tecnicoMatricula: '111', semanaInicio: '2026-09-21', diasPrevistos: ['2026-09-21'] }),
+      ordem({ id: 'b', numeroOs: '2', tecnicoMatricula: '222', semanaInicio: '2026-09-21', diasPrevistos: ['2026-09-21'] }),
     ];
     const sigmaPorOs = {
-      ...sigma('000001', [{ matricula: '111', data: '2026-09-21' }]), // bate
-      ...sigma('000002', [{ matricula: '222', data: '2026-09-22' }]), // dia diferente, não bate
+      ...sigma('000001', [{ matricula: '111', data: '2026-09-21' }]), // dentro da semana (segunda)
+      ...sigma('000002', [{ matricula: '222', data: '2026-09-28' }]), // semana seguinte, fora
     };
-    const r = calcularIndicadoresSemana({ ordens, sigmaPorOs, diasSemanaFallback: [], matchColaborador });
+    const r = calcularIndicadoresSemana({ ordens, sigmaPorOs, matchColaborador });
     expect(r.geral).toEqual({ programadas: 2, executadas: 1, naoExecutadas: 1, atendimento: 50 });
   });
 
@@ -50,7 +62,7 @@ describe('calcularIndicadoresSemana', () => {
       ordem({ id: 'b', area: 'APOIO', categoriaIndicador: 'REFRIGERACAO', numeroOs: '2' }),
       ordem({ id: 'c', area: 'APOIO', categoriaIndicador: null, numeroOs: '3' }), // não classificado
     ];
-    const r = calcularIndicadoresSemana({ ordens, sigmaPorOs: {}, diasSemanaFallback: [], matchColaborador });
+    const r = calcularIndicadoresSemana({ ordens, sigmaPorOs: {}, matchColaborador });
     const categorias = r.porArea.map(a => a.categoria).sort();
     expect(categorias).toEqual([null, 'MECANICA', 'REFRIGERACAO'].sort());
     expect(r.porArea.find(a => a.categoria === 'ELETRICA')).toBeUndefined();
@@ -62,7 +74,7 @@ describe('calcularIndicadoresSemana', () => {
       ordem({ id: 'b', area: 'MECANICA', categoriaIndicador: 'MECANICA', numeroOs: '2', planoPreventivoId: null }),
       ordem({ id: 'c', area: 'APOIO', categoriaIndicador: 'REFRIGERACAO', numeroOs: '3', planoPreventivoId: 'p2' }),
     ];
-    const r = calcularIndicadoresSemana({ ordens, sigmaPorOs: {}, diasSemanaFallback: [], matchColaborador });
+    const r = calcularIndicadoresSemana({ ordens, sigmaPorOs: {}, matchColaborador });
     const mecanica = r.porArea.find(a => a.categoria === 'MECANICA')!;
     expect(mecanica.programadas).toBe(2);
     expect(mecanica.cumprimentoPlano.programadas).toBe(1);
@@ -75,7 +87,7 @@ describe('calcularIndicadoresSemana', () => {
       ordem({ id: 'a', numeroOs: '1', planoPreventivoId: 'plano-1' }),
       ordem({ id: 'b', numeroOs: '2', planoPreventivoId: null }),
     ];
-    const r = calcularIndicadoresSemana({ ordens, sigmaPorOs: {}, diasSemanaFallback: [], matchColaborador });
+    const r = calcularIndicadoresSemana({ ordens, sigmaPorOs: {}, matchColaborador });
     expect(r.cumprimentoPlano.programadas).toBe(1);
     expect(r.geral.programadas).toBe(2);
   });
@@ -87,7 +99,7 @@ describe('calcularIndicadoresSemana', () => {
       ordem({ id: `o${i}`, numeroOs: String(i + 1), tecnicoMatricula: '111', diasPrevistos: ['2026-09-21'] }));
     const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {};
     for (let i = 0; i < 10; i++) Object.assign(sigmaPorOs, sigma(String(i + 1).padStart(6, '0'), [{ matricula: '111', data: '2026-09-21' }]));
-    const r = calcularIndicadoresSemana({ ordens, sigmaPorOs, diasSemanaFallback: [], matchColaborador });
+    const r = calcularIndicadoresSemana({ ordens, sigmaPorOs, matchColaborador });
     expect(r.geral.atendimento).toBe(100);
     expect(r.geral.atendimento).toBeGreaterThanOrEqual(META_ATENDIMENTO);
     expect(r.cumprimentoPlano.programadas).toBe(0);
@@ -103,7 +115,7 @@ describe('calcularIndicadoresSemana', () => {
     ];
     // Só a ordem 'a' bate no SIGMA -> geral 50%, cumprimentoPlano 100% (1 de 1 do plano).
     const sigmaPorOs = sigma('000001', [{ matricula: '111', data: '2026-09-21' }]);
-    const r = calcularIndicadoresSemana({ ordens, sigmaPorOs, diasSemanaFallback: [], matchColaborador });
+    const r = calcularIndicadoresSemana({ ordens, sigmaPorOs, matchColaborador });
     expect(r.geral.atendimento).toBe(50);
     expect(r.cumprimentoPlano.atendimento).toBe(100);
     expect(r.cumprimentoPlano.atendimento).toBeGreaterThanOrEqual(META_CUMPRIMENTO * 0.9);

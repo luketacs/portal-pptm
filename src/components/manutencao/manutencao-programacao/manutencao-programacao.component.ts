@@ -151,6 +151,16 @@ function normalizarNumeroOs(v: string): string {
   return /^\d+$/.test(s) ? s.padStart(6, '0') : s.toUpperCase();
 }
 
+// Domingo da semana que começa em `segundaIso` — usado por statusExecucao()/
+// atendimentoProgramacao() pra checar se um apontamento caiu dentro da semana da
+// ordem (mesma lógica de src/utils/manutencao-dashboard.ts, duplicada aqui porque este
+// componente ainda não usa aquele util diretamente).
+function domingoDaSemana(segundaIso: string): string {
+  const d = new Date(segundaIso + 'T00:00:00');
+  d.setDate(d.getDate() + 6);
+  return d.toISOString().slice(0, 10);
+}
+
 @Component({
   selector: 'app-manutencao-programacao',
   standalone: true,
@@ -1663,21 +1673,24 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Selo de execução por OS, pra saber se ela já foi apontada (executada) no SIGMA
   // dentro da própria semana programada, ou ainda não. `null` = ou não tem número de
   // OS pra checar, ou a consulta ao SIGMA ainda não voltou. Um apontamento fora da
-  // semana (feito em outra semana) conta como "Não executada" — só vale o que caiu no
-  // intervalo em que a OS foi programada pra rodar. E tem que ser um apontamento DO
-  // TÉCNICO dessa linha — um apoio com 2 pessoas onde só 1 aponta não faz a linha da
-  // outra pessoa virar "Executada" (o apontamento do SIGMA só tem a matrícula de quem
+  // semana (feito em outra semana) conta como "Não executada" — só vale o que caiu
+  // dentro da semana em que a OS foi programada (semanaInicio até domingo) — não mais
+  // restrito aos dias PREVISTOS especificamente: quando o técnico troca de dia dentro
+  // da mesma semana (executa numa data diferente da planejada), o apontamento existe
+  // mas antes nunca contava como "executada". E tem que ser um apontamento DO TÉCNICO
+  // dessa linha — um apoio com 2 pessoas onde só 1 aponta não faz a linha da outra
+  // pessoa virar "Executada" (o apontamento do SIGMA só tem a matrícula de quem
   // apontou, casada aqui com a matrícula gravada na linha — tecnicoMatricula — ou, na
   // falta dela, com o nome via ApontamentosService).
-  statusExecucao(o: ManutencaoOrdem, diasSemanaOverride?: string[]): { label: string; class: string; dot: string; title: string } | null {
+  statusExecucao(o: ManutencaoOrdem): { label: string; class: string; dot: string; title: string } | null {
     if (!o.numeroOs?.trim()) return null;
     const resultado = this.sigmaPorOs()[normalizarNumeroOs(o.numeroOs)];
     if (!resultado) return null;
 
-    const diasDaSemana = o.diasPrevistos.length > 0 ? o.diasPrevistos : (diasSemanaOverride ?? this.diasDaSemanaAtual().map(d => d.data));
+    const domingo = domingoDaSemana(o.semanaInicio);
     const colaborador = this.apontamentosService.matchColaboradorDaOrdem(o.tecnicoMatricula, o.tecnicoNome ?? '');
     const dentroDaSemana = colaborador
-      ? resultado.apontamentos.filter(a => diasDaSemana.includes(a.data) && a.executante === colaborador.matricula)
+      ? resultado.apontamentos.filter(a => a.data >= o.semanaInicio && a.data <= domingo && a.executante === colaborador.matricula)
       : [];
     if (dentroDaSemana.length > 0) {
       return {
@@ -1692,11 +1705,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // real de execução vem do SIGMA, ver statusExecucao()) — mostrar "PEND" em toda linha
   // não informa nada. Só vale mostrar o status bruto quando ele for diferente de PEND
   // (dado legado, de antes dessa mudança); no caso comum, mostra a execução no lugar.
-  statusOuExecucao(o: ManutencaoOrdem, diasSemanaOverride?: string[]): { label: string; class: string } | null {
+  statusOuExecucao(o: ManutencaoOrdem): { label: string; class: string } | null {
     if (o.status && o.status.toUpperCase() !== 'PEND') {
       return { label: o.status, class: this.statusBadgeClass(o.status) };
     }
-    return this.statusExecucao(o, diasSemanaOverride);
+    return this.statusExecucao(o);
   }
 
   // KPI "Atendimento da programação" — % das OS da semana filtrada que já foram
@@ -1729,9 +1742,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       if (!resultado) continue;
       rastreaveis++;
       const todosApontaram = linhas.every(o => {
-        const dias = o.diasPrevistos.length > 0 ? o.diasPrevistos : this.diasDaSemanaAtual().map(d => d.data);
+        const domingo = domingoDaSemana(o.semanaInicio);
         const colaborador = this.apontamentosService.matchColaboradorDaOrdem(o.tecnicoMatricula, o.tecnicoNome ?? '');
-        return !!colaborador && resultado.apontamentos.some(a => a.executante === colaborador.matricula && dias.includes(a.data));
+        return !!colaborador && resultado.apontamentos.some(a =>
+          a.executante === colaborador.matricula && a.data >= o.semanaInicio && a.data <= domingo);
       });
       if (todosApontaram) executadas++;
     }
