@@ -350,7 +350,7 @@
     <section class="pcm-section">
       <h2 class="pcm-section-title">Evolução ao Longo do Ano</h2>
       @if (linhaTempoGeral(); as lt) {
-        <div class="pcm-linha-tempo-bloco">
+        <div class="pcm-linha-tempo-bloco" appVisivelNaTela>
           <svg [attr.viewBox]="'0 0 ' + lt.largura + ' ' + lt.altura" class="pcm-linha-tempo-svg">
             <defs>
               <linearGradient id="pcm-grad-area-geral" x1="0" y1="0" x2="0" y2="1">
@@ -396,7 +396,7 @@
       <h2 class="pcm-section-title">Evolução ao Longo do Ano — por Área</h2>
       <div class="pcm-linha-tempo-grid-areas">
         @for (item of linhaTempoPorArea(); track item.categoria) {
-          <div class="pcm-linha-tempo-area">
+          <div class="pcm-linha-tempo-area" appVisivelNaTela>
             <h4 class="pcm-horas-grafico-area-titulo">{{ item.label }}</h4>
             @if (item.geometria; as lt) {
               <svg [attr.viewBox]="'0 0 ' + lt.largura + ' ' + lt.altura" class="pcm-linha-tempo-svg">

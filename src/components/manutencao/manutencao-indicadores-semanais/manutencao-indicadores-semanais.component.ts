@@ -17,6 +17,7 @@ import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistorico
 import { MESES_ABREV, MESES_COMPLETO } from '../../../utils/relatorio-mensal-pcm';
 import { HhEquipamento, KpiExecucao, calcularHhTecnico, calcularKpiExecucao, hhPorEquipamento, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
 import { encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
+import { VisivelNaTelaDirective } from './visivel-na-tela.directive';
 
 // Nomes de área do relatório PCM antigo -> categoria desta tela (mesmo recorte de 5,
 // já sem "Lubrificação" — dentro de Mecânica — nem "Operação" separada de "Limp
@@ -132,7 +133,7 @@ const INTERVALO_POLL_MS = 3 * 60 * 1000;
 @Component({
   selector: 'app-manutencao-indicadores-semanais',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, VisivelNaTelaDirective],
   templateUrl: './manutencao-indicadores-semanais.component.html',
   styleUrl: './manutencao-indicadores-semanais.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
