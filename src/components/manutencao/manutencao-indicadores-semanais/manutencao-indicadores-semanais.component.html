@@ -27,9 +27,6 @@
     @if (ultimaAtualizacaoEm(); as data) {
       <span class="text-xs text-gray-400">Atualizado às {{ data | date: 'HH:mm' }} — atualiza sozinho a cada poucos minutos</span>
     }
-    @if (isAdmin()) {
-      <span class="text-xs text-red-500 font-mono">[DEBUG TEMP] {{ debugSemanas() | json }}</span>
-    }
     <button type="button" (click)="imprimir()" class="ml-auto text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
       Gerar Relatório (Imprimir / Salvar PDF)
     </button>

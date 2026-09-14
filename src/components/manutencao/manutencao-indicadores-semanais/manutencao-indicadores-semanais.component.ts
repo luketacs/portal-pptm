@@ -378,32 +378,30 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // ── Evolução ao Longo do Ano + Consolidado do Ano ──────────────────────
 
   // Toda semana desde a S37/2026 (início do uso nativo da Programação) até a semana
-  // corrente, em ordem cronológica — sem limite de janela (diferente do dropdown
-  // "semanas" acima, que só mostra um recorte curto pra escolher pontualmente).
+  // SELECIONADA no filtro (não "hoje" de verdade) — em ordem cronológica, sem limite
+  // de janela (diferente do dropdown "semanas" acima, que só mostra um recorte curto
+  // pra escolher pontualmente).
+  //
+  // Causa raiz do bug "gráfico preso em 0%": antes usava `new Date()` direto, ignorando
+  // o filtro — então o último ponto SEMPRE era a semana corrente de verdade (ex. S38),
+  // mesmo com o usuário olhando outra semana (ex. S37) na tabela/cards. Como a semana
+  // real "de hoje" quase sempre ainda não tem ordem nenhuma programada (é o futuro do
+  // ponto de vista de quem está olhando uma semana anterior), esse ponto ficava sempre
+  // em 0% e nunca mudava — o gráfico deve acompanhar o que está selecionado, não o
+  // relógio.
   private semanasHistoricoIso = computed(() => {
-    const hojeIso = paraIso(segundaFeiraDe(new Date()));
+    const fimIso = this.semanaFiltro();
     const minimoIso = paraIso(this.segundaDaSemanaISO(2026, 37));
-    const fimIso = hojeIso < minimoIso ? minimoIso : hojeIso; // nunca antes do início do sistema
+    const fimClamped = fimIso < minimoIso ? minimoIso : fimIso; // nunca antes do início do sistema
     const resultado: string[] = [];
     let cursor = new Date(minimoIso + 'T00:00:00');
-    const fim = new Date(fimIso + 'T00:00:00');
+    const fim = new Date(fimClamped + 'T00:00:00');
     while (cursor <= fim) {
       resultado.push(paraIso(cursor));
       cursor.setDate(cursor.getDate() + 7);
     }
     return resultado;
   });
-
-  // TEMP DEBUG — remover depois de achar por que o gráfico de Evolução fica preso em
-  // 0%: expõe os valores brutos que decidem qual é a "última semana" do gráfico, pra
-  // comparar com a semana que a tabela/cards mostram (semanaFiltro), sem precisar de
-  // acesso ao banco.
-  debugSemanas = computed(() => ({
-    semanaFiltro: this.semanaFiltro(),
-    ultimaSemanaHistoricoIso: this.semanasHistoricoIso()[this.semanasHistoricoIso().length - 1] ?? null,
-    totalSemanasHistoricoIso: this.semanasHistoricoIso().length,
-    ultimoPontoGeral: this.pontosEvolucaoGeral()[this.pontosEvolucaoGeral().length - 1] ?? null,
-  }));
 
   private indicadoresPorSemana = computed(() => {
     const sigmaPorOs = this.sigmaPorOs();
