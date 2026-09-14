@@ -14,6 +14,7 @@ import {
 } from '../../../utils/manutencao-indicadores';
 import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, linhaRetaAreaPath, linhaRetaPath } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
+import { MESES_ABREV, MESES_COMPLETO } from '../../../utils/relatorio-mensal-pcm';
 import { HhEquipamento, KpiExecucao, calcularHhTecnico, calcularKpiExecucao, hhPorEquipamento, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
 import { encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 
@@ -84,6 +85,35 @@ function diasDaSemana(segundaIso: string): { data: string; label: string }[] {
 
 function normalizarTexto(v: string): string {
   return v.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+}
+
+// Mês ('YYYY-MM') a que uma semana pertence — convenção: pela segunda-feira
+// (semanaInicio), igual o resto da tela já usa essa data como "identidade" da semana.
+function mesDaSemana(semanaInicioIso: string): string {
+  return semanaInicioIso.slice(0, 7);
+}
+
+// Toda segunda-feira ('YYYY-MM-DD') dentro do mês 'YYYY-MM' — pro modo Mensal do toggle
+// Semana/Mês. Avança dia a dia (nunca pra trás) até a 1a segunda do mês, depois +7 em
+// +7, validando CADA candidata via paraIso(...).slice(0,7)===mesIso (não confia só na
+// aritmética de "primeira segunda") — evita vazar a última semana do mês anterior pra
+// dentro do agrupamento caso a fórmula erre por 1.
+function semanasDoMes(mesIso: string): string[] {
+  const [ano, mes] = mesIso.split('-').map(Number);
+  const cursor = new Date(ano, mes - 1, 1);
+  while (cursor.getDay() !== 1) cursor.setDate(cursor.getDate() + 1);
+  const resultado: string[] = [];
+  while (paraIso(cursor).slice(0, 7) === mesIso) {
+    resultado.push(paraIso(cursor));
+    cursor.setDate(cursor.getDate() + 7);
+  }
+  return resultado;
+}
+
+function formatarMesLabel(mesIso: string): string {
+  const [ano, mes] = mesIso.split('-');
+  const abrev = MESES_ABREV[Number(mes) - 1];
+  return `${MESES_COMPLETO[abrev]}/${ano}`;
 }
 
 // Reaproveita o mesmo intervalo do proxy do SIGMA (cache de 10min no servidor, ver
@@ -215,9 +245,42 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
 
   diasDaSemanaAtual = computed(() => diasDaSemana(this.semanaFiltro()));
 
+  // ── Toggle Semana / Mês — mesma tela, dois níveis de agregação. "Mês" reaproveita a
+  // mesma calcularIndicadoresSemana (soma ordens de várias semanas do mês em vez de
+  // uma semana só, ver semanasDoPeriodoSet abaixo) — não é uma tela nova. ──
+  modoPeriodo = signal<'semana' | 'mes'>('semana');
+
+  // Mesma ordem de `semanas` (mais futuro primeiro) — 2 meses à frente, 6 pra trás.
+  readonly meses = (() => {
+    const result: { value: string; label: string }[] = [];
+    const hoje = new Date();
+    const mesMinimoIso = mesDaSemana(paraIso(this.segundaDaSemanaISO(2026, 37)));
+    for (let offset = 2; offset >= -6; offset--) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() + offset, 1);
+      const mesIso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (mesIso < mesMinimoIso) continue;
+      result.push({ value: mesIso, label: formatarMesLabel(mesIso) });
+    }
+    return result;
+  })();
+
+  mesFiltro = signal((() => {
+    const hojeMesIso = mesDaSemana(paraIso(segundaFeiraDe(new Date())));
+    const mesMinimoIso = mesDaSemana(paraIso(this.segundaDaSemanaISO(2026, 37)));
+    return hojeMesIso < mesMinimoIso ? mesMinimoIso : hojeMesIso;
+  })());
+
+  // Toda semana ('YYYY-MM-DD') que compõe o período selecionado — 1 semana no modo
+  // Semana, todas as segundas do mês no modo Mês. Filtro central: todo lugar que
+  // precisa "ordens desse período" testa `semanasDoPeriodoSet().has(o.semanaInicio)`
+  // em vez de comparar direto com semanaFiltro()/mesFiltro().
+  private semanasDoPeriodoSet = computed<Set<string>>(() =>
+    this.modoPeriodo() === 'semana' ? new Set([this.semanaFiltro()]) : new Set(semanasDoMes(this.mesFiltro())));
+
   // Cabeçalho do relatório mostrava a data ISO crua (ex. "2026-09-14") — formata como
-  // "SEMANA 38 · 14/09 a 20/09/2026", igual ao padrão já usado no dropdown de semana.
-  semanaLabel = computed(() => {
+  // "SEMANA 38 · 14/09 a 20/09/2026" (modo Semana) ou "SETEMBRO/2026" (modo Mês).
+  periodoLabel = computed(() => {
+    if (this.modoPeriodo() === 'mes') return formatarMesLabel(this.mesFiltro()).toUpperCase();
     const semana = this.semanaFiltro();
     const dias = this.diasDaSemanaAtual();
     const inicio = dias[0]?.data ?? semana;
@@ -232,8 +295,10 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // selecionada quanto pra Evolução/Consolidado do Ano.
   private ordensTipo = computed(() => this.manutencaoService.ordens().filter(o => o.tipo === 'ordem'));
 
-  private ordensDaSemana = computed(() =>
-    this.ordensTipo().filter(o => o.semanaInicio === this.semanaFiltro()));
+  private ordensDaSemana = computed(() => {
+    const semanas = this.semanasDoPeriodoSet();
+    return this.ordensTipo().filter(o => semanas.has(o.semanaInicio));
+  });
 
   // Só pro indicador (Atendimento à Programação / Cumprimento do Plano) — Apoio conta
   // só pras 3 equipes reais do indicador (Refrigeração/Limp Operacional/SPCI, ver
@@ -281,11 +346,14 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     }
   }
 
-  indicadores = computed<IndicadoresSemana>(() => calcularIndicadoresSemana({
-    ordens: this.ordensParaFechamento().filter(o => o.semanaInicio === this.semanaFiltro()),
-    sigmaPorOs: this.sigmaPorOs(),
-    matchColaborador: this.matchColaborador,
-  }));
+  indicadores = computed<IndicadoresSemana>(() => {
+    const semanas = this.semanasDoPeriodoSet();
+    return calcularIndicadoresSemana({
+      ordens: this.ordensParaFechamento().filter(o => semanas.has(o.semanaInicio)),
+      sigmaPorOs: this.sigmaPorOs(),
+      matchColaborador: this.matchColaborador,
+    });
+  });
 
   // ── Migrado do Dashboard da Programação (src/components/manutencao/
   // manutencao-dashboard/) — essa tela substitui o Dashboard, então essas métricas
@@ -300,8 +368,14 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   kpiPreventivas = computed<KpiExecucao>(() =>
     calcularKpiExecucao(this.ordemExecutadaAgrupadaLocal(this.ordensDaSemana().filter(o => o.tipoServico?.trim().toUpperCase() === 'PREVENTIVA')).map(executada => ({ executada }))));
 
-  qtdExames = computed(() => this.manutencaoService.ordens().filter(o => o.semanaInicio === this.semanaFiltro() && o.tipo === 'exame_medico').length);
-  qtdFolgas = computed(() => this.manutencaoService.ordens().filter(o => o.semanaInicio === this.semanaFiltro() && o.tipo === 'folga').length);
+  qtdExames = computed(() => {
+    const semanas = this.semanasDoPeriodoSet();
+    return this.manutencaoService.ordens().filter(o => semanas.has(o.semanaInicio) && o.tipo === 'exame_medico').length;
+  });
+  qtdFolgas = computed(() => {
+    const semanas = this.semanasDoPeriodoSet();
+    return this.manutencaoService.ordens().filter(o => semanas.has(o.semanaInicio) && o.tipo === 'folga').length;
+  });
 
   private hhPorEquipamentoTodos = computed<HhEquipamento[]>(() => hhPorEquipamento(this.ordensDaSemana()));
   hhPorEquipamentoTop10 = computed(() => this.hhPorEquipamentoTodos().slice(0, 10));
@@ -316,23 +390,35 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       return t.includes('ELETR') || t.includes('MECAN');
     }));
 
+  // Soma HH semana a semana dentro do período (1 semana no modo Semana, todas as
+  // semanas do mês no modo Mês) — NÃO dá pra flatten pra uma chamada só cobrindo o mês
+  // inteiro: encontrarFeriasNoIntervalo() usa .find(), só acha o PRIMEIRO período de
+  // férias que toca o intervalo. Férias (diferente de folga) podem ser fracionadas em
+  // até 3 períodos (CLT) — um técnico com dois períodos de férias no mesmo mês perderia
+  // o segundo se o intervalo fosse o mês inteiro numa tacada só. Calculando semana a
+  // semana, cada chamada só enxerga os 7 dias daquela semana, então não tem como
+  // colidir dois períodos de férias na mesma chamada.
   hhTotais = computed(() => {
-    const dias = this.diasDaSemanaAtual();
     const ferias = this.manutencaoService.ferias();
-    const ordensDaSemanaTodas = this.manutencaoService.ordens().filter(o => o.semanaInicio === this.semanaFiltro());
+    const ordensTodas = this.manutencaoService.ordens();
+    const tecnicos = this.tecnicosParaHh();
     let bruto = 0;
     let liquido = 0;
-    for (const colaborador of this.tecnicosParaHh()) {
-      const ordensDoTecnico = ordensDaSemanaTodas.filter(o => o.tecnicoNome === colaborador.nome);
-      const r = calcularHhTecnico({
-        dias,
-        disponibilidadePorDia: new Map(dias.map(d => [d.data, this.apontamentosService.disponibilidadeNoDia(colaborador, d.data)])),
-        diasFolga: new Set(ordensDoTecnico.filter(o => o.tipo === 'folga').flatMap(o => o.diasPrevistos)),
-        diasExameMedico: new Set(ordensDoTecnico.filter(o => o.tipo === 'exame_medico').flatMap(o => o.diasPrevistos)),
-        feriasIntervalo: encontrarFeriasNoIntervalo(ferias, colaborador.nome, dias.map(d => d.data)),
-      });
-      bruto += r.bruto;
-      liquido += r.liquido;
+    for (const semanaIso of this.semanasDoPeriodoSet()) {
+      const dias = diasDaSemana(semanaIso);
+      const ordensDaSemanaTodas = ordensTodas.filter(o => o.semanaInicio === semanaIso);
+      for (const colaborador of tecnicos) {
+        const ordensDoTecnico = ordensDaSemanaTodas.filter(o => o.tecnicoNome === colaborador.nome);
+        const r = calcularHhTecnico({
+          dias,
+          disponibilidadePorDia: new Map(dias.map(d => [d.data, this.apontamentosService.disponibilidadeNoDia(colaborador, d.data)])),
+          diasFolga: new Set(ordensDoTecnico.filter(o => o.tipo === 'folga').flatMap(o => o.diasPrevistos)),
+          diasExameMedico: new Set(ordensDoTecnico.filter(o => o.tipo === 'exame_medico').flatMap(o => o.diasPrevistos)),
+          feriasIntervalo: encontrarFeriasNoIntervalo(ferias, colaborador.nome, dias.map(d => d.data)),
+        });
+        bruto += r.bruto;
+        liquido += r.liquido;
+      }
     }
     return {
       disponivel: Math.round(liquido * 100) / 100,
@@ -390,7 +476,18 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // em 0% e nunca mudava — o gráfico deve acompanhar o que está selecionado, não o
   // relógio.
   private semanasHistoricoIso = computed(() => {
-    const fimIso = this.semanaFiltro();
+    // No modo Mês, o limite precisa ir até a última segunda do mês selecionado — não
+    // usar semanaFiltro() direto aqui (fica congelado/não muda de valor nesse modo).
+    // Sem esse branch, consolidadoAno() (que depende desta lista) ficaria ancorado numa
+    // semana desatualizada ao trocar pra Mês, reintroduzindo uma variante do bug "preso
+    // em 0%" já corrigido nesta tela.
+    let fimIso: string;
+    if (this.modoPeriodo() === 'mes') {
+      const semanasDoMesAtual = semanasDoMes(this.mesFiltro());
+      fimIso = semanasDoMesAtual[semanasDoMesAtual.length - 1] ?? this.semanaFiltro();
+    } else {
+      fimIso = this.semanaFiltro();
+    }
     const minimoIso = paraIso(this.segundaDaSemanaISO(2026, 37));
     const fimClamped = fimIso < minimoIso ? minimoIso : fimIso; // nunca antes do início do sistema
     const resultado: string[] = [];
@@ -403,6 +500,10 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     return resultado;
   });
 
+  // Meses cobertos pelas semanas acima — deriva do MESMO range já corrigido em vez de
+  // manter um segundo cálculo de limite independente (evita os dois desalinharem).
+  private mesesHistoricoIso = computed(() => [...new Set(this.semanasHistoricoIso().map(mesDaSemana))]);
+
   private indicadoresPorSemana = computed(() => {
     const sigmaPorOs = this.sigmaPorOs();
     const ordensTipo = this.ordensParaFechamento();
@@ -414,6 +515,33 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
         matchColaborador: this.matchColaborador,
       }),
     }));
+  });
+
+  // Mesma ideia de indicadoresPorSemana, mas agrupando as semanas já calculadas por mês
+  // — soma as contagens brutas de cada semana do mês via somarContagem (nunca faz média
+  // de % semanais), mesmo padrão que consolidadoAno já usa pra combinar semanas.
+  private indicadoresPorMes = computed(() => {
+    const porMes = new Map<string, IndicadoresSemana[]>();
+    for (const { semana, indicadores } of this.indicadoresPorSemana()) {
+      const mes = mesDaSemana(semana);
+      const lista = porMes.get(mes);
+      if (lista) lista.push(indicadores);
+      else porMes.set(mes, [indicadores]);
+    }
+    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 0 };
+    return this.mesesHistoricoIso().map(mes => {
+      const semanas = porMes.get(mes) ?? [];
+      const geral = semanas.reduce((acc, ind) => this.somarContagem(acc, ind.geral), zero);
+      const cumprimentoPlano = semanas.reduce((acc, ind) => this.somarContagem(acc, ind.cumprimentoPlano), zero);
+      const porArea: IndicadorArea[] = CATEGORIAS_INDICADOR
+        .map((categoria): IndicadorArea => ({
+          categoria,
+          ...semanas.reduce((acc, ind) => this.somarContagem(acc, ind.porArea.find(a => a.categoria === categoria) ?? zero), zero),
+          cumprimentoPlano: semanas.reduce((acc, ind) => this.somarContagem(acc, ind.porArea.find(a => a.categoria === categoria)?.cumprimentoPlano ?? zero), zero),
+        }))
+        .filter(a => a.programadas > 0);
+      return { mes, geral, cumprimentoPlano, porArea };
+    });
   });
 
   // Combina o histórico importado (semanas de ANTES da S37/2026 — só tem % agregado,
@@ -464,6 +592,71 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     return resultado;
   });
 
+  // Versão mensal de pontosEvolucaoGeral/pontosEvolucaoPorArea — mesma ideia, só que o
+  // histórico "de antes" (guardado por semana) é agrupado por mesDaSemana() e somado via
+  // somarContagem antes de virar %, em vez de usar o % de uma semana isolada.
+  private pontosEvolucaoGeralMensal = computed<{ mes: string; atendimento: number; cumprimento: number }[]>(() => {
+    const inicioAoVivoIso = paraIso(this.segundaDaSemanaISO(2026, 37));
+    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 0 };
+    const geralPorMes = new Map<string, ContagemExecucao>();
+    const planoPorMes = new Map<string, ContagemExecucao>();
+    for (const item of this.historicoService.itens()) {
+      if (item.categoria !== 'GERAL' || item.semanaInicio >= inicioAoVivoIso) continue;
+      const mes = mesDaSemana(item.semanaInicio);
+      geralPorMes.set(mes, this.somarContagem(geralPorMes.get(mes) ?? zero,
+        { programadas: item.programadas, executadas: item.executadas, naoExecutadas: item.naoExecutadas, atendimento: 0 }));
+      planoPorMes.set(mes, this.somarContagem(planoPorMes.get(mes) ?? zero,
+        { programadas: item.planejadasPlano, executadas: item.executadasPlano, naoExecutadas: item.naoExecutadasPlano, atendimento: 0 }));
+    }
+    const mapa = new Map<string, { atendimento: number; cumprimento: number }>();
+    for (const [mes, g] of geralPorMes) {
+      mapa.set(mes, { atendimento: g.atendimento, cumprimento: (planoPorMes.get(mes) ?? zero).atendimento });
+    }
+    for (const { mes, geral, cumprimentoPlano } of this.indicadoresPorMes()) {
+      mapa.set(mes, { atendimento: geral.atendimento, cumprimento: cumprimentoPlano.atendimento });
+    }
+    // Garante que o mês selecionado bate com o mesmo número que os cards/tabela mostram
+    // (fonte única: indicadores(), já agregado pro mês inteiro nesse modo).
+    const ind = this.indicadores();
+    mapa.set(this.mesFiltro(), { atendimento: ind.geral.atendimento, cumprimento: ind.cumprimentoPlano.atendimento });
+    return [...mapa.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([mes, v]) => ({ mes, ...v }));
+  });
+
+  private pontosEvolucaoPorAreaMensal = computed<Map<CategoriaIndicador, Map<string, { atendimento: number; cumprimento: number }>>>(() => {
+    const inicioAoVivoIso = paraIso(this.segundaDaSemanaISO(2026, 37));
+    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 0 };
+    const geralPorCategoria = new Map(CATEGORIAS_INDICADOR.map(c => [c, new Map<string, ContagemExecucao>()]));
+    const planoPorCategoria = new Map(CATEGORIAS_INDICADOR.map(c => [c, new Map<string, ContagemExecucao>()]));
+    for (const item of this.historicoService.itens()) {
+      if (item.categoria === 'GERAL' || item.semanaInicio >= inicioAoVivoIso) continue;
+      const mes = mesDaSemana(item.semanaInicio);
+      const mapaGeral = geralPorCategoria.get(item.categoria);
+      const mapaPlano = planoPorCategoria.get(item.categoria);
+      mapaGeral?.set(mes, this.somarContagem(mapaGeral.get(mes) ?? zero,
+        { programadas: item.programadas, executadas: item.executadas, naoExecutadas: item.naoExecutadas, atendimento: 0 }));
+      mapaPlano?.set(mes, this.somarContagem(mapaPlano.get(mes) ?? zero,
+        { programadas: item.planejadasPlano, executadas: item.executadasPlano, naoExecutadas: item.naoExecutadasPlano, atendimento: 0 }));
+    }
+    const resultado = new Map(CATEGORIAS_INDICADOR.map(c => [c, new Map<string, { atendimento: number; cumprimento: number }>()]));
+    for (const categoria of CATEGORIAS_INDICADOR) {
+      for (const [mes, g] of geralPorCategoria.get(categoria)!) {
+        resultado.get(categoria)!.set(mes, { atendimento: g.atendimento, cumprimento: (planoPorCategoria.get(categoria)!.get(mes) ?? zero).atendimento });
+      }
+    }
+    for (const { mes, porArea } of this.indicadoresPorMes()) {
+      for (const area of porArea) {
+        if (!area.categoria) continue;
+        resultado.get(area.categoria)?.set(mes, { atendimento: area.atendimento, cumprimento: area.cumprimentoPlano.atendimento });
+      }
+    }
+    const mesFiltro = this.mesFiltro();
+    for (const area of this.indicadores().porArea) {
+      if (!area.categoria) continue;
+      resultado.get(area.categoria)?.set(mesFiltro, { atendimento: area.atendimento, cumprimento: area.cumprimentoPlano.atendimento });
+    }
+    return resultado;
+  });
+
   // Geometria SVG (mesmo util do Relatório Semanal/Mensal PCM,
   // src/utils/relatorio-linha-tempo.ts — só troca a fonte dos pontos: em vez de ler
   // célula de planilha, vem do histórico importado + cálculo ao vivo acima). Enriquece
@@ -488,17 +681,33 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     };
   }
 
+  // "SET/26" — rótulo curto de mês pro eixo X do gráfico no modo Mensal (mesmos nomes
+  // de MESES_ABREV, ano com 2 dígitos pra não brigar por espaço com o rótulo semanal).
+  private labelMes(mesIso: string): string {
+    const [ano, mes] = mesIso.split('-');
+    return `${MESES_ABREV[Number(mes) - 1]}/${ano.slice(2)}`;
+  }
+
   linhaTempoGeral = computed(() => {
-    const pontos = this.pontosEvolucaoGeral().map(p => ({ label: `S${this.numeroSemanaISO(p.semana)}`, atendimento: p.atendimento, cumprimento: p.cumprimento }));
+    const pontos = this.modoPeriodo() === 'mes'
+      ? this.pontosEvolucaoGeralMensal().map(p => ({ label: this.labelMes(p.mes), atendimento: p.atendimento, cumprimento: p.cumprimento }))
+      : this.pontosEvolucaoGeral().map(p => ({ label: `S${this.numeroSemanaISO(p.semana)}`, atendimento: p.atendimento, cumprimento: p.cumprimento }));
     return this.enriquecerGeometria(calcularLinhaTempo(pontos), pontos);
   });
 
-  linhaTempoPorArea = computed(() => CATEGORIAS_INDICADOR.map(categoria => {
-    const pontos = [...(this.pontosEvolucaoPorArea().get(categoria) ?? new Map()).entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([semana, v]): PontoLinhaTempo => ({ label: `S${this.numeroSemanaISO(semana)}`, atendimento: v.atendimento, cumprimento: v.cumprimento }));
-    return { categoria, label: CATEGORIA_LABEL[categoria], geometria: this.enriquecerGeometria(calcularLinhaTempo(pontos), pontos) };
-  }));
+  linhaTempoPorArea = computed(() => {
+    const mensal = this.modoPeriodo() === 'mes';
+    const mapaPorCategoria = mensal ? this.pontosEvolucaoPorAreaMensal() : this.pontosEvolucaoPorArea();
+    return CATEGORIAS_INDICADOR.map(categoria => {
+      const pontos = [...(mapaPorCategoria.get(categoria) ?? new Map()).entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([chave, v]): PontoLinhaTempo => ({
+          label: mensal ? this.labelMes(chave) : `S${this.numeroSemanaISO(chave)}`,
+          atendimento: v.atendimento, cumprimento: v.cumprimento,
+        }));
+      return { categoria, label: CATEGORIA_LABEL[categoria], geometria: this.enriquecerGeometria(calcularLinhaTempo(pontos), pontos) };
+    });
+  });
 
   private somarContagem(a: ContagemExecucao, b: ContagemExecucao): ContagemExecucao {
     const programadas = a.programadas + b.programadas;
