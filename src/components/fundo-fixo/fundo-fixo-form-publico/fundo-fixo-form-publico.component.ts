@@ -110,6 +110,7 @@ export class FundoFixoFormPublicoComponent {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'request',
           nomeSolicitante: this.nomeSolicitante(),
           contato: this.contato(),
           setor: this.setor(),
@@ -138,10 +139,10 @@ export class FundoFixoFormPublicoComponent {
   }
 
   private async uploadOrcamento(file: File): Promise<string | null> {
-    const prepResp = await fetch('/api/fundo-fixo-public-upload-url', {
+    const prepResp = await fetch('/api/fundo-fixo-public-request', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contentType: file.type }),
+      body: JSON.stringify({ action: 'upload-url', contentType: file.type }),
     });
     const prep = await prepResp.json().catch(() => ({ success: false }));
     if (!prepResp.ok || !prep.success) return null;

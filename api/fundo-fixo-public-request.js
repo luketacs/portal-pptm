@@ -1,10 +1,24 @@
-// Serverless function: cria uma solicitação de compra do Fundo Fixo enviada pelo
-// formulário público (sem login). É a única forma de gravar sem sessão — o RLS
-// da tabela (auth.uid() IS NOT NULL) continua bloqueando insert anônimo direto no
-// banco; aqui a validação de quem pode escrever o quê é feita nesta função, com
-// os mesmos limites usados no formulário interno.
+// Serverless function: as duas ações do formulário público do Fundo Fixo (sem login),
+// num arquivo só — dispatcha por `body.action` ('upload-url' | 'request', default
+// 'request'). Juntadas pra não estourar o limite de 12 Serverless Functions por
+// deployment do plano Hobby da Vercel (cada arquivo em api/ conta como uma function
+// separada) — duas rotas pequenas e do mesmo formulário, sem motivo pra ficarem em
+// arquivos/deploys separados.
+//
+// 'request' cria a solicitação de compra em si. É a única forma de gravar sem sessão —
+// o RLS da tabela (auth.uid() IS NOT NULL) continua bloqueando insert anônimo direto no
+// banco; aqui a validação de quem pode escrever o quê é feita nesta function, com os
+// mesmos limites usados no formulário interno.
+//
+// 'upload-url' gera uma signed upload URL para o anexo de orçamento. O upload do
+// arquivo em si acontece direto do navegador pro Supabase Storage usando essa URL
+// assinada — não passa pelo corpo desta function, então não esbarra no limite de
+// payload do Vercel. O token assinado autoriza o upload sozinho, então a política do
+// bucket continua só permitindo INSERT autenticado — ninguém anônimo ganha acesso de
+// escrita direta.
 
 import { createClient } from '@supabase/supabase-js';
+import { randomUUID } from 'crypto';
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://portalpptm.com').split(',');
 const BUCKET = 'fundo-fixo-anexos';
@@ -13,20 +27,29 @@ const BUCKET = 'fundo-fixo-anexos';
 const SETORES = ['Manutenção', 'Operação', 'Infraestrutura', 'Outros'];
 const LIMITE_POR_COMPRA = 500;
 
-const RATE_LIMIT_WINDOW_MS = 60 * 1000;
-const RATE_LIMIT_MAX = 5;
-const rateLimitMap = new Map();
+const ALLOWED_TYPES = {
+  'application/pdf': 'pdf',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
 
-function checkRateLimit(ip) {
+// Um rate limit por ação — mesmos limites de cada function original (request: 5/min,
+// upload-url: 8/min, a URL assinada sozinha não grava nada, só "reserva" um caminho).
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const rateLimitMapRequest = new Map();
+const rateLimitMapUploadUrl = new Map();
+
+function checkRateLimit(map, ip, max) {
   const now = Date.now();
-  const entry = rateLimitMap.get(ip) || { count: 0, start: now };
+  const entry = map.get(ip) || { count: 0, start: now };
   if (now - entry.start > RATE_LIMIT_WINDOW_MS) {
-    rateLimitMap.set(ip, { count: 1, start: now });
+    map.set(ip, { count: 1, start: now });
     return true;
   }
-  if (entry.count >= RATE_LIMIT_MAX) return false;
+  if (entry.count >= max) return false;
   entry.count++;
-  rateLimitMap.set(ip, entry);
+  map.set(ip, entry);
   return true;
 }
 
@@ -40,26 +63,9 @@ function mesAtual() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export default async function handler(req, res) {
-  const origin = req.headers.origin || '';
-  const corsOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  res.setHeader('Access-Control-Allow-Origin', corsOrigin);
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Método não permitido.' });
-
-  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
-  if (!checkRateLimit(ip)) {
+async function handleRequest(req, res, ip, supabase) {
+  if (!checkRateLimit(rateLimitMapRequest, ip, 5)) {
     return res.status(429).json({ success: false, error: 'Muitas requisições. Tente novamente em instantes.' });
-  }
-
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    console.error('[fundo-fixo-public-request] Missing env vars');
-    return res.status(500).json({ success: false, error: 'Configuração do servidor incompleta.' });
   }
 
   const body = req.body || {};
@@ -87,8 +93,6 @@ export default async function handler(req, res) {
   if (orcamentoPath && !orcamentoPath.startsWith('publico/')) {
     return res.status(400).json({ success: false, error: 'Anexo inválido.' });
   }
-
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   let orcamentoUrl = null;
   if (orcamentoPath) {
@@ -137,4 +141,49 @@ export default async function handler(req, res) {
   });
 
   return res.status(200).json({ success: true });
+}
+
+async function handleUploadUrl(req, res, ip, supabase) {
+  if (!checkRateLimit(rateLimitMapUploadUrl, ip, 8)) {
+    return res.status(429).json({ success: false, error: 'Muitas requisições. Tente novamente em instantes.' });
+  }
+
+  const contentType = String(req.body?.contentType || '');
+  const ext = ALLOWED_TYPES[contentType];
+  if (!ext) {
+    return res.status(400).json({ success: false, error: 'Tipo de arquivo não permitido. Use PDF, JPG, PNG ou WEBP.' });
+  }
+
+  const path = `publico/${randomUUID()}.${ext}`;
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path);
+  if (error) {
+    console.error('[fundo-fixo-public-upload-url] Error:', error.message);
+    return res.status(500).json({ success: false, error: 'Erro ao preparar upload do anexo.' });
+  }
+
+  return res.status(200).json({ success: true, path: data.path, token: data.token });
+}
+
+export default async function handler(req, res) {
+  const origin = req.headers.origin || '';
+  const corsOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Método não permitido.' });
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[fundo-fixo-public-request] Missing env vars');
+    return res.status(500).json({ success: false, error: 'Configuração do servidor incompleta.' });
+  }
+
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+  if (req.body?.action === 'upload-url') return handleUploadUrl(req, res, ip, supabase);
+  return handleRequest(req, res, ip, supabase);
 }
