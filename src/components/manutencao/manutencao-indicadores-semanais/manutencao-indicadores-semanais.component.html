@@ -56,9 +56,6 @@
     @if (ultimaAtualizacaoEm(); as data) {
       <span class="text-xs text-gray-400">Atualizado às {{ data | date: 'HH:mm' }} — atualiza sozinho a cada poucos minutos</span>
     }
-    @if (isAdmin()) {
-      <span class="text-xs text-red-500 font-mono">[DEBUG TEMP] {{ debugApontamentos() | json }}</span>
-    }
     <button type="button" (click)="imprimir()" class="ml-auto text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
       Gerar Relatório (Imprimir / Salvar PDF)
     </button>
@@ -105,10 +102,7 @@
   <div class="pcm-report">
     <header class="pcm-header">
       <div class="pcm-logos">
-        <img src="/relatorio-pcm-logo-principal.svg" alt="PPTM" class="pcm-logo-principal" />
-        <div class="pcm-logo-secondary">
-          <img src="/relatorio-pcm-logo-secundaria.svg" alt="Logo Secundária" class="pcm-logo-secundaria" />
-        </div>
+        <img src="/company-logo.png" alt="Diamante — Geração de Energia" class="pcm-logo-diamante" />
       </div>
       <div class="pcm-company-info">
         <div class="pcm-company-name">PORTO DO PECÉM TRANSPORTADORA DE MINÉRIOS</div>
@@ -176,46 +170,83 @@
 
     <section class="pcm-section">
       <h2 class="pcm-section-title">Horas Apontadas por Técnico</h2>
-      @if (rankingHorasApontadas().length === 0) {
+      @if (rankingHorasApontadasEletrica().length === 0 && rankingHorasApontadasMecanica().length === 0) {
         <p class="pcm-empty">Nenhum apontamento de Elétrica/Mecânica nesse período.</p>
       } @else {
-        <div class="pcm-horas-tecnico-grid">
-          @for (item of rankingHorasApontadas(); track item.colaborador.matricula) {
-            <div class="pcm-horas-tecnico-card">
-              <div class="flex items-center justify-between mb-1.5">
-                <span class="text-sm font-semibold text-gray-700 truncate" [title]="item.colaborador.nome">{{ item.colaborador.nome }}</span>
-                <span class="text-xs text-gray-400 flex-shrink-0 ml-2">{{ item.colaborador.area }}</span>
-              </div>
-              <div class="space-y-1">
-                <div class="flex items-center gap-2 text-xs">
-                  <span class="w-20 text-gray-500 flex-shrink-0">Apontada</span>
-                  <div class="flex-1 bg-slate-100 rounded-full h-3 pcm-hh-barra-fundo">
-                    <div class="h-3 rounded-full pcm-hh-barra-fill pcm-hh-barra-fill--apontada" [style.width.%]="percentualBarraHoras(item.totalHoras, item.horasDisponiveis)"></div>
+        @if (rankingHorasApontadasEletrica().length > 0) {
+          <h3 class="pcm-horas-tecnico-subtitulo">Elétrica</h3>
+          <div class="pcm-horas-tecnico-grid">
+            @for (item of rankingHorasApontadasEletrica(); track item.colaborador.matricula) {
+              <div class="pcm-horas-tecnico-card">
+                <div class="text-sm font-semibold text-gray-700 truncate mb-1.5" [title]="item.colaborador.nome">{{ item.colaborador.nome }}</div>
+                <div class="space-y-1">
+                  <div class="flex items-center gap-2 text-xs">
+                    <span class="w-20 text-gray-500 flex-shrink-0">Apontada</span>
+                    <div class="flex-1 bg-slate-100 rounded-full h-3 pcm-hh-barra-fundo">
+                      <div class="h-3 rounded-full pcm-hh-barra-fill pcm-hh-barra-fill--apontada" [style.width.%]="percentualBarraHoras(item.totalHoras, item.horasDisponiveis)"></div>
+                    </div>
+                    <span class="w-12 text-right text-gray-600 font-semibold flex-shrink-0">{{ item.totalHoras }}h</span>
                   </div>
-                  <span class="w-12 text-right text-gray-600 font-semibold flex-shrink-0">{{ item.totalHoras }}h</span>
-                </div>
-                <div class="flex items-center gap-2 text-xs">
-                  <span class="w-20 text-gray-500 flex-shrink-0">Programada</span>
-                  <div class="flex-1 bg-slate-100 rounded-full h-3 pcm-hh-barra-fundo">
-                    <div class="h-3 rounded-full pcm-hh-barra-fill pcm-hh-barra-fill--programada" [style.width.%]="percentualBarraHoras(item.horasProgramadas, item.horasDisponiveis)"></div>
+                  <div class="flex items-center gap-2 text-xs">
+                    <span class="w-20 text-gray-500 flex-shrink-0">Programada</span>
+                    <div class="flex-1 bg-slate-100 rounded-full h-3 pcm-hh-barra-fundo">
+                      <div class="h-3 rounded-full pcm-hh-barra-fill pcm-hh-barra-fill--programada" [style.width.%]="percentualBarraHoras(item.horasProgramadas, item.horasDisponiveis)"></div>
+                    </div>
+                    <span class="w-12 text-right text-gray-600 font-semibold flex-shrink-0">{{ item.horasProgramadas }}h</span>
                   </div>
-                  <span class="w-12 text-right text-gray-600 font-semibold flex-shrink-0">{{ item.horasProgramadas }}h</span>
-                </div>
-                <div class="flex items-center gap-2 text-xs">
-                  <span class="w-20 text-gray-500 flex-shrink-0">Disponível</span>
-                  <div class="flex-1 bg-slate-100 rounded-full h-3 pcm-hh-barra-fundo">
-                    <div class="h-3 rounded-full pcm-hh-barra-fill pcm-hh-barra-fill--disponivel" style="width: 100%"></div>
+                  <div class="flex items-center gap-2 text-xs">
+                    <span class="w-20 text-gray-500 flex-shrink-0">Disponível</span>
+                    <div class="flex-1 bg-slate-100 rounded-full h-3 pcm-hh-barra-fundo">
+                      <div class="h-3 rounded-full pcm-hh-barra-fill pcm-hh-barra-fill--disponivel" style="width: 100%"></div>
+                    </div>
+                    <span class="w-12 text-right text-gray-600 font-semibold flex-shrink-0">{{ item.horasDisponiveis }}h</span>
                   </div>
-                  <span class="w-12 text-right text-gray-600 font-semibold flex-shrink-0">{{ item.horasDisponiveis }}h</span>
+                </div>
+                <div class="mt-1.5 text-right">
+                  <strong class="pcm-percentage">{{ item.eficiencia }}%</strong>
+                  <span class="text-xs text-gray-400"> eficiência</span>
                 </div>
               </div>
-              <div class="mt-1.5 text-right">
-                <strong class="pcm-percentage">{{ item.eficiencia }}%</strong>
-                <span class="text-xs text-gray-400"> eficiência</span>
+            }
+          </div>
+        }
+        @if (rankingHorasApontadasMecanica().length > 0) {
+          <h3 class="pcm-horas-tecnico-subtitulo">Mecânica</h3>
+          <div class="pcm-horas-tecnico-grid">
+            @for (item of rankingHorasApontadasMecanica(); track item.colaborador.matricula) {
+              <div class="pcm-horas-tecnico-card">
+                <div class="text-sm font-semibold text-gray-700 truncate mb-1.5" [title]="item.colaborador.nome">{{ item.colaborador.nome }}</div>
+                <div class="space-y-1">
+                  <div class="flex items-center gap-2 text-xs">
+                    <span class="w-20 text-gray-500 flex-shrink-0">Apontada</span>
+                    <div class="flex-1 bg-slate-100 rounded-full h-3 pcm-hh-barra-fundo">
+                      <div class="h-3 rounded-full pcm-hh-barra-fill pcm-hh-barra-fill--apontada" [style.width.%]="percentualBarraHoras(item.totalHoras, item.horasDisponiveis)"></div>
+                    </div>
+                    <span class="w-12 text-right text-gray-600 font-semibold flex-shrink-0">{{ item.totalHoras }}h</span>
+                  </div>
+                  <div class="flex items-center gap-2 text-xs">
+                    <span class="w-20 text-gray-500 flex-shrink-0">Programada</span>
+                    <div class="flex-1 bg-slate-100 rounded-full h-3 pcm-hh-barra-fundo">
+                      <div class="h-3 rounded-full pcm-hh-barra-fill pcm-hh-barra-fill--programada" [style.width.%]="percentualBarraHoras(item.horasProgramadas, item.horasDisponiveis)"></div>
+                    </div>
+                    <span class="w-12 text-right text-gray-600 font-semibold flex-shrink-0">{{ item.horasProgramadas }}h</span>
+                  </div>
+                  <div class="flex items-center gap-2 text-xs">
+                    <span class="w-20 text-gray-500 flex-shrink-0">Disponível</span>
+                    <div class="flex-1 bg-slate-100 rounded-full h-3 pcm-hh-barra-fundo">
+                      <div class="h-3 rounded-full pcm-hh-barra-fill pcm-hh-barra-fill--disponivel" style="width: 100%"></div>
+                    </div>
+                    <span class="w-12 text-right text-gray-600 font-semibold flex-shrink-0">{{ item.horasDisponiveis }}h</span>
+                  </div>
+                </div>
+                <div class="mt-1.5 text-right">
+                  <strong class="pcm-percentage">{{ item.eficiencia }}%</strong>
+                  <span class="text-xs text-gray-400"> eficiência</span>
+                </div>
               </div>
-            </div>
-          }
-        </div>
+            }
+          </div>
+        }
         <p class="text-xs text-gray-400 mt-2">Horas Programadas/Eficiência só calculadas pra Elétrica/Mecânica — mesma restrição do HH acima. Barras na escala da própria Hora Disponível do técnico.</p>
       }
     </section>

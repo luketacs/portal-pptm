@@ -448,12 +448,15 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     return dados.filter(a => a.data >= semana && a.data <= domingo);
   });
 
-  rankingHorasApontadas = computed<RankingItem[]>(() => {
-    const dados = this.apontamentosDoPeriodo();
-    const eletrica = this.apontamentosService.calcularStats(this.apontamentosService.filtrarPorEquipe(dados, 'eletrica'), 'eletrica').ranking;
-    const mecanica = this.apontamentosService.calcularStats(this.apontamentosService.filtrarPorEquipe(dados, 'mecanica'), 'mecanica').ranking;
-    return [...eletrica, ...mecanica].sort((a, b) => b.totalHoras - a.totalHoras || b.totalOS - a.totalOS);
-  });
+  // Elétrica e Mecânica separadas (não misturadas num ranking só) — cada uma ordenada
+  // por horas apontadas.
+  rankingHorasApontadasEletrica = computed<RankingItem[]>(() =>
+    this.apontamentosService.calcularStats(this.apontamentosService.filtrarPorEquipe(this.apontamentosDoPeriodo(), 'eletrica'), 'eletrica')
+      .ranking.slice().sort((a, b) => b.totalHoras - a.totalHoras || b.totalOS - a.totalOS));
+
+  rankingHorasApontadasMecanica = computed<RankingItem[]>(() =>
+    this.apontamentosService.calcularStats(this.apontamentosService.filtrarPorEquipe(this.apontamentosDoPeriodo(), 'mecanica'), 'mecanica')
+      .ranking.slice().sort((a, b) => b.totalHoras - a.totalHoras || b.totalOS - a.totalOS));
 
   // Largura da barra em % da própria Hora Disponível do técnico (referência = 100%) —
   // capada em 100 pra não estourar o container quando apontado/programado > disponível.
@@ -461,19 +464,6 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     return disponivel > 0 ? Math.min(100, Math.round((valor / disponivel) * 100)) : 0;
   }
 
-  // TEMP DEBUG — remover depois de achar por que a seção "Horas Apontadas por Técnico"
-  // aparece com todo mundo zerado mesmo com apontamento real no período, segundo o
-  // usuário. Mostra o funil sem precisar de acesso ao banco.
-  debugApontamentos = computed(() => ({
-    modoPeriodo: this.modoPeriodo(),
-    semanaFiltro: this.semanaFiltro(),
-    mesFiltro: this.mesFiltro(),
-    erroServico: this.apontamentosService.error(),
-    totalCarregado: this.apontamentosTodos().length,
-    totalNoPeriodo: this.apontamentosDoPeriodo().length,
-    primeirasDatasCarregadas: this.apontamentosTodos().slice(0, 3).map(a => a.data),
-    ultimasDatasCarregadas: this.apontamentosTodos().slice(-3).map(a => a.data),
-  }));
 
   imprimir(): void {
     window.print();

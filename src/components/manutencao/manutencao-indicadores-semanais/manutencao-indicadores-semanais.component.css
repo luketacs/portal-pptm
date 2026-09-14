@@ -67,11 +67,12 @@
 .pcm-linha-tempo-rotulo-final--atendimento { fill: #2e7d32; }
 .pcm-linha-tempo-rotulo-final--cumprimento { fill: #1565c0; }
 
-/* Cabeçalho leve (mesma linha da tabela abaixo) — logos com a cor real, sem o filtro
-   que achatava tudo em branco pra caber no fundo azul-marinho original. */
+/* Cabeçalho leve (mesma linha da tabela abaixo) — só o logo da Diamante (o mesmo PNG
+   usado no resto do Portal), sem as marcas do relatório PPTM original que este
+   cabeçalho reproduzia antes. */
 .pcm-header { background: linear-gradient(135deg, #e9eefc 0%, #d9e6fb 100%); color: #1e293b; }
-.pcm-logo-principal, .pcm-logo-secundaria { filter: none; opacity: 1; }
-.pcm-logo-secondary, .pcm-company-info { border-left-color: rgba(30, 58, 95, .15); }
+.pcm-logo-diamante { height: 46px; width: auto; object-fit: contain; }
+.pcm-company-info { border-left-color: rgba(30, 58, 95, .15); }
 .pcm-report-title { color: #475569; opacity: 1; }
 .pcm-periodo-info { background-color: rgba(255, 255, 255, .7); color: #334155; border: 1px solid rgba(30, 58, 95, .1); }
 .pcm-status-badge { color: #fff; }
@@ -123,3 +124,13 @@
   padding: 12px 14px;
   background: #fff;
 }
+
+.pcm-horas-tecnico-subtitulo {
+  font-size: .8rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin: 14px 0 8px;
+}
+.pcm-horas-tecnico-subtitulo:first-child { margin-top: 0; }
