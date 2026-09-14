@@ -343,6 +343,18 @@ export class ManutencaoPlanosComponent implements OnInit {
   formEquipamentosRelacionadosDigitando = signal('');
   formEquipamentosRelacionadosTexto = computed(() => this.formEquipamentosRelacionadosLista().join(', '));
 
+  // Catálogo pra autocomplete do campo acima — une o "equipamento" já cadastrado nos
+  // planos com o das ordens (algumas ordens usam um rótulo mais genérico, ex. "TC 05"
+  // pra linha inteira, que não existe como "equipamento" de nenhum plano específico).
+  // Continua sendo texto livre (datalist não bloqueia digitar algo fora da lista), só
+  // ajuda a não ficar "solto" digitando um nome que não bate com nada real.
+  catalogoEquipamentos = computed(() => {
+    const nomes = new Set<string>();
+    for (const p of this.manutencaoPlanosService.planos()) if (p.equipamento) nomes.add(p.equipamento);
+    for (const o of this.manutencaoProgramacaoService.ordens()) if (o.equipamento) nomes.add(o.equipamento);
+    return [...nomes].sort((a, b) => a.localeCompare(b));
+  });
+
   adicionarEquipamentoRelacionado(valor: string): void {
     const v = valor.trim();
     if (!v) return;
