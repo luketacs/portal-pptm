@@ -56,6 +56,20 @@ describe('calcularIndicadoresSemana', () => {
     expect(r.porArea.find(a => a.categoria === 'ELETRICA')).toBeUndefined();
   });
 
+  it('cumprimentoPlano de cada área só conta ordens daquela área que também são do plano', () => {
+    const ordens = [
+      ordem({ id: 'a', area: 'MECANICA', categoriaIndicador: 'MECANICA', numeroOs: '1', planoPreventivoId: 'p1' }),
+      ordem({ id: 'b', area: 'MECANICA', categoriaIndicador: 'MECANICA', numeroOs: '2', planoPreventivoId: null }),
+      ordem({ id: 'c', area: 'APOIO', categoriaIndicador: 'REFRIGERACAO', numeroOs: '3', planoPreventivoId: 'p2' }),
+    ];
+    const r = calcularIndicadoresSemana({ ordens, sigmaPorOs: {}, diasSemanaFallback: [], matchColaborador });
+    const mecanica = r.porArea.find(a => a.categoria === 'MECANICA')!;
+    expect(mecanica.programadas).toBe(2);
+    expect(mecanica.cumprimentoPlano.programadas).toBe(1);
+    const refrigeracao = r.porArea.find(a => a.categoria === 'REFRIGERACAO')!;
+    expect(refrigeracao.cumprimentoPlano.programadas).toBe(1);
+  });
+
   it('cumprimentoPlano só conta ordens com planoPreventivoId preenchido', () => {
     const ordens = [
       ordem({ id: 'a', numeroOs: '1', planoPreventivoId: 'plano-1' }),

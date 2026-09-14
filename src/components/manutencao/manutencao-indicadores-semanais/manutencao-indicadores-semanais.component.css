@@ -1,0 +1,3 @@
+/* Reaproveita a mesma linha do tempo SVG (geometria + estilo) já usada nos relatórios
+   Semanal/Mensal PCM — só a fonte dos pontos muda (cálculo ao vivo, não planilha). */
+@import '../../../styles/pcm-report-shared.css';

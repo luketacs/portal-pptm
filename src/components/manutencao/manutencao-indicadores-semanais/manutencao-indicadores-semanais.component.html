@@ -86,4 +86,94 @@
       </div>
     }
   </div>
+
+  <!-- Consolidado do ano até o momento -->
+  <div>
+    <h2 class="text-lg font-bold text-gray-800 mb-2">Consolidado do Ano</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div class="app-card p-4">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Atendimento à Programação</p>
+        <p class="text-3xl font-bold" [class]="corPercentual(consolidadoAno().geral.atendimento, metaAtendimento)">{{ consolidadoAno().geral.atendimento }}%</p>
+        <p class="text-sm text-gray-500 mt-1">{{ consolidadoAno().geral.executadas }} de {{ consolidadoAno().geral.programadas }} executadas no ano</p>
+      </div>
+      <div class="app-card p-4">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Cumprimento do Plano</p>
+        <p class="text-3xl font-bold" [class]="corPercentual(consolidadoAno().cumprimentoPlano.atendimento, metaCumprimento)">{{ consolidadoAno().cumprimentoPlano.atendimento }}%</p>
+        <p class="text-sm text-gray-500 mt-1">{{ consolidadoAno().cumprimentoPlano.executadas }} de {{ consolidadoAno().cumprimentoPlano.programadas }} planejadas do Plano no ano</p>
+      </div>
+      <div class="app-card p-4 flex flex-col justify-center items-start">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Status Geral do Ano</p>
+        <span class="text-sm font-bold px-3 py-1.5 rounded-full" [class]="statusCor(consolidadoAno().statusGeral)">{{ consolidadoAno().statusGeral }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Evolução ao longo do ano — geral -->
+  <div class="app-card p-4">
+    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Evolução ao Longo do Ano</p>
+    @if (linhaTempoGeral(); as lt) {
+      <div class="pcm-linha-tempo-bloco">
+        <svg [attr.viewBox]="'0 0 ' + lt.largura + ' ' + lt.altura" class="pcm-linha-tempo-svg">
+          @for (g of lt.eixoY; track g.label) {
+            <line [attr.x1]="lt.margem.esquerda" [attr.x2]="lt.largura - lt.margem.direita" [attr.y1]="g.posicao" [attr.y2]="g.posicao" class="pcm-linha-tempo-grid" />
+            <text [attr.x]="lt.margem.esquerda - 6" [attr.y]="g.posicao" class="pcm-linha-tempo-eixo-y">{{ g.label }}</text>
+          }
+          @for (l of lt.eixoX; track l.label) {
+            <text [attr.x]="l.posicao" [attr.y]="lt.altura - 8" class="pcm-linha-tempo-eixo-x">{{ l.label }}</text>
+          }
+          <polyline [attr.points]="lt.linhaCumprimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
+          <polyline [attr.points]="lt.linhaAtendimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
+          @for (p of lt.pontosCumprimento; track $index) {
+            <circle [attr.cx]="p.x" [attr.cy]="p.y" r="3" class="pcm-linha-tempo-ponto--cumprimento" />
+          }
+          @for (p of lt.pontosAtendimento; track $index) {
+            <circle [attr.cx]="p.x" [attr.cy]="p.y" r="3" class="pcm-linha-tempo-ponto--atendimento" />
+          }
+        </svg>
+        <div class="pcm-linha-tempo-legenda">
+          <span><span class="pcm-legenda-cor pcm-legenda-cor--atendimento"></span>Atendimento à Programação</span>
+          <span><span class="pcm-legenda-cor pcm-legenda-cor--cumprimento"></span>Cumprimento do Plano</span>
+        </div>
+      </div>
+    } @else {
+      <p class="pcm-empty text-sm text-gray-400">Sem dados suficientes ainda para montar a linha do tempo.</p>
+    }
+  </div>
+
+  <!-- Evolução ao longo do ano — por área -->
+  <div class="app-card p-4">
+    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Evolução ao Longo do Ano — por Área</p>
+    <div class="pcm-linha-tempo-grid-areas">
+      @for (item of linhaTempoPorArea(); track item.categoria) {
+        <div class="pcm-linha-tempo-area">
+          <h4 class="pcm-horas-grafico-area-titulo text-sm font-semibold text-gray-600">{{ item.label }}</h4>
+          @if (item.geometria; as lt) {
+            <svg [attr.viewBox]="'0 0 ' + lt.largura + ' ' + lt.altura" class="pcm-linha-tempo-svg">
+              @for (g of lt.eixoY; track g.label) {
+                <line [attr.x1]="lt.margem.esquerda" [attr.x2]="lt.largura - lt.margem.direita" [attr.y1]="g.posicao" [attr.y2]="g.posicao" class="pcm-linha-tempo-grid" />
+                <text [attr.x]="lt.margem.esquerda - 6" [attr.y]="g.posicao" class="pcm-linha-tempo-eixo-y">{{ g.label }}</text>
+              }
+              @for (l of lt.eixoX; track l.label) {
+                <text [attr.x]="l.posicao" [attr.y]="lt.altura - 8" class="pcm-linha-tempo-eixo-x">{{ l.label }}</text>
+              }
+              <polyline [attr.points]="lt.linhaCumprimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
+              <polyline [attr.points]="lt.linhaAtendimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
+              @for (p of lt.pontosCumprimento; track $index) {
+                <circle [attr.cx]="p.x" [attr.cy]="p.y" r="2.5" class="pcm-linha-tempo-ponto--cumprimento" />
+              }
+              @for (p of lt.pontosAtendimento; track $index) {
+                <circle [attr.cx]="p.x" [attr.cy]="p.y" r="2.5" class="pcm-linha-tempo-ponto--atendimento" />
+              }
+            </svg>
+          } @else {
+            <p class="pcm-empty text-sm text-gray-400">Sem dados suficientes.</p>
+          }
+        </div>
+      }
+    </div>
+    <div class="pcm-linha-tempo-legenda">
+      <span><span class="pcm-legenda-cor pcm-legenda-cor--atendimento"></span>Atendimento à Programação</span>
+      <span><span class="pcm-legenda-cor pcm-legenda-cor--cumprimento"></span>Cumprimento do Plano</span>
+    </div>
+  </div>
 </div>

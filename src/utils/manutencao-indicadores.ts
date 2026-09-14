@@ -49,6 +49,7 @@ export const CATEGORIA_LABEL: Record<CategoriaIndicador, string> = {
 
 export interface IndicadorArea extends ContagemExecucao {
   categoria: CategoriaIndicador | null; // null = "Não classificado" (Apoio sem categoria escolhida)
+  cumprimentoPlano: ContagemExecucao; // mesmo recorte de cumprimentoPlano da semana, só que restrito a essa área
 }
 
 export interface IndicadoresSemana {
@@ -71,11 +72,16 @@ export function calcularIndicadoresSemana(params: {
 
   const geral = calc(ordens);
 
+  const doPlano = ordens.filter(o => !!o.planoPreventivoId);
   const porArea: IndicadorArea[] = [...CATEGORIAS_INDICADOR, null]
-    .map(categoria => ({ categoria, ...calc(ordens.filter(o => o.categoriaIndicador === categoria)) }))
+    .map(categoria => ({
+      categoria,
+      ...calc(ordens.filter(o => o.categoriaIndicador === categoria)),
+      cumprimentoPlano: calc(doPlano.filter(o => o.categoriaIndicador === categoria)),
+    }))
     .filter(a => a.programadas > 0);
 
-  const cumprimentoPlano = calc(ordens.filter(o => !!o.planoPreventivoId));
+  const cumprimentoPlano = calc(doPlano);
 
   let statusGeral: StatusGeralSemana;
   if (geral.atendimento >= META_ATENDIMENTO && cumprimentoPlano.atendimento >= META_CUMPRIMENTO) {
