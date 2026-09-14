@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, WritableSignal, 
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ManutencaoProgramacaoService } from '../../../services/manutencao-programacao.service';
-import { ApontamentosService } from '../../../services/apontamentos.service';
+import { Apontamento, ApontamentosService, RankingItem } from '../../../services/apontamentos.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
@@ -136,6 +136,10 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   readonly icones = ICONES;
   errorMessage = signal('');
   private pollId: ReturnType<typeof setInterval> | null = null;
+  // Apontamentos crus (tabela `apontamentos`, importada do SIGMA) — só pra Horas
+  // Apontadas x Programadas x Disponíveis por técnico (ver rankingHorasApontadas
+  // abaixo). Carregado uma vez no ngOnInit, igual ao resto dos dados da tela.
+  private apontamentosTodos = signal<Apontamento[]>([]);
 
   constructor(
     private manutencaoService: ManutencaoProgramacaoService,
@@ -190,6 +194,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       await this.apontamentosService.loadColaboradores();
       await this.manutencaoService.loadFerias();
       await this.historicoService.load();
+      this.apontamentosTodos.set(await this.apontamentosService.loadApontamentos());
     } catch {
       this.errorMessage.set('Erro ao carregar os indicadores da semana.');
     }
@@ -424,6 +429,30 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       disponivel: Math.round(liquido * 100) / 100,
       indisponivel: Math.round((bruto - liquido) * 100) / 100,
     };
+  });
+
+  // ── Horas Apontadas x Programadas x Disponíveis por técnico ────────────────
+  // Mesmo dado ao vivo (tabela `apontamentos`, importada do SIGMA) e mesma fórmula já
+  // usados na tela de Apontamentos (ApontamentosService.calcularStats) — só reaproveita,
+  // não recalcula nada diferente. Só Elétrica/Mecânica: "Horas Programadas" só existe
+  // calculada pra essas duas equipes lá (mesma restrição que já vale pro HH acima —
+  // Apoio programa por equipe/empresa, sem disponibilidade individual cadastrada).
+  private apontamentosDoPeriodo = computed(() => {
+    const dados = this.apontamentosTodos().filter(a => !!a.data);
+    if (this.modoPeriodo() === 'mes') {
+      const mes = this.mesFiltro();
+      return dados.filter(a => a.data.startsWith(mes));
+    }
+    const semana = this.semanaFiltro();
+    const domingo = diasDaSemana(semana)[6].data;
+    return dados.filter(a => a.data >= semana && a.data <= domingo);
+  });
+
+  rankingHorasApontadas = computed<RankingItem[]>(() => {
+    const dados = this.apontamentosDoPeriodo();
+    const eletrica = this.apontamentosService.calcularStats(this.apontamentosService.filtrarPorEquipe(dados, 'eletrica'), 'eletrica').ranking;
+    const mecanica = this.apontamentosService.calcularStats(this.apontamentosService.filtrarPorEquipe(dados, 'mecanica'), 'mecanica').ranking;
+    return [...eletrica, ...mecanica].sort((a, b) => b.totalHoras - a.totalHoras || b.totalOS - a.totalOS);
   });
 
   imprimir(): void {

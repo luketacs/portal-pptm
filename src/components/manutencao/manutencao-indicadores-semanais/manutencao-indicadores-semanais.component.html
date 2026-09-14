@@ -172,6 +172,41 @@
     </section>
 
     <section class="pcm-section">
+      <h2 class="pcm-section-title">Horas Apontadas por Técnico</h2>
+      @if (rankingHorasApontadas().length === 0) {
+        <p class="pcm-empty">Nenhum apontamento de Elétrica/Mecânica nesse período.</p>
+      } @else {
+        <div class="pcm-table-container">
+          <table class="pcm-table">
+            <thead>
+              <tr>
+                <th>Técnico</th>
+                <th>Equipe</th>
+                <th>Horas Apontadas</th>
+                <th>Horas Programadas</th>
+                <th>Horas Disponíveis</th>
+                <th>Eficiência</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (item of rankingHorasApontadas(); track item.colaborador.matricula; let i = $index) {
+                <tr [class]="i % 2 === 0 ? 'pcm-even-row' : 'pcm-odd-row'">
+                  <td class="pcm-area-name">{{ item.colaborador.nome }}</td>
+                  <td>{{ item.colaborador.area }}</td>
+                  <td>{{ item.totalHoras }}h</td>
+                  <td>{{ item.horasProgramadas }}h</td>
+                  <td>{{ item.horasDisponiveis }}h</td>
+                  <td><strong class="pcm-percentage">{{ item.eficiencia }}%</strong></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <p class="text-xs text-gray-400 mt-2">Horas Programadas/Eficiência só calculadas pra Elétrica/Mecânica — mesma restrição do HH acima.</p>
+      }
+    </section>
+
+    <section class="pcm-section">
       <h2 class="pcm-section-title">Desempenho por Área</h2>
       @if (indicadores().porArea.length === 0) {
         <p class="pcm-empty">Nenhuma ordem programada nessa semana.</p>
