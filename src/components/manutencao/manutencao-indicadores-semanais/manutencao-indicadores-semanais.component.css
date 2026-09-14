@@ -51,6 +51,15 @@
   to   { r: 13; opacity: 0; }
 }
 
+/* Cabeçalho leve (mesma linha da tabela abaixo) — logos com a cor real, sem o filtro
+   que achatava tudo em branco pra caber no fundo azul-marinho original. */
+.pcm-header { background: linear-gradient(135deg, #e9eefc 0%, #d9e6fb 100%); color: #1e293b; }
+.pcm-logo-principal, .pcm-logo-secundaria { filter: none; opacity: 1; }
+.pcm-logo-secondary, .pcm-company-info { border-left-color: rgba(30, 58, 95, .15); }
+.pcm-report-title { color: #475569; opacity: 1; }
+.pcm-periodo-info { background-color: rgba(255, 255, 255, .7); color: #334155; border: 1px solid rgba(30, 58, 95, .1); }
+.pcm-status-badge { color: #fff; }
+
 /* "Desempenho por Área" troca o cabeçalho azul-marinho do documento impresso (os
    relatórios PCM continuam com ele) por um visual leve — cabeçalho claro com texto
    escuro, sem zebra (linhas só com borda fina + hover), números alinhados. */
