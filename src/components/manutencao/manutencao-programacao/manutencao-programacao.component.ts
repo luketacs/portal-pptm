@@ -1392,15 +1392,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   formEquipamentosRelacionadosDigitando = signal('');
   formEquipamentosRelacionadosTexto = computed(() => this.formEquipamentosRelacionadosLista().join(', '));
 
-  // Catálogo pra autocomplete do campo acima — mesma fonte usada na tela de Planos (une
-  // o "equipamento" dos planos com o das ordens já cadastradas), pra não ficar digitando
-  // um nome "solto" que não bate com nada real.
-  catalogoEquipamentos = computed(() => {
-    const nomes = new Set<string>();
-    for (const p of this.manutencaoPlanosService.planos()) if (p.equipamento) nomes.add(p.equipamento);
-    for (const o of this.manutencaoService.ordens()) if (o.equipamento) nomes.add(o.equipamento);
-    return [...nomes].sort((a, b) => a.localeCompare(b));
-  });
+  // Autocomplete do campo acima reaproveita o catálogo fixo `equipamentos()` (linha
+  // ~647, public/equipamentos.json) já usado no dropdown "Equipamento" deste mesmo
+  // formulário — não precisa de um computed novo.
   // Recursos vira uma lista de "chips" (outros técnicos e/ou equipamentos) em vez de um
   // texto livre único — permite marcar vários ajudantes numa OS só. Continua salvo como
   // texto (join por vírgula) no banco, sem precisar mudar o schema.

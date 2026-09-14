@@ -102,8 +102,14 @@ export class ManutencaoPlanosComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     try {
       // Carrega as ordens junto (não só os planos) — a tela de histórico precisa delas
-      // pra juntar cada ciclo com a ordem que ele gerou.
-      await Promise.all([this.manutencaoPlanosService.load(), this.manutencaoProgramacaoService.load()]);
+      // pra juntar cada ciclo com a ordem que ele gerou. loadEquipamentos() carrega o
+      // catálogo fixo de equipamentos (public/equipamentos.json) usado no autocomplete
+      // de "Outros equipamentos no Quadro de LOTO".
+      await Promise.all([
+        this.manutencaoPlanosService.load(),
+        this.manutencaoProgramacaoService.load(),
+        this.manutencaoProgramacaoService.loadEquipamentos(),
+      ]);
     } catch {
       this.errorMessage.set('Erro ao carregar os planos de manutenção.');
     }
@@ -343,17 +349,12 @@ export class ManutencaoPlanosComponent implements OnInit {
   formEquipamentosRelacionadosDigitando = signal('');
   formEquipamentosRelacionadosTexto = computed(() => this.formEquipamentosRelacionadosLista().join(', '));
 
-  // Catálogo pra autocomplete do campo acima — une o "equipamento" já cadastrado nos
-  // planos com o das ordens (algumas ordens usam um rótulo mais genérico, ex. "TC 05"
-  // pra linha inteira, que não existe como "equipamento" de nenhum plano específico).
-  // Continua sendo texto livre (datalist não bloqueia digitar algo fora da lista), só
-  // ajuda a não ficar "solto" digitando um nome que não bate com nada real.
-  catalogoEquipamentos = computed(() => {
-    const nomes = new Set<string>();
-    for (const p of this.manutencaoPlanosService.planos()) if (p.equipamento) nomes.add(p.equipamento);
-    for (const o of this.manutencaoProgramacaoService.ordens()) if (o.equipamento) nomes.add(o.equipamento);
-    return [...nomes].sort((a, b) => a.localeCompare(b));
-  });
+  // Catálogo pra autocomplete do campo acima — mesmo catálogo fixo (public/
+  // equipamentos.json) usado no dropdown "Equipamento" da Nova OS, não o texto livre
+  // de cada plano (que tem centenas de descrições diferentes, ex. "CLP/INVERSORES
+  // TC05" — o que faz sentido aqui é a linha/equipamento cadastrado, ex. "TC 05").
+  // Continua sendo texto livre (datalist não bloqueia digitar algo fora da lista).
+  catalogoEquipamentos = computed(() => this.manutencaoProgramacaoService.equipamentos());
 
   adicionarEquipamentoRelacionado(valor: string): void {
     const v = valor.trim();
