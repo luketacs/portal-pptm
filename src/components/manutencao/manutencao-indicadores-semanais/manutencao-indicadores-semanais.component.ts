@@ -9,10 +9,11 @@ import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { ManutencaoIndicadoresHistoricoService } from '../../../services/manutencao-indicadores-historico.service';
 import { CategoriaIndicador, ConsultaSigmaResultado, ImportarIndicadorHistoricoItem, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
 import {
-  CATEGORIAS_INDICADOR, CATEGORIA_LABEL, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO, calcularIndicadoresSemana,
+  CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
+  StatusGeralSemana, calcularIndicadoresSemana,
 } from '../../../utils/manutencao-indicadores';
 import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, suavizarAreaPath, suavizarPath } from '../../../utils/relatorio-linha-tempo';
-import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoSemanas, extrairHistoricoSemanasPorArea } from '../../../utils/relatorio-semanal-pcm';
+import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
 import { HhEquipamento, KpiExecucao, calcularHhTecnico, calcularKpiExecucao, hhPorEquipamento, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
 import { encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 
@@ -460,20 +461,66 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     return { categoria, label: CATEGORIA_LABEL[categoria], geometria: this.enriquecerGeometria(calcularLinhaTempo(pontos), pontos) };
   }));
 
+  private somarContagem(a: ContagemExecucao, b: ContagemExecucao): ContagemExecucao {
+    const programadas = a.programadas + b.programadas;
+    const executadas = a.executadas + b.executadas;
+    return {
+      programadas, executadas, naoExecutadas: programadas - executadas,
+      atendimento: programadas > 0 ? Math.round((executadas / programadas) * 10000) / 100 : 0,
+    };
+  }
+
   // Soma todas as semanas do ano corrente (não o histórico inteiro, que pode cruzar
-  // virada de ano) numa única agregação — reaproveita calcularIndicadoresSemana direto,
-  // sem nenhuma fórmula nova: "ano até o momento" é só "várias semanas juntas".
+  // virada de ano), pra bater com o total anual da planilha antiga. Duas fontes, sem
+  // sobreposição na prática (semanasHistoricoIso só começa na S37/2026, quando a
+  // Programação nativa passou a existir):
+  // - Semanas ao vivo (S37/2026 em diante): recalcula a partir das ordens reais, igual
+  //   sempre foi (reaproveita calcularIndicadoresSemana direto).
+  // - Semanas de antes disso: não têm ordem real no Portal, só o que foi importado da
+  //   planilha (ver "Importar histórico") — soma direto as contagens brutas gravadas na
+  //   importação. Antes, essas semanas ficavam de fora inteiramente (só tinha % agregado
+  //   guardado, sem contagem por trás pra somar), o que deixava o Consolidado do Ano bem
+  //   abaixo do valor real da planilha.
   consolidadoAno = computed<IndicadoresSemana>(() => {
     const anoAtual = new Date().getFullYear();
-    const semanasDoAno = new Set(this.semanasHistoricoIso().filter(s => Number(s.slice(0, 4)) === anoAtual));
-    // ordemExecutadaAgrupada usa a semanaInicio de cada ordem pra achar a janela certa
-    // (não um "dia da semana" único externo) — funciona sem ambiguidade mesmo somando
-    // ordens de várias semanas diferentes num agregado só.
-    return calcularIndicadoresSemana({
-      ordens: this.ordensTipo().filter(o => semanasDoAno.has(o.semanaInicio)),
+    const semanasAoVivoDoAno = new Set(this.semanasHistoricoIso().filter(s => Number(s.slice(0, 4)) === anoAtual));
+
+    const aoVivo = calcularIndicadoresSemana({
+      ordens: this.ordensTipo().filter(o => semanasAoVivoDoAno.has(o.semanaInicio)),
       sigmaPorOs: this.sigmaPorOs(),
       matchColaborador: this.matchColaborador,
     });
+
+    const historicoDoAno = this.historicoService.itens().filter(item =>
+      Number(item.semanaInicio.slice(0, 4)) === anoAtual && !semanasAoVivoDoAno.has(item.semanaInicio));
+
+    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 0 };
+    const somarHistorico = (categoria: CategoriaIndicador | 'GERAL', plano: boolean) => historicoDoAno
+      .filter(i => i.categoria === categoria)
+      .reduce((acc, i) => this.somarContagem(acc, plano
+        ? { programadas: i.planejadasPlano, executadas: i.executadasPlano, naoExecutadas: i.naoExecutadasPlano, atendimento: 0 }
+        : { programadas: i.programadas, executadas: i.executadas, naoExecutadas: i.naoExecutadas, atendimento: 0 }), zero);
+
+    const geral = this.somarContagem(aoVivo.geral, somarHistorico('GERAL', false));
+    const cumprimentoPlano = this.somarContagem(aoVivo.cumprimentoPlano, somarHistorico('GERAL', true));
+
+    const porArea: IndicadorArea[] = CATEGORIAS_INDICADOR
+      .map((categoria): IndicadorArea => {
+        const areaAoVivo = aoVivo.porArea.find(a => a.categoria === categoria);
+        return {
+          categoria,
+          ...this.somarContagem(areaAoVivo ?? zero, somarHistorico(categoria, false)),
+          cumprimentoPlano: this.somarContagem(areaAoVivo?.cumprimentoPlano ?? zero, somarHistorico(categoria, true)),
+        };
+      })
+      .filter(a => a.programadas > 0);
+
+    let statusGeral: StatusGeralSemana;
+    if (geral.atendimento >= META_ATENDIMENTO && cumprimentoPlano.atendimento >= META_CUMPRIMENTO) statusGeral = 'Dentro da Meta';
+    else if (geral.atendimento >= META_ATENDIMENTO * 0.9 || cumprimentoPlano.atendimento >= META_CUMPRIMENTO * 0.9) statusGeral = 'Próximo da Meta';
+    else statusGeral = 'Abaixo da Meta';
+
+    return { geral, cumprimentoPlano, porArea, statusGeral };
   });
 
   // Mesmas cores do badge "STATUS GERAL" do Relatório Semanal/Mensal PCM
@@ -520,14 +567,24 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       const paraSemanaInicio = (label: string) => paraIso(this.segundaDaSemanaISO(ano, Number(label.replace('S', ''))));
       const itens: ImportarIndicadorHistoricoItem[] = [];
 
-      for (const ponto of extrairHistoricoSemanas(rows, 53)) {
-        itens.push({ semanaInicio: paraSemanaInicio(ponto.label), categoria: 'GERAL', atendimento: ponto.atendimento, cumprimento: ponto.cumprimento });
+      for (const ponto of extrairHistoricoContagens(rows, 53)) {
+        itens.push({
+          semanaInicio: paraSemanaInicio(ponto.label), categoria: 'GERAL',
+          programadas: ponto.programadas, executadas: ponto.executadas, naoExecutadas: ponto.naoExecutadas,
+          planejadasPlano: ponto.planejadasPlano, executadasPlano: ponto.executadasPlano, naoExecutadasPlano: ponto.naoExecutadasPlano,
+          atendimento: ponto.atendimento, cumprimento: ponto.cumprimento,
+        });
       }
       for (const areaPcm of AREAS_LINHA_TEMPO_SEPARADA) {
         const categoria = AREA_PCM_PARA_CATEGORIA[areaPcm];
         if (!categoria) continue;
-        for (const ponto of extrairHistoricoSemanasPorArea(rows, 53, areaPcm)) {
-          itens.push({ semanaInicio: paraSemanaInicio(ponto.label), categoria, atendimento: ponto.atendimento, cumprimento: ponto.cumprimento });
+        for (const ponto of extrairHistoricoContagensPorArea(rows, 53, areaPcm)) {
+          itens.push({
+            semanaInicio: paraSemanaInicio(ponto.label), categoria,
+            programadas: ponto.programadas, executadas: ponto.executadas, naoExecutadas: ponto.naoExecutadas,
+            planejadasPlano: ponto.planejadasPlano, executadasPlano: ponto.executadasPlano, naoExecutadasPlano: ponto.naoExecutadasPlano,
+            atendimento: ponto.atendimento, cumprimento: ponto.cumprimento,
+          });
         }
       }
 

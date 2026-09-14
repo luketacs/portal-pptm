@@ -7,6 +7,12 @@ interface IndicadorHistoricoRow {
   id: string;
   semana_inicio: string;
   categoria: string;
+  programadas: number;
+  executadas: number;
+  nao_executadas: number;
+  planejadas_plano: number;
+  executadas_plano: number;
+  nao_executadas_plano: number;
   atendimento: number;
   cumprimento: number;
   importado_por_id: string | null;
@@ -19,6 +25,12 @@ function mapRow(r: IndicadorHistoricoRow): IndicadorHistoricoSemana {
     id: r.id,
     semanaInicio: r.semana_inicio,
     categoria: r.categoria as CategoriaIndicador | 'GERAL',
+    programadas: Number(r.programadas),
+    executadas: Number(r.executadas),
+    naoExecutadas: Number(r.nao_executadas),
+    planejadasPlano: Number(r.planejadas_plano),
+    executadasPlano: Number(r.executadas_plano),
+    naoExecutadasPlano: Number(r.nao_executadas_plano),
     atendimento: Number(r.atendimento),
     cumprimento: Number(r.cumprimento),
     importadoPorId: r.importado_por_id,
@@ -73,6 +85,12 @@ export class ManutencaoIndicadoresHistoricoService {
         itens.map(item => ({
           semana_inicio: item.semanaInicio,
           categoria: item.categoria,
+          programadas: item.programadas,
+          executadas: item.executadas,
+          nao_executadas: item.naoExecutadas,
+          planejadas_plano: item.planejadasPlano,
+          executadas_plano: item.executadasPlano,
+          nao_executadas_plano: item.naoExecutadasPlano,
           atendimento: item.atendimento,
           cumprimento: item.cumprimento,
           importado_por_id: user.id,

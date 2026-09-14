@@ -328,6 +328,84 @@ export function extrairHistoricoSemanasPorArea(rows: unknown[][], semanaAte: num
   return pontos;
 }
 
+export interface PontoHistoricoIndicador {
+  label: string;
+  programadas: number;
+  executadas: number;
+  naoExecutadas: number;
+  planejadasPlano: number;
+  executadasPlano: number;
+  naoExecutadasPlano: number;
+  atendimento: number;
+  cumprimento: number;
+}
+
+// Mesma leitura de extrairHistoricoSemanas, mas devolvendo também as contagens brutas
+// (não só o %) — usado pelo "Importar histórico" da tela de Indicadores Semanais: o
+// Consolidado do Ano soma "quantidade de ordens" ano inteiro, e isso não dá pra
+// derivar de um percentual já calculado (perde a informação de quantas ordens tinha
+// por trás). Funções separadas de extrairHistoricoSemanas/PorArea (que continuam só
+// com %) pra não arriscar nada no Relatório Semanal/Mensal PCM, que só precisa do %.
+export function extrairHistoricoContagens(rows: unknown[][], semanaAte: number): PontoHistoricoIndicador[] {
+  const linhaSemanas = rows[LINHA_SEMANAS] ?? [];
+  const pontos: PontoHistoricoIndicador[] = [];
+  for (let semana = 1; semana <= semanaAte; semana++) {
+    const coluna = encontrarColunaSemana(linhaSemanas, semana);
+    if (coluna === null) continue;
+    let programadas = 0, executadas = 0, naoExecutadas = 0, planejadasPlano = 0, executadasPlano = 0, naoExecutadasPlano = 0;
+    for (const { linhaBase } of AREAS_PCM) {
+      const p = safeNumericCell(rows, linhaBase, coluna);
+      if (p === 0) continue;
+      programadas += p;
+      executadas += safeNumericCell(rows, linhaBase + 1, coluna);
+      naoExecutadas += safeNumericCell(rows, linhaBase + 2, coluna);
+      planejadasPlano += safeNumericCell(rows, linhaBase + 3, coluna);
+      executadasPlano += safeNumericCell(rows, linhaBase + 4, coluna);
+      naoExecutadasPlano += safeNumericCell(rows, linhaBase + 5, coluna);
+    }
+    if (programadas === 0) continue;
+    pontos.push({
+      label: `S${semana}`,
+      programadas: Math.trunc(programadas), executadas: Math.trunc(executadas), naoExecutadas: Math.trunc(naoExecutadas),
+      planejadasPlano: Math.trunc(planejadasPlano), executadasPlano: Math.trunc(executadasPlano), naoExecutadasPlano: Math.trunc(naoExecutadasPlano),
+      atendimento: round2((executadas / programadas) * 100),
+      // Mesma regra de calcularTotaisSemana: sem plano pra semana, mas com ordens
+      // programadas de verdade, fica em 100% (não tinha o que cumprir).
+      cumprimento: planejadasPlano > 0 ? round2((executadasPlano / planejadasPlano) * 100) : 100,
+    });
+  }
+  return pontos;
+}
+
+// Mesma ideia de extrairHistoricoContagens, mas pra uma única área — usado pra
+// popular o histórico por categoria (AREAS_LINHA_TEMPO_SEPARADA) com contagem.
+export function extrairHistoricoContagensPorArea(rows: unknown[][], semanaAte: number, nomeArea: string): PontoHistoricoIndicador[] {
+  const areaInfo = AREAS_PCM.find(a => a.nome === nomeArea);
+  if (!areaInfo) return [];
+
+  const linhaSemanas = rows[LINHA_SEMANAS] ?? [];
+  const pontos: PontoHistoricoIndicador[] = [];
+  for (let semana = 1; semana <= semanaAte; semana++) {
+    const coluna = encontrarColunaSemana(linhaSemanas, semana);
+    if (coluna === null) continue;
+    const programadas = safeNumericCell(rows, areaInfo.linhaBase, coluna);
+    if (programadas === 0) continue;
+    const executadas = safeNumericCell(rows, areaInfo.linhaBase + 1, coluna);
+    const naoExecutadas = safeNumericCell(rows, areaInfo.linhaBase + 2, coluna);
+    const planejadasPlano = safeNumericCell(rows, areaInfo.linhaBase + 3, coluna);
+    const executadasPlano = safeNumericCell(rows, areaInfo.linhaBase + 4, coluna);
+    const naoExecutadasPlano = safeNumericCell(rows, areaInfo.linhaBase + 5, coluna);
+    pontos.push({
+      label: `S${semana}`,
+      programadas: Math.trunc(programadas), executadas: Math.trunc(executadas), naoExecutadas: Math.trunc(naoExecutadas),
+      planejadasPlano: Math.trunc(planejadasPlano), executadasPlano: Math.trunc(executadasPlano), naoExecutadasPlano: Math.trunc(naoExecutadasPlano),
+      atendimento: round2((executadas / programadas) * 100),
+      cumprimento: planejadasPlano > 0 ? round2((executadasPlano / planejadasPlano) * 100) : 100,
+    });
+  }
+  return pontos;
+}
+
 export function analisarPontosAtencaoEAcoes(
   dados: DadosSemana,
 ): { pontosAtencao: PontoAtencao[]; acoesPrioritarias: AcaoPrioritaria[] } {

@@ -288,6 +288,14 @@ export interface IndicadorHistoricoSemana {
   id: string;
   semanaInicio: string; // 'YYYY-MM-DD', segunda-feira da semana
   categoria: CategoriaIndicador | 'GERAL'; // 'GERAL' = soma de todas as áreas
+  // Contagens brutas (além do %) — sem elas o Consolidado do Ano não tem como somar
+  // "quantidade de ordens" ano inteiro, só a média dos percentuais já calculados.
+  programadas: number;
+  executadas: number;
+  naoExecutadas: number;
+  planejadasPlano: number;
+  executadasPlano: number;
+  naoExecutadasPlano: number;
   atendimento: number;
   cumprimento: number;
   importadoPorId: string | null;
@@ -298,6 +306,12 @@ export interface IndicadorHistoricoSemana {
 export interface ImportarIndicadorHistoricoItem {
   semanaInicio: string;
   categoria: CategoriaIndicador | 'GERAL';
+  programadas: number;
+  executadas: number;
+  naoExecutadas: number;
+  planejadasPlano: number;
+  executadasPlano: number;
+  naoExecutadasPlano: number;
   atendimento: number;
   cumprimento: number;
 }

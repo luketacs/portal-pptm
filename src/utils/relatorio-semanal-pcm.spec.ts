@@ -1,6 +1,7 @@
 import {
   AREAS_PCM, DadosSemana, analisarPontosAtencaoEAcoes, calcularPeriodoSemana,
-  encontrarColunaSemana, extrairHistoricoSemanas, extrairHistoricoSemanasPorArea, gerarDestaques, parseIndicadoresSemanais,
+  encontrarColunaSemana, extrairHistoricoContagens, extrairHistoricoContagensPorArea, extrairHistoricoSemanas, extrairHistoricoSemanasPorArea,
+  gerarDestaques, parseIndicadoresSemanais,
 } from './relatorio-semanal-pcm';
 
 describe('calcularPeriodoSemana', () => {
@@ -237,6 +238,69 @@ describe('extrairHistoricoSemanasPorArea', () => {
       { label: 'S1', atendimento: 100, cumprimento: 100 },
       { label: 'S2', atendimento: 90, cumprimento: 100 },
     ]);
+  });
+});
+
+// Igual montarPlanilhaMultiSemanas, mas também preenche naoExecutadas (+2) e
+// naoExecutadasPlano (+5) — extrairHistoricoContagens/PorArea usa essas duas colunas
+// também, não só programadas/executadas/plano.
+function montarPlanilhaContagens(
+  porSemana: Record<number, [prog: number, exec: number, naoExec: number, planPlano: number, execPlano: number, naoExecPlano: number]>,
+): unknown[][] {
+  const rows: unknown[][] = [];
+  rows[5] = [];
+  const { linhaBase } = AREAS_PCM[0];
+  for (const [semanaStr, [prog, exec, naoExec, planPlano, execPlano, naoExecPlano]] of Object.entries(porSemana)) {
+    const semana = Number(semanaStr);
+    const col = 5 + semana;
+    rows[5][col] = semana;
+    rows[linhaBase] = rows[linhaBase] ?? []; rows[linhaBase][col] = prog;
+    rows[linhaBase + 1] = rows[linhaBase + 1] ?? []; rows[linhaBase + 1][col] = exec;
+    rows[linhaBase + 2] = rows[linhaBase + 2] ?? []; rows[linhaBase + 2][col] = naoExec;
+    rows[linhaBase + 3] = rows[linhaBase + 3] ?? []; rows[linhaBase + 3][col] = planPlano;
+    rows[linhaBase + 4] = rows[linhaBase + 4] ?? []; rows[linhaBase + 4][col] = execPlano;
+    rows[linhaBase + 5] = rows[linhaBase + 5] ?? []; rows[linhaBase + 5][col] = naoExecPlano;
+  }
+  return rows;
+}
+
+describe('extrairHistoricoContagens', () => {
+  it('extrai programadas/executadas/naoExecutadas/plano além do %, uma semana por vez', () => {
+    const rows = montarPlanilhaContagens({
+      1: [10, 7, 3, 5, 4, 1], // 70% / 80%
+    });
+    const pontos = extrairHistoricoContagens(rows, 1);
+    expect(pontos).toEqual([
+      { label: 'S1', programadas: 10, executadas: 7, naoExecutadas: 3, planejadasPlano: 5, executadasPlano: 4, naoExecutadasPlano: 1, atendimento: 70, cumprimento: 80 },
+    ]);
+  });
+
+  it('pula semana sem nenhuma ordem programada', () => {
+    const rows = montarPlanilhaContagens({ 1: [10, 10, 0, 10, 10, 0] });
+    expect(extrairHistoricoContagens(rows, 3).map(p => p.label)).toEqual(['S1']);
+  });
+});
+
+describe('extrairHistoricoContagensPorArea', () => {
+  it('extrai a contagem de uma área específica (não a soma geral)', () => {
+    const rows: unknown[][] = [];
+    rows[5] = [];
+    const linhaBase = AREAS_PCM.find(a => a.nome === 'ELÉTRICA')!.linhaBase;
+    rows[5][6] = 1;
+    rows[linhaBase] = []; rows[linhaBase][6] = 20;
+    rows[linhaBase + 1] = []; rows[linhaBase + 1][6] = 18;
+    rows[linhaBase + 2] = []; rows[linhaBase + 2][6] = 2;
+    rows[linhaBase + 3] = []; rows[linhaBase + 3][6] = 6;
+    rows[linhaBase + 4] = []; rows[linhaBase + 4][6] = 5;
+    rows[linhaBase + 5] = []; rows[linhaBase + 5][6] = 1;
+    const pontos = extrairHistoricoContagensPorArea(rows, 1, 'ELÉTRICA');
+    expect(pontos).toEqual([
+      { label: 'S1', programadas: 20, executadas: 18, naoExecutadas: 2, planejadasPlano: 6, executadasPlano: 5, naoExecutadasPlano: 1, atendimento: 90, cumprimento: 83.33 },
+    ]);
+  });
+
+  it('retorna lista vazia quando a área não existe', () => {
+    expect(extrairHistoricoContagensPorArea([], 5, 'AREA INEXISTENTE')).toEqual([]);
   });
 });
 
