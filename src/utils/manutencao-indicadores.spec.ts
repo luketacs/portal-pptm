@@ -107,7 +107,7 @@ describe('calcularIndicadoresSemana', () => {
   });
 
   it('status "Próximo da Meta" quando pelo menos um dos dois indicadores passa de 90% da meta', () => {
-    // META_CUMPRIMENTO * 0.9 = 83.7 -> 85% de cumprimento entra em "Próximo", mesmo com
+    // META_CUMPRIMENTO * 0.9 = 85.5 -> 100% de cumprimento entra em "Próximo", mesmo com
     // atendimento geral baixo.
     const ordens = [
       ordem({ id: 'a', numeroOs: '1', tipoServico: 'PREVENTIVA', tecnicoMatricula: '111', diasPrevistos: ['2026-09-21'] }),

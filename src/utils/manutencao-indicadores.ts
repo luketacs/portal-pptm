@@ -9,8 +9,8 @@ import { ordemExecutadaAgrupada } from './manutencao-dashboard';
 
 export type StatusGeralSemana = 'Dentro da Meta' | 'Próximo da Meta' | 'Abaixo da Meta';
 
-export const META_ATENDIMENTO = 91.0;
-export const META_CUMPRIMENTO = 93.0;
+export const META_ATENDIMENTO = 95.0;
+export const META_CUMPRIMENTO = 95.0;
 
 function round2(v: number): number {
   return Math.round(v * 100) / 100;
