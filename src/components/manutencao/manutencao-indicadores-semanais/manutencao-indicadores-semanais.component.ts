@@ -7,12 +7,14 @@ import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { ManutencaoIndicadoresHistoricoService } from '../../../services/manutencao-indicadores-historico.service';
-import { CategoriaIndicador, ConsultaSigmaResultado, ImportarIndicadorHistoricoItem } from '../../../models/manutencao-programacao.model';
+import { CategoriaIndicador, ConsultaSigmaResultado, ImportarIndicadorHistoricoItem, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO, calcularIndicadoresSemana,
 } from '../../../utils/manutencao-indicadores';
 import { PontoLinhaTempo, calcularLinhaTempo } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoSemanas, extrairHistoricoSemanasPorArea } from '../../../utils/relatorio-semanal-pcm';
+import { HhEquipamento, KpiExecucao, calcularHhTecnico, calcularKpiExecucao, hhPorEquipamento, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
+import { encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 
 // Nomes de área do relatório PCM antigo -> categoria desta tela (mesmo recorte de 5,
 // já sem "Lubrificação" — dentro de Mecânica — nem "Operação" separada de "Limp
@@ -52,6 +54,10 @@ function diasDaSemana(segundaIso: string): { data: string; label: string }[] {
     const d = new Date(ano, mes - 1, dia + i);
     return { data: paraIso(d), label };
   });
+}
+
+function normalizarTexto(v: string): string {
+  return v.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
 }
 
 // Reaproveita o mesmo intervalo do proxy do SIGMA (cache de 10min no servidor, ver
@@ -101,6 +107,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     try {
       await this.manutencaoService.load();
       await this.apontamentosService.loadColaboradores();
+      await this.manutencaoService.loadFerias();
       await this.historicoService.load();
     } catch {
       this.errorMessage.set('Erro ao carregar os indicadores da semana.');
@@ -207,6 +214,63 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     diasSemanaFallback: this.diasDaSemanaAtual().map(d => d.data),
     matchColaborador: this.matchColaborador,
   }));
+
+  // ── Migrado do Dashboard da Programação (src/components/manutencao/
+  // manutencao-dashboard/) — essa tela substitui o Dashboard, então essas métricas
+  // (Corretivas/Preventivas, Exames/Folgas, HH) vêm pra cá antes dele ser removido.
+  private ordemExecutadaAgrupadaLocal(ordens: ManutencaoOrdem[]): boolean[] {
+    return ordemExecutadaAgrupada(ordens, this.sigmaPorOs(), this.diasDaSemanaAtual().map(d => d.data), this.matchColaborador);
+  }
+
+  kpiCorretivas = computed<KpiExecucao>(() =>
+    calcularKpiExecucao(this.ordemExecutadaAgrupadaLocal(this.ordensDaSemana().filter(o => o.tipoServico?.trim().toUpperCase() === 'CORRETIVA')).map(executada => ({ executada }))));
+
+  kpiPreventivas = computed<KpiExecucao>(() =>
+    calcularKpiExecucao(this.ordemExecutadaAgrupadaLocal(this.ordensDaSemana().filter(o => o.tipoServico?.trim().toUpperCase() === 'PREVENTIVA')).map(executada => ({ executada }))));
+
+  qtdExames = computed(() => this.manutencaoService.ordens().filter(o => o.semanaInicio === this.semanaFiltro() && o.tipo === 'exame_medico').length);
+  qtdFolgas = computed(() => this.manutencaoService.ordens().filter(o => o.semanaInicio === this.semanaFiltro() && o.tipo === 'folga').length);
+
+  private hhPorEquipamentoTodos = computed<HhEquipamento[]>(() => hhPorEquipamento(this.ordensDaSemana()));
+  hhPorEquipamentoTop10 = computed(() => this.hhPorEquipamentoTodos().slice(0, 10));
+  hhPorEquipamentoMax = computed(() => this.hhPorEquipamentoTop10()[0]?.horas ?? 0);
+
+  // HH só faz sentido pra Elétrica/Mecânica (Apoio programa por equipe/empresa, sem
+  // disponibilidade individual cadastrada) — soma as duas juntas, já que esta tela não
+  // filtra por área como o Dashboard filtrava.
+  private tecnicosParaHh = computed(() =>
+    this.apontamentosService.colaboradores().filter(c => {
+      const t = normalizarTexto(c.area);
+      return t.includes('ELETR') || t.includes('MECAN');
+    }));
+
+  hhTotais = computed(() => {
+    const dias = this.diasDaSemanaAtual();
+    const ferias = this.manutencaoService.ferias();
+    const ordensDaSemanaTodas = this.manutencaoService.ordens().filter(o => o.semanaInicio === this.semanaFiltro());
+    let bruto = 0;
+    let liquido = 0;
+    for (const colaborador of this.tecnicosParaHh()) {
+      const ordensDoTecnico = ordensDaSemanaTodas.filter(o => o.tecnicoNome === colaborador.nome);
+      const r = calcularHhTecnico({
+        dias,
+        disponibilidadePorDia: new Map(dias.map(d => [d.data, this.apontamentosService.disponibilidadeNoDia(colaborador, d.data)])),
+        diasFolga: new Set(ordensDoTecnico.filter(o => o.tipo === 'folga').flatMap(o => o.diasPrevistos)),
+        diasExameMedico: new Set(ordensDoTecnico.filter(o => o.tipo === 'exame_medico').flatMap(o => o.diasPrevistos)),
+        feriasIntervalo: encontrarFeriasNoIntervalo(ferias, colaborador.nome, dias.map(d => d.data)),
+      });
+      bruto += r.bruto;
+      liquido += r.liquido;
+    }
+    return {
+      disponivel: Math.round(liquido * 100) / 100,
+      indisponivel: Math.round((bruto - liquido) * 100) / 100,
+    };
+  });
+
+  imprimir(): void {
+    window.print();
+  }
 
   // ── Evolução ao Longo do Ano + Consolidado do Ano ──────────────────────
 
