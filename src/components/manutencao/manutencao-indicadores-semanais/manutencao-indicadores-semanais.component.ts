@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, WritableSignal, computed, effect, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, WritableSignal, computed, effect, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ManutencaoProgramacaoService } from '../../../services/manutencao-programacao.service';
@@ -173,8 +173,14 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   atendimentoAnimado = signal(0);
   cumprimentoAnimado = signal(0);
 
+  // Lido com untracked(): sem isso, o effect() que chama esta função (ver constructor)
+  // passa a depender do próprio destino() que ELE mesmo escreve (via destino.set() no
+  // rAF abaixo) — cada frame da animação reescreve o signal, o que reagenda o effect,
+  // que reinicia a animação do zero a partir do ponto atual, pra sempre. Resultado
+  // visível: em vez de uma transição suave, o número fica "andando de um em um"
+  // (às vezes até parecendo diminuir), nunca convergindo de fato pro valor real.
   private animarContador(alvo: number, destino: WritableSignal<number>): void {
-    const inicio = destino();
+    const inicio = untracked(() => destino());
     if (Math.abs(inicio - alvo) < 0.05) { destino.set(alvo); return; }
     const duracaoMs = 900;
     const t0 = performance.now();
