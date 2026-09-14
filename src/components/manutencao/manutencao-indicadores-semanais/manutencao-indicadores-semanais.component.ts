@@ -394,6 +394,17 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     return resultado;
   });
 
+  // TEMP DEBUG — remover depois de achar por que o gráfico de Evolução fica preso em
+  // 0%: expõe os valores brutos que decidem qual é a "última semana" do gráfico, pra
+  // comparar com a semana que a tabela/cards mostram (semanaFiltro), sem precisar de
+  // acesso ao banco.
+  debugSemanas = computed(() => ({
+    semanaFiltro: this.semanaFiltro(),
+    ultimaSemanaHistoricoIso: this.semanasHistoricoIso()[this.semanasHistoricoIso().length - 1] ?? null,
+    totalSemanasHistoricoIso: this.semanasHistoricoIso().length,
+    ultimoPontoGeral: this.pontosEvolucaoGeral()[this.pontosEvolucaoGeral().length - 1] ?? null,
+  }));
+
   private indicadoresPorSemana = computed(() => {
     const sigmaPorOs = this.sigmaPorOs();
     const ordensTipo = this.ordensParaFechamento();
