@@ -279,3 +279,25 @@ export interface EditarManutencaoOrdemRequest {
   planoPreventivoId: string | null;
   checklist: string[] | null;
 }
+
+// Ponto de indicador semanal importado da planilha "Painel de Indicadores de PCM" —
+// cobre as semanas de ANTES da Programação nativa existir (antes da S37/2026), quando
+// atendimento/cumprimento não davam pra calcular a partir de manutencao_programacao.
+// Ver Acompanhamento de Indicadores Semanais ("Importar histórico").
+export interface IndicadorHistoricoSemana {
+  id: string;
+  semanaInicio: string; // 'YYYY-MM-DD', segunda-feira da semana
+  categoria: CategoriaIndicador | 'GERAL'; // 'GERAL' = soma de todas as áreas
+  atendimento: number;
+  cumprimento: number;
+  importadoPorId: string | null;
+  importadoPorNome: string;
+  importadoEm: Date;
+}
+
+export interface ImportarIndicadorHistoricoItem {
+  semanaInicio: string;
+  categoria: CategoriaIndicador | 'GERAL';
+  atendimento: number;
+  cumprimento: number;
+}

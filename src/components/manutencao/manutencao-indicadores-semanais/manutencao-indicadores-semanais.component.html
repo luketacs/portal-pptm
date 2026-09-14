@@ -1,12 +1,12 @@
 <div class="space-y-4">
-  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+  <div class="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-3">
     <div>
       <h1 class="text-2xl font-bold text-gray-800">Acompanhamento de Indicadores Semanais</h1>
       <p class="text-sm text-gray-500 mt-0.5">Atendimento à Programação e Cumprimento do Plano, calculados ao vivo a partir da execução apontada no SIGMA.</p>
     </div>
   </div>
 
-  <div class="app-card p-4 flex flex-wrap items-end gap-4">
+  <div class="no-print app-card p-4 flex flex-wrap items-end gap-4">
     <div>
       <label class="block text-xs font-medium text-gray-600 mb-1">Semana</label>
       <select [ngModel]="semanaFiltro()" (ngModelChange)="semanaFiltro.set($event)"
@@ -27,153 +27,256 @@
     @if (ultimaAtualizacaoEm(); as data) {
       <span class="text-xs text-gray-400">Atualizado às {{ data | date: 'HH:mm' }} — atualiza sozinho a cada poucos minutos</span>
     }
+    @if (isAdmin()) {
+      <button type="button" (click)="importarAberto.set(!importarAberto())" class="ml-auto text-sm text-slate-600 hover:text-slate-800 font-semibold">
+        {{ importarAberto() ? 'Fechar importar histórico' : 'Importar histórico (Excel)' }}
+      </button>
+    }
   </div>
 
-  @if (errorMessage()) {
-    <div class="app-card p-4 text-sm text-red-600">{{ errorMessage() }}</div>
+  @if (isAdmin() && importarAberto()) {
+    <div class="no-print app-card p-4 space-y-3 max-w-xl">
+      <div>
+        <p class="text-sm font-medium text-slate-700">Planilha "Painel de Indicadores de PCM" (.xlsx)</p>
+        <p class="text-xs text-gray-400 mt-0.5">Aba "Indicadores Semanais" — preenche as semanas de antes da Programação nativa existir (antes da S37/2026), que ficam gravadas e entram na Evolução/Consolidado do Ano junto com as semanas calculadas ao vivo.</p>
+      </div>
+      <div class="flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Arquivo</label>
+          <label class="cursor-pointer inline-block">
+            <input type="file" accept=".xlsx" class="hidden" (change)="onArquivoImportacaoSelecionado($event)" />
+            <span class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
+              {{ arquivoImportacao()?.name ?? 'Selecionar planilha' }}
+            </span>
+          </label>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Ano</label>
+          <input type="number" min="2020" max="2035" [ngModel]="anoImportacao()" (ngModelChange)="anoImportacao.set($event)"
+            class="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <button type="button" (click)="confirmarImportarHistorico()" [disabled]="!arquivoImportacao() || importando()"
+          class="rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 disabled:opacity-50">
+          {{ importando() ? 'Importando...' : 'Importar' }}
+        </button>
+      </div>
+    </div>
   }
 
-  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-    <div class="app-card p-4">
-      <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Atendimento à Programação</p>
-      <p class="text-3xl font-bold" [class]="corPercentual(indicadores().geral.atendimento, metaAtendimento)">{{ indicadores().geral.atendimento }}%</p>
-      <p class="text-sm text-gray-500 mt-1">{{ indicadores().geral.executadas }} de {{ indicadores().geral.programadas }} executadas · meta {{ metaAtendimento }}%</p>
-    </div>
-    <div class="app-card p-4">
-      <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Cumprimento do Plano</p>
-      <p class="text-3xl font-bold" [class]="corPercentual(indicadores().cumprimentoPlano.atendimento, metaCumprimento)">{{ indicadores().cumprimentoPlano.atendimento }}%</p>
-      <p class="text-sm text-gray-500 mt-1">{{ indicadores().cumprimentoPlano.executadas }} de {{ indicadores().cumprimentoPlano.programadas }} planejadas do Plano · meta {{ metaCumprimento }}%</p>
-    </div>
-    <div class="app-card p-4 flex flex-col justify-center items-start">
-      <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Status Geral</p>
-      <span class="text-sm font-bold px-3 py-1.5 rounded-full" [class]="statusCor(indicadores().statusGeral)">{{ indicadores().statusGeral }}</span>
-    </div>
-  </div>
+  @if (errorMessage()) {
+    <div class="no-print app-card p-4 text-sm text-red-600">{{ errorMessage() }}</div>
+  }
 
-  <div class="app-card p-4">
-    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Desempenho por Área</p>
-    @if (indicadores().porArea.length === 0) {
-      <p class="text-sm text-gray-400">Nenhuma ordem programada nessa semana.</p>
-    } @else {
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-left text-xs font-semibold text-gray-500 uppercase border-b border-slate-200">
-              <th class="py-2 pr-3">Área</th>
-              <th class="py-2 pr-3 text-right">Programadas</th>
-              <th class="py-2 pr-3 text-right">Executadas</th>
-              <th class="py-2 pr-3 text-right">Não Executadas</th>
-              <th class="py-2 pr-3 text-right">Atendimento</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (a of indicadores().porArea; track (a.categoria ?? 'null')) {
-              <tr class="border-b border-slate-100 last:border-0">
-                <td class="py-2 pr-3 font-medium text-gray-700">
-                  {{ a.categoria ? categoriaLabel[a.categoria] : 'Não classificado' }}
-                  @if (!a.categoria) {
-                    <span class="ml-1 text-xs text-amber-600" title="Ordem de Apoio sem categoria escolhida — editar e classificar">⚠</span>
-                  }
-                </td>
-                <td class="py-2 pr-3 text-right">{{ a.programadas }}</td>
-                <td class="py-2 pr-3 text-right">{{ a.executadas }}</td>
-                <td class="py-2 pr-3 text-right">{{ a.naoExecutadas }}</td>
-                <td class="py-2 pr-3 text-right font-semibold" [class]="corPercentual(a.atendimento, metaAtendimento)">{{ a.atendimento }}%</td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    }
-  </div>
-
-  <!-- Consolidado do ano até o momento -->
-  <div>
-    <h2 class="text-lg font-bold text-gray-800 mb-2">Consolidado do Ano</h2>
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <div class="app-card p-4">
-        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Atendimento à Programação</p>
-        <p class="text-3xl font-bold" [class]="corPercentual(consolidadoAno().geral.atendimento, metaAtendimento)">{{ consolidadoAno().geral.atendimento }}%</p>
-        <p class="text-sm text-gray-500 mt-1">{{ consolidadoAno().geral.executadas }} de {{ consolidadoAno().geral.programadas }} executadas no ano</p>
-      </div>
-      <div class="app-card p-4">
-        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Cumprimento do Plano</p>
-        <p class="text-3xl font-bold" [class]="corPercentual(consolidadoAno().cumprimentoPlano.atendimento, metaCumprimento)">{{ consolidadoAno().cumprimentoPlano.atendimento }}%</p>
-        <p class="text-sm text-gray-500 mt-1">{{ consolidadoAno().cumprimentoPlano.executadas }} de {{ consolidadoAno().cumprimentoPlano.programadas }} planejadas do Plano no ano</p>
-      </div>
-      <div class="app-card p-4 flex flex-col justify-center items-start">
-        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Status Geral do Ano</p>
-        <span class="text-sm font-bold px-3 py-1.5 rounded-full" [class]="statusCor(consolidadoAno().statusGeral)">{{ consolidadoAno().statusGeral }}</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Evolução ao longo do ano — geral -->
-  <div class="app-card p-4">
-    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Evolução ao Longo do Ano</p>
-    @if (linhaTempoGeral(); as lt) {
-      <div class="pcm-linha-tempo-bloco">
-        <svg [attr.viewBox]="'0 0 ' + lt.largura + ' ' + lt.altura" class="pcm-linha-tempo-svg">
-          @for (g of lt.eixoY; track g.label) {
-            <line [attr.x1]="lt.margem.esquerda" [attr.x2]="lt.largura - lt.margem.direita" [attr.y1]="g.posicao" [attr.y2]="g.posicao" class="pcm-linha-tempo-grid" />
-            <text [attr.x]="lt.margem.esquerda - 6" [attr.y]="g.posicao" class="pcm-linha-tempo-eixo-y">{{ g.label }}</text>
-          }
-          @for (l of lt.eixoX; track l.label) {
-            <text [attr.x]="l.posicao" [attr.y]="lt.altura - 8" class="pcm-linha-tempo-eixo-x">{{ l.label }}</text>
-          }
-          <polyline [attr.points]="lt.linhaCumprimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
-          <polyline [attr.points]="lt.linhaAtendimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
-          @for (p of lt.pontosCumprimento; track $index) {
-            <circle [attr.cx]="p.x" [attr.cy]="p.y" r="3" class="pcm-linha-tempo-ponto--cumprimento" />
-          }
-          @for (p of lt.pontosAtendimento; track $index) {
-            <circle [attr.cx]="p.x" [attr.cy]="p.y" r="3" class="pcm-linha-tempo-ponto--atendimento" />
-          }
-        </svg>
-        <div class="pcm-linha-tempo-legenda">
-          <span><span class="pcm-legenda-cor pcm-legenda-cor--atendimento"></span>Atendimento à Programação</span>
-          <span><span class="pcm-legenda-cor pcm-legenda-cor--cumprimento"></span>Cumprimento do Plano</span>
+  <div class="pcm-report">
+    <header class="pcm-header">
+      <div class="pcm-logos">
+        <img src="/relatorio-pcm-logo-principal.svg" alt="PPTM" class="pcm-logo-principal" />
+        <div class="pcm-logo-secondary">
+          <img src="/relatorio-pcm-logo-secundaria.svg" alt="Logo Secundária" class="pcm-logo-secundaria" />
         </div>
       </div>
-    } @else {
-      <p class="pcm-empty text-sm text-gray-400">Sem dados suficientes ainda para montar a linha do tempo.</p>
-    }
-  </div>
+      <div class="pcm-company-info">
+        <div class="pcm-company-name">PORTO DO PECÉM TRANSPORTADORA DE MINÉRIOS</div>
+        <div class="pcm-report-title">Acompanhamento de Indicadores Semanais — PPTM</div>
+      </div>
+      <div class="pcm-report-info">
+        <div><strong>SEMANA:</strong> {{ semanaFiltro() }}</div>
+        <div class="pcm-status-badge" [style.background-color]="statusCor(indicadores().statusGeral)">
+          STATUS GERAL: {{ indicadores().statusGeral }}
+        </div>
+      </div>
+    </header>
 
-  <!-- Evolução ao longo do ano — por área -->
-  <div class="app-card p-4">
-    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Evolução ao Longo do Ano — por Área</p>
-    <div class="pcm-linha-tempo-grid-areas">
-      @for (item of linhaTempoPorArea(); track item.categoria) {
-        <div class="pcm-linha-tempo-area">
-          <h4 class="pcm-horas-grafico-area-titulo text-sm font-semibold text-gray-600">{{ item.label }}</h4>
-          @if (item.geometria; as lt) {
-            <svg [attr.viewBox]="'0 0 ' + lt.largura + ' ' + lt.altura" class="pcm-linha-tempo-svg">
-              @for (g of lt.eixoY; track g.label) {
-                <line [attr.x1]="lt.margem.esquerda" [attr.x2]="lt.largura - lt.margem.direita" [attr.y1]="g.posicao" [attr.y2]="g.posicao" class="pcm-linha-tempo-grid" />
-                <text [attr.x]="lt.margem.esquerda - 6" [attr.y]="g.posicao" class="pcm-linha-tempo-eixo-y">{{ g.label }}</text>
+    <section class="pcm-section">
+      <h2 class="pcm-section-title">Resumo Executivo</h2>
+      <div class="pcm-cards">
+        <div class="pcm-card pcm-card--green">
+          <div class="pcm-card-title">Atendimento à Programação</div>
+          <div class="pcm-card-value">{{ indicadores().geral.atendimento }}%</div>
+          <div class="pcm-card-meta">Meta: {{ metaAtendimento }}%</div>
+        </div>
+        <div class="pcm-card pcm-card--blue">
+          <div class="pcm-card-title">Cumprimento do Plano</div>
+          <div class="pcm-card-value">{{ indicadores().cumprimentoPlano.atendimento }}%</div>
+          <div class="pcm-card-meta">Meta: {{ metaCumprimento }}%</div>
+        </div>
+        <div class="pcm-card pcm-card--purple">
+          <div class="pcm-card-title">OS's Executadas</div>
+          <div class="pcm-card-value">{{ indicadores().geral.executadas }}/{{ indicadores().geral.programadas }}</div>
+        </div>
+        <div class="pcm-card pcm-card--orange">
+          <div class="pcm-card-title">OS's Não Executadas</div>
+          <div class="pcm-card-value">{{ indicadores().geral.naoExecutadas }}</div>
+        </div>
+        <div class="pcm-card pcm-card--teal">
+          <div class="pcm-card-title">OS's Planejadas Plano</div>
+          <div class="pcm-card-value">{{ indicadores().cumprimentoPlano.programadas }}</div>
+          <div class="pcm-card-meta">{{ indicadores().cumprimentoPlano.executadas }} executadas do plano</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pcm-section">
+      <h2 class="pcm-section-title">Desempenho por Área</h2>
+      @if (indicadores().porArea.length === 0) {
+        <p class="pcm-empty">Nenhuma ordem programada nessa semana.</p>
+      } @else {
+        <div class="pcm-table-container">
+          <table class="pcm-table">
+            <thead>
+              <tr>
+                <th rowspan="2" style="min-width: 150px;">Área</th>
+                <th colspan="5" class="pcm-subheader-atendimento">Atendimento à Programação</th>
+                <th colspan="5" class="pcm-subheader-cumprimento">Cumprimento do Plano</th>
+              </tr>
+              <tr>
+                <th>Programadas</th>
+                <th>Executadas</th>
+                <th>Não Executadas</th>
+                <th>Atendimento</th>
+                <th>Status</th>
+                <th>Planejadas</th>
+                <th>Executadas</th>
+                <th>Não Executadas</th>
+                <th>Cumprimento</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (a of indicadores().porArea; track (a.categoria ?? 'null'); let i = $index) {
+                <tr [class]="i % 2 === 0 ? 'pcm-even-row' : 'pcm-odd-row'">
+                  <td class="pcm-area-name">
+                    {{ a.categoria ? categoriaLabel[a.categoria] : 'Não classificado' }}
+                    @if (!a.categoria) {
+                      <span class="ml-1 text-xs text-amber-600" title="Ordem de Apoio sem categoria escolhida — editar e classificar">⚠</span>
+                    }
+                  </td>
+                  <td>{{ a.programadas }}</td>
+                  <td>{{ a.executadas }}</td>
+                  <td>{{ a.naoExecutadas }}</td>
+                  <td><strong class="pcm-percentage">{{ a.atendimento }}%</strong></td>
+                  <td>
+                    <span class="pcm-status-indicator" [class.pcm-status-meta]="a.atendimento >= metaAtendimento" [class.pcm-status-alert]="a.atendimento < metaAtendimento">
+                      {{ a.atendimento >= metaAtendimento ? 'Meta' : (a.atendimento + '%') }}
+                    </span>
+                  </td>
+                  <td>{{ a.cumprimentoPlano.programadas }}</td>
+                  <td>{{ a.cumprimentoPlano.executadas }}</td>
+                  <td>{{ a.cumprimentoPlano.naoExecutadas }}</td>
+                  <td><strong class="pcm-percentage">{{ a.cumprimentoPlano.atendimento }}%</strong></td>
+                  <td>
+                    <span class="pcm-status-indicator" [class.pcm-status-meta]="a.cumprimentoPlano.atendimento >= metaCumprimento" [class.pcm-status-alert]="a.cumprimentoPlano.atendimento < metaCumprimento">
+                      {{ a.cumprimentoPlano.atendimento >= metaCumprimento ? 'Meta' : (a.cumprimentoPlano.atendimento + '%') }}
+                    </span>
+                  </td>
+                </tr>
               }
-              @for (l of lt.eixoX; track l.label) {
-                <text [attr.x]="l.posicao" [attr.y]="lt.altura - 8" class="pcm-linha-tempo-eixo-x">{{ l.label }}</text>
-              }
-              <polyline [attr.points]="lt.linhaCumprimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
-              <polyline [attr.points]="lt.linhaAtendimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
-              @for (p of lt.pontosCumprimento; track $index) {
-                <circle [attr.cx]="p.x" [attr.cy]="p.y" r="2.5" class="pcm-linha-tempo-ponto--cumprimento" />
-              }
-              @for (p of lt.pontosAtendimento; track $index) {
-                <circle [attr.cx]="p.x" [attr.cy]="p.y" r="2.5" class="pcm-linha-tempo-ponto--atendimento" />
-              }
-            </svg>
-          } @else {
-            <p class="pcm-empty text-sm text-gray-400">Sem dados suficientes.</p>
-          }
+            </tbody>
+            <tfoot>
+              <tr>
+                <td class="pcm-area-name">TOTAL GERAL</td>
+                <td>{{ indicadores().geral.programadas }}</td>
+                <td>{{ indicadores().geral.executadas }}</td>
+                <td>{{ indicadores().geral.naoExecutadas }}</td>
+                <td><strong>{{ indicadores().geral.atendimento }}%</strong></td>
+                <td></td>
+                <td>{{ indicadores().cumprimentoPlano.programadas }}</td>
+                <td>{{ indicadores().cumprimentoPlano.executadas }}</td>
+                <td>{{ indicadores().cumprimentoPlano.naoExecutadas }}</td>
+                <td><strong>{{ indicadores().cumprimentoPlano.atendimento }}%</strong></td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       }
-    </div>
-    <div class="pcm-linha-tempo-legenda">
-      <span><span class="pcm-legenda-cor pcm-legenda-cor--atendimento"></span>Atendimento à Programação</span>
-      <span><span class="pcm-legenda-cor pcm-legenda-cor--cumprimento"></span>Cumprimento do Plano</span>
-    </div>
+    </section>
+
+    <section class="pcm-section">
+      <h2 class="pcm-section-title">Consolidado do Ano</h2>
+      <div class="pcm-cards">
+        <div class="pcm-card pcm-card--green">
+          <div class="pcm-card-title">Atendimento à Programação</div>
+          <div class="pcm-card-value">{{ consolidadoAno().geral.atendimento }}%</div>
+          <div class="pcm-card-meta">{{ consolidadoAno().geral.executadas }} de {{ consolidadoAno().geral.programadas }} executadas no ano</div>
+        </div>
+        <div class="pcm-card pcm-card--blue">
+          <div class="pcm-card-title">Cumprimento do Plano</div>
+          <div class="pcm-card-value">{{ consolidadoAno().cumprimentoPlano.atendimento }}%</div>
+          <div class="pcm-card-meta">{{ consolidadoAno().cumprimentoPlano.executadas }} de {{ consolidadoAno().cumprimentoPlano.programadas }} planejadas do Plano</div>
+        </div>
+        <div class="pcm-card pcm-card--teal">
+          <div class="pcm-card-title">Status Geral do Ano</div>
+          <div class="pcm-card-value" [style.color]="statusCor(consolidadoAno().statusGeral)" style="font-size: 1.1rem;">{{ consolidadoAno().statusGeral }}</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pcm-section">
+      <h2 class="pcm-section-title">Evolução ao Longo do Ano</h2>
+      @if (linhaTempoGeral(); as lt) {
+        <div class="pcm-linha-tempo-bloco">
+          <svg [attr.viewBox]="'0 0 ' + lt.largura + ' ' + lt.altura" class="pcm-linha-tempo-svg">
+            @for (g of lt.eixoY; track g.label) {
+              <line [attr.x1]="lt.margem.esquerda" [attr.x2]="lt.largura - lt.margem.direita" [attr.y1]="g.posicao" [attr.y2]="g.posicao" class="pcm-linha-tempo-grid" />
+              <text [attr.x]="lt.margem.esquerda - 6" [attr.y]="g.posicao" class="pcm-linha-tempo-eixo-y">{{ g.label }}</text>
+            }
+            @for (l of lt.eixoX; track l.label) {
+              <text [attr.x]="l.posicao" [attr.y]="lt.altura - 8" class="pcm-linha-tempo-eixo-x">{{ l.label }}</text>
+            }
+            <polyline [attr.points]="lt.linhaCumprimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
+            <polyline [attr.points]="lt.linhaAtendimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
+            @for (p of lt.pontosCumprimento; track $index) {
+              <circle [attr.cx]="p.x" [attr.cy]="p.y" r="3" class="pcm-linha-tempo-ponto--cumprimento" />
+            }
+            @for (p of lt.pontosAtendimento; track $index) {
+              <circle [attr.cx]="p.x" [attr.cy]="p.y" r="3" class="pcm-linha-tempo-ponto--atendimento" />
+            }
+          </svg>
+          <div class="pcm-linha-tempo-legenda">
+            <span><span class="pcm-legenda-cor pcm-legenda-cor--atendimento"></span>Atendimento à Programação</span>
+            <span><span class="pcm-legenda-cor pcm-legenda-cor--cumprimento"></span>Cumprimento do Plano</span>
+          </div>
+        </div>
+      } @else {
+        <p class="pcm-empty">Sem dados suficientes ainda para montar a linha do tempo.</p>
+      }
+    </section>
+
+    <section class="pcm-section">
+      <h2 class="pcm-section-title">Evolução ao Longo do Ano — por Área</h2>
+      <div class="pcm-linha-tempo-grid-areas">
+        @for (item of linhaTempoPorArea(); track item.categoria) {
+          <div class="pcm-linha-tempo-area">
+            <h4 class="pcm-horas-grafico-area-titulo">{{ item.label }}</h4>
+            @if (item.geometria; as lt) {
+              <svg [attr.viewBox]="'0 0 ' + lt.largura + ' ' + lt.altura" class="pcm-linha-tempo-svg">
+                @for (g of lt.eixoY; track g.label) {
+                  <line [attr.x1]="lt.margem.esquerda" [attr.x2]="lt.largura - lt.margem.direita" [attr.y1]="g.posicao" [attr.y2]="g.posicao" class="pcm-linha-tempo-grid" />
+                  <text [attr.x]="lt.margem.esquerda - 6" [attr.y]="g.posicao" class="pcm-linha-tempo-eixo-y">{{ g.label }}</text>
+                }
+                @for (l of lt.eixoX; track l.label) {
+                  <text [attr.x]="l.posicao" [attr.y]="lt.altura - 8" class="pcm-linha-tempo-eixo-x">{{ l.label }}</text>
+                }
+                <polyline [attr.points]="lt.linhaCumprimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
+                <polyline [attr.points]="lt.linhaAtendimento" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
+                @for (p of lt.pontosCumprimento; track $index) {
+                  <circle [attr.cx]="p.x" [attr.cy]="p.y" r="2.5" class="pcm-linha-tempo-ponto--cumprimento" />
+                }
+                @for (p of lt.pontosAtendimento; track $index) {
+                  <circle [attr.cx]="p.x" [attr.cy]="p.y" r="2.5" class="pcm-linha-tempo-ponto--atendimento" />
+                }
+              </svg>
+            } @else {
+              <p class="pcm-empty">Sem dados suficientes.</p>
+            }
+          </div>
+        }
+      </div>
+      <div class="pcm-linha-tempo-legenda">
+        <span><span class="pcm-legenda-cor pcm-legenda-cor--atendimento"></span>Atendimento à Programação</span>
+        <span><span class="pcm-legenda-cor pcm-legenda-cor--cumprimento"></span>Cumprimento do Plano</span>
+      </div>
+    </section>
   </div>
 </div>

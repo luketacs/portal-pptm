@@ -3,11 +3,27 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ManutencaoProgramacaoService } from '../../../services/manutencao-programacao.service';
 import { ApontamentosService } from '../../../services/apontamentos.service';
-import { ConsultaSigmaResultado } from '../../../models/manutencao-programacao.model';
+import { AuthService } from '../../../services/auth.service';
+import { NotificationService } from '../../../services/notification.service';
+import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
+import { ManutencaoIndicadoresHistoricoService } from '../../../services/manutencao-indicadores-historico.service';
+import { CategoriaIndicador, ConsultaSigmaResultado, ImportarIndicadorHistoricoItem } from '../../../models/manutencao-programacao.model';
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO, calcularIndicadoresSemana,
 } from '../../../utils/manutencao-indicadores';
-import { LinhaTempoGeometria, calcularLinhaTempo } from '../../../utils/relatorio-linha-tempo';
+import { PontoLinhaTempo, calcularLinhaTempo } from '../../../utils/relatorio-linha-tempo';
+import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoSemanas, extrairHistoricoSemanasPorArea } from '../../../utils/relatorio-semanal-pcm';
+
+// Nomes de área do relatório PCM antigo -> categoria desta tela (mesmo recorte de 5,
+// já sem "Lubrificação" — dentro de Mecânica — nem "Operação" separada de "Limp
+// Operacional", conforme decidido com o usuário).
+const AREA_PCM_PARA_CATEGORIA: Record<string, CategoriaIndicador> = {
+  'MECÂNICA': 'MECANICA',
+  'ELÉTRICA': 'ELETRICA',
+  'LIMP OPERACIONAL': 'LIMP_OPERACIONAL',
+  'REFRIGERAÇÃO': 'REFRIGERACAO',
+  'SPCI': 'SPCI',
+};
 
 const DIAS_SEMANA_LABEL = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB', 'DOM'];
 
@@ -61,6 +77,10 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   constructor(
     private manutencaoService: ManutencaoProgramacaoService,
     private apontamentosService: ApontamentosService,
+    private authService: AuthService,
+    private notificationService: NotificationService,
+    private confirmDialogService: ConfirmDialogService,
+    private historicoService: ManutencaoIndicadoresHistoricoService,
   ) {
     // Refaz a consulta ao SIGMA sempre que a lista de OS (todo o histórico, não só a
     // semana selecionada — precisa pra Evolução ao Longo do Ano e pro Consolidado do
@@ -75,10 +95,13 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   private matchColaborador = (matricula: string | null, nome: string) =>
     this.apontamentosService.matchColaboradorDaOrdem(matricula, nome);
 
+  isAdmin = computed(() => this.authService.currentUser()?.role === 'Admin');
+
   async ngOnInit(): Promise<void> {
     try {
       await this.manutencaoService.load();
       await this.apontamentosService.loadColaboradores();
+      await this.historicoService.load();
     } catch {
       this.errorMessage.set('Erro ao carregar os indicadores da semana.');
     }
@@ -218,31 +241,49 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     }));
   });
 
+  // Combina o histórico importado (semanas de ANTES da S37/2026 — só tem % agregado,
+  // vindo da planilha, ver ManutencaoIndicadoresHistoricoService) com o cálculo ao vivo
+  // (semanas com ordens reais no Portal) — o cálculo ao vivo sempre vence se as duas
+  // fontes cobrirem a mesma semana (não deveria acontecer na prática, só bem perto da
+  // virada S36→S37/2026).
+  private pontosEvolucaoGeral = computed<{ semana: string; atendimento: number; cumprimento: number }[]>(() => {
+    const mapa = new Map<string, { atendimento: number; cumprimento: number }>();
+    for (const item of this.historicoService.itens()) {
+      if (item.categoria === 'GERAL') mapa.set(item.semanaInicio, { atendimento: item.atendimento, cumprimento: item.cumprimento });
+    }
+    for (const { semana, indicadores } of this.indicadoresPorSemana()) {
+      mapa.set(semana, { atendimento: indicadores.geral.atendimento, cumprimento: indicadores.cumprimentoPlano.atendimento });
+    }
+    return [...mapa.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([semana, v]) => ({ semana, ...v }));
+  });
+
+  private pontosEvolucaoPorArea = computed<Map<CategoriaIndicador, Map<string, { atendimento: number; cumprimento: number }>>>(() => {
+    const resultado = new Map(CATEGORIAS_INDICADOR.map(c => [c, new Map<string, { atendimento: number; cumprimento: number }>()]));
+    for (const item of this.historicoService.itens()) {
+      if (item.categoria !== 'GERAL') resultado.get(item.categoria)?.set(item.semanaInicio, { atendimento: item.atendimento, cumprimento: item.cumprimento });
+    }
+    for (const { semana, indicadores } of this.indicadoresPorSemana()) {
+      for (const area of indicadores.porArea) {
+        if (!area.categoria) continue;
+        resultado.get(area.categoria)?.set(semana, { atendimento: area.atendimento, cumprimento: area.cumprimentoPlano.atendimento });
+      }
+    }
+    return resultado;
+  });
+
   // Geometria SVG pronta pro <polyline>/<circle> (mesmo util do Relatório Semanal/
   // Mensal PCM, src/utils/relatorio-linha-tempo.ts — só troca a fonte dos pontos: em
-  // vez de ler célula de planilha, vem do cálculo ao vivo acima).
-  linhaTempoGeral = computed<LinhaTempoGeometria | null>(() => calcularLinhaTempo(
-    this.indicadoresPorSemana().map(({ semana, indicadores }) => ({
-      label: `S${this.numeroSemanaISO(semana)}`,
-      atendimento: indicadores.geral.atendimento,
-      cumprimento: indicadores.cumprimentoPlano.atendimento,
-    })),
+  // vez de ler célula de planilha, vem do histórico importado + cálculo ao vivo acima).
+  linhaTempoGeral = computed(() => calcularLinhaTempo(
+    this.pontosEvolucaoGeral().map(p => ({ label: `S${this.numeroSemanaISO(p.semana)}`, atendimento: p.atendimento, cumprimento: p.cumprimento })),
   ));
 
-  linhaTempoPorArea = computed(() => CATEGORIAS_INDICADOR.map(categoria => ({
-    categoria,
-    label: CATEGORIA_LABEL[categoria],
-    geometria: calcularLinhaTempo(
-      this.indicadoresPorSemana().map(({ semana, indicadores }) => {
-        const area = indicadores.porArea.find(a => a.categoria === categoria);
-        return {
-          label: `S${this.numeroSemanaISO(semana)}`,
-          atendimento: area?.atendimento ?? 0,
-          cumprimento: area?.cumprimentoPlano.atendimento ?? 0,
-        };
-      }),
-    ),
-  })));
+  linhaTempoPorArea = computed(() => CATEGORIAS_INDICADOR.map(categoria => {
+    const pontos = [...(this.pontosEvolucaoPorArea().get(categoria) ?? new Map()).entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([semana, v]): PontoLinhaTempo => ({ label: `S${this.numeroSemanaISO(semana)}`, atendimento: v.atendimento, cumprimento: v.cumprimento }));
+    return { categoria, label: CATEGORIA_LABEL[categoria], geometria: calcularLinhaTempo(pontos) };
+  }));
 
   // Soma todas as semanas do ano corrente (não o histórico inteiro, que pode cruzar
   // virada de ano) numa única agregação — reaproveita calcularIndicadoresSemana direto,
@@ -262,15 +303,71 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     });
   });
 
-  corPercentual(percentual: number, meta: number): string {
-    if (percentual >= meta) return 'text-green-600';
-    if (percentual >= meta * 0.9) return 'text-amber-600';
-    return 'text-red-600';
+  // Mesmas cores do badge "STATUS GERAL" do Relatório Semanal/Mensal PCM
+  // (relatorio-semanal-pcm.component.ts, STATUS_COR) — usado via [style.background-color].
+  statusCor(status: IndicadoresSemana['statusGeral']): string {
+    if (status === 'Dentro da Meta') return '#4CAF50';
+    if (status === 'Próximo da Meta') return '#FF9800';
+    return '#F44336';
   }
 
-  statusCor(status: IndicadoresSemana['statusGeral']): string {
-    if (status === 'Dentro da Meta') return 'bg-green-100 text-green-700';
-    if (status === 'Próximo da Meta') return 'bg-amber-100 text-amber-700';
-    return 'bg-red-100 text-red-700';
+  // ── Importar histórico (planilha "Painel de Indicadores de PCM") ──────────
+  // Cobre as semanas de ANTES da Programação nativa existir — o mesmo leitor de
+  // planilha do Relatório Semanal PCM (extrairHistoricoSemanas/PorArea), mas em vez de
+  // só desenhar na tela na hora, grava em manutencao_indicadores_historico pra ficar
+  // disponível pra sempre (ver ManutencaoIndicadoresHistoricoService).
+  importarAberto = signal(false);
+  arquivoImportacao = signal<File | null>(null);
+  anoImportacao = signal(new Date().getFullYear());
+  importando = signal(false);
+
+  onArquivoImportacaoSelecionado(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.arquivoImportacao.set(input.files?.[0] ?? null);
+  }
+
+  async confirmarImportarHistorico(): Promise<void> {
+    const file = this.arquivoImportacao();
+    if (!file) return;
+    const ano = this.anoImportacao();
+    if (!(await this.confirmDialogService.confirm(
+      `Importar o histórico de indicadores de ${ano} dessa planilha? Semanas já importadas antes (mesmo ano/categoria) são atualizadas, não duplicadas.`,
+    ))) return;
+
+    this.importando.set(true);
+    try {
+      const XLSX = await import('xlsx');
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array', cellDates: false });
+      const sheetName = wb.SheetNames.find(n => n.trim().toLowerCase() === 'indicadores semanais') ?? wb.SheetNames[0];
+      const ws = sheetName ? wb.Sheets[sheetName] : undefined;
+      if (!ws) throw new Error('Aba "Indicadores Semanais" não encontrada no arquivo.');
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true }) as unknown[][];
+
+      const paraSemanaInicio = (label: string) => paraIso(this.segundaDaSemanaISO(ano, Number(label.replace('S', ''))));
+      const itens: ImportarIndicadorHistoricoItem[] = [];
+
+      for (const ponto of extrairHistoricoSemanas(rows, 53)) {
+        itens.push({ semanaInicio: paraSemanaInicio(ponto.label), categoria: 'GERAL', atendimento: ponto.atendimento, cumprimento: ponto.cumprimento });
+      }
+      for (const areaPcm of AREAS_LINHA_TEMPO_SEPARADA) {
+        const categoria = AREA_PCM_PARA_CATEGORIA[areaPcm];
+        if (!categoria) continue;
+        for (const ponto of extrairHistoricoSemanasPorArea(rows, 53, areaPcm)) {
+          itens.push({ semanaInicio: paraSemanaInicio(ponto.label), categoria, atendimento: ponto.atendimento, cumprimento: ponto.cumprimento });
+        }
+      }
+
+      if (itens.length === 0) throw new Error('Nenhuma semana com dado encontrada nessa planilha.');
+
+      await this.historicoService.importarLote(itens);
+      this.notificationService.showSuccess(`Histórico importado: ${itens.length} pontos (${ano}).`);
+      this.arquivoImportacao.set(null);
+      this.importarAberto.set(false);
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao importar o histórico.');
+    } finally {
+      this.importando.set(false);
+    }
   }
 }
