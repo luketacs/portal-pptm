@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, WritableSignal, 
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ManutencaoProgramacaoService } from '../../../services/manutencao-programacao.service';
-import { Apontamento, ApontamentosService, RankingItem } from '../../../services/apontamentos.service';
+import { ApontamentosService, Colaborador } from '../../../services/apontamentos.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
@@ -54,6 +54,14 @@ interface CardIndicador {
   meta?: string;
   cor: 'green' | 'blue' | 'purple' | 'orange' | 'teal' | 'red';
   icone: string;
+}
+
+interface HorasTecnicoItem {
+  colaborador: Colaborador;
+  horasProgramadas: number;
+  horasApontadas: number;
+  horasDisponiveis: number;
+  eficiencia: number;
 }
 
 // Mesmos helpers de semana do Dashboard da Programação (manutencao-dashboard.component.ts)
@@ -136,10 +144,6 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   readonly icones = ICONES;
   errorMessage = signal('');
   private pollId: ReturnType<typeof setInterval> | null = null;
-  // Apontamentos crus (tabela `apontamentos`, importada do SIGMA) — só pra Horas
-  // Apontadas x Programadas x Disponíveis por técnico (ver rankingHorasApontadas
-  // abaixo). Carregado uma vez no ngOnInit, igual ao resto dos dados da tela.
-  private apontamentosTodos = signal<Apontamento[]>([]);
 
   constructor(
     private manutencaoService: ManutencaoProgramacaoService,
@@ -194,7 +198,6 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       await this.apontamentosService.loadColaboradores();
       await this.manutencaoService.loadFerias();
       await this.historicoService.load();
-      this.apontamentosTodos.set(await this.apontamentosService.loadApontamentos());
     } catch {
       this.errorMessage.set('Erro ao carregar os indicadores da semana.');
     }
@@ -432,31 +435,57 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   });
 
   // ── Horas Apontadas x Programadas x Disponíveis por técnico ────────────────
-  // Mesmo dado ao vivo (tabela `apontamentos`, importada do SIGMA) e mesma fórmula já
-  // usados na tela de Apontamentos (ApontamentosService.calcularStats) — só reaproveita,
-  // não recalcula nada diferente. Só Elétrica/Mecânica: "Horas Programadas" só existe
-  // calculada pra essas duas equipes lá (mesma restrição que já vale pro HH acima —
-  // Apoio programa por equipe/empresa, sem disponibilidade individual cadastrada).
-  private apontamentosDoPeriodo = computed(() => {
-    const dados = this.apontamentosTodos().filter(a => !!a.data);
-    if (this.modoPeriodo() === 'mes') {
-      const mes = this.mesFiltro();
-      return dados.filter(a => a.data.startsWith(mes));
+  // 100% ao vivo, a partir do que já roda no resto desta tela (ManutencaoOrdem +
+  // consulta ao SIGMA) — NÃO usa a tabela `apontamentos` (essa é alimentada por upload
+  // manual de planilha e pode ficar semanas desatualizada, como aconteceu). Programada
+  // = soma de duracaoHoras de toda ordem do técnico no período; Apontada = a mesma
+  // soma, só das ordens que o SIGMA confirma executadas (ordemExecutadaAgrupada, o
+  // mesmo critério usado em "Desempenho por Área" e em statusExecucao() da
+  // Programação — se uma OS já aparece como executada lá, ela também conta aqui);
+  // Disponível = mesma fórmula de hhTotais (calcularHhTecnico), só que por pessoa em
+  // vez de somada. Só Elétrica/Mecânica, mesma restrição do HH acima.
+  private tecnicosEletrica = computed(() =>
+    this.apontamentosService.colaboradores().filter(c => normalizarTexto(c.area).includes('ELETR')));
+  private tecnicosMecanica = computed(() =>
+    this.apontamentosService.colaboradores().filter(c => normalizarTexto(c.area).includes('MECAN')));
+
+  private calcularHorasPorTecnico(tecnicos: Colaborador[]): HorasTecnicoItem[] {
+    const ferias = this.manutencaoService.ferias();
+    const ordensTodas = this.manutencaoService.ordens();
+    const sigmaPorOs = this.sigmaPorOs();
+    const resultado: HorasTecnicoItem[] = tecnicos.map(c => ({ colaborador: c, horasProgramadas: 0, horasApontadas: 0, horasDisponiveis: 0, eficiencia: 0 }));
+    for (const semanaIso of this.semanasDoPeriodoSet()) {
+      const dias = diasDaSemana(semanaIso);
+      const ordensDaSemanaTodas = ordensTodas.filter(o => o.semanaInicio === semanaIso);
+      for (const item of resultado) {
+        const ordensDoTecnico = ordensDaSemanaTodas.filter(o => o.tecnicoNome === item.colaborador.nome);
+        for (const o of ordensDoTecnico.filter(x => x.tipo === 'ordem')) {
+          const horas = o.duracaoHoras ?? 0;
+          item.horasProgramadas += horas;
+          const [executada] = ordemExecutadaAgrupada([o], sigmaPorOs, this.matchColaborador);
+          if (executada) item.horasApontadas += horas;
+        }
+        const r = calcularHhTecnico({
+          dias,
+          disponibilidadePorDia: new Map(dias.map(d => [d.data, this.apontamentosService.disponibilidadeNoDia(item.colaborador, d.data)])),
+          diasFolga: new Set(ordensDoTecnico.filter(o => o.tipo === 'folga').flatMap(o => o.diasPrevistos)),
+          diasExameMedico: new Set(ordensDoTecnico.filter(o => o.tipo === 'exame_medico').flatMap(o => o.diasPrevistos)),
+          feriasIntervalo: encontrarFeriasNoIntervalo(ferias, item.colaborador.nome, dias.map(d => d.data)),
+        });
+        item.horasDisponiveis += r.liquido;
+      }
     }
-    const semana = this.semanaFiltro();
-    const domingo = diasDaSemana(semana)[6].data;
-    return dados.filter(a => a.data >= semana && a.data <= domingo);
-  });
+    for (const item of resultado) {
+      item.horasProgramadas = Math.round(item.horasProgramadas * 100) / 100;
+      item.horasApontadas = Math.round(item.horasApontadas * 100) / 100;
+      item.horasDisponiveis = Math.round(item.horasDisponiveis * 100) / 100;
+      item.eficiencia = item.horasProgramadas > 0 ? Math.round((item.horasApontadas / item.horasProgramadas) * 1000) / 10 : 0;
+    }
+    return resultado.sort((a, b) => b.horasApontadas - a.horasApontadas);
+  }
 
-  // Elétrica e Mecânica separadas (não misturadas num ranking só) — cada uma ordenada
-  // por horas apontadas.
-  rankingHorasApontadasEletrica = computed<RankingItem[]>(() =>
-    this.apontamentosService.calcularStats(this.apontamentosService.filtrarPorEquipe(this.apontamentosDoPeriodo(), 'eletrica'), 'eletrica')
-      .ranking.slice().sort((a, b) => b.totalHoras - a.totalHoras || b.totalOS - a.totalOS));
-
-  rankingHorasApontadasMecanica = computed<RankingItem[]>(() =>
-    this.apontamentosService.calcularStats(this.apontamentosService.filtrarPorEquipe(this.apontamentosDoPeriodo(), 'mecanica'), 'mecanica')
-      .ranking.slice().sort((a, b) => b.totalHoras - a.totalHoras || b.totalOS - a.totalOS));
+  rankingHorasApontadasEletrica = computed<HorasTecnicoItem[]>(() => this.calcularHorasPorTecnico(this.tecnicosEletrica()));
+  rankingHorasApontadasMecanica = computed<HorasTecnicoItem[]>(() => this.calcularHorasPorTecnico(this.tecnicosMecanica()));
 
   // Largura da barra em % da própria Hora Disponível do técnico (referência = 100%) —
   // capada em 100 pra não estourar o container quando apontado/programado > disponível.
