@@ -12,7 +12,7 @@ import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
   StatusGeralSemana, calcularIndicadoresSemana,
 } from '../../../utils/manutencao-indicadores';
-import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, suavizarAreaPath, suavizarPath } from '../../../utils/relatorio-linha-tempo';
+import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, linhaRetaAreaPath, linhaRetaPath } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
 import { HhEquipamento, KpiExecucao, calcularHhTecnico, calcularKpiExecucao, hhPorEquipamento, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
 import { encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
@@ -430,18 +430,20 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // Geometria SVG (mesmo util do Relatório Semanal/Mensal PCM,
   // src/utils/relatorio-linha-tempo.ts — só troca a fonte dos pontos: em vez de ler
   // célula de planilha, vem do histórico importado + cálculo ao vivo acima). Enriquece
-  // com path suavizado (curva, não segmento reto) + área de preenchimento sob a linha
-  // de Atendimento — só essa, pra não empilhar duas áreas semitransparentes uma sobre a
-  // outra quando as duas séries andam coladas (visual mais limpo).
+  // com path em <path> (segmento reto entre pontos, igual sempre foi — só não é mais
+  // <polyline> porque a animação de "desenhar a linha" via pathLength/stroke-dashoffset
+  // precisa de <path>) + área de preenchimento sob a linha de Atendimento — só essa,
+  // pra não empilhar duas áreas semitransparentes uma sobre a outra quando as duas
+  // séries andam coladas (visual mais limpo).
   private enriquecerGeometria(geo: LinhaTempoGeometria | null, pontos: PontoLinhaTempo[]) {
     if (!geo) return null;
     const baseY = geo.altura - geo.margem.baixo;
     const ultimo = pontos[pontos.length - 1];
     return {
       ...geo,
-      pathAtendimento: suavizarPath(geo.pontosAtendimento),
-      pathCumprimento: suavizarPath(geo.pontosCumprimento),
-      areaAtendimento: suavizarAreaPath(geo.pontosAtendimento, baseY),
+      pathAtendimento: linhaRetaPath(geo.pontosAtendimento),
+      pathCumprimento: linhaRetaPath(geo.pontosCumprimento),
+      areaAtendimento: linhaRetaAreaPath(geo.pontosAtendimento, baseY),
       // Valor do ponto atual (última semana), pra rotular o destaque no fim da linha —
       // a geometria só tem coordenada SVG (x/y), não o valor original em %.
       ultimoAtendimento: ultimo ? Math.round(ultimo.atendimento) : null,

@@ -105,33 +105,20 @@ export function calcularLinhaTempo(
   };
 }
 
-// Catmull-Rom → Bézier: mesmos pontos de calcularLinhaTempo, só desenhados como curva
-// suave em vez de segmento reto entre cada par (visual mais moderno). Não muda nada dos
-// relatórios PCM (que continuam usando linhaAtendimento/linhaCumprimento, o <polyline>
-// reto) — usado só pela tela de Indicadores Semanais, que quis esse estilo.
-export function suavizarPath(pontos: CoordenadaSvg[]): string {
+// Mesmos pontos de calcularLinhaTempo, só como atributo "d" de <path> (segmento reto
+// entre cada par, igual ao <polyline> original) em vez de "points" — usado pela tela
+// de Indicadores Semanais, que precisa de <path> (não <polyline>) pro truque de
+// animação de "desenhar a linha" via pathLength/stroke-dashoffset.
+export function linhaRetaPath(pontos: CoordenadaSvg[]): string {
   if (pontos.length === 0) return '';
-  if (pontos.length === 1) return `M ${pontos[0].x},${pontos[0].y}`;
-  let d = `M ${pontos[0].x},${pontos[0].y}`;
-  for (let i = 0; i < pontos.length - 1; i++) {
-    const p0 = pontos[i - 1] ?? pontos[i];
-    const p1 = pontos[i];
-    const p2 = pontos[i + 1];
-    const p3 = pontos[i + 2] ?? p2;
-    const cp1x = p1.x + (p2.x - p0.x) / 6;
-    const cp1y = p1.y + (p2.y - p0.y) / 6;
-    const cp2x = p2.x - (p3.x - p1.x) / 6;
-    const cp2y = p2.y - (p3.y - p1.y) / 6;
-    d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
-  }
-  return d;
+  return `M ${pontos[0].x},${pontos[0].y}` + pontos.slice(1).map(p => ` L ${p.x},${p.y}`).join('');
 }
 
-// Mesma curva suavizada acima, fechada descendo até `baseY` — pra preencher com
-// gradiente por baixo da linha (visual de "area chart").
-export function suavizarAreaPath(pontos: CoordenadaSvg[], baseY: number): string {
+// Mesma linha reta acima, fechada descendo até `baseY` — pra preencher com gradiente
+// por baixo da linha (visual de "area chart").
+export function linhaRetaAreaPath(pontos: CoordenadaSvg[], baseY: number): string {
   if (pontos.length === 0) return '';
   const primeiro = pontos[0];
   const ultimo = pontos[pontos.length - 1];
-  return `${suavizarPath(pontos)} L ${ultimo.x},${baseY} L ${primeiro.x},${baseY} Z`;
+  return `${linhaRetaPath(pontos)} L ${ultimo.x},${baseY} L ${primeiro.x},${baseY} Z`;
 }
