@@ -1,6 +1,18 @@
 /* Reaproveita a linha do tempo SVG dos relatórios PCM — só a fonte dos pontos muda. */
 @import '../../../styles/pcm-report-shared.css';
 
+/* Cores oficiais da marca Diamante (Manual de Identidade DD-0099-26) — azul escuro e
+   laranja são as cores prioritárias (devem estar presentes), azul claro e amarelo são
+   secundárias (uso moderado). Só usadas aqui no cabeçalho/botão principal — o
+   código de cor dos cards/gráficos (verde=meta batida, vermelho=alerta etc.) é
+   semântico, não identidade visual, então fica como já era. */
+:host {
+  --diamante-azul-escuro: #2039f9;
+  --diamante-laranja: #de7128;
+  --diamante-azul-claro: #69bafc;
+  --diamante-amarelo: #e9af29;
+}
+
 /* Modernização só desta tela — sem 3D real (distorce leitura de valor). */
 .pcm-card {
   position: relative;
@@ -69,13 +81,44 @@
 
 /* Cabeçalho leve (mesma linha da tabela abaixo) — só o logo da Diamante (o mesmo PNG
    usado no resto do Portal), sem as marcas do relatório PPTM original que este
-   cabeçalho reproduzia antes. */
-.pcm-header { background: linear-gradient(135deg, #e9eefc 0%, #d9e6fb 100%); color: #1e293b; }
+   cabeçalho reproduzia antes. Fundo é um tom claro do azul escuro oficial da marca (não
+   mais um azul genérico) + a faixa de 4 cores no rodapé do cabeçalho, mesma assinatura
+   visual usada em toda página do Manual de Identidade. */
+.pcm-header {
+  position: relative;
+  background: linear-gradient(135deg, #e8ecfe 0%, #d7defc 100%);
+  color: #1e293b;
+  padding-bottom: 26px;
+}
+.pcm-header::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--diamante-laranja) 0% 25%,
+    var(--diamante-amarelo) 25% 50%,
+    var(--diamante-azul-claro) 50% 75%,
+    var(--diamante-azul-escuro) 75% 100%
+  );
+}
 .pcm-logo-diamante { height: 46px; width: auto; object-fit: contain; }
 .pcm-company-info { border-left-color: rgba(30, 58, 95, .15); }
 .pcm-report-title { color: #475569; opacity: 1; }
 .pcm-periodo-info { background-color: rgba(255, 255, 255, .7); color: #334155; border: 1px solid rgba(30, 58, 95, .1); }
 .pcm-status-badge { color: #fff; }
+
+/* Botões/links principais da barra de controle (toggle Semana/Mês, Atualizar,
+   Gerar Relatório, Importar histórico) — troca o azul genérico do Tailwind
+   (bg-blue-600/text-blue-600) pelo azul escuro oficial da marca. Só afeta esta tela:
+   estilo de componente Angular é escopado ao próprio template, não vaza pro resto
+   do Portal mesmo sobrescrevendo uma classe utilitária pelo nome. */
+.bg-blue-600 { background-color: var(--diamante-azul-escuro) !important; }
+.hover\:bg-blue-700:hover { background-color: #1a2fd6 !important; }
+.text-blue-600 { color: var(--diamante-azul-escuro) !important; }
+.hover\:text-blue-700:hover { color: #1a2fd6 !important; }
+.focus\:ring-blue-500:focus { --tw-ring-color: var(--diamante-azul-claro) !important; }
 
 /* "Desempenho por Área" troca o cabeçalho azul-marinho do documento impresso (os
    relatórios PCM continuam com ele) por um visual leve — cabeçalho claro com texto
