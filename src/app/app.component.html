@@ -20,7 +20,7 @@
 } @else if (isPublicViewRoute()) {
   <!-- Visualização pública — sem sidebar nem header/rodapé, independente do login -->
   <div class="min-h-screen bg-gray-100">
-    <main class="max-w-7xl w-full mx-auto p-4 md:p-8">
+    <main class="w-full p-4 md:p-8" [class.max-w-7xl]="!isPublicWideRoute()" [class.mx-auto]="!isPublicWideRoute()">
       <router-outlet />
     </main>
   </div>

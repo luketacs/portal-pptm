@@ -34,6 +34,7 @@ export class AppComponent implements OnDestroy {
   currentUrl = signal('/');
   isPublicAuthRoute;
   isPublicViewRoute;
+  isPublicWideRoute;
   shouldShowAuthTransition;
 
   constructor(
@@ -79,6 +80,18 @@ export class AppComponent implements OnDestroy {
     });
 
     this.isPublicAuthRoute = computed(() => isAuthPageRoute() || this.isPublicViewRoute());
+
+    // Painéis públicos pensados pra ficar abertos num monitor/TV (não um formulário
+    // como publico/fundo-fixo) usam a tela toda em vez do container centralizado
+    // max-w-7xl — o relatório de Indicadores já se adapta sozinho a mais largura
+    // (grid de cards com auto-fit, SVGs com width:100%), só precisava do container
+    // deixar de limitar.
+    this.isPublicWideRoute = computed(() => {
+      const url = this.currentUrl();
+      const pathname = window.location.pathname;
+      const check = (u: string) => u.startsWith('/publico/indicadores-manutencao');
+      return check(url) || check(pathname);
+    });
 
     this.shouldShowAuthTransition = computed(() => {
       const user = this.currentUser();
