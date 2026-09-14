@@ -235,6 +235,16 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   private ordensDaSemana = computed(() =>
     this.ordensTipo().filter(o => o.semanaInicio === this.semanaFiltro()));
 
+  // Só pro indicador (Atendimento à Programação / Cumprimento do Plano) — Apoio conta
+  // só pras 3 equipes reais do indicador (Refrigeração/Limp Operacional/SPCI, ver
+  // inferirCategoriaIndicadorPorTecnico). O resto do Apoio (empresas de
+  // equipamento/andaime tipo TOP ANDAIMES, guindaste etc.) não faz parte do fechamento
+  // desse indicador — não é "não classificado" esperando revisão, é fora da conta
+  // mesmo, por decisão do usuário. categoriaIndicador nulo em Mecânica/Elétrica nunca
+  // acontece (o service preenche sozinho), então esse filtro só afeta Apoio na prática.
+  private ordensParaFechamento = computed(() =>
+    this.ordensTipo().filter(o => o.area !== 'APOIO' || !!o.categoriaIndicador));
+
   // ── Execução via SIGMA (mesmo padrão do Dashboard) ──
   sigmaPorOs = signal<Record<string, ConsultaSigmaResultado>>({});
   sigmaAtualizando = signal(false);
@@ -272,17 +282,10 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   }
 
   indicadores = computed<IndicadoresSemana>(() => calcularIndicadoresSemana({
-    ordens: this.ordensDaSemana(),
+    ordens: this.ordensParaFechamento().filter(o => o.semanaInicio === this.semanaFiltro()),
     sigmaPorOs: this.sigmaPorOs(),
     matchColaborador: this.matchColaborador,
   }));
-
-  // Ordens por trás da linha "Não classificado" da tabela — a linha só mostra a
-  // contagem, sem dar pra saber QUAIS ordens são; lista aqui pra aparecer embaixo da
-  // tabela e a pessoa conseguir abrir e classificar direto, sem precisar caçar na
-  // Programação.
-  ordensNaoClassificadasDaSemana = computed(() =>
-    this.ordensDaSemana().filter(o => o.area === 'APOIO' && !o.categoriaIndicador));
 
   // ── Migrado do Dashboard da Programação (src/components/manutencao/
   // manutencao-dashboard/) — essa tela substitui o Dashboard, então essas métricas
@@ -393,7 +396,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
 
   private indicadoresPorSemana = computed(() => {
     const sigmaPorOs = this.sigmaPorOs();
-    const ordensTipo = this.ordensTipo();
+    const ordensTipo = this.ordensParaFechamento();
     return this.semanasHistoricoIso().map(semana => ({
       semana,
       indicadores: calcularIndicadoresSemana({
@@ -422,6 +425,11 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     for (const { semana, indicadores } of this.indicadoresPorSemana()) {
       mapa.set(semana, { atendimento: indicadores.geral.atendimento, cumprimento: indicadores.cumprimentoPlano.atendimento });
     }
+    // Garante que a semana selecionada no filtro bate com o mesmo número que os cards/
+    // tabela mostram (fonte única: indicadores()) — não confia em indicadoresPorSemana
+    // ter exatamente essa mesma semana calculada igual, sempre escreve por cima.
+    const ind = this.indicadores();
+    mapa.set(this.semanaFiltro(), { atendimento: ind.geral.atendimento, cumprimento: ind.cumprimentoPlano.atendimento });
     return [...mapa.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([semana, v]) => ({ semana, ...v }));
   });
 
@@ -436,6 +444,13 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
         if (!area.categoria) continue;
         resultado.get(area.categoria)?.set(semana, { atendimento: area.atendimento, cumprimento: area.cumprimentoPlano.atendimento });
       }
+    }
+    // Mesma garantia de pontosEvolucaoGeral: a semana selecionada bate com o mesmo
+    // número que a tabela "Desempenho por Área" mostra (fonte única: indicadores()).
+    const semanaFiltro = this.semanaFiltro();
+    for (const area of this.indicadores().porArea) {
+      if (!area.categoria) continue;
+      resultado.get(area.categoria)?.set(semanaFiltro, { atendimento: area.atendimento, cumprimento: area.cumprimentoPlano.atendimento });
     }
     return resultado;
   });
@@ -501,7 +516,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     const semanasAoVivoDoAno = new Set(this.semanasHistoricoIso().filter(s => Number(s.slice(0, 4)) === anoAtual));
 
     const aoVivo = calcularIndicadoresSemana({
-      ordens: this.ordensTipo().filter(o => semanasAoVivoDoAno.has(o.semanaInicio)),
+      ordens: this.ordensParaFechamento().filter(o => semanasAoVivoDoAno.has(o.semanaInicio)),
       sigmaPorOs: this.sigmaPorOs(),
       matchColaborador: this.matchColaborador,
     });
