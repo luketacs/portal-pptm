@@ -215,6 +215,16 @@
             </tfoot>
           </table>
         </div>
+        @if (ordensNaoClassificadasDaSemana().length > 0) {
+          <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            <strong>{{ ordensNaoClassificadasDaSemana().length }} ordem(ns) de Apoio sem categoria nesta semana</strong> — editar e escolher Refrigeração/Limp Operacional/SPCI pra sair de "Não classificado":
+            <ul class="mt-1 list-disc pl-4">
+              @for (o of ordensNaoClassificadasDaSemana(); track o.id) {
+                <li>{{ o.numeroOs ? 'OS ' + o.numeroOs : 'Sem número de OS' }} — {{ o.tecnicoNome }} — {{ o.descricao }}</li>
+              }
+            </ul>
+          </div>
+        }
       }
     </section>
 

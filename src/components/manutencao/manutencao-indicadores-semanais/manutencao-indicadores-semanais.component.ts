@@ -277,6 +277,13 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     matchColaborador: this.matchColaborador,
   }));
 
+  // Ordens por trás da linha "Não classificado" da tabela — a linha só mostra a
+  // contagem, sem dar pra saber QUAIS ordens são; lista aqui pra aparecer embaixo da
+  // tabela e a pessoa conseguir abrir e classificar direto, sem precisar caçar na
+  // Programação.
+  ordensNaoClassificadasDaSemana = computed(() =>
+    this.ordensDaSemana().filter(o => o.area === 'APOIO' && !o.categoriaIndicador));
+
   // ── Migrado do Dashboard da Programação (src/components/manutencao/
   // manutencao-dashboard/) — essa tela substitui o Dashboard, então essas métricas
   // (Corretivas/Preventivas, Exames/Folgas, HH) vêm pra cá antes dele ser removido.
@@ -399,13 +406,18 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
 
   // Combina o histórico importado (semanas de ANTES da S37/2026 — só tem % agregado,
   // vindo da planilha, ver ManutencaoIndicadoresHistoricoService) com o cálculo ao vivo
-  // (semanas com ordens reais no Portal) — o cálculo ao vivo sempre vence se as duas
-  // fontes cobrirem a mesma semana (não deveria acontecer na prática, só bem perto da
-  // virada S36→S37/2026).
+  // (semanas com ordens reais no Portal). Ignora qualquer item do histórico com
+  // semanaInicio >= início do uso nativo (S37/2026) — a planilha às vezes já vem com
+  // coluna pra semanas futuras preenchida (planejamento adiantado, "programadas" > 0
+  // mas "executadas" 0 porque a semana ainda nem chegou), e como o cálculo ao vivo só
+  // cobre até "hoje" (ver semanasHistoricoIso), um item desses nunca seria sobrescrito
+  // e sobrava plantado como se fosse o "ponto atual" com 0% — sempre errado e nunca
+  // atualizava, já que aquela semana futura não existe de verdade no Portal ainda.
   private pontosEvolucaoGeral = computed<{ semana: string; atendimento: number; cumprimento: number }[]>(() => {
+    const inicioAoVivoIso = paraIso(this.segundaDaSemanaISO(2026, 37));
     const mapa = new Map<string, { atendimento: number; cumprimento: number }>();
     for (const item of this.historicoService.itens()) {
-      if (item.categoria === 'GERAL') mapa.set(item.semanaInicio, { atendimento: item.atendimento, cumprimento: item.cumprimento });
+      if (item.categoria === 'GERAL' && item.semanaInicio < inicioAoVivoIso) mapa.set(item.semanaInicio, { atendimento: item.atendimento, cumprimento: item.cumprimento });
     }
     for (const { semana, indicadores } of this.indicadoresPorSemana()) {
       mapa.set(semana, { atendimento: indicadores.geral.atendimento, cumprimento: indicadores.cumprimentoPlano.atendimento });
@@ -414,9 +426,10 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   });
 
   private pontosEvolucaoPorArea = computed<Map<CategoriaIndicador, Map<string, { atendimento: number; cumprimento: number }>>>(() => {
+    const inicioAoVivoIso = paraIso(this.segundaDaSemanaISO(2026, 37));
     const resultado = new Map(CATEGORIAS_INDICADOR.map(c => [c, new Map<string, { atendimento: number; cumprimento: number }>()]));
     for (const item of this.historicoService.itens()) {
-      if (item.categoria !== 'GERAL') resultado.get(item.categoria)?.set(item.semanaInicio, { atendimento: item.atendimento, cumprimento: item.cumprimento });
+      if (item.categoria !== 'GERAL' && item.semanaInicio < inicioAoVivoIso) resultado.get(item.categoria)?.set(item.semanaInicio, { atendimento: item.atendimento, cumprimento: item.cumprimento });
     }
     for (const { semana, indicadores } of this.indicadoresPorSemana()) {
       for (const area of indicadores.porArea) {
@@ -493,8 +506,15 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       matchColaborador: this.matchColaborador,
     });
 
+    // Só semanas de ANTES do início do uso ao vivo (S37/2026) — não basta checar "fora
+    // de semanasAoVivoDoAno", porque isso deixaria passar um item do histórico pra uma
+    // semana FUTURA (além de "hoje"): a planilha às vezes já vem com a coluna de
+    // semanas futuras preenchida (planejamento adiantado, 0 executadas porque a semana
+    // ainda nem chegou), e isso puxava o Consolidado do Ano pra baixo à toa (mesmo bug
+    // do "ponto atual" preso em 0% na Evolução ao Longo do Ano, ver pontosEvolucaoGeral).
+    const inicioAoVivoIso = paraIso(this.segundaDaSemanaISO(2026, 37));
     const historicoDoAno = this.historicoService.itens().filter(item =>
-      Number(item.semanaInicio.slice(0, 4)) === anoAtual && !semanasAoVivoDoAno.has(item.semanaInicio));
+      Number(item.semanaInicio.slice(0, 4)) === anoAtual && item.semanaInicio < inicioAoVivoIso);
 
     const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 0 };
     const somarHistorico = (categoria: CategoriaIndicador | 'GERAL', plano: boolean) => historicoDoAno
