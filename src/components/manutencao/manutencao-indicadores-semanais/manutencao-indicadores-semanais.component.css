@@ -51,7 +51,26 @@
   to   { r: 13; opacity: 0; }
 }
 
-.pcm-table tbody tr:hover { background-color: #eef2ff !important; }
+/* "Desempenho por Área" troca o cabeçalho azul-marinho do documento impresso (os
+   relatórios PCM continuam com ele) por um visual leve — cabeçalho claro com texto
+   escuro, sem zebra (linhas só com borda fina + hover), números alinhados. */
+.pcm-table-container { box-shadow: none; border: 1px solid #e5e9f2; }
+.pcm-table thead { background: #f7f8fc; color: #475569; }
+.pcm-table th {
+  border-right: none;
+  border-bottom: 2px solid #e2e8f0;
+  color: #64748b;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.pcm-subheader-atendimento, .pcm-subheader-cumprimento { font-size: .78rem; text-transform: none; letter-spacing: normal; }
+.pcm-even-row, .pcm-odd-row { background: #fff; }
+.pcm-table td { border-bottom: 1px solid #f1f5f9; font-variant-numeric: tabular-nums; }
+.pcm-table tbody tr { transition: background-color .15s ease; }
+.pcm-table tbody tr:hover { background-color: #f8fafc !important; }
+.pcm-table tfoot { background: #f7f8fc; }
+.pcm-table tfoot td { color: #1e293b; border-top: 2px solid #cbd5e1; }
 .pcm-status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; background: currentColor; }
 
 /* Barra de HH nasce em 0% (antes do SIGMA responder) e transiciona sozinha. */
