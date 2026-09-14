@@ -19,6 +19,20 @@ export function inferirCategoriaIndicador(especialidade: string | null, area: Ma
   return null;
 }
 
+// Mesma ideia de inferirCategoriaIndicador, mas a partir do nome da equipe/empresa de
+// Apoio (tecnicoNome) — convenção real do sistema: SERVPLEX é quem faz Refrigeração,
+// OPERAÇÃO é Limp Operacional, BMS é SPCI (ver "Apoio programa por empresa/equipe" em
+// manutencao-programacao.component.ts). Usado como fallback quando ninguém escolheu a
+// categoria manualmente, pra essas 3 equipes conhecidas não caírem em "Não
+// classificado" à toa.
+export function inferirCategoriaIndicadorPorTecnico(tecnicoNome: string): CategoriaIndicador | null {
+  const nome = tecnicoNome.toUpperCase();
+  if (nome.includes('SERVPLEX')) return 'REFRIGERACAO';
+  if (nome.includes('OPERA')) return 'LIMP_OPERACIONAL';
+  if (nome.includes('BMS')) return 'SPCI';
+  return null;
+}
+
 // "Próxima execução" de um plano — substitui o antigo campo mutável `ultima_execucao`
 // (ver PlanoPreventivo, aposentado): agora é sempre derivada do ciclo mais recente já
 // registrado em manutencao_ciclos (ver ManutencaoPlanosService.ultimoCicloDoPlano).

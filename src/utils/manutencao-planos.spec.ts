@@ -1,5 +1,8 @@
 import { PlanoManutencao } from '../models/manutencao-programacao.model';
-import { gerarGradeMensal, inferirCategoriaIndicador, planosAtrasados, planosComProximaExecucao, proximaExecucaoPlano, sugestoesDaSemana } from './manutencao-planos';
+import {
+  gerarGradeMensal, inferirCategoriaIndicador, inferirCategoriaIndicadorPorTecnico, planosAtrasados,
+  planosComProximaExecucao, proximaExecucaoPlano, sugestoesDaSemana,
+} from './manutencao-planos';
 
 function plano(overrides: Partial<PlanoManutencao> = {}): PlanoManutencao {
   return {
@@ -197,5 +200,23 @@ describe('inferirCategoriaIndicador', () => {
   it('Apoio sem especialidade reconhecível (ex. Elétrica dentro de Apoio) ou nula fica null — pessoa escolhe na hora', () => {
     expect(inferirCategoriaIndicador('P-ELETRICA-PREVENTIVA', 'APOIO')).toBe(null);
     expect(inferirCategoriaIndicador(null, 'APOIO')).toBe(null);
+  });
+});
+
+describe('inferirCategoriaIndicadorPorTecnico', () => {
+  it('SERVPLEX vira REFRIGERACAO', () => {
+    expect(inferirCategoriaIndicadorPorTecnico('SERVPLEX')).toBe('REFRIGERACAO');
+  });
+
+  it('OPERAÇÃO vira LIMP_OPERACIONAL (não faz diferença maiúscula/minúscula ou acento)', () => {
+    expect(inferirCategoriaIndicadorPorTecnico('Operação')).toBe('LIMP_OPERACIONAL');
+  });
+
+  it('BMS vira SPCI', () => {
+    expect(inferirCategoriaIndicadorPorTecnico('bms')).toBe('SPCI');
+  });
+
+  it('nome de equipe/técnico não reconhecido fica null', () => {
+    expect(inferirCategoriaIndicadorPorTecnico('TOP ANDAIMES')).toBe(null);
   });
 });

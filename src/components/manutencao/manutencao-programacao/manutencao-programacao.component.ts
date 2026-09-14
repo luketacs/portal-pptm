@@ -19,7 +19,10 @@ import {
   HORAS_TREINAMENTO_DIA_TODO, calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo,
   encontrarOrdemDuplicada, podeEditarSemanaFechada, recursosParaEspelho,
 } from '../../../utils/manutencao-regras';
-import { inferirCategoriaIndicador, PlanoComProximaData, planosAtrasados, planosComProximaExecucao, proximaExecucaoPlano, sugestoesDaSemana } from '../../../utils/manutencao-planos';
+import {
+  inferirCategoriaIndicador, inferirCategoriaIndicadorPorTecnico, PlanoComProximaData, planosAtrasados,
+  planosComProximaExecucao, proximaExecucaoPlano, sugestoesDaSemana,
+} from '../../../utils/manutencao-planos';
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
@@ -1395,11 +1398,15 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Só editável quando formArea()==='APOIO' — Mecânica/Elétrica não têm ambiguidade
   // (o service já preenche sozinho igual à área). Ver CategoriaIndicador no model.
   formCategoriaIndicador = signal<CategoriaIndicador | null>(null);
-  // Mecânica/Elétrica não têm ambiguidade — a categoria é sempre a própria área
-  // (Apoio precisa do que a pessoa escolheu em formCategoriaIndicador, pode ser null).
+  // Mecânica/Elétrica não têm ambiguidade — a categoria é sempre a própria área. Apoio
+  // usa o que a pessoa escolheu em formCategoriaIndicador; se ninguém escolheu, tenta
+  // inferir do nome da equipe (SERVPLEX/OPERAÇÃO/BMS — ver inferirCategoriaIndicadorPorTecnico)
+  // antes de desistir e mandar null — evita "Não classificado" à toa pras 3 equipes
+  // conhecidas quando o formulário é preenchido sem passar pelo select.
   private categoriaIndicadorParaEnviar(): CategoriaIndicador | null {
     const area = this.formArea();
-    return area === 'APOIO' ? this.formCategoriaIndicador() : area;
+    if (area !== 'APOIO') return area;
+    return this.formCategoriaIndicador() ?? inferirCategoriaIndicadorPorTecnico(this.formTecnicoNome());
   }
 
   categoriaIndicadorOpcoes: { valor: CategoriaIndicador; label: string }[] = [
