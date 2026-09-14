@@ -405,8 +405,8 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // Mesma ideia, agrupando por atividade (descrição da ordem) em vez de equipamento —
   // "principais atividades desenvolvidas", as que mais consumiram HH no período.
   private hhPorAtividadeTodos = computed<HhAtividade[]>(() => hhPorAtividade(this.ordensDaSemana()));
-  hhPorAtividadeTop10 = computed(() => this.hhPorAtividadeTodos().slice(0, 10));
-  hhPorAtividadeMax = computed(() => this.hhPorAtividadeTop10()[0]?.horas ?? 0);
+  hhPorAtividadeTop3 = computed(() => this.hhPorAtividadeTodos().slice(0, 3));
+  hhPorAtividadeMax = computed(() => this.hhPorAtividadeTop3()[0]?.horas ?? 0);
 
   // HH só faz sentido pra Elétrica/Mecânica (Apoio programa por equipe/empresa, sem
   // disponibilidade individual cadastrada) — soma as duas juntas, já que esta tela não

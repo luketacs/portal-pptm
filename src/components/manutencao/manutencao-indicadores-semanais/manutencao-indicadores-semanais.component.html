@@ -169,12 +169,12 @@
     </section>
 
     <section class="pcm-section">
-      <h2 class="pcm-section-title">Principais Atividades — Top 10</h2>
-      @if (hhPorAtividadeTop10().length === 0) {
+      <h2 class="pcm-section-title">Principais Atividades — Top 3</h2>
+      @if (hhPorAtividadeTop3().length === 0) {
         <p class="pcm-empty">Nenhuma OS com descrição/duração preenchidos nessa semana.</p>
       } @else {
         <div class="space-y-1.5">
-          @for (item of hhPorAtividadeTop10(); track item.atividade) {
+          @for (item of hhPorAtividadeTop3(); track item.atividade) {
             <div class="flex items-center gap-2 text-sm">
               <span class="w-40 sm:w-56 truncate text-gray-700 flex-shrink-0" [title]="item.atividade">{{ item.atividade }}</span>
               <div class="flex-1 bg-slate-100 rounded-full h-4 pcm-hh-barra-fundo">
