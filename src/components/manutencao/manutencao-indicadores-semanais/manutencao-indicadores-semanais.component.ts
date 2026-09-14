@@ -432,26 +432,32 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // com path suavizado (curva, não segmento reto) + área de preenchimento sob a linha
   // de Atendimento — só essa, pra não empilhar duas áreas semitransparentes uma sobre a
   // outra quando as duas séries andam coladas (visual mais limpo).
-  private enriquecerGeometria(geo: LinhaTempoGeometria | null) {
+  private enriquecerGeometria(geo: LinhaTempoGeometria | null, pontos: PontoLinhaTempo[]) {
     if (!geo) return null;
     const baseY = geo.altura - geo.margem.baixo;
+    const ultimo = pontos[pontos.length - 1];
     return {
       ...geo,
       pathAtendimento: suavizarPath(geo.pontosAtendimento),
       pathCumprimento: suavizarPath(geo.pontosCumprimento),
       areaAtendimento: suavizarAreaPath(geo.pontosAtendimento, baseY),
+      // Valor do ponto atual (última semana), pra rotular o destaque no fim da linha —
+      // a geometria só tem coordenada SVG (x/y), não o valor original em %.
+      ultimoAtendimento: ultimo ? Math.round(ultimo.atendimento) : null,
+      ultimoCumprimento: ultimo ? Math.round(ultimo.cumprimento) : null,
     };
   }
 
-  linhaTempoGeral = computed(() => this.enriquecerGeometria(calcularLinhaTempo(
-    this.pontosEvolucaoGeral().map(p => ({ label: `S${this.numeroSemanaISO(p.semana)}`, atendimento: p.atendimento, cumprimento: p.cumprimento })),
-  )));
+  linhaTempoGeral = computed(() => {
+    const pontos = this.pontosEvolucaoGeral().map(p => ({ label: `S${this.numeroSemanaISO(p.semana)}`, atendimento: p.atendimento, cumprimento: p.cumprimento }));
+    return this.enriquecerGeometria(calcularLinhaTempo(pontos), pontos);
+  });
 
   linhaTempoPorArea = computed(() => CATEGORIAS_INDICADOR.map(categoria => {
     const pontos = [...(this.pontosEvolucaoPorArea().get(categoria) ?? new Map()).entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([semana, v]): PontoLinhaTempo => ({ label: `S${this.numeroSemanaISO(semana)}`, atendimento: v.atendimento, cumprimento: v.cumprimento }));
-    return { categoria, label: CATEGORIA_LABEL[categoria], geometria: this.enriquecerGeometria(calcularLinhaTempo(pontos)) };
+    return { categoria, label: CATEGORIA_LABEL[categoria], geometria: this.enriquecerGeometria(calcularLinhaTempo(pontos), pontos) };
   }));
 
   // Soma todas as semanas do ano corrente (não o histórico inteiro, que pode cruzar
