@@ -1,7 +1,7 @@
 <div class="space-y-4">
   <div class="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-3">
     <div>
-      <h1 class="text-2xl font-bold text-gray-800">Acompanhamento de Indicadores Semanais</h1>
+      <h1 class="text-2xl font-bold text-gray-800">{{ tituloPagina() }}</h1>
       <p class="text-sm text-gray-500 mt-0.5">Atendimento à Programação e Cumprimento do Plano, calculados ao vivo a partir da execução apontada no SIGMA.</p>
     </div>
   </div>
@@ -106,7 +106,7 @@
       </div>
       <div class="pcm-company-info">
         <div class="pcm-company-name">PORTO DO PECÉM TRANSPORTADORA DE MINÉRIOS</div>
-        <div class="pcm-report-title">Acompanhamento de Indicadores Semanais — PPTM</div>
+        <div class="pcm-report-title">{{ tituloPagina() }} — PPTM</div>
       </div>
       <div class="pcm-report-info">
         <div class="pcm-periodo-info">{{ periodoLabel() }}</div>

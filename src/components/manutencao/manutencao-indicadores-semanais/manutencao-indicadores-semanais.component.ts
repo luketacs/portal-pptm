@@ -285,6 +285,12 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     return hojeMesIso < mesMinimoIso ? mesMinimoIso : hojeMesIso;
   })());
 
+  // Título da tela/relatório — acompanha o toggle Semana/Mês (usado no <h1> e no
+  // cabeçalho do relatório impresso). Não mexe no texto da aba "Indicadores Semanais"
+  // do upload de histórico (essa é o nome fixo da aba dentro da planilha, não descreve
+  // esta tela).
+  tituloPagina = computed(() => this.modoPeriodo() === 'mes' ? 'Acompanhamento de Indicadores Mensais' : 'Acompanhamento de Indicadores Semanais');
+
   // Toda semana ('YYYY-MM-DD') que compõe o período selecionado — 1 semana no modo
   // Semana, todas as segundas do mês no modo Mês. Filtro central: todo lugar que
   // precisa "ordens desse período" testa `semanasDoPeriodoSet().has(o.semanaInicio)`
