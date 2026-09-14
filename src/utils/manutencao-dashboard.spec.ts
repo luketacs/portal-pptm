@@ -1,4 +1,4 @@
-import { calcularHhTecnico, calcularKpiExecucao, hhPorEquipamento } from './manutencao-dashboard';
+import { calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento } from './manutencao-dashboard';
 import { HORAS_EXAME_MEDICO } from './manutencao-regras';
 
 const DIAS_SEMANA_37 = [
@@ -53,6 +53,35 @@ describe('hhPorEquipamento', () => {
   it('trata duracaoHoras null como 0', () => {
     const ordens = [{ equipamento: 'X', duracaoHoras: null }];
     expect(hhPorEquipamento(ordens)).toEqual([{ equipamento: 'X', horas: 0 }]);
+  });
+});
+
+describe('hhPorAtividade', () => {
+  it('agrupa e soma duracaoHoras por descrição (atividade)', () => {
+    const ordens = [
+      { descricao: 'Troca de rolamento', duracaoHoras: 4 },
+      { descricao: 'Troca de rolamento', duracaoHoras: 2 },
+      { descricao: 'Inspeção elétrica', duracaoHoras: 3 },
+    ];
+    expect(hhPorAtividade(ordens)).toEqual([
+      { atividade: 'Troca de rolamento', horas: 6 },
+      { atividade: 'Inspeção elétrica', horas: 3 },
+    ]);
+  });
+
+  it('ordena do maior consumo de HH pro menor', () => {
+    const ordens = [{ descricao: 'A', duracaoHoras: 1 }, { descricao: 'B', duracaoHoras: 10 }];
+    expect(hhPorAtividade(ordens).map(h => h.atividade)).toEqual(['B', 'A']);
+  });
+
+  it('ignora ordens sem descrição preenchida', () => {
+    const ordens = [{ descricao: null, duracaoHoras: 5 }, { descricao: '  ', duracaoHoras: 5 }, { descricao: 'X', duracaoHoras: 1 }];
+    expect(hhPorAtividade(ordens)).toEqual([{ atividade: 'X', horas: 1 }]);
+  });
+
+  it('trata duracaoHoras null como 0', () => {
+    const ordens = [{ descricao: 'X', duracaoHoras: null }];
+    expect(hhPorAtividade(ordens)).toEqual([{ atividade: 'X', horas: 0 }]);
   });
 });
 

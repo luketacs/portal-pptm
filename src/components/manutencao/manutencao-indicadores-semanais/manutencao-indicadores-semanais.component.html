@@ -169,6 +169,25 @@
     </section>
 
     <section class="pcm-section">
+      <h2 class="pcm-section-title">Principais Atividades — Top 10</h2>
+      @if (hhPorAtividadeTop10().length === 0) {
+        <p class="pcm-empty">Nenhuma OS com descrição/duração preenchidos nessa semana.</p>
+      } @else {
+        <div class="space-y-1.5">
+          @for (item of hhPorAtividadeTop10(); track item.atividade) {
+            <div class="flex items-center gap-2 text-sm">
+              <span class="w-40 sm:w-56 truncate text-gray-700 flex-shrink-0" [title]="item.atividade">{{ item.atividade }}</span>
+              <div class="flex-1 bg-slate-100 rounded-full h-4 pcm-hh-barra-fundo">
+                <div class="h-4 rounded-full pcm-hh-barra-fill" [style.width.%]="hhPorAtividadeMax() > 0 ? (item.horas / hhPorAtividadeMax() * 100) : 0"></div>
+              </div>
+              <span class="w-14 text-right text-gray-600 font-semibold flex-shrink-0">{{ item.horas }}h</span>
+            </div>
+          }
+        </div>
+      }
+    </section>
+
+    <section class="pcm-section">
       <h2 class="pcm-section-title">Horas Apontadas por Técnico</h2>
       @if (rankingHorasApontadasEletrica().length === 0 && rankingHorasApontadasMecanica().length === 0) {
         <p class="pcm-empty">Nenhum apontamento de Elétrica/Mecânica nesse período.</p>

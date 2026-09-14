@@ -15,7 +15,7 @@ import {
 import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, linhaRetaAreaPath, linhaRetaPath } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
 import { MESES_ABREV, MESES_COMPLETO } from '../../../utils/relatorio-mensal-pcm';
-import { HhEquipamento, KpiExecucao, calcularHhTecnico, calcularKpiExecucao, hhPorEquipamento, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
+import { HhAtividade, HhEquipamento, KpiExecucao, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
 import { encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 import { VisivelNaTelaDirective } from './visivel-na-tela.directive';
 
@@ -401,6 +401,12 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   private hhPorEquipamentoTodos = computed<HhEquipamento[]>(() => hhPorEquipamento(this.ordensDaSemana()));
   hhPorEquipamentoTop10 = computed(() => this.hhPorEquipamentoTodos().slice(0, 10));
   hhPorEquipamentoMax = computed(() => this.hhPorEquipamentoTop10()[0]?.horas ?? 0);
+
+  // Mesma ideia, agrupando por atividade (descrição da ordem) em vez de equipamento —
+  // "principais atividades desenvolvidas", as que mais consumiram HH no período.
+  private hhPorAtividadeTodos = computed<HhAtividade[]>(() => hhPorAtividade(this.ordensDaSemana()));
+  hhPorAtividadeTop10 = computed(() => this.hhPorAtividadeTodos().slice(0, 10));
+  hhPorAtividadeMax = computed(() => this.hhPorAtividadeTop10()[0]?.horas ?? 0);
 
   // HH só faz sentido pra Elétrica/Mecânica (Apoio programa por equipe/empresa, sem
   // disponibilidade individual cadastrada) — soma as duas juntas, já que esta tela não

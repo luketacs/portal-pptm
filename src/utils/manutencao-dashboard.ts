@@ -88,6 +88,27 @@ export function hhPorEquipamento(ordens: { equipamento: string | null; duracaoHo
     .sort((a, b) => b.horas - a.horas);
 }
 
+export interface HhAtividade {
+  atividade: string;
+  horas: number;
+}
+
+// Mesma ideia de hhPorEquipamento, só que agrupando por descrição da ordem (a
+// "atividade" em si) em vez de equipamento — mostra quais tipos de atividade
+// consumiram mais HH no período, não em qual equipamento. Ordens sem descrição
+// preenchida ficam de fora (não tem o que agrupar).
+export function hhPorAtividade(ordens: { descricao: string | null; duracaoHoras: number | null }[]): HhAtividade[] {
+  const mapa = new Map<string, number>();
+  for (const o of ordens) {
+    const desc = o.descricao?.trim();
+    if (!desc) continue;
+    mapa.set(desc, (mapa.get(desc) ?? 0) + (o.duracaoHoras ?? 0));
+  }
+  return [...mapa.entries()]
+    .map(([atividade, horas]) => ({ atividade, horas: Math.round(horas * 100) / 100 }))
+    .sort((a, b) => b.horas - a.horas);
+}
+
 export interface HhTecnico {
   bruto: number;
   liquido: number;
