@@ -369,8 +369,8 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   cardsConsolidadoAno = computed<CardIndicador[]>(() => {
     const ano = this.consolidadoAno();
     return [
-      { titulo: 'Atendimento à Programação', valor: `${ano.geral.atendimento}%`, meta: `${ano.geral.executadas} de ${ano.geral.programadas} executadas no ano`, cor: 'green', icone: 'check' },
-      { titulo: 'Cumprimento do Plano', valor: `${ano.cumprimentoPlano.atendimento}%`, meta: `${ano.cumprimentoPlano.executadas} de ${ano.cumprimentoPlano.programadas} planejadas do Plano`, cor: 'blue', icone: 'calendario' },
+      { titulo: 'Atendimento à Programação', valor: `${ano.geral.atendimento}%`, meta: `${ano.geral.executadas} de ${ano.geral.programadas} executadas no ano · Meta: ${this.metaAtendimento}%`, cor: 'green', icone: 'check' },
+      { titulo: 'Cumprimento do Plano', valor: `${ano.cumprimentoPlano.atendimento}%`, meta: `${ano.cumprimentoPlano.executadas} de ${ano.cumprimentoPlano.programadas} planejadas do Plano · Meta: ${this.metaCumprimento}%`, cor: 'blue', icone: 'calendario' },
       { titulo: 'Status Geral do Ano', valor: ano.statusGeral, cor: 'teal', icone: 'bandeira' },
     ];
   });
