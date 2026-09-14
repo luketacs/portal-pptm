@@ -77,7 +77,43 @@
   animation-delay: .9s;
 }
 .pcm-linha-tempo-rotulo-final--atendimento { fill: #2e7d32; }
-.pcm-linha-tempo-rotulo-final--cumprimento { fill: #1565c0; }
+.pcm-linha-tempo-rotulo-final--cumprimento { fill: var(--diamante-azul-escuro); }
+
+/* Cumprimento do Plano (linha/ponto/legenda) na cor oficial da marca — era um azul
+   genérico (#2196F3) herdado do documento PCM original. Atendimento fica verde (não é
+   cor da marca, mas é status — "indo bem" — então não mexe). */
+.pcm-linha-tempo-linha--cumprimento { stroke: var(--diamante-azul-escuro); }
+.pcm-linha-tempo-ponto--cumprimento { fill: var(--diamante-azul-escuro); }
+.pcm-legenda-cor--cumprimento { background-color: var(--diamante-azul-escuro); }
+
+/* Moldura dos gráficos de Evolução — mesmo cartão do resto do Portal (.app-card em
+   src/index.css: fundo branco, borda clara, sombra suave, cantos de 14px), em vez de
+   ficarem "soltos" dentro da seção sem nenhum contorno próprio. */
+.pcm-linha-tempo-bloco,
+.pcm-linha-tempo-area {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .08), 0 10px 24px rgba(15, 23, 42, .06);
+  padding: 20px;
+  transition: box-shadow .18s ease, transform .18s ease;
+}
+.pcm-linha-tempo-bloco:hover,
+.pcm-linha-tempo-area:hover {
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .16);
+  transform: translateY(-2px);
+}
+
+/* Títulos das seções e dos mini-gráficos por área — cor azul-marinho do documento
+   original trocada pelo azul primário do Portal (mesmo --color-primary-600 usado em
+   botões/links em todo o resto do sistema). */
+.pcm-section-title,
+.pcm-horas-grafico-area-titulo {
+  color: var(--diamante-azul-escuro);
+}
+.pcm-section-title {
+  border-bottom-color: #eef2ff;
+}
 
 /* Cabeçalho leve (mesma linha da tabela abaixo) — só o logo da Diamante (o mesmo PNG
    usado no resto do Portal), sem as marcas do relatório PPTM original que este
