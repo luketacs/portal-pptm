@@ -11,7 +11,7 @@ import { ApontamentosService } from '../../../services/apontamentos.service';
 import { ExcelExportService, ProgramacaoSemanalGrupo, ProgramacaoSemanalLinha } from '../../../services/excel-export.service';
 import { AlmoxarifadoService, Movimentacao, Solicitacao } from '../../../services/almoxarifado.service';
 import {
-  ConsultaSigmaResultado, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo,
+  CategoriaIndicador, ConsultaSigmaResultado, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo,
   OperadorEscalaApoio, PlanoManutencao, RecursoEspecialItem, SigmaBacklogItem,
 } from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, TURNO_LABEL, turnoNoDia } from '../../../utils/escala-apoio';
@@ -19,7 +19,7 @@ import {
   HORAS_TREINAMENTO_DIA_TODO, calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo,
   encontrarOrdemDuplicada, podeEditarSemanaFechada, recursosParaEspelho,
 } from '../../../utils/manutencao-regras';
-import { PlanoComProximaData, planosAtrasados, planosComProximaExecucao, proximaExecucaoPlano, sugestoesDaSemana } from '../../../utils/manutencao-planos';
+import { inferirCategoriaIndicador, PlanoComProximaData, planosAtrasados, planosComProximaExecucao, proximaExecucaoPlano, sugestoesDaSemana } from '../../../utils/manutencao-planos';
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
@@ -1229,6 +1229,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   programarDaPreventiva(plano: PlanoComProximaData): void {
     this.abrirCriar();
     this.formArea.set(plano.area);
+    this.formCategoriaIndicador.set(inferirCategoriaIndicador(plano.especialidade, plano.area));
     this.formDescricao.set(plano.nome);
     this.formEquipamento.set(plano.equipamento);
     this.formTipoServico.set('PREVENTIVA');
@@ -1381,6 +1382,21 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   formIdEdicao = signal<string | null>(null);
   formTipo = signal<ManutencaoTipo>('ordem');
   formArea = signal<ManutencaoArea>('ELETRICA');
+  // Só editável quando formArea()==='APOIO' — Mecânica/Elétrica não têm ambiguidade
+  // (o service já preenche sozinho igual à área). Ver CategoriaIndicador no model.
+  formCategoriaIndicador = signal<CategoriaIndicador | null>(null);
+  // Mecânica/Elétrica não têm ambiguidade — a categoria é sempre a própria área
+  // (Apoio precisa do que a pessoa escolheu em formCategoriaIndicador, pode ser null).
+  private categoriaIndicadorParaEnviar(): CategoriaIndicador | null {
+    const area = this.formArea();
+    return area === 'APOIO' ? this.formCategoriaIndicador() : area;
+  }
+
+  categoriaIndicadorOpcoes: { valor: CategoriaIndicador; label: string }[] = [
+    { valor: 'LIMP_OPERACIONAL', label: 'Limp Operacional' },
+    { valor: 'REFRIGERACAO', label: 'Refrigeração' },
+    { valor: 'SPCI', label: 'SPCI' },
+  ];
   formNumeroOs = signal('');
   formSemOs = signal(false);
   formDescricao = signal('');
@@ -1487,6 +1503,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     ));
     this.formChecklist.set(plano.atividades);
     this.formVincularPlanoTexto.set('');
+    if (this.formArea() === 'APOIO' && !this.formCategoriaIndicador()) {
+      this.formCategoriaIndicador.set(inferirCategoriaIndicador(plano.especialidade, plano.area));
+    }
     if (!this.formTipoServico().trim()) this.formTipoServico.set('PREVENTIVA');
     if (plano.lotoPadrao && !this.formLoto().trim()) this.formLoto.set(plano.lotoPadrao);
     if (plano.equipamentosRelacionados && this.formEquipamentosRelacionadosLista().length === 0) {
@@ -1987,6 +2006,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formTipo.set('ordem');
     const area = this.areaFiltro();
     this.formArea.set(area !== 'todos' ? area : 'ELETRICA');
+    this.formCategoriaIndicador.set(null);
     this.formNumeroOs.set('');
     this.formNumeroOsStatusSigma.set(null);
     this.formSemOs.set(false);
@@ -2030,6 +2050,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formIdEdicao.set(o.id);
     this.formTipo.set(o.tipo);
     this.formArea.set(o.area);
+    this.formCategoriaIndicador.set(o.categoriaIndicador);
     this.formNumeroOs.set(o.numeroOs ?? '');
     this.formNumeroOsStatusSigma.set(null);
     this.formSemOs.set(o.semOs);
@@ -2307,6 +2328,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         await this.manutencaoService.editarOrdem(idEdicao, {
           tipo,
           area: this.formArea(),
+          categoriaIndicador: this.categoriaIndicadorParaEnviar(),
           numeroOs: ehOrdem ? (this.formNumeroOs().trim() || null) : null,
           semOs: ehOrdem && this.formSemOs(),
           descricao: this.descricaoParaEnvio(),
@@ -2342,6 +2364,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         const novoId = await this.manutencaoService.criarOrdem({
           tipo,
           area: this.formArea(),
+          categoriaIndicador: this.categoriaIndicadorParaEnviar() ?? undefined,
           semanaInicio: this.semanaFiltro(),
           numeroOs: ehOrdem ? (this.formNumeroOs().trim() || undefined) : undefined,
           semOs: ehOrdem && this.formSemOs(),

@@ -4,7 +4,7 @@ import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
 import { podeEditarSemanaFechada } from '../utils/manutencao-regras';
 import {
-  ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest, EquipeApoioItem, FeriasTecnico,
+  CategoriaIndicador, ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest, EquipeApoioItem, FeriasTecnico,
   ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, ParadaPlanta,
   RecursoEspecialItem, SigmaBacklogItem,
 } from '../models/manutencao-programacao.model';
@@ -13,6 +13,7 @@ interface ManutencaoOrdemRow {
   id: string;
   tipo: string;
   area: string;
+  categoria_indicador: string | null;
   semana_inicio: string;
   numero_os: string | null;
   sem_os: boolean;
@@ -49,6 +50,7 @@ function mapRow(r: ManutencaoOrdemRow): ManutencaoOrdem {
     id: r.id,
     tipo: (r.tipo as ManutencaoTipo) || 'ordem',
     area: r.area as ManutencaoArea,
+    categoriaIndicador: r.categoria_indicador as CategoriaIndicador | null,
     semanaInicio: r.semana_inicio,
     numeroOs: r.numero_os,
     semOs: r.sem_os,
@@ -161,6 +163,9 @@ export class ManutencaoProgramacaoService {
     const payload = {
       tipo: req.tipo ?? 'ordem',
       area: req.area,
+      // Mecânica/Elétrica não têm ambiguidade — categoria = área, sem depender do
+      // formulário mandar nada. Apoio só grava o que vier explicitamente escolhido.
+      categoria_indicador: req.categoriaIndicador ?? (req.area === 'APOIO' ? null : req.area),
       semana_inicio: req.semanaInicio,
       numero_os: req.semOs ? null : (req.numeroOs?.trim() || null),
       sem_os: req.semOs ?? false,
@@ -343,6 +348,7 @@ export class ManutencaoProgramacaoService {
       .update({
         tipo: updates.tipo,
         area: updates.area,
+        categoria_indicador: updates.categoriaIndicador ?? (updates.area === 'APOIO' ? null : updates.area),
         numero_os: updates.semOs ? null : (updates.numeroOs?.trim() || null),
         sem_os: updates.semOs,
         descricao: updates.descricao.trim(),

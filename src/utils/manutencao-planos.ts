@@ -2,7 +2,22 @@ import {
   calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva, periodicidadeEmDias,
   preventivaVencendo, PeriodicidadeUnidade,
 } from './manutencao-preventivas';
-import { PlanoManutencao } from '../models/manutencao-programacao.model';
+import { CategoriaIndicador, ManutencaoArea, PlanoManutencao } from '../models/manutencao-programacao.model';
+
+// Deriva a categoria do indicador semanal (ver CategoriaIndicador) a partir do que já
+// existe no plano — Mecânica/Elétrica não têm ambiguidade; Apoio precisa olhar
+// `especialidade` (texto livre herdado do SIGMA, ex. "P-REFRIGERACAO-PREVENTIVA",
+// "P-OPERACAO-LIMPEZA INDUSTRIAL") pra decidir entre as 3 opções. null quando não dá
+// pra inferir (ex. SPCI, que ainda não tem nenhum Plano cadastrado) — a pessoa escolhe
+// na hora de programar.
+export function inferirCategoriaIndicador(especialidade: string | null, area: ManutencaoArea): CategoriaIndicador | null {
+  if (area === 'MECANICA' || area === 'ELETRICA') return area;
+  const esp = (especialidade ?? '').toUpperCase();
+  if (esp.includes('REFRIGERA')) return 'REFRIGERACAO';
+  if (esp.includes('OPERACAO') || esp.includes('LIMPEZA')) return 'LIMP_OPERACIONAL';
+  if (esp.includes('SPCI')) return 'SPCI';
+  return null;
+}
 
 // "Próxima execução" de um plano — substitui o antigo campo mutável `ultima_execucao`
 // (ver PlanoPreventivo, aposentado): agora é sempre derivada do ciclo mais recente já

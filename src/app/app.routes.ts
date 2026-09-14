@@ -185,6 +185,14 @@ export const APP_ROUTES: Routes = [
     title: 'Dashboard da Programação',
   },
   {
+    path: 'manutencao/indicadores-semanais',
+    loadComponent: () =>
+      import('../components/manutencao/manutencao-indicadores-semanais/manutencao-indicadores-semanais.component').then(m => m.ManutencaoIndicadoresSemanaisComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Acompanhamento de Indicadores Semanais',
+  },
+  {
     path: 'manutencao/planos',
     loadComponent: () =>
       import('../components/manutencao/manutencao-planos/manutencao-planos.component').then(m => m.ManutencaoPlanosComponent),

@@ -1,0 +1,89 @@
+<div class="space-y-4">
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-800">Acompanhamento de Indicadores Semanais</h1>
+      <p class="text-sm text-gray-500 mt-0.5">Atendimento à Programação e Cumprimento do Plano, calculados ao vivo a partir da execução apontada no SIGMA.</p>
+    </div>
+  </div>
+
+  <div class="app-card p-4 flex flex-wrap items-end gap-4">
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Semana</label>
+      <select [ngModel]="semanaFiltro()" (ngModelChange)="semanaFiltro.set($event)"
+        class="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+        @for (s of semanas; track s.value) {
+          <option [value]="s.value">{{ s.label }}</option>
+        }
+      </select>
+    </div>
+    <button type="button" (click)="atualizar()" [disabled]="sigmaAtualizando()"
+      class="text-sm text-blue-600 hover:text-blue-700 font-semibold disabled:opacity-50">
+      @if (sigmaAtualizando()) {
+        Atualizando execução...
+      } @else {
+        Atualizar execução (SIGMA)
+      }
+    </button>
+    @if (ultimaAtualizacaoEm(); as data) {
+      <span class="text-xs text-gray-400">Atualizado às {{ data | date: 'HH:mm' }} — atualiza sozinho a cada poucos minutos</span>
+    }
+  </div>
+
+  @if (errorMessage()) {
+    <div class="app-card p-4 text-sm text-red-600">{{ errorMessage() }}</div>
+  }
+
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div class="app-card p-4">
+      <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Atendimento à Programação</p>
+      <p class="text-3xl font-bold" [class]="corPercentual(indicadores().geral.atendimento, metaAtendimento)">{{ indicadores().geral.atendimento }}%</p>
+      <p class="text-sm text-gray-500 mt-1">{{ indicadores().geral.executadas }} de {{ indicadores().geral.programadas }} executadas · meta {{ metaAtendimento }}%</p>
+    </div>
+    <div class="app-card p-4">
+      <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Cumprimento do Plano</p>
+      <p class="text-3xl font-bold" [class]="corPercentual(indicadores().cumprimentoPlano.atendimento, metaCumprimento)">{{ indicadores().cumprimentoPlano.atendimento }}%</p>
+      <p class="text-sm text-gray-500 mt-1">{{ indicadores().cumprimentoPlano.executadas }} de {{ indicadores().cumprimentoPlano.programadas }} planejadas do Plano · meta {{ metaCumprimento }}%</p>
+    </div>
+    <div class="app-card p-4 flex flex-col justify-center items-start">
+      <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Status Geral</p>
+      <span class="text-sm font-bold px-3 py-1.5 rounded-full" [class]="statusCor(indicadores().statusGeral)">{{ indicadores().statusGeral }}</span>
+    </div>
+  </div>
+
+  <div class="app-card p-4">
+    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Desempenho por Área</p>
+    @if (indicadores().porArea.length === 0) {
+      <p class="text-sm text-gray-400">Nenhuma ordem programada nessa semana.</p>
+    } @else {
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-xs font-semibold text-gray-500 uppercase border-b border-slate-200">
+              <th class="py-2 pr-3">Área</th>
+              <th class="py-2 pr-3 text-right">Programadas</th>
+              <th class="py-2 pr-3 text-right">Executadas</th>
+              <th class="py-2 pr-3 text-right">Não Executadas</th>
+              <th class="py-2 pr-3 text-right">Atendimento</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (a of indicadores().porArea; track (a.categoria ?? 'null')) {
+              <tr class="border-b border-slate-100 last:border-0">
+                <td class="py-2 pr-3 font-medium text-gray-700">
+                  {{ a.categoria ? categoriaLabel[a.categoria] : 'Não classificado' }}
+                  @if (!a.categoria) {
+                    <span class="ml-1 text-xs text-amber-600" title="Ordem de Apoio sem categoria escolhida — editar e classificar">⚠</span>
+                  }
+                </td>
+                <td class="py-2 pr-3 text-right">{{ a.programadas }}</td>
+                <td class="py-2 pr-3 text-right">{{ a.executadas }}</td>
+                <td class="py-2 pr-3 text-right">{{ a.naoExecutadas }}</td>
+                <td class="py-2 pr-3 text-right font-semibold" [class]="corPercentual(a.atendimento, metaAtendimento)">{{ a.atendimento }}%</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</div>

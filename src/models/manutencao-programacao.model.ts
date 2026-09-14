@@ -1,4 +1,9 @@
 export type ManutencaoArea = 'ELETRICA' | 'MECANICA' | 'APOIO';
+// Quebra mais fina que `area`, só pra o indicador semanal (ver Acompanhamento de
+// Indicadores Semanais) — Mecânica/Elétrica mapeiam 1:1 com `area` (sem ambiguidade,
+// preenchido sozinho); Apoio se divide em 3 (Limp Operacional/Refrigeração/SPCI), que
+// hoje não tem nenhum campo que as distinga. null = ainda não classificado.
+export type CategoriaIndicador = 'MECANICA' | 'ELETRICA' | 'LIMP_OPERACIONAL' | 'REFRIGERACAO' | 'SPCI';
 // Vem direto do SIGMA (ex.: "PEND", "EXPA") — o Portal não controla essa transição, só
 // exibe/edita o que o SIGMA já informa. Texto livre, não uma lista fechada de valores.
 export type ManutencaoStatus = string;
@@ -12,6 +17,9 @@ export interface ManutencaoOrdem {
   id: string;
   tipo: ManutencaoTipo;
   area: ManutencaoArea;
+  // Só relevante quando area='APOIO' (Mecânica/Elétrica preenchem sozinhas, iguais à
+  // área) — ver CategoriaIndicador. null = ainda não classificado.
+  categoriaIndicador: CategoriaIndicador | null;
   semanaInicio: string; // 'YYYY-MM-DD', segunda-feira da semana
   numeroOs: string | null;
   // true = esse serviço não tem (e nunca vai ter) OS no SIGMA — ex.: revisão de
@@ -51,6 +59,7 @@ export interface ManutencaoOrdem {
 export interface CreateManutencaoOrdemRequest {
   tipo?: ManutencaoTipo; // default 'ordem' no service se não informado
   area: ManutencaoArea;
+  categoriaIndicador?: CategoriaIndicador;
   semanaInicio: string;
   numeroOs?: string;
   semOs?: boolean;
@@ -249,6 +258,7 @@ export interface FeriasTecnico {
 export interface EditarManutencaoOrdemRequest {
   tipo: ManutencaoTipo;
   area: ManutencaoArea;
+  categoriaIndicador: CategoriaIndicador | null;
   numeroOs: string | null;
   semOs: boolean;
   descricao: string;

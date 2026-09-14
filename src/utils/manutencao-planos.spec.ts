@@ -1,5 +1,5 @@
 import { PlanoManutencao } from '../models/manutencao-programacao.model';
-import { gerarGradeMensal, planosAtrasados, planosComProximaExecucao, proximaExecucaoPlano, sugestoesDaSemana } from './manutencao-planos';
+import { gerarGradeMensal, inferirCategoriaIndicador, planosAtrasados, planosComProximaExecucao, proximaExecucaoPlano, sugestoesDaSemana } from './manutencao-planos';
 
 function plano(overrides: Partial<PlanoManutencao> = {}): PlanoManutencao {
   return {
@@ -173,5 +173,29 @@ describe('gerarGradeMensal', () => {
     // ano vira certo (formato 'YYYY-MM-DD' correto, sem erro de cálculo).
     const ultimoDiaGrade = todosDias[todosDias.length - 1].data;
     expect(ultimoDiaGrade >= '2026-12-31' || ultimoDiaGrade.startsWith('2027-01')).toBe(true);
+  });
+});
+
+describe('inferirCategoriaIndicador', () => {
+  it('Mecânica e Elétrica não têm ambiguidade — categoria é sempre a própria área', () => {
+    expect(inferirCategoriaIndicador(null, 'MECANICA')).toBe('MECANICA');
+    expect(inferirCategoriaIndicador('qualquer coisa', 'ELETRICA')).toBe('ELETRICA');
+  });
+
+  it('Apoio com especialidade de refrigeração vira REFRIGERACAO', () => {
+    expect(inferirCategoriaIndicador('P-REFRIGERACAO-PREVENTIVA', 'APOIO')).toBe('REFRIGERACAO');
+  });
+
+  it('Apoio com especialidade de operação/limpeza vira LIMP_OPERACIONAL', () => {
+    expect(inferirCategoriaIndicador('P-OPERACAO-LIMPEZA INDUSTRIAL', 'APOIO')).toBe('LIMP_OPERACIONAL');
+  });
+
+  it('Apoio com especialidade de SPCI vira SPCI', () => {
+    expect(inferirCategoriaIndicador('P-SPCI-PREVENTIVA', 'APOIO')).toBe('SPCI');
+  });
+
+  it('Apoio sem especialidade reconhecível (ex. Elétrica dentro de Apoio) ou nula fica null — pessoa escolhe na hora', () => {
+    expect(inferirCategoriaIndicador('P-ELETRICA-PREVENTIVA', 'APOIO')).toBe(null);
+    expect(inferirCategoriaIndicador(null, 'APOIO')).toBe(null);
   });
 });

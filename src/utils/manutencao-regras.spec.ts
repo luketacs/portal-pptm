@@ -17,7 +17,7 @@ const DIAS_SEMANA_37 = [
 
 function ordem(overrides: Partial<ManutencaoOrdem>): ManutencaoOrdem {
   return {
-    id: 'x', tipo: 'ordem', area: 'ELETRICA', semanaInicio: '2026-09-07', numeroOs: null, semOs: false,
+    id: 'x', tipo: 'ordem', area: 'ELETRICA', categoriaIndicador: null, semanaInicio: '2026-09-07', numeroOs: null, semOs: false,
     descricao: '', equipamento: null, equipamentosRelacionados: null, recursos: null, loto: null, areaAtuacao: null, duracaoHoras: null,
     tipoServico: null, tecnicoNome: '', tecnicoMatricula: null, diasPrevistos: [], status: 'PEND',
     observacoes: null, reuniaoHorario: null, reuniaoLocal: null, planoPreventivoId: null, checklist: null,

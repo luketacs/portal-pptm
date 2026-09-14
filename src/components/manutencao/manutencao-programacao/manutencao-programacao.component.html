@@ -1263,6 +1263,20 @@
         </div>
       </div>
 
+      @if (formArea() === 'APOIO' && formTipo() === 'ordem') {
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-slate-700 mb-1">Categoria (indicador semanal)</label>
+          <select [ngModel]="formCategoriaIndicador()" (ngModelChange)="formCategoriaIndicador.set($event)"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+            <option [ngValue]="null">Não classificado</option>
+            @for (op of categoriaIndicadorOpcoes; track op.valor) {
+              <option [value]="op.valor">{{ op.label }}</option>
+            }
+          </select>
+          <p class="text-xs text-gray-400 mt-1">Usado só pra separar Limp Operacional/Refrigeração/SPCI no Acompanhamento de Indicadores Semanais — não afeta nada mais desta OS.</p>
+        </div>
+      }
+
       @if (formTipo() === 'ordem') {
         <label class="flex items-center gap-2 mb-3 cursor-pointer">
           <input type="checkbox" [checked]="formSemOs()" (change)="formSemOs.set(!formSemOs())" class="rounded" />

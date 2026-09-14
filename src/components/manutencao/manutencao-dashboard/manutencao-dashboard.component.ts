@@ -5,7 +5,7 @@ import { ManutencaoProgramacaoService } from '../../../services/manutencao-progr
 import { ApontamentosService } from '../../../services/apontamentos.service';
 import { ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
 import { encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
-import { HhEquipamento, KpiExecucao, calcularHhTecnico, calcularKpiExecucao, hhPorEquipamento } from '../../../utils/manutencao-dashboard';
+import { HhEquipamento, KpiExecucao, calcularHhTecnico, calcularKpiExecucao, hhPorEquipamento, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 
@@ -38,11 +38,6 @@ function diasDaSemana(segundaIso: string): { data: string; label: string }[] {
 
 function normalizarTexto(v: string): string {
   return v.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
-}
-
-function normalizarNumeroOs(v: string): string {
-  const s = v.trim();
-  return /^\d+$/.test(s) ? s.padStart(6, '0') : s.toUpperCase();
 }
 
 const AREA_LABEL: Record<ManutencaoArea, string> = {
@@ -177,26 +172,14 @@ export class ManutencaoDashboardComponent implements OnInit {
   // técnicos do grupo têm apontamento DELES batendo com o dia previsto — não "qualquer
   // apontamento" na OS (um apoio de 2 pessoas onde só 1 aponta não está concluído,
   // mesmo critério de statusExecucao()/atendimentoProgramacao() na Programação).
+  // Extraída pra src/utils/manutencao-dashboard.ts (ordemExecutadaAgrupada) — também
+  // usada pelo Acompanhamento de Indicadores Semanais, pra não duplicar o critério de
+  // "executada".
   private ordemExecutadaAgrupada(ordens: ManutencaoOrdem[]): boolean[] {
-    const porOs = new Map<string, ManutencaoOrdem[]>();
-    let semOsIdx = 0;
-    for (const o of ordens) {
-      const chave = o.numeroOs?.trim() ? normalizarNumeroOs(o.numeroOs) : `__sem-os-${semOsIdx++}`;
-      const lista = porOs.get(chave);
-      if (lista) lista.push(o);
-      else porOs.set(chave, [o]);
-    }
-    const sigmaPorOs = this.sigmaPorOs();
-    return [...porOs.values()].map(linhas => {
-      if (!linhas[0].numeroOs?.trim()) return false;
-      const resultado = sigmaPorOs[normalizarNumeroOs(linhas[0].numeroOs!)];
-      if (!resultado) return false;
-      return linhas.every(o => {
-        const dias = o.diasPrevistos.length > 0 ? o.diasPrevistos : this.diasDaSemanaAtual().map(d => d.data);
-        const colaborador = this.apontamentosService.matchColaboradorDaOrdem(o.tecnicoMatricula, o.tecnicoNome ?? '');
-        return !!colaborador && resultado.apontamentos.some(a => a.executante === colaborador.matricula && dias.includes(a.data));
-      });
-    });
+    return ordemExecutadaAgrupada(
+      ordens, this.sigmaPorOs(), this.diasDaSemanaAtual().map(d => d.data),
+      (matricula, nome) => this.apontamentosService.matchColaboradorDaOrdem(matricula, nome),
+    );
   }
 
   // ── KPIs de execução ──
