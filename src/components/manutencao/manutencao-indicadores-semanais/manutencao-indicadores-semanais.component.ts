@@ -457,10 +457,16 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // Programação — se uma OS já aparece como executada lá, ela também conta aqui);
   // Disponível = mesma fórmula de hhTotais (calcularHhTecnico), só que por pessoa em
   // vez de somada. Só Elétrica/Mecânica, mesma restrição do HH acima.
+  // Pedido do usuário: tirar esse colaborador específico desses gráficos (não do
+  // cadastro/matriculas.json em si, só da exibição aqui).
+  private readonly NOMES_EXCLUIDOS_HORAS = new Set(['JOAQUIM NETO']);
+
   private tecnicosEletrica = computed(() =>
-    this.apontamentosService.colaboradores().filter(c => normalizarTexto(c.area).includes('ELETR')));
+    this.apontamentosService.colaboradores()
+      .filter(c => normalizarTexto(c.area).includes('ELETR') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))));
   private tecnicosMecanica = computed(() =>
-    this.apontamentosService.colaboradores().filter(c => normalizarTexto(c.area).includes('MECAN')));
+    this.apontamentosService.colaboradores()
+      .filter(c => normalizarTexto(c.area).includes('MECAN') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))));
 
   private calcularHorasPorTecnico(tecnicos: Colaborador[]): HorasTecnicoItem[] {
     const ferias = this.manutencaoService.ferias();
@@ -538,9 +544,21 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     return [
       { titulo: 'Atendimento à Programação', valor: `${ano.geral.atendimento}%`, meta: `${ano.geral.executadas} de ${ano.geral.programadas} executadas no ano · Meta: ${this.metaAtendimento}%`, cor: 'green', icone: 'check' },
       { titulo: 'Cumprimento do Plano', valor: `${ano.cumprimentoPlano.atendimento}%`, meta: `${ano.cumprimentoPlano.executadas} de ${ano.cumprimentoPlano.programadas} planejadas do Plano · Meta: ${this.metaCumprimento}%`, cor: 'blue', icone: 'calendario' },
-      { titulo: 'Status Geral do Ano', valor: ano.statusGeral, cor: 'teal', icone: 'bandeira' },
+      { titulo: 'Status Geral do Ano', valor: this.statusAnoSimplificado(), cor: 'teal', icone: 'bandeira' },
     ];
   });
+
+  // "Status Geral do Ano" simplificado a pedido do usuário — só 2 valores (não os 3 de
+  // StatusGeralSemana que o resto da tela usa, com a faixa intermediária "Próximo da
+  // Meta"): Acima da Meta exige os dois indicadores (Atendimento e Cumprimento) em
+  // 95% ou mais; qualquer coisa abaixo disso é Abaixo da Meta, só pra este card.
+  statusAnoSimplificado = computed(() => {
+    const ano = this.consolidadoAno();
+    return (ano.geral.atendimento >= this.metaAtendimento && ano.cumprimentoPlano.atendimento >= this.metaCumprimento)
+      ? 'Acima da Meta' : 'Abaixo da Meta';
+  });
+
+  statusAnoCor = computed(() => this.statusAnoSimplificado() === 'Acima da Meta' ? '#4CAF50' : '#F44336');
 
   // ── Evolução ao Longo do Ano + Consolidado do Ano ──────────────────────
 

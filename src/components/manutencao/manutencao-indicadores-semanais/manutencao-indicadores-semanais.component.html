@@ -146,7 +146,7 @@
           </div>
         }
       </div>
-      <p class="text-xs text-gray-400 mt-2">HH disponível/indisponível soma Elétrica + Mecânica (Apoio programa por equipe/empresa, não tem disponibilidade individual cadastrada).</p>
+      <p class="text-xs text-gray-400 mt-2">HH disponível/indisponível soma Elétrica + Mecânica.</p>
     </section>
 
     <section class="pcm-section">
@@ -337,7 +337,7 @@
             </svg>
             <div class="pcm-card-title">{{ c.titulo }}</div>
             @if (c.titulo === 'Status Geral do Ano') {
-              <div class="pcm-card-value" style="font-size: 1.1rem;" [style.color]="statusCor(consolidadoAno().statusGeral)">{{ c.valor }}</div>
+              <div class="pcm-card-value" style="font-size: 1.1rem;" [style.color]="statusAnoCor()">{{ c.valor }}</div>
             } @else {
               <div class="pcm-card-value">{{ c.valor }}</div>
             }
