@@ -1,24 +1,34 @@
--- A migration 039 deveria garantir que planos do MESMO equipamento (mesmo TAG/KKS —
--- ex. as 3 variantes de periodicidade de "BANCO BATERIAS TC06") sempre saíssem na
--- mesma semana. Uma verificação nos dados reais (não na simulação) encontrou 117 desses
--- grupos ainda divididos entre semanas diferentes — o SQL que rodou não corresponde
--- exatamente à versão final do algoritmo (com agrupamento atômico) que ficou no
+-- A migration 039 deveria garantir que planos do mesmo local/equipamento sempre saíssem
+-- na mesma semana. Uma verificação nos dados reais (não na simulação) encontrou 135
+-- grupos ainda divididos entre semanas diferentes — o SQL que efetivamente rodou não
+-- corresponde à versão final do algoritmo (com agrupamento atômico) que ficou no
 -- repositório; a causa exata não importa mais do que o fato de estar errado agora.
 --
--- Esta migration corrige de forma direta e idempotente: para cada grupo
--- (área+equipamento) onde TODOS os membros compartilham o mesmo tag_kks (ou seja, é
--- inequivocamente o mesmo ativo físico — não um rótulo genérico de categoria
--- compartilhado por TAGs diferentes, que é um caso à parte, não tratado aqui) e que
--- ainda tem membros no backlog com data_inicial divergente entre si, move todos pra a
--- MAIS CEDO das datas já usadas no grupo (nunca atrasa nada que já estava mais perto).
+-- Cobre os dois casos encontrados:
+--   1. Grupos onde todos os membros são o MESMO tag_kks (mesmo ativo físico, ex. as 3
+--      variantes de periodicidade de "BANCO BATERIAS TC06") — inequivocamente deveriam
+--      estar juntos.
+--   2. Grupos onde o campo "equipamento" é um rótulo de categoria compartilhado por
+--      TAGs/ativos físicos diferentes (ex. "ROLOS E PAINEIS" com 4 ativos distintos, e a
+--      maioria dos casos de ar-condicionado/refrigeração — vários splits na mesma sala,
+--      cada um com sua própria data real vinda da migration 040) — confirmado com o
+--      usuário: força junto também, mesmo sendo ativos diferentes, porque a visita à
+--      mesma sala provavelmente cobre todos de uma vez.
 --
--- Não mexe nos 18 grupos restantes onde o "equipamento" é um rótulo de categoria
--- compartilhado por TAGs/ativos físicos diferentes (ex. "ROLOS E PAINEIS", e a maior
--- parte dos casos de ar-condicionado/refrigeração da migration 040) — isso depende de
--- uma decisão de negócio (forçar junto mesmo sendo ativos diferentes, ou manter cada um
--- na sua data real) que ainda não foi confirmada.
+-- Corrige de forma direta e idempotente: para cada grupo (área+equipamento, ≥2 planos
+-- ativos) com membros no backlog em datas divergentes, move todos pra a MAIS CEDO das
+-- datas já usadas no grupo (nunca atrasa nada que já estava mais perto).
 
 UPDATE manutencao_planos SET data_inicial = '2026-09-21' WHERE id = ANY(ARRAY[
+    'a6c43555-7fd3-461d-bfa4-0850ee85465c',
+    '499668b5-1150-4ca3-a027-58214cee8a38',
+    '1af63ec9-bc08-4b18-899f-9d44f7b643f8',
+    '72bc3021-1709-419e-9aff-d574a6270723',
+    '25069f71-9a5c-4a2c-8ab2-7fdbbbc260e7',
+    '9d7484e3-cafa-43dd-909a-d98fa0f8b747',
+    '2ea3c01d-dfa3-4dce-bc71-572b3363422a',
+    '0ea803c4-c18c-445a-aeaf-718763017522',
+    'c0f5213b-efb2-42e6-9e88-74f5e15b89b5',
     '19a43e27-9c03-4a9f-bb70-5ee82a8d2388',
     'bf5565fd-aafd-466d-959c-4ae894d65563',
     'c8cce003-19e4-46ba-99ff-82da0df5ddac',
@@ -90,14 +100,26 @@ UPDATE manutencao_planos SET data_inicial = '2026-09-21' WHERE id = ANY(ARRAY[
     'f6a5cdf3-66c4-4897-bde0-1c2a89cc402c',
     'fb2bd5f9-1804-4038-8f5a-4337642c88cf',
     'f0e6d0fa-4165-45b3-af57-af633e70aad0',
-    '8d098efe-902a-4044-949d-372a1a8e16bf',
     'ebc7926e-57b5-4cbe-8763-2ea1c875b0f6',
+    '8d098efe-902a-4044-949d-372a1a8e16bf',
     'fbcc4ce5-bdaa-4284-bb0e-c36799ed0291',
     '358b9c59-7816-47a2-9be3-e8a171ded14c',
     'f7949ad1-e435-4e88-811f-dfdcc860834c',
     'f27ed8a4-c7ae-4396-92df-3af20da14fe9',
     'b1dedd0d-2b4f-4f58-aa63-aa183fc28da4',
     'a930063a-0c5d-4cad-a002-44ba5b9b7cbb',
+    'ac58fdc6-4b44-4ac5-a9f5-25a4721b55a0',
+    'b5750773-ac2e-4a01-bc57-6789229f0e69',
+    '0e6a7dfa-51f6-4ebe-829b-05690496d004',
+    '8f4820a8-eea8-4338-a2dd-5a18e6f4010e',
+    '632d6e4d-8cda-4e2b-b2f7-c907561b41cc',
+    '5c511cfb-56ec-4657-b615-58408802653d',
+    '59ccd759-e82e-46d5-ba10-b0557f1001dc',
+    '1811adbf-8c9c-4b70-8428-da00f1d99315',
+    '7762a9d6-7aec-46cb-a961-64cb01cbfc08',
+    '087efe6a-c444-445b-9b7a-ab25081e22fb',
+    'e987ce97-c083-4b44-9227-f5decb0b243c',
+    'e1f5243d-c59b-4267-bf5b-adda68790f2e',
     '741a7d09-0e43-4908-a995-c2f67e1d2d19',
     '7443131b-33f6-4070-82f0-4f6df468aad2',
     'd80692b3-0d58-4c56-883c-fa69c2ce7bbc',
@@ -105,9 +127,19 @@ UPDATE manutencao_planos SET data_inicial = '2026-09-21' WHERE id = ANY(ARRAY[
     '4ac8b201-76d4-4ff7-8d27-a385c80b94e1',
     '340ed543-a614-4acc-bc80-fddae5907579',
     '989a5701-b68e-46f9-86c1-6ad6c87e408e'
-  ]::uuid[]); -- 86 planos
+  ]::uuid[]); -- 107 planos
 
 UPDATE manutencao_planos SET data_inicial = '2026-09-28' WHERE id = ANY(ARRAY[
+    '95e91786-8029-4301-af01-e95dd8b40e83',
+    'fb5fc9b6-8353-47b4-8be5-26c0347c5dbf',
+    '735840ba-d965-4da7-906e-edb880a8c3f4',
+    '3cf69d51-6902-46d4-b94f-48ec8a556f03',
+    '49e456da-b4b5-4d15-b2c5-f0af0106498a',
+    '596885ec-627b-4876-80d5-172f75d4fda3',
+    '531aff44-f033-4767-9778-4a4ab7ae7074',
+    '24e33d76-ac06-4ab7-921c-8bf98422e10f',
+    '59c64655-d8d4-42e9-9106-f1c42379b9d3',
+    '9a9ba63d-6bd6-40b0-ad65-ed637c83d0b4',
     '875b9b39-f561-42eb-92cb-5ed2bdcd81c0',
     'fe6e4649-0fee-49f2-b332-15d725cb1abf',
     '74bb7da9-756b-462d-abab-be8780318106',
@@ -127,6 +159,8 @@ UPDATE manutencao_planos SET data_inicial = '2026-09-28' WHERE id = ANY(ARRAY[
     '5a8b0d14-eac9-427a-b7e2-b86b72499dfa',
     'f8df82f1-c79e-49ae-be42-3d0d7e99aa4a',
     'efdb61bd-4e06-4c38-a1e5-6f9b267afbfe',
+    '8d56b36b-d439-443f-a016-64ae3e55d6b4',
+    '3748cb67-eb5a-422c-9584-b944a5c1e457',
     'fcfc8203-8f15-44a0-8290-667c0c25c34f',
     'edcd65a7-44d8-4302-b1cc-d3a11389ca08',
     'de4d26ec-d059-4634-a8ba-f745ed30be86',
@@ -134,10 +168,13 @@ UPDATE manutencao_planos SET data_inicial = '2026-09-28' WHERE id = ANY(ARRAY[
     '84584a49-07ae-4a7e-b81f-53536be21570',
     '9e03eaa1-7ed2-4634-8da6-ac964a2c5e46',
     'f00127c4-7f90-4060-9698-0feaf467f74a',
+    '4329cafb-2dec-4ebd-99db-310f166dbcf8',
     'f66d5a50-c187-4686-b1ba-a9a04638a194',
+    '18503e17-bb36-41d0-a9cc-b1da80ae2eb9',
+    '578dc942-30db-46d8-9f71-bd0ed8785181',
     '6fd62ee1-82da-46ef-b622-30b7cb39aa9e',
     '844918d4-abc5-4346-8f51-f51b146c3a66'
-  ]::uuid[]); -- 29 planos
+  ]::uuid[]); -- 44 planos
 
 UPDATE manutencao_planos SET data_inicial = '2026-10-05' WHERE id = ANY(ARRAY[
     '530b86a6-cc0e-40fc-8a39-cb33cc810c3c',
@@ -169,6 +206,12 @@ UPDATE manutencao_planos SET data_inicial = '2026-10-05' WHERE id = ANY(ARRAY[
 
 UPDATE manutencao_planos SET data_inicial = '2026-10-12' WHERE id = ANY(ARRAY[
     '45470953-1754-4d1d-a3ba-309037d4881b',
+    '3ba9ff6b-b48d-4645-94b4-5bb802feee91',
+    'ce042f88-adc2-4b3d-bfb7-8301574182d1',
+    '2ea7616b-a414-46c7-93ea-24fac17082aa',
+    'f325c08d-10ed-4220-b7cf-98fa3c69c428',
+    '31036727-cbc9-49ff-b74b-36fdb0721db0',
+    'c295ebbc-6d9d-4301-ae1f-21b6dfca8f59',
     '6b57ee5f-ef78-4764-a88f-8fedf8dbf9a6',
     '5820fe42-3591-4fe6-87e2-4ae36fb798f2',
     '8d5f38d4-ea0c-486b-8ac4-b9e5201f09c4',
@@ -178,6 +221,20 @@ UPDATE manutencao_planos SET data_inicial = '2026-10-12' WHERE id = ANY(ARRAY[
     'f3f3146f-0756-47fe-bef3-974528e87f4c',
     'a5fa83be-00f1-4ce1-98d5-671f66e89763',
     'a38786e8-8b82-4860-a4aa-f88a532d0eb8',
+    'f184c35d-416b-41e3-a72d-bb894bd5c5ff',
+    '8693fc62-75dd-4dd6-ab13-12b5cf17ea54',
+    '638a88bb-7525-4724-b76d-30a473d8bac0',
+    '22333e73-2fc2-460a-8c22-03747b7c669b',
+    'dfeda8cb-bd8e-48b6-ae73-c642fe75db4f',
+    '82aa1835-1bde-487d-bb71-4b889d1eb8c6',
+    'd14c7b0c-0348-4db2-ab8d-881e27af61e8',
+    '2861828b-11ab-4856-8caa-ac5840a13cfc',
+    '4d40357a-02c1-40f3-9c62-8ff7ed987d80',
+    '83aaac8c-57bb-4634-b0cb-9103188b4ada',
+    'f43b4f49-985e-47b0-b9e6-b02ef22489e2',
+    'ef15e6d2-b292-4cd7-b797-5316ef9e2c7b',
+    '33db92d2-28e7-45ef-a6f0-2e2615314690',
+    '3100c43b-6f49-49c4-a8e6-21a15aaaa146',
     '3983a3a9-5f85-44ca-acc7-13470e8024ce',
     '68cec49b-8232-483c-ab5c-b48b49763adc',
     'b0cb3c0d-2323-4932-bcb5-44ce8b156dbd',
@@ -189,7 +246,7 @@ UPDATE manutencao_planos SET data_inicial = '2026-10-12' WHERE id = ANY(ARRAY[
     'eacd5a8c-9661-4c27-a5f1-fe4ad34b59c2',
     '3fa44b71-bc06-4f0f-9f81-d79e21a7ffa0',
     '4eccfc44-0007-4646-8cb7-b504993bbbcb'
-  ]::uuid[]); -- 21 planos
+  ]::uuid[]); -- 41 planos
 
 UPDATE manutencao_planos SET data_inicial = '2026-10-19' WHERE id = ANY(ARRAY[
     '24b6a9c6-7638-40a8-ab5c-c1cd8d05ce5e',
@@ -211,13 +268,23 @@ UPDATE manutencao_planos SET data_inicial = '2026-10-19' WHERE id = ANY(ARRAY[
     'd62ea49e-260f-437b-aecc-abc1e2ee2bf5',
     '6b349159-d754-4666-b873-bf1e20d983e0',
     'c870ec87-2fe8-40d3-8fa1-df1473020091',
+    '984eaa8b-fd7a-49b5-aa5e-2faaf5b34b00',
+    '0c699b21-43c9-4fc6-bfcc-169ef401e16e',
+    '5894ef85-cbd9-4c6d-8401-c67931c9d4ad',
+    '9f9b195b-841f-4a57-b61c-b5ca180180f7',
+    '0cd3f306-c246-4318-8109-04ea971b21bc',
+    '7857254a-01f0-491c-833d-17df868c5388',
+    '647aed2c-7ab2-49fc-a878-824229a952ce',
+    'a4336804-44e7-408c-a460-dde0ad043a66',
+    '3e0e16bc-7868-4a96-9386-db27a602e59e',
+    'c7bd0971-d08d-4c59-be69-23e758d4f31b',
     '7806a9c4-572b-41c5-bffa-3125664b88e4',
     '6f855798-61c6-4f90-b418-8b82c1ed157a',
     '99d89db5-7040-47aa-b508-f029f8c46502',
     '57920efd-574d-42f3-b42f-be6ad69c2006',
     'ab748c50-d1e9-4b60-a980-15bb3174054a',
     '426a6cb7-3052-460d-b92d-8e4a622229b6'
-  ]::uuid[]); -- 25 planos
+  ]::uuid[]); -- 35 planos
 
 UPDATE manutencao_planos SET data_inicial = '2026-10-26' WHERE id = ANY(ARRAY[
     '5ab49524-3e6c-43c5-935f-60dc560a41e3',
@@ -239,6 +306,7 @@ UPDATE manutencao_planos SET data_inicial = '2026-10-26' WHERE id = ANY(ARRAY[
   ]::uuid[]); -- 16 planos
 
 UPDATE manutencao_planos SET data_inicial = '2026-11-02' WHERE id = ANY(ARRAY[
+    '788d8059-f3a7-4200-baef-920dd78eff1f',
     '68941378-c0ab-4cfb-88be-7a481697a5cc',
     '9432f975-7121-424b-b4fc-30b6e42953dc',
     'f50e0415-90f9-446a-a08c-be58a7aee68b',
@@ -248,7 +316,7 @@ UPDATE manutencao_planos SET data_inicial = '2026-11-02' WHERE id = ANY(ARRAY[
     '646f1917-0bc1-4ca3-b8ad-e375d7f726da',
     '898c72cf-a150-4c1f-ae31-377737d2380b',
     '1ea348c4-b002-4e1c-b8b0-69cf5c0d6e3c'
-  ]::uuid[]); -- 9 planos
+  ]::uuid[]); -- 10 planos
 
 UPDATE manutencao_planos SET data_inicial = '2026-11-09' WHERE id = ANY(ARRAY[
     'daba104b-2daf-4a94-95a4-f801127ec7f8',
@@ -293,12 +361,17 @@ UPDATE manutencao_planos SET data_inicial = '2026-11-23' WHERE id = ANY(ARRAY[
   ]::uuid[]); -- 7 planos
 
 UPDATE manutencao_planos SET data_inicial = '2026-12-07' WHERE id = ANY(ARRAY[
+    'f164f66c-8f4e-499c-a8fc-2abc77fba879',
+    '8649b391-9849-4e38-a917-f8f65acda078',
     'c241f822-81b1-47c4-912b-2af90104f149',
     'bc91eab4-2e13-4c8a-9b8f-254af2130d26'
-  ]::uuid[]); -- 2 planos
+  ]::uuid[]); -- 4 planos
 
 UPDATE manutencao_planos SET data_inicial = '2026-12-14' WHERE id = ANY(ARRAY[
+    '79ee4e18-4aa5-4b33-8b4e-60ceb7cf1eb4',
+    'f9ae5da9-5996-47d2-8c5b-fd61bf861fb9',
+    '2ef54c3d-e5e3-46f4-98cf-70521b224753',
     '30712abc-de9b-47a4-9aa8-5eac91d131b5',
     'f8c0f5cc-b949-4f19-8272-4049b35bcacc'
-  ]::uuid[]); -- 2 planos
+  ]::uuid[]); -- 5 planos
 
