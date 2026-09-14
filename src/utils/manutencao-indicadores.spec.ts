@@ -68,11 +68,11 @@ describe('calcularIndicadoresSemana', () => {
     expect(r.porArea.find(a => a.categoria === 'ELETRICA')).toBeUndefined();
   });
 
-  it('cumprimentoPlano de cada área só conta ordens daquela área que também são do plano', () => {
+  it('cumprimentoPlano de cada área só conta ordens daquela área que também são preventivas', () => {
     const ordens = [
-      ordem({ id: 'a', area: 'MECANICA', categoriaIndicador: 'MECANICA', numeroOs: '1', planoPreventivoId: 'p1' }),
-      ordem({ id: 'b', area: 'MECANICA', categoriaIndicador: 'MECANICA', numeroOs: '2', planoPreventivoId: null }),
-      ordem({ id: 'c', area: 'APOIO', categoriaIndicador: 'REFRIGERACAO', numeroOs: '3', planoPreventivoId: 'p2' }),
+      ordem({ id: 'a', area: 'MECANICA', categoriaIndicador: 'MECANICA', numeroOs: '1', tipoServico: 'PREVENTIVA' }),
+      ordem({ id: 'b', area: 'MECANICA', categoriaIndicador: 'MECANICA', numeroOs: '2', tipoServico: 'CORRETIVA' }),
+      ordem({ id: 'c', area: 'APOIO', categoriaIndicador: 'REFRIGERACAO', numeroOs: '3', tipoServico: 'PREVENTIVA' }),
     ];
     const r = calcularIndicadoresSemana({ ordens, sigmaPorOs: {}, matchColaborador });
     const mecanica = r.porArea.find(a => a.categoria === 'MECANICA')!;
@@ -82,10 +82,10 @@ describe('calcularIndicadoresSemana', () => {
     expect(refrigeracao.cumprimentoPlano.programadas).toBe(1);
   });
 
-  it('cumprimentoPlano só conta ordens com planoPreventivoId preenchido', () => {
+  it('cumprimentoPlano só conta ordens com tipoServico PREVENTIVA (independe de vínculo com Plano cadastrado)', () => {
     const ordens = [
-      ordem({ id: 'a', numeroOs: '1', planoPreventivoId: 'plano-1' }),
-      ordem({ id: 'b', numeroOs: '2', planoPreventivoId: null }),
+      ordem({ id: 'a', numeroOs: '1', tipoServico: 'PREVENTIVA', planoPreventivoId: null }),
+      ordem({ id: 'b', numeroOs: '2', tipoServico: 'CORRETIVA', planoPreventivoId: 'plano-1' }),
     ];
     const r = calcularIndicadoresSemana({ ordens, sigmaPorOs: {}, matchColaborador });
     expect(r.cumprimentoPlano.programadas).toBe(1);
@@ -110,8 +110,8 @@ describe('calcularIndicadoresSemana', () => {
     // META_CUMPRIMENTO * 0.9 = 83.7 -> 85% de cumprimento entra em "Próximo", mesmo com
     // atendimento geral baixo.
     const ordens = [
-      ordem({ id: 'a', numeroOs: '1', planoPreventivoId: 'p1', tecnicoMatricula: '111', diasPrevistos: ['2026-09-21'] }),
-      ordem({ id: 'b', numeroOs: '2', planoPreventivoId: null }), // não executada, sem SIGMA
+      ordem({ id: 'a', numeroOs: '1', tipoServico: 'PREVENTIVA', tecnicoMatricula: '111', diasPrevistos: ['2026-09-21'] }),
+      ordem({ id: 'b', numeroOs: '2', tipoServico: 'CORRETIVA' }), // não executada, sem SIGMA
     ];
     // Só a ordem 'a' bate no SIGMA -> geral 50%, cumprimentoPlano 100% (1 de 1 do plano).
     const sigmaPorOs = sigma('000001', [{ matricula: '111', data: '2026-09-21' }]);

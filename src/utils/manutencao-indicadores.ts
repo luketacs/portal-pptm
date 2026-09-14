@@ -72,7 +72,10 @@ export function calcularIndicadoresSemana(params: {
 
   const geral = calc(ordens);
 
-  const doPlano = ordens.filter(o => !!o.planoPreventivoId);
+  // Cumprimento do Plano = plano de manutenção PREVENTIVA (tipoServico), não o vínculo
+  // opcional com um registro de Plano cadastrado (planoPreventivoId) — nem toda
+  // preventiva nasce de um Plano formal, mas todas contam pro cumprimento do plano.
+  const doPlano = ordens.filter(o => o.tipoServico?.trim().toUpperCase() === 'PREVENTIVA');
   const porArea: IndicadorArea[] = [...CATEGORIAS_INDICADOR, null]
     .map(categoria => ({
       categoria,
