@@ -115,7 +115,7 @@ export const CATEGORIAS_INDICADOR: CategoriaIndicador[] = ['MECANICA', 'ELETRICA
 export const CATEGORIA_LABEL: Record<CategoriaIndicador, string> = {
   MECANICA: 'Mecânica',
   ELETRICA: 'Elétrica',
-  LIMP_OPERACIONAL: 'Limp Operacional',
+  LIMP_OPERACIONAL: 'Limpeza Operacional',
   REFRIGERACAO: 'Refrigeração',
   SPCI: 'SPCI',
 };

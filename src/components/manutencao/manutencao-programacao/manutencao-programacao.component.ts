@@ -1410,7 +1410,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   }
 
   categoriaIndicadorOpcoes: { valor: CategoriaIndicador; label: string }[] = [
-    { valor: 'LIMP_OPERACIONAL', label: 'Limp Operacional' },
+    { valor: 'LIMP_OPERACIONAL', label: 'Limpeza Operacional' },
     { valor: 'REFRIGERACAO', label: 'Refrigeração' },
     { valor: 'SPCI', label: 'SPCI' },
   ];
