@@ -40,7 +40,7 @@ export class RequestListComponent implements OnInit, OnDestroy {
   maxValue = signal<number | null>(null); // Filtro de valor máximo
 
   // Filter options
-  materialTypes: (MaterialType | 'all')[] = ['all', 'Mecânica', 'Elétrica', 'SPCI', 'Refrigeração', 'Outros'];
+  materialTypes: (MaterialType | 'all')[] = ['all', 'Mecânica', 'Elétrica', 'Automação', 'SPCI', 'Refrigeração', 'Outros'];
   requestStatuses: (RequestStatus | 'all')[] = [
     'all', 
     'Pendente', 

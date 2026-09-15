@@ -23,6 +23,7 @@ export function normalizeMaterialType(value: string): MaterialType {
     .toLowerCase();
 
   if (normalized.includes('mec')) return 'Mecânica';
+  if (normalized.includes('automa')) return 'Automação';
   if (normalized.includes('ele')) return 'Elétrica';
   if (normalized.includes('refrig')) return 'Refrigeração';
   if (normalized === 'spci') return 'SPCI';

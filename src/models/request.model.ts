@@ -1,7 +1,7 @@
 ﻿import { UserProfile } from './user.model';
 
 export type RequestStatus = 'Pendente' | 'Aprovado no Portal' | 'Reprovado' | 'Aprovado no MRP' | 'SC Criada' | 'Em Cotação' | 'Aprovado em RD' | 'Reprovado em RD' | 'Pedido Criado' | 'Material Recebido' | 'Finalizado';
-export type MaterialType = 'Mecânica' | 'Elétrica' | 'SPCI' | 'Refrigeração' | 'Outros';
+export type MaterialType = 'Mecânica' | 'Elétrica' | 'Automação' | 'SPCI' | 'Refrigeração' | 'Outros';
 export type Priority = 'Baixa' | 'Média' | 'Alta' | 'Emergencial';
 
 export interface HistoryEvent {

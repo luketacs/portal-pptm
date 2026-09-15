@@ -103,6 +103,8 @@ describe('normalizeMaterialType', () => {
     ['MECANICA', 'Mecânica'],
     ['Elétrica', 'Elétrica'],
     ['eletrica', 'Elétrica'],
+    ['Automação', 'Automação'],
+    ['automacao', 'Automação'],
     ['Refrigeração', 'Refrigeração'],
     ['refrigeracao', 'Refrigeração'],
     ['SPCI', 'SPCI'],
