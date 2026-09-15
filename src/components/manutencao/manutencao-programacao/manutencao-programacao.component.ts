@@ -1696,9 +1696,19 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
     const domingo = domingoDaSemana(o.semanaInicio);
     const colaborador = this.apontamentosService.matchColaboradorDaOrdem(o.tecnicoMatricula, o.tecnicoNome ?? '');
+    // Apoio programa por empresa/equipe (tecnicoNome = "SERVPLEX"/"OPERAÇÃO"/"TOP
+    // ANDAIMES"...), não por pessoa cadastrada em matriculas.json — matchColaboradorDaOrdem
+    // nunca resolve um indivíduo pra esse texto. Sem uma pessoa específica pra cobrar
+    // apontamento dela, cai pra "qualquer apontamento bateu dentro da semana da ordem"
+    // (mesmo raciocínio/mesmo fix de ordemExecutadaAgrupada em manutencao-dashboard.ts,
+    // usado pelo Acompanhamento de Indicadores — duplicado aqui porque esta tela ainda
+    // não reaproveita aquela função). Restrito a area==='APOIO': pra Elétrica/Mecânica
+    // continua exigindo a matrícula específica.
     const dentroDaSemana = colaborador
       ? resultado.apontamentos.filter(a => a.data >= o.semanaInicio && a.data <= domingo && a.executante === colaborador.matricula)
-      : [];
+      : o.area === 'APOIO'
+        ? resultado.apontamentos.filter(a => a.data >= o.semanaInicio && a.data <= domingo)
+        : [];
     if (dentroDaSemana.length > 0) {
       return {
         label: 'Executada', class: 'bg-green-100 text-green-700', dot: 'bg-green-500',
@@ -1751,8 +1761,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       const todosApontaram = linhas.every(o => {
         const domingo = domingoDaSemana(o.semanaInicio);
         const colaborador = this.apontamentosService.matchColaboradorDaOrdem(o.tecnicoMatricula, o.tecnicoNome ?? '');
-        return !!colaborador && resultado.apontamentos.some(a =>
-          a.executante === colaborador.matricula && a.data >= o.semanaInicio && a.data <= domingo);
+        const dentroDaSemana = (a: { data: string }) => a.data >= o.semanaInicio && a.data <= domingo;
+        // Mesmo fallback de statusExecucao() acima pra ordem de Apoio (empresa/equipe,
+        // sem colaborador individual resolvível) — ver comentário lá.
+        if (!colaborador) return o.area === 'APOIO' && resultado.apontamentos.some(dentroDaSemana);
+        return resultado.apontamentos.some(a => a.executante === colaborador.matricula && dentroDaSemana(a));
       });
       if (todosApontaram) executadas++;
     }
