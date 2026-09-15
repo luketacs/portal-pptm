@@ -33,7 +33,7 @@ describe('calcularIndicadoresSemana', () => {
     // semana) sem nenhuma ordem do plano não "falhou", simplesmente não tinha nada
     // previsto. Antes lia como "Abaixo da Meta" (0% não bate meta nenhuma).
     const r = calcularIndicadoresSemana({ ordens: [], sigmaPorOs: {}, matchColaborador });
-    expect(r.geral).toEqual({ programadas: 0, executadas: 0, parciais: 0, naoExecutadas: 0, atendimento: 100 });
+    expect(r.geral).toEqual({ programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 });
     expect(r.porArea).toEqual([]);
     expect(r.statusGeral).toBe('Dentro da Meta');
   });
@@ -47,7 +47,7 @@ describe('calcularIndicadoresSemana', () => {
     ];
     const sigmaPorOs = sigma('000001', [{ matricula: '111', data: '2026-09-24' }]); // quinta, não estava em diasPrevistos, mas é da mesma semana
     const r = calcularIndicadoresSemana({ ordens, sigmaPorOs, matchColaborador });
-    expect(r.geral).toEqual({ programadas: 1, executadas: 1, parciais: 0, naoExecutadas: 0, atendimento: 100 });
+    expect(r.geral).toEqual({ programadas: 1, executadas: 1, naoExecutadas: 0, atendimento: 100 });
   });
 
   it('não conta como executada quando o apontamento cai fora da semana da ordem', () => {
@@ -60,7 +60,22 @@ describe('calcularIndicadoresSemana', () => {
       ...sigma('000002', [{ matricula: '222', data: '2026-09-28' }]), // semana seguinte, fora
     };
     const r = calcularIndicadoresSemana({ ordens, sigmaPorOs, matchColaborador });
-    expect(r.geral).toEqual({ programadas: 2, executadas: 1, parciais: 0, naoExecutadas: 1, atendimento: 50 });
+    expect(r.geral).toEqual({ programadas: 2, executadas: 1, naoExecutadas: 1, atendimento: 50 });
+  });
+
+  // Pedido do usuário: uma OS dividida entre 2+ técnicos, com só alguns deles apontados
+  // dentro da semana (ordemExecutadaAgrupada retorna 'parcial'), conta como executada
+  // pro indicador — não fica de fora do atendimento só porque falta o apontamento
+  // individual de outro técnico da mesma OS (caso real: OS 047664/semana 37, um
+  // técnico com apontamento EXEC, o outro ainda sem apontar).
+  it('OS "parcial" (2+ técnicos, só alguns apontaram) conta como executada', () => {
+    const ordens = [
+      ordem({ id: 'a', numeroOs: '1', tecnicoMatricula: '111', semanaInicio: '2026-09-21', diasPrevistos: ['2026-09-21'] }),
+      ordem({ id: 'b', numeroOs: '1', tecnicoMatricula: '222', semanaInicio: '2026-09-21', diasPrevistos: ['2026-09-21'] }),
+    ];
+    const sigmaPorOs = sigma('000001', [{ matricula: '111', data: '2026-09-21' }]); // só a matrícula 111 apontou
+    const r = calcularIndicadoresSemana({ ordens, sigmaPorOs, matchColaborador });
+    expect(r.geral).toEqual({ programadas: 1, executadas: 1, naoExecutadas: 0, atendimento: 100 });
   });
 
   it('agrupa por área (categoriaIndicador), só mostrando as que têm pelo menos 1 programada', () => {

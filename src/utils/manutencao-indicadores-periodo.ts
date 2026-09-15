@@ -92,9 +92,8 @@ export function segundaDaSemanaISO(ano: number, semana: number): Date {
 export function somarContagem(a: ContagemExecucao, b: ContagemExecucao): ContagemExecucao {
   const programadas = a.programadas + b.programadas;
   const executadas = a.executadas + b.executadas;
-  const parciais = a.parciais + b.parciais;
   return {
-    programadas, executadas, parciais, naoExecutadas: programadas - executadas - parciais,
+    programadas, executadas, naoExecutadas: programadas - executadas,
     atendimento: programadas > 0 ? Math.round((executadas / programadas) * 10000) / 100 : 100,
   };
 }

@@ -313,19 +313,17 @@
             <thead>
               <tr>
                 <th rowspan="2" style="min-width: 150px;">Área</th>
-                <th colspan="6" class="pcm-subheader-atendimento">Atendimento à Programação</th>
-                <th colspan="6" class="pcm-subheader-cumprimento">Cumprimento do Plano</th>
+                <th colspan="5" class="pcm-subheader-atendimento">Atendimento à Programação</th>
+                <th colspan="5" class="pcm-subheader-cumprimento">Cumprimento do Plano</th>
               </tr>
               <tr>
                 <th>Programadas</th>
                 <th>Executadas</th>
-                <th>Parciais</th>
                 <th>Não Executadas</th>
                 <th>Atendimento</th>
                 <th>Status</th>
                 <th>Planejadas</th>
                 <th>Executadas</th>
-                <th>Parciais</th>
                 <th>Não Executadas</th>
                 <th>Cumprimento</th>
                 <th>Status</th>
@@ -342,7 +340,6 @@
                   </td>
                   <td>{{ a.programadas }}</td>
                   <td>{{ a.executadas }}</td>
-                  <td [class.pcm-valor-parcial]="a.parciais > 0" [title]="a.parciais > 0 ? 'OS dividida entre técnicos — falta apontamento de parte deles' : ''">{{ a.parciais }}</td>
                   <td>{{ a.naoExecutadas }}</td>
                   <td><strong class="pcm-percentage">{{ a.atendimento }}%</strong></td>
                   <td>
@@ -352,7 +349,6 @@
                   </td>
                   <td>{{ a.cumprimentoPlano.programadas }}</td>
                   <td>{{ a.cumprimentoPlano.executadas }}</td>
-                  <td [class.pcm-valor-parcial]="a.cumprimentoPlano.parciais > 0" [title]="a.cumprimentoPlano.parciais > 0 ? 'OS dividida entre técnicos — falta apontamento de parte deles' : ''">{{ a.cumprimentoPlano.parciais }}</td>
                   <td>{{ a.cumprimentoPlano.naoExecutadas }}</td>
                   <td><strong class="pcm-percentage">{{ a.cumprimentoPlano.atendimento }}%</strong></td>
                   <td>
@@ -368,13 +364,11 @@
                 <td class="pcm-area-name">TOTAL GERAL</td>
                 <td>{{ indicadores().geral.programadas }}</td>
                 <td>{{ indicadores().geral.executadas }}</td>
-                <td>{{ indicadores().geral.parciais }}</td>
                 <td>{{ indicadores().geral.naoExecutadas }}</td>
                 <td><strong>{{ indicadores().geral.atendimento }}%</strong></td>
                 <td></td>
                 <td>{{ indicadores().cumprimentoPlano.programadas }}</td>
                 <td>{{ indicadores().cumprimentoPlano.executadas }}</td>
-                <td>{{ indicadores().cumprimentoPlano.parciais }}</td>
                 <td>{{ indicadores().cumprimentoPlano.naoExecutadas }}</td>
                 <td><strong>{{ indicadores().cumprimentoPlano.atendimento }}%</strong></td>
                 <td></td>

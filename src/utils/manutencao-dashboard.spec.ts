@@ -24,23 +24,26 @@ function ordem(overrides: Partial<ManutencaoOrdem> = {}): ManutencaoOrdem {
 }
 
 describe('calcularKpiExecucao', () => {
-  it('retorna 0/0/0/0% quando não há ordens', () => {
-    expect(calcularKpiExecucao([])).toEqual({ programadas: 0, executadas: 0, parciais: 0, percentual: 0 });
+  it('retorna 0/0/0% quando não há ordens', () => {
+    expect(calcularKpiExecucao([])).toEqual({ programadas: 0, executadas: 0, percentual: 0 });
   });
 
   it('calcula o percentual a partir da mistura de executadas/não executadas', () => {
     const ordens = [{ status: 'executada' as const }, { status: 'executada' as const }, { status: 'nao-executada' as const }, { status: 'nao-executada' as const }];
-    expect(calcularKpiExecucao(ordens)).toEqual({ programadas: 4, executadas: 2, parciais: 0, percentual: 50 });
+    expect(calcularKpiExecucao(ordens)).toEqual({ programadas: 4, executadas: 2, percentual: 50 });
   });
 
   it('100% quando todas foram executadas', () => {
     const ordens = [{ status: 'executada' as const }, { status: 'executada' as const }];
-    expect(calcularKpiExecucao(ordens)).toEqual({ programadas: 2, executadas: 2, parciais: 0, percentual: 100 });
+    expect(calcularKpiExecucao(ordens)).toEqual({ programadas: 2, executadas: 2, percentual: 100 });
   });
 
-  it('parciais não entram no numerador do percentual, só na contagem própria', () => {
+  // Pedido do usuário: uma OS 'parcial' (2+ técnicos, só alguns apontaram) conta como
+  // executada pro indicador — se pelo menos um já fez a parte dele, considera feito
+  // (caso real: OS 047664, um técnico com EXEC, o outro ainda sem apontar).
+  it('"parcial" conta como executada (pelo menos 1 técnico já apontou)', () => {
     const ordens = [{ status: 'executada' as const }, { status: 'parcial' as const }, { status: 'nao-executada' as const }];
-    expect(calcularKpiExecucao(ordens)).toEqual({ programadas: 3, executadas: 1, parciais: 1, percentual: 33 });
+    expect(calcularKpiExecucao(ordens)).toEqual({ programadas: 3, executadas: 2, percentual: 67 });
   });
 });
 

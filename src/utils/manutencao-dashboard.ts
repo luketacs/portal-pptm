@@ -91,19 +91,22 @@ export function ordemExecutadaAgrupada(
 export interface KpiExecucao {
   programadas: number;
   executadas: number;
-  parciais: number;
   percentual: number;
 }
 
-// `parciais` não entra no numerador do percentual (a OS ainda não está 100% concluída
-// enquanto algum técnico do grupo não apontou a parte dele) — só é contado à parte pra
-// UI distinguir "faltou só uma parte" de "ninguém apontou nada ainda".
+// Pedido do usuário: pro indicador (Acompanhamento de Indicadores), uma OS 'parcial'
+// (2+ técnicos, só alguns apontaram) conta como executada — se pelo menos um já fez a
+// parte dele, o serviço em si está considerado feito pro indicador, mesmo faltando
+// algum apontamento individual (caso real: OS 047664, Xavier Bruno apontou EXEC,
+// Mauro Teixeira ainda não apontou a dele). Diferente da aba de Programação
+// (statusExecucao()/atendimentoProgramacao() em manutencao-programacao.component.ts),
+// que continua tratando 'parcial' à parte — lá interessa saber exatamente quem ainda
+// não apontou, aqui não.
 export function calcularKpiExecucao(ordens: { status: StatusExecucaoGrupo }[]): KpiExecucao {
   const programadas = ordens.length;
-  const executadas = ordens.filter(o => o.status === 'executada').length;
-  const parciais = ordens.filter(o => o.status === 'parcial').length;
+  const executadas = ordens.filter(o => o.status !== 'nao-executada').length;
   const percentual = programadas > 0 ? Math.round((executadas / programadas) * 100) : 0;
-  return { programadas, executadas, parciais, percentual };
+  return { programadas, executadas, percentual };
 }
 
 export interface HhEquipamento {

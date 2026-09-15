@@ -51,7 +51,6 @@ const ICONES: Record<string, string> = {
   relogio: 'M12 21a9 9 0 100-18 9 9 0 000 18z M12 7.5v5l3.5 2',
   relogioX: 'M12 21a9 9 0 100-18 9 9 0 000 18z M9.5 9.5l5 5 M14.5 9.5l-5 5',
   bandeira: 'M5 21V4 M5 5h13l-2.5 3.2L18 11.5H5',
-  parcial: 'M12 3a9 9 0 100 18 9 9 0 000-18z M12 3v18',
 };
 
 interface CardIndicador {
@@ -502,22 +501,14 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       { titulo: 'Atendimento à Programação', valor: `${this.atendimentoAnimado()}%`, meta: `Meta: ${this.metaAtendimento}%`, cor: 'green', icone: 'check' },
       { titulo: 'Cumprimento do Plano', valor: `${this.cumprimentoAnimado()}%`, meta: `Meta: ${this.metaCumprimento}%`, cor: 'blue', icone: 'calendario' },
       { titulo: "OS's Executadas", valor: `${ind.geral.executadas}/${ind.geral.programadas}`, cor: 'purple', icone: 'lista' },
-      { titulo: "OS's Parcialmente Executadas", valor: `${ind.geral.parciais}`, meta: ind.geral.parciais > 0 ? 'OS dividida entre técnicos — falta apontamento de parte deles' : undefined, cor: 'orange', icone: 'parcial' },
       { titulo: "OS's Não Executadas", valor: `${ind.geral.naoExecutadas}`, cor: 'orange', icone: 'alerta' },
       { titulo: "OS's Planejadas Plano", valor: `${ind.cumprimentoPlano.programadas}`, meta: `${ind.cumprimentoPlano.executadas} executadas do plano`, cor: 'teal', icone: 'prancheta' },
     ];
   });
 
-  // "X de Y executadas (Z parcial)" — só menciona parciais quando existir alguma, pra
-  // não poluir o card nas semanas sem esse caso.
-  private metaExecucao(kpi: KpiExecucao): string {
-    const base = `${kpi.executadas} de ${kpi.programadas} executadas`;
-    return kpi.parciais > 0 ? `${base} (${kpi.parciais} parcial${kpi.parciais > 1 ? 'is' : ''})` : base;
-  }
-
   cardsCorretivasPreventivas = computed<CardIndicador[]>(() => [
-    { titulo: 'Corretivas', valor: `${this.kpiCorretivas().percentual}%`, meta: this.metaExecucao(this.kpiCorretivas()), cor: 'purple', icone: 'raio' },
-    { titulo: 'Preventivas', valor: `${this.kpiPreventivas().percentual}%`, meta: this.metaExecucao(this.kpiPreventivas()), cor: 'teal', icone: 'escudo' },
+    { titulo: 'Corretivas', valor: `${this.kpiCorretivas().percentual}%`, meta: `${this.kpiCorretivas().executadas} de ${this.kpiCorretivas().programadas} executadas`, cor: 'purple', icone: 'raio' },
+    { titulo: 'Preventivas', valor: `${this.kpiPreventivas().percentual}%`, meta: `${this.kpiPreventivas().executadas} de ${this.kpiPreventivas().programadas} executadas`, cor: 'teal', icone: 'escudo' },
     { titulo: 'Exames Médicos', valor: `${this.qtdExames()} ${this.qtdExames() === 1 ? 'exame' : 'exames'}`, cor: 'orange', icone: 'cruz' },
     { titulo: 'Folgas', valor: `${this.qtdFolgas()} ${this.qtdFolgas() === 1 ? 'dia de folga' : 'dias de folga'}`, cor: 'orange', icone: 'lua' },
     { titulo: 'HH Disponível', valor: `${this.hhTotais().disponivel}h`, cor: 'green', icone: 'relogio' },
@@ -683,7 +674,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       if (lista) lista.push(indicadores);
       else porMes.set(mes, [indicadores]);
     }
-    const zero: ContagemExecucao = { programadas: 0, executadas: 0, parciais: 0, naoExecutadas: 0, atendimento: 100 };
+    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 };
     return this.mesesHistoricoIso().map(mes => {
       const semanas = porMes.get(mes) ?? [];
       const geral = semanas.reduce((acc, ind) => somarContagem(acc, ind.geral), zero);
@@ -752,16 +743,16 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // somarContagem antes de virar %, em vez de usar o % de uma semana isolada.
   private pontosEvolucaoGeralMensal = computed<{ mes: string; atendimento: number; cumprimento: number }[]>(() => {
     const inicioAoVivoIso = paraIso(segundaDaSemanaISO(2026, 37));
-    const zero: ContagemExecucao = { programadas: 0, executadas: 0, parciais: 0, naoExecutadas: 0, atendimento: 100 };
+    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 };
     const geralPorMes = new Map<string, ContagemExecucao>();
     const planoPorMes = new Map<string, ContagemExecucao>();
     for (const item of this.historicoService.itens()) {
       if (item.categoria !== 'GERAL' || item.semanaInicio >= inicioAoVivoIso) continue;
       const mes = mesDaSemana(item.semanaInicio);
       geralPorMes.set(mes, somarContagem(geralPorMes.get(mes) ?? zero,
-        { programadas: item.programadas, executadas: item.executadas, parciais: 0, naoExecutadas: item.naoExecutadas, atendimento: 0 }));
+        { programadas: item.programadas, executadas: item.executadas, naoExecutadas: item.naoExecutadas, atendimento: 0 }));
       planoPorMes.set(mes, somarContagem(planoPorMes.get(mes) ?? zero,
-        { programadas: item.planejadasPlano, executadas: item.executadasPlano, parciais: 0, naoExecutadas: item.naoExecutadasPlano, atendimento: 0 }));
+        { programadas: item.planejadasPlano, executadas: item.executadasPlano, naoExecutadas: item.naoExecutadasPlano, atendimento: 0 }));
     }
     const mapa = new Map<string, { atendimento: number; cumprimento: number }>();
     for (const [mes, g] of geralPorMes) {
@@ -779,7 +770,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
 
   private pontosEvolucaoPorAreaMensal = computed<Map<CategoriaIndicador, Map<string, { atendimento: number; cumprimento: number }>>>(() => {
     const inicioAoVivoIso = paraIso(segundaDaSemanaISO(2026, 37));
-    const zero: ContagemExecucao = { programadas: 0, executadas: 0, parciais: 0, naoExecutadas: 0, atendimento: 100 };
+    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 };
     const geralPorCategoria = new Map(CATEGORIAS_INDICADOR.map(c => [c, new Map<string, ContagemExecucao>()]));
     const planoPorCategoria = new Map(CATEGORIAS_INDICADOR.map(c => [c, new Map<string, ContagemExecucao>()]));
     for (const item of this.historicoService.itens()) {
@@ -788,9 +779,9 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       const mapaGeral = geralPorCategoria.get(item.categoria);
       const mapaPlano = planoPorCategoria.get(item.categoria);
       mapaGeral?.set(mes, somarContagem(mapaGeral.get(mes) ?? zero,
-        { programadas: item.programadas, executadas: item.executadas, parciais: 0, naoExecutadas: item.naoExecutadas, atendimento: 0 }));
+        { programadas: item.programadas, executadas: item.executadas, naoExecutadas: item.naoExecutadas, atendimento: 0 }));
       mapaPlano?.set(mes, somarContagem(mapaPlano.get(mes) ?? zero,
-        { programadas: item.planejadasPlano, executadas: item.executadasPlano, parciais: 0, naoExecutadas: item.naoExecutadasPlano, atendimento: 0 }));
+        { programadas: item.planejadasPlano, executadas: item.executadasPlano, naoExecutadas: item.naoExecutadasPlano, atendimento: 0 }));
     }
     const resultado = new Map(CATEGORIAS_INDICADOR.map(c => [c, new Map<string, { atendimento: number; cumprimento: number }>()]));
     for (const categoria of CATEGORIAS_INDICADOR) {
@@ -909,12 +900,12 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     const historicoDoAno = this.historicoService.itens().filter(item =>
       Number(item.semanaInicio.slice(0, 4)) === anoAtual && item.semanaInicio < inicioAoVivoIso);
 
-    const zero: ContagemExecucao = { programadas: 0, executadas: 0, parciais: 0, naoExecutadas: 0, atendimento: 100 };
+    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 };
     const somarHistorico = (categoria: CategoriaIndicador | 'GERAL', plano: boolean) => historicoDoAno
       .filter(i => i.categoria === categoria)
       .reduce((acc, i) => somarContagem(acc, plano
-        ? { programadas: i.planejadasPlano, executadas: i.executadasPlano, parciais: 0, naoExecutadas: i.naoExecutadasPlano, atendimento: 0 }
-        : { programadas: i.programadas, executadas: i.executadas, parciais: 0, naoExecutadas: i.naoExecutadas, atendimento: 0 }), zero);
+        ? { programadas: i.planejadasPlano, executadas: i.executadasPlano, naoExecutadas: i.naoExecutadasPlano, atendimento: 0 }
+        : { programadas: i.programadas, executadas: i.executadas, naoExecutadas: i.naoExecutadas, atendimento: 0 }), zero);
 
     const geral = somarContagem(aoVivo.geral, somarHistorico('GERAL', false));
     const cumprimentoPlano = somarContagem(aoVivo.cumprimentoPlano, somarHistorico('GERAL', true));

@@ -89,25 +89,25 @@ export type MatchColaborador = (matricula: string | null, nome: string) => { mat
 export interface ContagemExecucao {
   programadas: number;
   executadas: number;
-  parciais: number;
   naoExecutadas: number;
   atendimento: number;
 }
 
+// Pedido do usuário: pro indicador, uma OS 'parcial' (2+ técnicos, só alguns
+// apontaram) conta como executada — se pelo menos um já fez a parte dele, o serviço
+// está considerado feito pro indicador (caso real: OS 047664, um técnico com EXEC, o
+// outro sem apontar ainda). Diferente da Programação, que mantém 'parcial' à parte
+// (statusExecucao()/atendimentoProgramacao() em manutencao-programacao.component.ts) —
+// lá interessa saber exatamente quem ainda não apontou; aqui não.
 function contarExecucao(
   ordens: ManutencaoOrdem[], sigmaPorOs: Record<string, ConsultaSigmaResultado>,
   matchColaborador: MatchColaborador,
 ): ContagemExecucao {
   const statusPorGrupo = ordemExecutadaAgrupada(ordens, sigmaPorOs, matchColaborador);
   const programadas = statusPorGrupo.length;
-  const executadas = statusPorGrupo.filter(s => s === 'executada').length;
-  // 'parcial' (OS dividida entre técnicos, só alguns apontaram) não conta como
-  // executada nem como não-executada — fica numa contagem própria pra não inflar
-  // nenhuma das duas nem embaralhar o percentual de atendimento (que continua medindo
-  // "% totalmente concluída").
-  const parciais = statusPorGrupo.filter(s => s === 'parcial').length;
+  const executadas = statusPorGrupo.filter(s => s !== 'nao-executada').length;
   return {
-    programadas, executadas, parciais, naoExecutadas: programadas - executadas - parciais,
+    programadas, executadas, naoExecutadas: programadas - executadas,
     // 0 programadas = 100%, não 0% — nada previsto pro período é, por definição,
     // cumprido por completo (nada ficou faltando). Pedido do usuário: uma área como
     // SPCI sem nenhuma ordem do plano numa semana não deve aparecer como "0%" de
