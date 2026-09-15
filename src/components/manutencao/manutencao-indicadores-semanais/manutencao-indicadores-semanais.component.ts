@@ -10,7 +10,7 @@ import { ManutencaoIndicadoresHistoricoService } from '../../../services/manuten
 import { CategoriaIndicador, ConsultaSigmaResultado, ImportarIndicadorHistoricoItem, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
-  StatusGeralSemana, calcularIndicadoresSemana,
+  PISO_INDICE_META, StatusGeralSemana, TETO_INDICE_META, calcularIndicadoresSemana, indiceAtingimentoMeta,
 } from '../../../utils/manutencao-indicadores';
 import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, linhaRetaAreaPath, linhaRetaPath } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
@@ -499,11 +499,20 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   cardsConsolidadoAno = computed<CardIndicador[]>(() => {
     const ano = this.consolidadoAno();
     return [
-      { titulo: 'Atendimento à Programação', valor: `${ano.geral.atendimento}%`, meta: `${ano.geral.executadas} de ${ano.geral.programadas} executadas no ano · Meta: ${this.metaAtendimento}%`, cor: 'green', icone: 'check' },
-      { titulo: 'Cumprimento do Plano', valor: `${ano.cumprimentoPlano.atendimento}%`, meta: `${ano.cumprimentoPlano.executadas} de ${ano.cumprimentoPlano.programadas} planejadas do Plano · Meta: ${this.metaCumprimento}%`, cor: 'blue', icone: 'calendario' },
+      { titulo: 'Atendimento à Programação', valor: `${ano.geral.atendimento}%`, meta: `${ano.geral.executadas} de ${ano.geral.programadas} executadas no ano · Meta: ${this.metaAtendimento}% · Índice: ${this.indiceAtendimentoAno()}%`, cor: 'green', icone: 'check' },
+      { titulo: 'Cumprimento do Plano', valor: `${ano.cumprimentoPlano.atendimento}%`, meta: `${ano.cumprimentoPlano.executadas} de ${ano.cumprimentoPlano.programadas} planejadas do Plano · Meta: ${this.metaCumprimento}% · Índice: ${this.indiceCumprimentoAno()}%`, cor: 'blue', icone: 'calendario' },
       { titulo: 'Status Geral do Ano', valor: this.statusAnoSimplificado(), cor: 'teal', icone: 'bandeira' },
     ];
   });
+
+  // Índice de atingimento de meta (régua de 3 trechos da planilha de PLR do
+  // Corporativo: piso 92% -> 75%, meta 95% -> 100%, teto 100% -> 125%, travado dali pra
+  // cima) — aplicado aos dois indicadores acumulados do ano. Ver indiceAtingimentoMeta()
+  // em manutencao-indicadores.ts pro detalhe da régua.
+  indiceAtendimentoAno = computed(() =>
+    indiceAtingimentoMeta(this.consolidadoAno().geral.atendimento, PISO_INDICE_META, this.metaAtendimento, TETO_INDICE_META));
+  indiceCumprimentoAno = computed(() =>
+    indiceAtingimentoMeta(this.consolidadoAno().cumprimentoPlano.atendimento, PISO_INDICE_META, this.metaCumprimento, TETO_INDICE_META));
 
   // "Status Geral do Ano" simplificado a pedido do usuário — só 2 valores (não os 3 de
   // StatusGeralSemana que o resto da tela usa, com a faixa intermediária "Próximo da

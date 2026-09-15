@@ -1,5 +1,8 @@
 import { ManutencaoOrdem, ConsultaSigmaResultado } from '../models/manutencao-programacao.model';
-import { calcularIndicadoresSemana, MatchColaborador, META_ATENDIMENTO, META_CUMPRIMENTO } from './manutencao-indicadores';
+import {
+  calcularIndicadoresSemana, indiceAtingimentoMeta, MatchColaborador, META_ATENDIMENTO, META_CUMPRIMENTO,
+  PISO_INDICE_META, TETO_INDICE_META,
+} from './manutencao-indicadores';
 
 function ordem(overrides: Partial<ManutencaoOrdem> = {}): ManutencaoOrdem {
   return {
@@ -128,5 +131,48 @@ describe('calcularIndicadoresSemana', () => {
     expect(r.cumprimentoPlano.atendimento).toBe(100);
     expect(r.cumprimentoPlano.atendimento).toBeGreaterThanOrEqual(META_CUMPRIMENTO * 0.9);
     expect(r.statusGeral).toBe('Próximo da Meta');
+  });
+});
+
+describe('indiceAtingimentoMeta', () => {
+  // Régua real usada pelo Corporativo (planilha de PLR): piso 92% -> índice 75%,
+  // meta 95% -> índice 100%, teto 100% -> índice 125% (travado dali pra cima).
+  const piso = PISO_INDICE_META; // 92
+  const meta = META_ATENDIMENTO; // 95 (mesmo valor de META_CUMPRIMENTO)
+  const teto = TETO_INDICE_META; // 100
+
+  it('exemplo da planilha: 98,06% (entre meta e teto) -> ~115,3%', () => {
+    // 1 + 0,25 * (98,06-95)/(100-95) = 1,153 -> 115,3%
+    expect(indiceAtingimentoMeta(98.06, piso, meta, teto)).toBeCloseTo(115.3, 1);
+  });
+
+  it('exatamente no piso -> 75%', () => {
+    expect(indiceAtingimentoMeta(92, piso, meta, teto)).toBe(75);
+  });
+
+  it('abaixo do piso -> rampa 0% a 75% (proporcional)', () => {
+    expect(indiceAtingimentoMeta(0, piso, meta, teto)).toBe(0);
+    expect(indiceAtingimentoMeta(46, piso, meta, teto)).toBeCloseTo(37.5, 1); // metade do piso -> metade de 75%
+  });
+
+  it('entre piso e meta -> rampa 75% a 100%', () => {
+    // Meio do caminho entre 92 e 95 (93,5) -> meio do caminho entre 75% e 100% (87,5%)
+    expect(indiceAtingimentoMeta(93.5, piso, meta, teto)).toBeCloseTo(87.5, 1);
+  });
+
+  it('exatamente na meta -> 100%', () => {
+    expect(indiceAtingimentoMeta(95, piso, meta, teto)).toBe(100);
+  });
+
+  it('exatamente no teto -> 125% (trava, não passa disso)', () => {
+    expect(indiceAtingimentoMeta(100, piso, meta, teto)).toBe(125);
+  });
+
+  it('acima do teto continua travado em 125%, não sobe mais', () => {
+    expect(indiceAtingimentoMeta(150, piso, meta, teto)).toBe(125);
+  });
+
+  it('nunca fica negativo (MÁXIMO(...,0) da planilha original)', () => {
+    expect(indiceAtingimentoMeta(-10, piso, meta, teto)).toBeGreaterThanOrEqual(0);
   });
 });

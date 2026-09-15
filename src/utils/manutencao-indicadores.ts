@@ -12,8 +12,40 @@ export type StatusGeralSemana = 'Dentro da Meta' | 'Próximo da Meta' | 'Abaixo 
 export const META_ATENDIMENTO = 95.0;
 export const META_CUMPRIMENTO = 95.0;
 
+// Régua do índice de atingimento da meta (PLR) — mesma planilha usada pro Corporativo:
+// piso (92%) -> índice 75%; meta (95%) -> índice 100%; teto (100%) -> índice 125%,
+// travado em 125% dali pra cima. Interpolação linear dentro de cada trecho — ver
+// indiceAtingimentoMeta() abaixo.
+export const PISO_INDICE_META = 92.0;
+export const TETO_INDICE_META = 100.0;
+
 function round2(v: number): number {
   return Math.round(v * 100) / 100;
+}
+
+// Índice de atingimento de meta em 3 trechos (0-75%, 75-100%, 100-125%), mesma fórmula
+// da planilha de PLR do Corporativo (célula com o MÁXIMO/SE encadeado) — só a metade
+// "quanto maior, melhor" (piso < meta < teto), que é o caso dos dois indicadores desta
+// tela (Atendimento à Programação e Cumprimento do Plano, ambos "mais é melhor"). Não
+// implementa a metade invertida da fórmula original (pra indicadores "quanto menor,
+// melhor", tipo Custo/Turnover) porque esta tela não tem nenhum indicador desse tipo.
+//   valor <= piso            -> rampa 0% a 75%
+//   piso < valor < meta      -> rampa 75% a 100%
+//   meta <= valor < teto     -> rampa 100% a 125%
+//   valor >= teto            -> trava em 125%
+// Retorna em pontos percentuais (125 = 125%), não fração.
+export function indiceAtingimentoMeta(valor: number, piso: number, meta: number, teto: number): number {
+  let indice: number;
+  if (valor <= piso) {
+    indice = piso > 0 ? 0.75 * (valor / piso) : 0;
+  } else if (valor < meta) {
+    indice = 0.75 + 0.25 * ((valor - piso) / (meta - piso));
+  } else if (valor < teto) {
+    indice = 1 + 0.25 * ((valor - meta) / (teto - meta));
+  } else {
+    indice = 1.25;
+  }
+  return Math.max(0, round2(indice * 100));
 }
 
 export type MatchColaborador = (matricula: string | null, nome: string) => { matricula: string } | null;
