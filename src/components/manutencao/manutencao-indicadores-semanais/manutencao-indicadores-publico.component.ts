@@ -391,12 +391,20 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   private ordensParaFechamento = computed(() =>
     this.ordensTipo().filter(o => o.area !== 'APOIO' || !!o.categoriaIndicador));
 
+  // ordensParaFechamento, já restrita ao período selecionado — kpiCorretivas/
+  // kpiPreventivas precisavam da mesma exclusão do Apoio não classificado (usavam
+  // ordensDaSemana() direto, contando ordem de TOP ANDAIMES/DB GUINDASTES como
+  // "programada" e inflando o "não executadas" com ordem que nunca devia entrar).
+  private ordensDaSemanaParaFechamento = computed(() => {
+    const semanas = this.semanasDoPeriodoSet();
+    return this.ordensParaFechamento().filter(o => semanas.has(o.semanaInicio));
+  });
+
   sigmaPorOs = computed(() => this.sigmaPorOsRaw());
 
   indicadores = computed<IndicadoresSemana>(() => {
-    const semanas = this.semanasDoPeriodoSet();
     return calcularIndicadoresSemana({
-      ordens: this.ordensParaFechamento().filter(o => semanas.has(o.semanaInicio)),
+      ordens: this.ordensDaSemanaParaFechamento(),
       sigmaPorOs: this.sigmaPorOs(),
       matchColaborador: this.matchColaboradorFn,
     });
@@ -407,10 +415,10 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   }
 
   kpiCorretivas = computed<KpiExecucao>(() =>
-    calcularKpiExecucao(this.ordemExecutadaAgrupadaLocal(this.ordensDaSemana().filter(o => o.tipoServico?.trim().toUpperCase() === 'CORRETIVA')).map(executada => ({ executada }))));
+    calcularKpiExecucao(this.ordemExecutadaAgrupadaLocal(this.ordensDaSemanaParaFechamento().filter(o => o.tipoServico?.trim().toUpperCase() === 'CORRETIVA')).map(executada => ({ executada }))));
 
   kpiPreventivas = computed<KpiExecucao>(() =>
-    calcularKpiExecucao(this.ordemExecutadaAgrupadaLocal(this.ordensDaSemana().filter(o => o.tipoServico?.trim().toUpperCase() === 'PREVENTIVA')).map(executada => ({ executada }))));
+    calcularKpiExecucao(this.ordemExecutadaAgrupadaLocal(this.ordensDaSemanaParaFechamento().filter(o => o.tipoServico?.trim().toUpperCase() === 'PREVENTIVA')).map(executada => ({ executada }))));
 
   qtdExames = computed(() => {
     const semanas = this.semanasDoPeriodoSet();
@@ -528,8 +536,8 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   cardsCorretivasPreventivas = computed<CardIndicador[]>(() => [
     { titulo: 'Corretivas', valor: `${this.kpiCorretivas().percentual}%`, meta: `${this.kpiCorretivas().executadas} de ${this.kpiCorretivas().programadas} executadas`, cor: 'purple', icone: 'raio' },
     { titulo: 'Preventivas', valor: `${this.kpiPreventivas().percentual}%`, meta: `${this.kpiPreventivas().executadas} de ${this.kpiPreventivas().programadas} executadas`, cor: 'teal', icone: 'escudo' },
-    { titulo: 'Exames Médicos', valor: `${this.qtdExames()}`, cor: 'orange', icone: 'cruz' },
-    { titulo: 'Folgas', valor: `${this.qtdFolgas()}`, cor: 'orange', icone: 'lua' },
+    { titulo: 'Exames Médicos', valor: `${this.qtdExames()} ${this.qtdExames() === 1 ? 'exame' : 'exames'}`, cor: 'orange', icone: 'cruz' },
+    { titulo: 'Folgas', valor: `${this.qtdFolgas()} ${this.qtdFolgas() === 1 ? 'folga' : 'folgas'}`, cor: 'orange', icone: 'lua' },
     { titulo: 'HH Disponível', valor: `${this.hhTotais().disponivel}h`, cor: 'green', icone: 'relogio' },
     { titulo: 'HH Indisponível', valor: `${this.hhTotais().indisponivel}h`, cor: 'red', icone: 'relogioX' },
   ]);
