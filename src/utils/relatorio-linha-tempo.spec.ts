@@ -1,4 +1,4 @@
-import { calcularLinhaTempo, linhaRetaAreaPath, linhaRetaPath } from './relatorio-linha-tempo';
+import { calcularLinhaTempo, linhaRetaAreaPath, linhaRetaPath, posicionarRotulosFinais } from './relatorio-linha-tempo';
 
 describe('calcularLinhaTempo', () => {
   it('retorna null quando nao ha pontos', () => {
@@ -140,5 +140,43 @@ describe('linhaRetaAreaPath', () => {
     expect(path).toContain('L 10,100'); // desce do ultimo ponto ate a base
     expect(path).toContain('L 0,100');  // volta pro X do primeiro ponto, na base
     expect(path.endsWith('Z')).toBe(true);
+  });
+});
+
+describe('posicionarRotulosFinais', () => {
+  const BOUNDS = { margemTopo: 16, alturaUtil: 192 }; // altura 220 - margem.baixo 28, mesmo padrão do relatório
+
+  it('pontos bem separados: cada rótulo fica perto do próprio ponto (comportamento de sempre)', () => {
+    const r = posicionarRotulosFinais({ yPontoAtendimento: 40, yPontoCumprimento: 140, ...BOUNDS });
+    expect(r.yRotuloAtendimento).toBeCloseTo(30); // 40 - 10
+    expect(r.yRotuloCumprimento).toBeCloseTo(157); // 140 + 17
+  });
+
+  it('valores próximos (pontos com Y quase igual): afasta os dois pra não colidir', () => {
+    const r = posicionarRotulosFinais({ yPontoAtendimento: 100, yPontoCumprimento: 100, ...BOUNDS });
+    expect(r.yRotuloCumprimento - r.yRotuloAtendimento).toBeGreaterThanOrEqual(18);
+  });
+
+  it('cumprimento fisicamente acima de atendimento (valores cruzados): ainda afasta o suficiente', () => {
+    // Regressão do relatado: cumprimento com valor bem maior que atendimento faz o
+    // ponto dele ficar bem mais alto (Y menor) — sem a separação mínima, o rótulo
+    // "abaixo do ponto de cumprimento" colide com o "acima do ponto de atendimento".
+    const r = posicionarRotulosFinais({ yPontoAtendimento: 100, yPontoCumprimento: 60, ...BOUNDS });
+    expect(r.yRotuloCumprimento - r.yRotuloAtendimento).toBeGreaterThanOrEqual(18);
+  });
+
+  it('ponto no topo do gráfico (valor em 100%): rótulo de atendimento não vaza pra cima da margem', () => {
+    const r = posicionarRotulosFinais({ yPontoAtendimento: 16, yPontoCumprimento: 16, ...BOUNDS });
+    expect(r.yRotuloAtendimento).toBeGreaterThanOrEqual(BOUNDS.margemTopo);
+  });
+
+  it('ponto na base do gráfico: rótulo de cumprimento não vaza pra baixo da área útil', () => {
+    const r = posicionarRotulosFinais({ yPontoAtendimento: 192, yPontoCumprimento: 192, ...BOUNDS });
+    expect(r.yRotuloCumprimento).toBeLessThanOrEqual(BOUNDS.alturaUtil);
+  });
+
+  it('mesmo nos dois extremos ao mesmo tempo (topo/base apertados), mantém alguma separação', () => {
+    const r = posicionarRotulosFinais({ yPontoAtendimento: 16, yPontoCumprimento: 16, margemTopo: 16, alturaUtil: 34 });
+    expect(r.yRotuloCumprimento).toBeGreaterThan(r.yRotuloAtendimento);
   });
 });

@@ -25,7 +25,7 @@ import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
   PISO_INDICE_META, StatusGeralSemana, TETO_INDICE_META, calcularIndicadoresSemana, indiceAtingimentoMeta,
 } from '../../../utils/manutencao-indicadores';
-import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, linhaRetaAreaPath, linhaRetaPath } from '../../../utils/relatorio-linha-tempo';
+import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, linhaRetaAreaPath, linhaRetaPath, posicionarRotulosFinais } from '../../../utils/relatorio-linha-tempo';
 import { MESES_ABREV } from '../../../utils/relatorio-mensal-pcm';
 import { HhAtividade, HhEquipamento, KpiExecucao, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
 import { encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
@@ -706,6 +706,18 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     if (!geo) return null;
     const baseY = geo.altura - geo.margem.baixo;
     const ultimo = pontos[pontos.length - 1];
+    const ultimoPontoAtendimento = geo.pontosAtendimento[geo.pontosAtendimento.length - 1];
+    const ultimoPontoCumprimento = geo.pontosCumprimento[geo.pontosCumprimento.length - 1];
+    // Posição dos rótulos "XX%" do ponto final calculada à parte (não é mais só
+    // "acima"/"abaixo" fixo) pra nunca colidir quando os dois valores ficam próximos,
+    // nem vazar pra fora do gráfico quando o ponto está bem no topo/base — ver
+    // posicionarRotulosFinais() em relatorio-linha-tempo.ts.
+    const rotulos = ultimoPontoAtendimento && ultimoPontoCumprimento
+      ? posicionarRotulosFinais({
+          yPontoAtendimento: ultimoPontoAtendimento.y, yPontoCumprimento: ultimoPontoCumprimento.y,
+          margemTopo: geo.margem.topo, alturaUtil: baseY,
+        })
+      : null;
     return {
       ...geo,
       pathAtendimento: linhaRetaPath(geo.pontosAtendimento),
@@ -713,6 +725,8 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
       areaAtendimento: linhaRetaAreaPath(geo.pontosAtendimento, baseY),
       ultimoAtendimento: ultimo ? Math.round(ultimo.atendimento) : null,
       ultimoCumprimento: ultimo ? Math.round(ultimo.cumprimento) : null,
+      yRotuloAtendimento: rotulos?.yRotuloAtendimento ?? null,
+      yRotuloCumprimento: rotulos?.yRotuloCumprimento ?? null,
     };
   }
 

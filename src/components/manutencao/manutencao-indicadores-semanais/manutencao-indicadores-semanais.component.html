@@ -402,8 +402,8 @@
               <circle [attr.cx]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].x" [attr.cy]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].y" r="10" class="pcm-linha-tempo-destaque pcm-linha-tempo-destaque--atendimento" />
               <circle [attr.cx]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].x" [attr.cy]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].y" r="4.5" class="pcm-linha-tempo-ponto--atendimento pcm-linha-tempo-ponto--final" />
               <circle [attr.cx]="lt.pontosCumprimento[lt.pontosCumprimento.length-1].x" [attr.cy]="lt.pontosCumprimento[lt.pontosCumprimento.length-1].y" r="4.5" class="pcm-linha-tempo-ponto--cumprimento pcm-linha-tempo-ponto--final" />
-              <text [attr.x]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].x - 7" [attr.y]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].y - 10" class="pcm-linha-tempo-rotulo-final pcm-linha-tempo-rotulo-final--atendimento">{{ lt.ultimoAtendimento }}%</text>
-              <text [attr.x]="lt.pontosCumprimento[lt.pontosCumprimento.length-1].x - 7" [attr.y]="lt.pontosCumprimento[lt.pontosCumprimento.length-1].y + 17" class="pcm-linha-tempo-rotulo-final pcm-linha-tempo-rotulo-final--cumprimento">{{ lt.ultimoCumprimento }}%</text>
+              <text [attr.x]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].x - 7" [attr.y]="lt.yRotuloAtendimento" class="pcm-linha-tempo-rotulo-final pcm-linha-tempo-rotulo-final--atendimento">{{ lt.ultimoAtendimento }}%</text>
+              <text [attr.x]="lt.pontosCumprimento[lt.pontosCumprimento.length-1].x - 7" [attr.y]="lt.yRotuloCumprimento" class="pcm-linha-tempo-rotulo-final pcm-linha-tempo-rotulo-final--cumprimento">{{ lt.ultimoCumprimento }}%</text>
             }
           </svg>
           <div class="pcm-linha-tempo-legenda">
@@ -449,8 +449,8 @@
                 @if (lt.pontosAtendimento.length > 0) {
                   <circle [attr.cx]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].x" [attr.cy]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].y" r="3.5" class="pcm-linha-tempo-ponto--atendimento pcm-linha-tempo-ponto--final" />
                   <circle [attr.cx]="lt.pontosCumprimento[lt.pontosCumprimento.length-1].x" [attr.cy]="lt.pontosCumprimento[lt.pontosCumprimento.length-1].y" r="3.5" class="pcm-linha-tempo-ponto--cumprimento pcm-linha-tempo-ponto--final" />
-                  <text [attr.x]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].x - 6" [attr.y]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].y - 9" class="pcm-linha-tempo-rotulo-final pcm-linha-tempo-rotulo-final--atendimento">{{ lt.ultimoAtendimento }}%</text>
-                  <text [attr.x]="lt.pontosCumprimento[lt.pontosCumprimento.length-1].x - 6" [attr.y]="lt.pontosCumprimento[lt.pontosCumprimento.length-1].y + 15" class="pcm-linha-tempo-rotulo-final pcm-linha-tempo-rotulo-final--cumprimento">{{ lt.ultimoCumprimento }}%</text>
+                  <text [attr.x]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].x - 6" [attr.y]="lt.yRotuloAtendimento" class="pcm-linha-tempo-rotulo-final pcm-linha-tempo-rotulo-final--atendimento">{{ lt.ultimoAtendimento }}%</text>
+                  <text [attr.x]="lt.pontosCumprimento[lt.pontosCumprimento.length-1].x - 6" [attr.y]="lt.yRotuloCumprimento" class="pcm-linha-tempo-rotulo-final pcm-linha-tempo-rotulo-final--cumprimento">{{ lt.ultimoCumprimento }}%</text>
                 }
               </svg>
             } @else {

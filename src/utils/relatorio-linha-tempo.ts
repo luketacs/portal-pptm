@@ -122,3 +122,34 @@ export function linhaRetaAreaPath(pontos: CoordenadaSvg[], baseY: number): strin
   const ultimo = pontos[pontos.length - 1];
   return `${linhaRetaPath(pontos)} L ${ultimo.x},${baseY} L ${primeiro.x},${baseY} Z`;
 }
+
+// Posição Y dos dois rótulos "XX%" do ponto final (Atendimento sempre acima do próprio
+// ponto, Cumprimento sempre abaixo do próprio ponto — mesma convenção visual de sempre,
+// não inverte quem fica em cima mesmo se os valores cruzarem). Sem isso, quando os dois
+// valores ficam próximos (ex.: 95%/97%) os dois rótulos colidem e viram um emaranhado
+// ilegível; e quando um ponto fica bem no topo do gráfico (valor em 100%), o rótulo
+// "acima do ponto" vaza pra fora da área desenhável e corta no cartão. Aqui: calcula os
+// deslocamentos padrão, prende o de cima pra nunca passar de `margemTopo`, garante uma
+// separação mínima entre os dois (empurrando o de baixo se precisar) e prende o de baixo
+// pra nunca passar de `alturaUtil` (altura do gráfico menos a margem inferior).
+export function posicionarRotulosFinais(params: {
+  yPontoAtendimento: number;
+  yPontoCumprimento: number;
+  margemTopo: number;
+  alturaUtil: number;
+}): { yRotuloAtendimento: number; yRotuloCumprimento: number } {
+  const OFFSET_ACIMA = 10;
+  const OFFSET_ABAIXO = 17;
+  const SEPARACAO_MINIMA = 18;
+  const yMinimo = params.margemTopo + 8;
+  const yMaximo = params.alturaUtil - 2;
+
+  let yAtendimento = Math.max(yMinimo, params.yPontoAtendimento - OFFSET_ACIMA);
+  let yCumprimento = Math.max(yAtendimento + SEPARACAO_MINIMA, params.yPontoCumprimento + OFFSET_ABAIXO);
+  yCumprimento = Math.min(yMaximo, yCumprimento);
+  // Se o clamp de baixo apertou yCumprimento (gráfico bem baixinho), garante a
+  // separação mínima afastando yAtendimento de novo em vez de deixar colidir.
+  yAtendimento = Math.min(yAtendimento, yCumprimento - SEPARACAO_MINIMA);
+
+  return { yRotuloAtendimento: yAtendimento, yRotuloCumprimento: yCumprimento };
+}
