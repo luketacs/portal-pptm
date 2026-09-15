@@ -407,8 +407,12 @@
       }
     </section>
 
-    <section class="pcm-section">
+    <section class="pcm-section pcm-secao-evolucao-areas">
       <h2 class="pcm-section-title">Evolução ao Longo do Ano — por Área</h2>
+      <div class="pcm-linha-tempo-legenda">
+        <span><span class="pcm-legenda-cor pcm-legenda-cor--atendimento"></span>Atendimento à Programação</span>
+        <span><span class="pcm-legenda-cor pcm-legenda-cor--cumprimento"></span>Cumprimento do Plano</span>
+      </div>
       <div class="pcm-linha-tempo-grid-areas">
         @for (item of linhaTempoPorArea(); track item.categoria) {
           <div class="pcm-linha-tempo-area" appVisivelNaTela>
@@ -449,10 +453,6 @@
             }
           </div>
         }
-      </div>
-      <div class="pcm-linha-tempo-legenda">
-        <span><span class="pcm-legenda-cor pcm-legenda-cor--atendimento"></span>Atendimento à Programação</span>
-        <span><span class="pcm-legenda-cor pcm-legenda-cor--cumprimento"></span>Cumprimento do Plano</span>
       </div>
     </section>
   </div>

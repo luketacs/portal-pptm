@@ -318,6 +318,77 @@
      o card de alguém no meio de uma grade". As classes .pcm-somente-impressao/
      .pcm-somente-tela controlam qual das duas versões aparece em cada meio. */
   .pcm-somente-tela { display: none !important; }
+
+  /* Reportado: "ELÉTRICA"/"MECÂNICA" ficava sozinho no fim de uma página, com a
+     tabela inteira (cabeçalho incluso) começando do zero na página seguinte —
+     "informação picada". Gruda o subtítulo com a primeira linha que vem depois. */
+  .pcm-horas-tecnico-subtitulo {
+    break-after: avoid;
+  }
+
+  /* A legenda de "Atendimento/Cumprimento" da linha do tempo geral é um bloco
+     pequeno e solto DEPOIS do card protegido por break-inside:avoid — sem proteção
+     própria, conseguia ficar sozinha, abrindo uma página nova só pra 2 linhas de
+     texto (reportado: página praticamente em branco). A legenda da grade "por
+     Área" foi movida no HTML pra ANTES da grade (não depois) pelo mesmo motivo,
+     mas com uma causa mais funda: uma CSS Grid com break-inside:avoid nos filhos
+     não fragmenta entre páginas no Chromium (é tratada como bloco atômico) — com a
+     legenda depois, ela corria o risco de descolar do grid inteiro. */
+  .pcm-linha-tempo-legenda {
+    break-before: avoid;
+  }
+
+  /* Mesmo com a legenda ANTES da grade (não depois) e com break-before:page nesta
+     seção (abaixo), título+legenda sozinhos numa página quase em branco, com a
+     grade inteira pulando pra seguinte, persistia: confirmado (via getComputedStyle
+     em impressão real) que break-before:page abre página nova certinho, mas
+     título+legenda+grade JUNTOS (grade em 2 colunas = 3 linhas de gráfico) são mais
+     altos que uma página A4 paisagem inteira — ou seja, nunca ia caber tudo numa
+     página só, break-inside:avoid ou não. 3 colunas em vez de 2 só no impresso
+     (2 linhas de gráfico em vez de 3) resolve isso de verdade: cada gráfico fica
+     mais estreito mas ainda legível numa página landscape bem mais larga que a
+     tela onde "2 colunas" foi decidido originalmente (ver comentário em
+     pcm-report-shared.css). */
+  .pcm-linha-tempo-grid-areas {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* Ainda assim força página nova pra esta seção — impede que ela comece "no meio"
+     de uma página com pouco espaço sobrando (o que voltaria a separar o título do
+     resto mesmo com a grade agora mais baixa) e garante margem de sobra confortável
+     abaixo da grade em vez de ficar espremida contra a borda da página. */
+  .pcm-secao-evolucao-areas {
+    break-before: page;
+  }
+
+  /* "Desempenho por Área" tem 11 colunas (Área + 5 Atendimento + 5 Cumprimento) —
+     largas o bastante (cabeçalho em uma linha só, texto sem quebrar) pra estourar
+     a largura impressa mesmo em paisagem, cortando as últimas colunas fora da
+     página. table-layout:fixed distribui a largura entre as colunas em vez de
+     deixar o conteúdo empurrar a tabela pra fora; título da Área com um pouco mais
+     de espaço que o resto (nome de categoria é mais longo que os números/badges). */
+  .pcm-table {
+    table-layout: fixed;
+    font-size: .64rem;
+  }
+  .pcm-table th {
+    white-space: normal;
+    overflow-wrap: break-word;
+    letter-spacing: 0;
+    padding: 4px 3px;
+    line-height: 1.25;
+    font-size: .58rem;
+  }
+  .pcm-table td {
+    padding: 4px 3px;
+  }
+  .pcm-table .pcm-area-name {
+    width: 13%;
+  }
+  .pcm-status-indicator {
+    padding: 1px 6px;
+    font-size: .6rem;
+  }
 }
 
 .pcm-somente-impressao { display: none; }
