@@ -187,6 +187,14 @@ function paraManutencaoOrdem(r: OrdemPublicaRaw): ManutencaoOrdem {
 
 const INTERVALO_POLL_MS = 3 * 60 * 1000;
 
+// Reload completo da página (não só reconsulta de dados) — pensado pra essa tela ficar
+// aberta num monitor do setor por horas/dias: sem isso, a aba nunca pega um deploy novo
+// (é uma SPA, o JS já carregado nunca muda sozinho) e o estado do navegador só cresce
+// com o tempo. INTERVALO_POLL_MS continua cuidando dos dados a cada poucos minutos;
+// isso aqui é só o "refresh de vez em quando" pedido pelo usuário, num intervalo bem
+// mais espaçado.
+const RELOAD_PAGINA_MS = 60 * 60 * 1000;
+
 @Component({
   selector: 'app-manutencao-indicadores-publico',
   standalone: true,
@@ -204,6 +212,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   carregando = signal(false);
   ultimaAtualizacaoEm = signal<Date | null>(null);
   private pollId: ReturnType<typeof setInterval> | null = null;
+  private reloadId: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     effect(() => this.animarContador(this.indicadores().geral.atendimento, this.atendimentoAnimado));
@@ -257,10 +266,14 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     }
     await this.atualizar();
     this.pollId = setInterval(() => this.atualizar(), INTERVALO_POLL_MS);
+    // Um setTimeout basta (não setInterval): o reload já reinicia a página inteira,
+    // então um novo temporizador nasce sozinho na próxima carga.
+    this.reloadId = setTimeout(() => location.reload(), RELOAD_PAGINA_MS);
   }
 
   ngOnDestroy(): void {
     if (this.pollId !== null) clearInterval(this.pollId);
+    if (this.reloadId !== null) clearTimeout(this.reloadId);
   }
 
   async atualizar(): Promise<void> {
