@@ -48,11 +48,21 @@ function domingoDaSemana(segundaIso: string): string {
 // executada" nesse caso do que aceitar qualquer apontamento da OS como se fosse
 // daquele técnico específico. Só Apoio tem esse "sem pessoa específica pra cobrar" por
 // design (programado por empresa/equipe, não por indivíduo).
+//
+// 'parcial': quando a OS é dividida entre 2+ técnicos e SÓ ALGUNS apontaram dentro da
+// semana (não todos, mas também não nenhum) — reportado: um técnico aponta, a linha
+// DELE já vira "Executada" na Programação (statusExecucao(), que é por linha), mas o
+// indicador (aqui, agrupado por OS) continha só true/false e ficava preso em "não
+// executada" até o(s) colega(s) da mesma OS também apontarem, sem nenhuma sinalização
+// intermediária. Pedido do usuário: distinguir esse caso ("falta só uma parte") de uma
+// OS onde ninguém apontou nada ainda.
+export type StatusExecucaoGrupo = 'executada' | 'parcial' | 'nao-executada';
+
 export function ordemExecutadaAgrupada(
   ordens: ManutencaoOrdem[],
   sigmaPorOs: Record<string, ConsultaSigmaResultado>,
   matchColaborador: (matricula: string | null, nome: string) => { matricula: string } | null,
-): boolean[] {
+): StatusExecucaoGrupo[] {
   const porOs = new Map<string, ManutencaoOrdem[]>();
   let semOsIdx = 0;
   for (const o of ordens) {
@@ -62,30 +72,38 @@ export function ordemExecutadaAgrupada(
     else porOs.set(chave, [o]);
   }
   return [...porOs.values()].map(linhas => {
-    if (!linhas[0].numeroOs?.trim()) return false;
+    if (!linhas[0].numeroOs?.trim()) return 'nao-executada';
     const resultado = sigmaPorOs[normalizarNumeroOs(linhas[0].numeroOs!)];
-    if (!resultado) return false;
-    return linhas.every(o => {
+    if (!resultado) return 'nao-executada';
+    const apontou = linhas.map(o => {
       const domingo = domingoDaSemana(o.semanaInicio);
       const dentroDaSemana = (a: { data: string }) => a.data >= o.semanaInicio && a.data <= domingo;
       const colaborador = matchColaborador(o.tecnicoMatricula, o.tecnicoNome ?? '');
       if (!colaborador) return o.area === 'APOIO' && resultado.apontamentos.some(dentroDaSemana);
       return resultado.apontamentos.some(a => a.executante === colaborador.matricula && dentroDaSemana(a));
     });
+    if (apontou.every(Boolean)) return 'executada';
+    if (apontou.some(Boolean)) return 'parcial';
+    return 'nao-executada';
   });
 }
 
 export interface KpiExecucao {
   programadas: number;
   executadas: number;
+  parciais: number;
   percentual: number;
 }
 
-export function calcularKpiExecucao(ordens: { executada: boolean }[]): KpiExecucao {
+// `parciais` não entra no numerador do percentual (a OS ainda não está 100% concluída
+// enquanto algum técnico do grupo não apontou a parte dele) — só é contado à parte pra
+// UI distinguir "faltou só uma parte" de "ninguém apontou nada ainda".
+export function calcularKpiExecucao(ordens: { status: StatusExecucaoGrupo }[]): KpiExecucao {
   const programadas = ordens.length;
-  const executadas = ordens.filter(o => o.executada).length;
+  const executadas = ordens.filter(o => o.status === 'executada').length;
+  const parciais = ordens.filter(o => o.status === 'parcial').length;
   const percentual = programadas > 0 ? Math.round((executadas / programadas) * 100) : 0;
-  return { programadas, executadas, percentual };
+  return { programadas, executadas, parciais, percentual };
 }
 
 export interface HhEquipamento {

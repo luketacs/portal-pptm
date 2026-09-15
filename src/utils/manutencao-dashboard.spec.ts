@@ -24,18 +24,23 @@ function ordem(overrides: Partial<ManutencaoOrdem> = {}): ManutencaoOrdem {
 }
 
 describe('calcularKpiExecucao', () => {
-  it('retorna 0/0/0% quando não há ordens', () => {
-    expect(calcularKpiExecucao([])).toEqual({ programadas: 0, executadas: 0, percentual: 0 });
+  it('retorna 0/0/0/0% quando não há ordens', () => {
+    expect(calcularKpiExecucao([])).toEqual({ programadas: 0, executadas: 0, parciais: 0, percentual: 0 });
   });
 
   it('calcula o percentual a partir da mistura de executadas/não executadas', () => {
-    const ordens = [{ executada: true }, { executada: true }, { executada: false }, { executada: false }];
-    expect(calcularKpiExecucao(ordens)).toEqual({ programadas: 4, executadas: 2, percentual: 50 });
+    const ordens = [{ status: 'executada' as const }, { status: 'executada' as const }, { status: 'nao-executada' as const }, { status: 'nao-executada' as const }];
+    expect(calcularKpiExecucao(ordens)).toEqual({ programadas: 4, executadas: 2, parciais: 0, percentual: 50 });
   });
 
   it('100% quando todas foram executadas', () => {
-    const ordens = [{ executada: true }, { executada: true }];
-    expect(calcularKpiExecucao(ordens)).toEqual({ programadas: 2, executadas: 2, percentual: 100 });
+    const ordens = [{ status: 'executada' as const }, { status: 'executada' as const }];
+    expect(calcularKpiExecucao(ordens)).toEqual({ programadas: 2, executadas: 2, parciais: 0, percentual: 100 });
+  });
+
+  it('parciais não entram no numerador do percentual, só na contagem própria', () => {
+    const ordens = [{ status: 'executada' as const }, { status: 'parcial' as const }, { status: 'nao-executada' as const }];
+    expect(calcularKpiExecucao(ordens)).toEqual({ programadas: 3, executadas: 1, parciais: 1, percentual: 33 });
   });
 });
 
@@ -152,12 +157,12 @@ describe('ordemExecutadaAgrupada', () => {
 
   it('sem número de OS, nunca é executada', () => {
     const o = ordem({ numeroOs: null });
-    expect(ordemExecutadaAgrupada([o], {}, matchPorMatricula)).toEqual([false]);
+    expect(ordemExecutadaAgrupada([o], {}, matchPorMatricula)).toEqual(['nao-executada']);
   });
 
   it('OS sem resultado do SIGMA, nunca é executada', () => {
     const o = ordem();
-    expect(ordemExecutadaAgrupada([o], {}, matchPorMatricula)).toEqual([false]);
+    expect(ordemExecutadaAgrupada([o], {}, matchPorMatricula)).toEqual(['nao-executada']);
   });
 
   it('colaborador resolvido (individual): exige apontamento DAQUELA matrícula dentro da semana', () => {
@@ -165,20 +170,20 @@ describe('ordemExecutadaAgrupada', () => {
     const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
       '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '20006136' }] },
     };
-    expect(ordemExecutadaAgrupada([executada], sigmaPorOs, matchPorMatricula)).toEqual([true]);
+    expect(ordemExecutadaAgrupada([executada], sigmaPorOs, matchPorMatricula)).toEqual(['executada']);
 
     // Apontamento existe, mas é de outra matrícula — não conta pra esse técnico específico.
     const outraPessoa: Record<string, ConsultaSigmaResultado> = {
       '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '11111111' }] },
     };
-    expect(ordemExecutadaAgrupada([executada], outraPessoa, matchPorMatricula)).toEqual([false]);
+    expect(ordemExecutadaAgrupada([executada], outraPessoa, matchPorMatricula)).toEqual(['nao-executada']);
   });
 
   it('apontamento fora da semana (mesmo com matrícula certa) não conta como executada', () => {
     const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
       '045203': { os: null, apontamentos: [{ data: '2026-09-21', status: 'EXEC', executante: '20006136' }] }, // semana seguinte
     };
-    expect(ordemExecutadaAgrupada([ordem()], sigmaPorOs, matchPorMatricula)).toEqual([false]);
+    expect(ordemExecutadaAgrupada([ordem()], sigmaPorOs, matchPorMatricula)).toEqual(['nao-executada']);
   });
 
   it('apontamento em dia da semana diferente do diasPrevistos ainda conta (semana inteira, não o dia exato)', () => {
@@ -186,27 +191,42 @@ describe('ordemExecutadaAgrupada', () => {
       // diasPrevistos da ordem é '2026-09-08' (terça); apontamento caiu na sexta, mesma semana.
       '045203': { os: null, apontamentos: [{ data: '2026-09-11', status: 'EXEC', executante: '20006136' }] },
     };
-    expect(ordemExecutadaAgrupada([ordem()], sigmaPorOs, matchPorMatricula)).toEqual([true]);
+    expect(ordemExecutadaAgrupada([ordem()], sigmaPorOs, matchPorMatricula)).toEqual(['executada']);
   });
 
   it('Apoio programado por empresa/equipe (colaborador nunca resolve): cai pra "qualquer apontamento na semana"', () => {
     // tecnicoNome = "SERVPLEX" não é ninguém em matriculas.json — matchColaborador sempre null aqui.
     const apoioOrdem = ordem({ area: 'APOIO', categoriaIndicador: 'REFRIGERACAO', tecnicoNome: 'SERVPLEX', tecnicoMatricula: null });
     const semApontamento: Record<string, ConsultaSigmaResultado> = { '045203': { os: null, apontamentos: [] } };
-    expect(ordemExecutadaAgrupada([apoioOrdem], semApontamento, matchPorMatricula)).toEqual([false]);
+    expect(ordemExecutadaAgrupada([apoioOrdem], semApontamento, matchPorMatricula)).toEqual(['nao-executada']);
 
     const comApontamentoDeQualquerUm: Record<string, ConsultaSigmaResultado> = {
       '045203': { os: null, apontamentos: [{ data: '2026-09-10', status: 'EXEC', executante: '55555555' }] },
     };
-    expect(ordemExecutadaAgrupada([apoioOrdem], comApontamentoDeQualquerUm, matchPorMatricula)).toEqual([true]);
+    expect(ordemExecutadaAgrupada([apoioOrdem], comApontamentoDeQualquerUm, matchPorMatricula)).toEqual(['executada']);
   });
 
-  it('agrupa por número de OS: só executada quando TODAS as linhas do grupo estão OK', () => {
+  it('agrupa por número de OS: só "executada" quando TODAS as linhas do grupo estão OK — com só 1 delas OK, é "parcial"', () => {
     const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
       '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '20006136' }] }, // só a matrícula da linha 1
     };
     const linha1 = ordem({ id: 'l1' });
     const linha2 = ordem({ id: 'l2', tecnicoMatricula: '77777777' }); // outra pessoa, sem apontamento dela
-    expect(ordemExecutadaAgrupada([linha1, linha2], sigmaPorOs, matchPorMatricula)).toEqual([false]);
+    expect(ordemExecutadaAgrupada([linha1, linha2], sigmaPorOs, matchPorMatricula)).toEqual(['parcial']);
+  });
+
+  // Reportado: dois técnicos numa mesma OS, um aponta na semana e o outro ainda não —
+  // a linha do que apontou já vira "Executada" na Programação (statusExecucao(), que é
+  // por linha), mas o indicador (agrupado por OS) ficava só true/false, sem sinalizar
+  // esse "faltou só uma parte" (caso real: OS 45095, Rafael Bruno + Antônio José).
+  it('agrupa por número de OS: "parcial" quando SÓ ALGUMAS linhas do grupo têm apontamento (nem todas, nem nenhuma)', () => {
+    const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
+      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '20006136' }] }, // só a matrícula da linha 1
+    };
+    const matchDuasMatriculas = (matricula: string | null) =>
+      matricula === '20006136' ? { matricula: '20006136' } : matricula === '77777777' ? { matricula: '77777777' } : null;
+    const linha1 = ordem({ id: 'l1' });
+    const linha2 = ordem({ id: 'l2', tecnicoMatricula: '77777777' }); // colaborador resolvido, mas sem apontamento dele
+    expect(ordemExecutadaAgrupada([linha1, linha2], sigmaPorOs, matchDuasMatriculas)).toEqual(['parcial']);
   });
 });

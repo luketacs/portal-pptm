@@ -89,6 +89,7 @@ export type MatchColaborador = (matricula: string | null, nome: string) => { mat
 export interface ContagemExecucao {
   programadas: number;
   executadas: number;
+  parciais: number;
   naoExecutadas: number;
   atendimento: number;
 }
@@ -97,11 +98,16 @@ function contarExecucao(
   ordens: ManutencaoOrdem[], sigmaPorOs: Record<string, ConsultaSigmaResultado>,
   matchColaborador: MatchColaborador,
 ): ContagemExecucao {
-  const executadaPorGrupo = ordemExecutadaAgrupada(ordens, sigmaPorOs, matchColaborador);
-  const programadas = executadaPorGrupo.length;
-  const executadas = executadaPorGrupo.filter(Boolean).length;
+  const statusPorGrupo = ordemExecutadaAgrupada(ordens, sigmaPorOs, matchColaborador);
+  const programadas = statusPorGrupo.length;
+  const executadas = statusPorGrupo.filter(s => s === 'executada').length;
+  // 'parcial' (OS dividida entre técnicos, só alguns apontaram) não conta como
+  // executada nem como não-executada — fica numa contagem própria pra não inflar
+  // nenhuma das duas nem embaralhar o percentual de atendimento (que continua medindo
+  // "% totalmente concluída").
+  const parciais = statusPorGrupo.filter(s => s === 'parcial').length;
   return {
-    programadas, executadas, naoExecutadas: programadas - executadas,
+    programadas, executadas, parciais, naoExecutadas: programadas - executadas - parciais,
     // 0 programadas = 100%, não 0% — nada previsto pro período é, por definição,
     // cumprido por completo (nada ficou faltando). Pedido do usuário: uma área como
     // SPCI sem nenhuma ordem do plano numa semana não deve aparecer como "0%" de

@@ -1752,13 +1752,14 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
     const sigmaPorOs = this.sigmaPorOs();
     let executadas = 0;
+    let parciais = 0;
     let rastreaveis = 0;
     for (const [chave, linhas] of porOs) {
       if (!linhas[0].numeroOs?.trim()) continue;
       const resultado = sigmaPorOs[chave];
       if (!resultado) continue;
       rastreaveis++;
-      const todosApontaram = linhas.every(o => {
+      const apontou = linhas.map(o => {
         const domingo = domingoDaSemana(o.semanaInicio);
         const colaborador = this.apontamentosService.matchColaboradorDaOrdem(o.tecnicoMatricula, o.tecnicoNome ?? '');
         const dentroDaSemana = (a: { data: string }) => a.data >= o.semanaInicio && a.data <= domingo;
@@ -1767,10 +1768,16 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         if (!colaborador) return o.area === 'APOIO' && resultado.apontamentos.some(dentroDaSemana);
         return resultado.apontamentos.some(a => a.executante === colaborador.matricula && dentroDaSemana(a));
       });
-      if (todosApontaram) executadas++;
+      // OS dividida entre 2+ técnicos onde só ALGUNS apontaram dentro da semana — não
+      // conta como executada, mas também não é "ninguém apontou nada" (statusExecucao()
+      // já mostra a linha de quem apontou como "Executada" individualmente; aqui,
+      // agrupado por OS, isso ficava invisível — reportado: técnico aponta, a linha dele
+      // já muda, mas o indicador continuava parado sem explicar o motivo).
+      if (apontou.every(Boolean)) executadas++;
+      else if (apontou.some(Boolean)) parciais++;
     }
     const percentual = rastreaveis > 0 ? Math.round((executadas / rastreaveis) * 100) : 0;
-    return { executadas, rastreaveis, totalOrdens: porOs.size, percentual };
+    return { executadas, parciais, rastreaveis, totalOrdens: porOs.size, percentual };
   });
 
   gaugeCorClass(at: { percentual: number; rastreaveis: number }): string {
@@ -1783,10 +1790,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Texto do gauge de atendimento compacto (ao lado de "Mais ações") — mesma
   // informação que o card grande mostrava, só que como tooltip pra caber num badge
   // pequeno em vez de ocupar uma linha inteira.
-  atendimentoTooltip(at: { executadas: number; rastreaveis: number; totalOrdens: number; percentual: number }): string {
+  atendimentoTooltip(at: { executadas: number; parciais: number; rastreaveis: number; totalOrdens: number; percentual: number }): string {
     if (at.rastreaveis > 0) {
       const extra = at.totalOrdens > at.rastreaveis ? ` (${at.totalOrdens - at.rastreaveis} sem número de OS ou aguardando o SIGMA)` : '';
-      return `Atendimento da programação: ${at.executadas} de ${at.rastreaveis} OS executadas dentro da semana${extra}. Clique pra atualizar.`;
+      const parcial = at.parciais > 0 ? ` +${at.parciais} parcial${at.parciais > 1 ? 'is' : ''} (falta apontamento de outro técnico da mesma OS)` : '';
+      return `Atendimento da programação: ${at.executadas} de ${at.rastreaveis} OS executadas dentro da semana${parcial}${extra}. Clique pra atualizar.`;
     }
     if (at.totalOrdens > 0) return 'Nenhuma OS rastreável pelo SIGMA ainda nessa semana. Clique pra atualizar.';
     return 'Nenhuma OS programada pra essa semana.';
