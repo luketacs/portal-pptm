@@ -15,35 +15,71 @@ export const META_CUMPRIMENTO = 95.0;
 // Régua do índice de atingimento da meta (PLR) — mesma planilha usada pro Corporativo:
 // piso (92%) -> índice 75%; meta (95%) -> índice 100%; teto (100%) -> índice 125%,
 // travado em 125% dali pra cima. Interpolação linear dentro de cada trecho — ver
-// indiceAtingimentoMeta() abaixo.
+// indiceAtingimentoMeta() abaixo. Usado por Atendimento à Programação e Cumprimento do
+// Plano (os dois indicadores calculados ao vivo desta tela).
 export const PISO_INDICE_META = 92.0;
 export const TETO_INDICE_META = 100.0;
+
+// Régua dos indicadores de input MANUAL (não calculados a partir de ordens — digitados
+// à mão, ver ManutencaoIndicadoresManuaisService/manutencao_indicadores_manuais).
+// "Quanto maior, melhor": Disponibilidade Global Anual. "Quanto menor, melhor": Dias/
+// Navio (menos dias parado é melhor) — piso > meta > teto de propósito, é isso que faz
+// indiceAtingimentoMeta() entrar no ramo invertido da régua (ver comentário lá).
+export const PISO_DISPONIBILIDADE_GLOBAL = 72.0;
+export const META_DISPONIBILIDADE_GLOBAL = 81.0;
+export const TETO_DISPONIBILIDADE_GLOBAL = 90.0;
+export const PISO_DIAS_NAVIO = 5.0;
+export const META_DIAS_NAVIO = 4.5;
+export const TETO_DIAS_NAVIO = 4.0;
 
 function round2(v: number): number {
   return Math.round(v * 100) / 100;
 }
 
-// Índice de atingimento de meta em 3 trechos (0-75%, 75-100%, 100-125%), mesma fórmula
-// da planilha de PLR do Corporativo (célula com o MÁXIMO/SE encadeado) — só a metade
-// "quanto maior, melhor" (piso < meta < teto), que é o caso dos dois indicadores desta
-// tela (Atendimento à Programação e Cumprimento do Plano, ambos "mais é melhor"). Não
-// implementa a metade invertida da fórmula original (pra indicadores "quanto menor,
-// melhor", tipo Custo/Turnover) porque esta tela não tem nenhum indicador desse tipo.
-//   valor <= piso            -> rampa 0% a 75%
+// Índice de atingimento de meta em 3 trechos (0-75%, 75-100%, 100-125%), mesma régua da
+// planilha de PLR do Corporativo. Cobre os dois sentidos, decididos pela ordem de
+// piso/teto — mesmo critério `SE(H6>F6;...)` da fórmula original de Excel:
+//
+// "Quanto maior, melhor" (teto > piso — caso de Atendimento à Programação, Cumprimento
+// do Plano, Disponibilidade Global Anual):
+//   valor <= piso            -> rampa 0% a 75%   (interpolação entre (0,0%) e (piso,75%))
 //   piso < valor < meta      -> rampa 75% a 100%
 //   meta <= valor < teto     -> rampa 100% a 125%
 //   valor >= teto            -> trava em 125%
+//
+// "Quanto menor, melhor" (teto < piso — caso de Dias/Navio, onde menos é melhor):
+//   valor <= teto             -> trava em 125%
+//   teto < valor < meta       -> rampa 125% a 100%
+//   meta <= valor < piso      -> rampa 100% a 75%
+//   valor >= piso             -> rampa 75% a 0%  (interpolação entre (piso,75%) e
+//                                (2×piso,0%) — mesmo "dobro do piso = pior caso
+//                                possível" da planilha original, único ponto sem uma
+//                                quarta referência explícita pra ancorar a reta)
 // Retorna em pontos percentuais (125 = 125%), não fração.
 export function indiceAtingimentoMeta(valor: number, piso: number, meta: number, teto: number): number {
   let indice: number;
-  if (valor <= piso) {
-    indice = piso > 0 ? 0.75 * (valor / piso) : 0;
-  } else if (valor < meta) {
-    indice = 0.75 + 0.25 * ((valor - piso) / (meta - piso));
-  } else if (valor < teto) {
-    indice = 1 + 0.25 * ((valor - meta) / (teto - meta));
+  if (teto > piso) {
+    // Quanto maior, melhor.
+    if (valor <= piso) {
+      indice = piso > 0 ? 0.75 * (valor / piso) : 0;
+    } else if (valor < meta) {
+      indice = 0.75 + 0.25 * ((valor - piso) / (meta - piso));
+    } else if (valor < teto) {
+      indice = 1 + 0.25 * ((valor - meta) / (teto - meta));
+    } else {
+      indice = 1.25;
+    }
   } else {
-    indice = 1.25;
+    // Quanto menor, melhor (piso > meta > teto).
+    if (valor <= teto) {
+      indice = 1.25;
+    } else if (valor < meta) {
+      indice = 1.25 - 0.25 * ((valor - teto) / (meta - teto));
+    } else if (valor < piso) {
+      indice = 1 - 0.25 * ((valor - meta) / (piso - meta));
+    } else {
+      indice = piso > 0 ? 0.75 * (2 - valor / piso) : 0;
+    }
   }
   return Math.max(0, round2(indice * 100));
 }

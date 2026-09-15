@@ -66,6 +66,14 @@ function mapHistorico(r) {
   };
 }
 
+// Indicadores anuais de input manual (Disponibilidade Global Anual, Dias/Navio) — só
+// leitura aqui (edição é Admin-only, na tela autenticada). Mesmo mapeamento de
+// ManutencaoIndicadoresManuaisService.mapRow() (src/services/
+// manutencao-indicadores-manuais.service.ts).
+function mapManual(r) {
+  return { ano: r.ano, chave: r.chave, valor: Number(r.valor) };
+}
+
 export default async function handler(req, res) {
   const origin = req.headers?.origin || '';
   res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
@@ -87,14 +95,17 @@ export default async function handler(req, res) {
       { data: ordensRows, error: erroOrdens },
       { data: feriasRows, error: erroFerias },
       { data: historicoRows, error: erroHistorico },
+      { data: manuaisRows, error: erroManuais },
     ] = await Promise.all([
       supabase.from('manutencao_programacao').select('*').order('semana_inicio', { ascending: false }),
       supabase.from('manutencao_ferias').select('id, tecnico_nome, tecnico_matricula, area, data_inicio, data_fim').order('data_inicio'),
       supabase.from('manutencao_indicadores_historico').select('*').order('semana_inicio'),
+      supabase.from('manutencao_indicadores_manuais').select('ano, chave, valor'),
     ]);
     if (erroOrdens) return res.status(500).json({ success: false, error: erroOrdens.message });
     if (erroFerias) return res.status(500).json({ success: false, error: erroFerias.message });
     if (erroHistorico) return res.status(500).json({ success: false, error: erroHistorico.message });
+    if (erroManuais) return res.status(500).json({ success: false, error: erroManuais.message });
 
     const ordens = ordensRows.map(mapOrdem);
 
@@ -120,6 +131,7 @@ export default async function handler(req, res) {
       ordens,
       ferias: feriasRows.map(mapFerias),
       historico: historicoRows.map(mapHistorico),
+      manuais: manuaisRows.map(mapManual),
       sigmaPorOs,
     });
   } catch (error) {

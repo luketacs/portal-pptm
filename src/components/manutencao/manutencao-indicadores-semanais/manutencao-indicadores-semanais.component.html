@@ -352,7 +352,35 @@
     </section>
 
     <section class="pcm-section">
-      <h2 class="pcm-section-title">Consolidado do Ano</h2>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="pcm-section-title">Consolidado do Ano</h2>
+        @if (isAdmin()) {
+          <button type="button" (click)="abrirEditarManuais()" class="no-print text-xs text-slate-600 hover:text-slate-800 font-semibold">
+            Editar Disponibilidade/Dias-Navio
+          </button>
+        }
+      </div>
+      @if (isAdmin() && manuaisAberto()) {
+        <div class="no-print app-card p-4 space-y-3 max-w-xl mb-3">
+          <p class="text-xs text-gray-400">Indicadores que não vêm das ordens do Portal — digitados à mão, um valor pro ano corrente ({{ anoConsolidado() }}).</p>
+          <div class="flex flex-wrap items-end gap-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Disponibilidade Global Anual (%)</label>
+              <input type="number" step="0.01" [ngModel]="formDisponibilidadeGlobal()" (ngModelChange)="formDisponibilidadeGlobal.set($event)"
+                class="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Dias/Navio (TCLD)</label>
+              <input type="number" step="0.01" [ngModel]="formDiasNavio()" (ngModelChange)="formDiasNavio.set($event)"
+                class="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <button type="button" (click)="salvarIndicadoresManuais()" [disabled]="salvandoManuais()"
+              class="rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 disabled:opacity-50">
+              {{ salvandoManuais() ? 'Salvando...' : 'Salvar' }}
+            </button>
+          </div>
+        </div>
+      }
       <div class="pcm-cards">
         @for (c of cardsConsolidadoAno(); track c.titulo) {
           <div class="pcm-card" [class]="'pcm-card--' + c.cor">

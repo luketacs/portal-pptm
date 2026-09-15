@@ -1,7 +1,8 @@
 import { ManutencaoOrdem, ConsultaSigmaResultado } from '../models/manutencao-programacao.model';
 import {
   calcularIndicadoresSemana, indiceAtingimentoMeta, MatchColaborador, META_ATENDIMENTO, META_CUMPRIMENTO,
-  PISO_INDICE_META, TETO_INDICE_META,
+  META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META,
+  TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META,
 } from './manutencao-indicadores';
 
 function ordem(overrides: Partial<ManutencaoOrdem> = {}): ManutencaoOrdem {
@@ -174,5 +175,51 @@ describe('indiceAtingimentoMeta', () => {
 
   it('nunca fica negativo (MÁXIMO(...,0) da planilha original)', () => {
     expect(indiceAtingimentoMeta(-10, piso, meta, teto)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('Disponibilidade Global Anual (piso/meta/teto próprios): exemplo real 84,14% -> 108,72%', () => {
+    expect(indiceAtingimentoMeta(84.14, PISO_DISPONIBILIDADE_GLOBAL, META_DISPONIBILIDADE_GLOBAL, TETO_DISPONIBILIDADE_GLOBAL))
+      .toBeCloseTo(108.72, 1);
+  });
+
+  describe('quanto menor, melhor (teto < piso, ex.: Dias/Navio)', () => {
+    const p = PISO_DIAS_NAVIO; // 5 -> 75%
+    const m = META_DIAS_NAVIO; // 4.5 -> 100%
+    const t = TETO_DIAS_NAVIO; // 4 -> 125%
+
+    it('exemplo real da planilha: 8,64 (bem acima do piso) -> 20,4%', () => {
+      expect(indiceAtingimentoMeta(8.64, p, m, t)).toBeCloseTo(20.4, 1);
+    });
+
+    it('exatamente no teto (melhor caso) -> 125%', () => {
+      expect(indiceAtingimentoMeta(4, p, m, t)).toBe(125);
+    });
+
+    it('melhor que o teto continua travado em 125%', () => {
+      expect(indiceAtingimentoMeta(2, p, m, t)).toBe(125);
+    });
+
+    it('exatamente na meta -> 100%', () => {
+      expect(indiceAtingimentoMeta(4.5, p, m, t)).toBe(100);
+    });
+
+    it('exatamente no piso -> 75%', () => {
+      expect(indiceAtingimentoMeta(5, p, m, t)).toBe(75);
+    });
+
+    it('entre teto e meta -> rampa 125% a 100%', () => {
+      // Meio do caminho entre 4 e 4,5 (4,25) -> meio do caminho entre 125% e 100% (112,5%)
+      expect(indiceAtingimentoMeta(4.25, p, m, t)).toBeCloseTo(112.5, 1);
+    });
+
+    it('entre meta e piso -> rampa 100% a 75%', () => {
+      // Meio do caminho entre 4,5 e 5 (4,75) -> meio do caminho entre 100% e 75% (87,5%)
+      expect(indiceAtingimentoMeta(4.75, p, m, t)).toBeCloseTo(87.5, 1);
+    });
+
+    it('pior que o dobro do piso -> 0%, nunca fica negativo', () => {
+      expect(indiceAtingimentoMeta(p * 2, p, m, t)).toBe(0);
+      expect(indiceAtingimentoMeta(p * 5, p, m, t)).toBe(0);
+    });
   });
 });

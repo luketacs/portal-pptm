@@ -7,10 +7,12 @@ import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { ManutencaoIndicadoresHistoricoService } from '../../../services/manutencao-indicadores-historico.service';
-import { CategoriaIndicador, ConsultaSigmaResultado, ImportarIndicadorHistoricoItem, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
+import { ManutencaoIndicadoresManuaisService } from '../../../services/manutencao-indicadores-manuais.service';
+import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, ImportarIndicadorHistoricoItem, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
-  PISO_INDICE_META, StatusGeralSemana, TETO_INDICE_META, calcularIndicadoresSemana, indiceAtingimentoMeta,
+  META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, StatusGeralSemana,
+  TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, indiceAtingimentoMeta,
 } from '../../../utils/manutencao-indicadores';
 import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, linhaRetaAreaPath, linhaRetaPath, posicionarRotulosFinais } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
@@ -100,6 +102,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     private notificationService: NotificationService,
     private confirmDialogService: ConfirmDialogService,
     private historicoService: ManutencaoIndicadoresHistoricoService,
+    private manuaisService: ManutencaoIndicadoresManuaisService,
   ) {
     // Refaz a consulta ao SIGMA sempre que a lista de OS (todo o histórico, não só a
     // semana selecionada — precisa pra Evolução ao Longo do Ano e pro Consolidado do
@@ -164,6 +167,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       await this.apontamentosService.loadColaboradores();
       await this.manutencaoService.loadFerias();
       await this.historicoService.load();
+      await this.manuaisService.load();
     } catch {
       this.errorMessage.set('Erro ao carregar os indicadores da semana.');
     }
@@ -498,9 +502,21 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
 
   cardsConsolidadoAno = computed<CardIndicador[]>(() => {
     const ano = this.consolidadoAno();
+    const disponibilidade = this.valorDisponibilidadeGlobalAno();
+    const diasNavio = this.valorDiasNavioAno();
     return [
       { titulo: 'Atendimento à Programação', valor: `${ano.geral.atendimento}%`, meta: `${ano.geral.executadas} de ${ano.geral.programadas} executadas no ano · Meta: ${this.metaAtendimento}% · Índice: ${this.indiceAtendimentoAno()}%`, cor: 'green', icone: 'check' },
       { titulo: 'Cumprimento do Plano', valor: `${ano.cumprimentoPlano.atendimento}%`, meta: `${ano.cumprimentoPlano.executadas} de ${ano.cumprimentoPlano.programadas} planejadas do Plano · Meta: ${this.metaCumprimento}% · Índice: ${this.indiceCumprimentoAno()}%`, cor: 'blue', icone: 'calendario' },
+      {
+        titulo: 'Disponibilidade Global Anual', valor: disponibilidade !== null ? `${disponibilidade}%` : '—',
+        meta: disponibilidade !== null ? `Meta: ${META_DISPONIBILIDADE_GLOBAL}% · Índice: ${this.indiceDisponibilidadeGlobalAno()}%` : 'Ainda não informado (input manual)',
+        cor: 'purple', icone: 'escudo',
+      },
+      {
+        titulo: 'Dias/Navio (TCLD)', valor: diasNavio !== null ? `${diasNavio}` : '—',
+        meta: diasNavio !== null ? `Meta: ${META_DIAS_NAVIO} · Índice: ${this.indiceDiasNavioAno()}%` : 'Ainda não informado (input manual)',
+        cor: 'orange', icone: 'prancheta',
+      },
       { titulo: 'Status Geral do Ano', valor: this.statusAnoSimplificado(), cor: 'teal', icone: 'bandeira' },
     ];
   });
@@ -513,6 +529,56 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     indiceAtingimentoMeta(this.consolidadoAno().geral.atendimento, PISO_INDICE_META, this.metaAtendimento, TETO_INDICE_META));
   indiceCumprimentoAno = computed(() =>
     indiceAtingimentoMeta(this.consolidadoAno().cumprimentoPlano.atendimento, PISO_INDICE_META, this.metaCumprimento, TETO_INDICE_META));
+
+  // ── Indicadores anuais de input manual (Disponibilidade Global Anual, Dias/Navio) ──
+  // Não dá pra calcular a partir de ManutencaoOrdem — vêm de fora do Portal, digitados à
+  // mão por um Admin (ver ManutencaoIndicadoresManuaisService, migration 049). `null`
+  // enquanto ninguém informou o valor daquele ano ainda.
+  // Não é private: o template lê direto no painel "Editar Disponibilidade/Dias-Navio".
+  anoConsolidado = computed(() => new Date().getFullYear());
+  valorDisponibilidadeGlobalAno = computed(() => this.manuaisService.valorDoAno(this.anoConsolidado(), 'disponibilidade_global_anual'));
+  valorDiasNavioAno = computed(() => this.manuaisService.valorDoAno(this.anoConsolidado(), 'dias_navio'));
+
+  indiceDisponibilidadeGlobalAno = computed(() => {
+    const valor = this.valorDisponibilidadeGlobalAno();
+    return valor === null ? null : indiceAtingimentoMeta(valor, PISO_DISPONIBILIDADE_GLOBAL, META_DISPONIBILIDADE_GLOBAL, TETO_DISPONIBILIDADE_GLOBAL);
+  });
+  // Dias/Navio é "quanto menor, melhor" (piso > meta > teto) — indiceAtingimentoMeta
+  // detecta isso sozinho pela ordem de piso/teto, ver comentário na função.
+  indiceDiasNavioAno = computed(() => {
+    const valor = this.valorDiasNavioAno();
+    return valor === null ? null : indiceAtingimentoMeta(valor, PISO_DIAS_NAVIO, META_DIAS_NAVIO, TETO_DIAS_NAVIO);
+  });
+
+  manuaisAberto = signal(false);
+  formDisponibilidadeGlobal = signal<number | null>(null);
+  formDiasNavio = signal<number | null>(null);
+  salvandoManuais = signal(false);
+
+  abrirEditarManuais(): void {
+    this.formDisponibilidadeGlobal.set(this.valorDisponibilidadeGlobalAno());
+    this.formDiasNavio.set(this.valorDiasNavioAno());
+    this.manuaisAberto.set(true);
+  }
+
+  async salvarIndicadoresManuais(): Promise<void> {
+    this.salvandoManuais.set(true);
+    try {
+      const ano = this.anoConsolidado();
+      const tarefas: Promise<void>[] = [];
+      const disp = this.formDisponibilidadeGlobal();
+      if (disp !== null) tarefas.push(this.manuaisService.salvar(ano, 'disponibilidade_global_anual', disp));
+      const dias = this.formDiasNavio();
+      if (dias !== null) tarefas.push(this.manuaisService.salvar(ano, 'dias_navio', dias));
+      await Promise.all(tarefas);
+      this.notificationService.showSuccess('Indicadores manuais salvos.');
+      this.manuaisAberto.set(false);
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao salvar os indicadores manuais.');
+    } finally {
+      this.salvandoManuais.set(false);
+    }
+  }
 
   // "Status Geral do Ano" simplificado a pedido do usuário — só 2 valores (não os 3 de
   // StatusGeralSemana que o resto da tela usa, com a faixa intermediária "Próximo da

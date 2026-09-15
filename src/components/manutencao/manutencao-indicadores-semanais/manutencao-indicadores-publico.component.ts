@@ -20,10 +20,11 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, WritableSignal, computed, effect, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { CategoriaIndicador, ConsultaSigmaResultado, FeriasTecnico, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
+import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, FeriasTecnico, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
-  PISO_INDICE_META, StatusGeralSemana, TETO_INDICE_META, calcularIndicadoresSemana, indiceAtingimentoMeta,
+  META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, StatusGeralSemana,
+  TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, indiceAtingimentoMeta,
 } from '../../../utils/manutencao-indicadores';
 import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, linhaRetaAreaPath, linhaRetaPath, posicionarRotulosFinais } from '../../../utils/relatorio-linha-tempo';
 import { MESES_ABREV } from '../../../utils/relatorio-mensal-pcm';
@@ -78,6 +79,14 @@ interface HistoricoItemPublico {
   naoExecutadasPlano: number;
   atendimento: number;
   cumprimento: number;
+}
+
+// Indicadores anuais de input manual (Disponibilidade Global Anual, Dias/Navio) — só
+// leitura aqui, edição é Admin-only na tela autenticada.
+interface IndicadorManualPublico {
+  ano: number;
+  chave: ChaveIndicadorManual;
+  valor: number;
 }
 
 // Ícones de linha simples — mesmo conjunto de manutencao-indicadores-semanais.component.ts.
@@ -243,6 +252,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   private ordensRaw = signal<ManutencaoOrdem[]>([]);
   private feriasRaw = signal<FeriasTecnico[]>([]);
   private historicoRaw = signal<HistoricoItemPublico[]>([]);
+  private manuaisRaw = signal<IndicadorManualPublico[]>([]);
   private sigmaPorOsRaw = signal<Record<string, ConsultaSigmaResultado>>({});
   private colaboradoresRaw = signal<Colaborador[]>([]);
 
@@ -285,6 +295,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
       this.ordensRaw.set((body.ordens as OrdemPublicaRaw[]).map(paraManutencaoOrdem));
       this.feriasRaw.set(body.ferias as FeriasTecnico[]);
       this.historicoRaw.set(body.historico as HistoricoItemPublico[]);
+      this.manuaisRaw.set(body.manuais as IndicadorManualPublico[]);
       this.sigmaPorOsRaw.set(body.sigmaPorOs as Record<string, ConsultaSigmaResultado>);
       this.ultimaAtualizacaoEm.set(new Date());
       this.errorMessage.set('');
@@ -525,11 +536,44 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
 
   cardsConsolidadoAno = computed<CardIndicador[]>(() => {
     const ano = this.consolidadoAno();
+    const disponibilidade = this.valorDisponibilidadeGlobalAno();
+    const diasNavio = this.valorDiasNavioAno();
     return [
       { titulo: 'Atendimento à Programação', valor: `${ano.geral.atendimento}%`, meta: `${ano.geral.executadas} de ${ano.geral.programadas} executadas no ano · Meta: ${this.metaAtendimento}% · Índice: ${this.indiceAtendimentoAno()}%`, cor: 'green', icone: 'check' },
       { titulo: 'Cumprimento do Plano', valor: `${ano.cumprimentoPlano.atendimento}%`, meta: `${ano.cumprimentoPlano.executadas} de ${ano.cumprimentoPlano.programadas} planejadas do Plano · Meta: ${this.metaCumprimento}% · Índice: ${this.indiceCumprimentoAno()}%`, cor: 'blue', icone: 'calendario' },
+      {
+        titulo: 'Disponibilidade Global Anual', valor: disponibilidade !== null ? `${disponibilidade}%` : '—',
+        meta: disponibilidade !== null ? `Meta: ${META_DISPONIBILIDADE_GLOBAL}% · Índice: ${this.indiceDisponibilidadeGlobalAno()}%` : 'Ainda não informado',
+        cor: 'purple', icone: 'escudo',
+      },
+      {
+        titulo: 'Dias/Navio (TCLD)', valor: diasNavio !== null ? `${diasNavio}` : '—',
+        meta: diasNavio !== null ? `Meta: ${META_DIAS_NAVIO} · Índice: ${this.indiceDiasNavioAno()}%` : 'Ainda não informado',
+        cor: 'orange', icone: 'prancheta',
+      },
       { titulo: 'Status Geral do Ano', valor: this.statusAnoSimplificado(), cor: 'teal', icone: 'bandeira' },
     ];
+  });
+
+  // Indicadores anuais de input manual — só leitura (edição é Admin-only na tela
+  // autenticada). `null` enquanto ninguém informou o valor daquele ano ainda.
+  private anoConsolidado = computed(() => new Date().getFullYear());
+  private valorManual(chave: ChaveIndicadorManual): number | null {
+    const ano = this.anoConsolidado();
+    return this.manuaisRaw().find(m => m.ano === ano && m.chave === chave)?.valor ?? null;
+  }
+  valorDisponibilidadeGlobalAno = computed(() => this.valorManual('disponibilidade_global_anual'));
+  valorDiasNavioAno = computed(() => this.valorManual('dias_navio'));
+
+  indiceDisponibilidadeGlobalAno = computed(() => {
+    const valor = this.valorDisponibilidadeGlobalAno();
+    return valor === null ? null : indiceAtingimentoMeta(valor, PISO_DISPONIBILIDADE_GLOBAL, META_DISPONIBILIDADE_GLOBAL, TETO_DISPONIBILIDADE_GLOBAL);
+  });
+  // Dias/Navio é "quanto menor, melhor" (piso > meta > teto) — indiceAtingimentoMeta
+  // detecta isso sozinho pela ordem de piso/teto.
+  indiceDiasNavioAno = computed(() => {
+    const valor = this.valorDiasNavioAno();
+    return valor === null ? null : indiceAtingimentoMeta(valor, PISO_DIAS_NAVIO, META_DIAS_NAVIO, TETO_DIAS_NAVIO);
   });
 
   // Índice de atingimento de meta (régua de 3 trechos da planilha de PLR do

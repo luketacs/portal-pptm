@@ -315,3 +315,19 @@ export interface ImportarIndicadorHistoricoItem {
   atendimento: number;
   cumprimento: number;
 }
+
+// Indicadores anuais de input manual (não dá pra calcular a partir de
+// manutencao_programacao — vêm de fora do Portal) — ver Consolidado do Ano, migration
+// 049. Um valor por (ano, chave); novo indicador manual = nova chave, sem migration
+// nova (a coluna `chave` não é validada por enum no banco).
+export type ChaveIndicadorManual = 'disponibilidade_global_anual' | 'dias_navio';
+
+export interface IndicadorManual {
+  id: string;
+  ano: number;
+  chave: ChaveIndicadorManual;
+  valor: number;
+  atualizadoPorId: string | null;
+  atualizadoPorNome: string;
+  atualizadoEm: Date;
+}
