@@ -1,5 +1,4 @@
 import { calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, ordemExecutadaAgrupada } from './manutencao-dashboard';
-import { HORAS_EXAME_MEDICO } from './manutencao-regras';
 import { ConsultaSigmaResultado, ManutencaoOrdem } from '../models/manutencao-programacao.model';
 
 const DIAS_SEMANA_37 = [
@@ -102,7 +101,7 @@ describe('calcularHhTecnico', () => {
   it('técnico normal: bruto e líquido iguais, indisponível zero', () => {
     const disponibilidadePorDia = new Map(DIAS_SEMANA_37.map(d => [d.data, 8]));
     const r = calcularHhTecnico({
-      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), diasExameMedico: new Set(), feriasIntervalo: null,
+      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), feriasIntervalo: null,
     });
     expect(r).toEqual({ bruto: 40, liquido: 40, indisponivel: 0 });
   });
@@ -110,26 +109,38 @@ describe('calcularHhTecnico', () => {
   it('técnico de férias a semana toda: indisponível = bruto, líquido = 0', () => {
     const disponibilidadePorDia = new Map(DIAS_SEMANA_37.map(d => [d.data, 8]));
     const r = calcularHhTecnico({
-      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), diasExameMedico: new Set(),
+      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(),
       feriasIntervalo: { dataInicio: '2026-09-01', dataFim: '2026-09-30' },
     });
     expect(r).toEqual({ bruto: 40, liquido: 0, indisponivel: 40 });
   });
 
-  it('técnico com 1 dia de exame médico: indisponível = HORAS_EXAME_MEDICO', () => {
+  it('técnico de folga 1 dia: indisponível = disponibilidade daquele dia', () => {
     const disponibilidadePorDia = new Map(DIAS_SEMANA_37.map(d => [d.data, 8]));
     const r = calcularHhTecnico({
-      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), diasExameMedico: new Set(['2026-09-09']), feriasIntervalo: null,
+      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(['2026-09-09']), feriasIntervalo: null,
     });
-    expect(r.indisponivel).toBe(HORAS_EXAME_MEDICO);
-    expect(r.bruto).toBe(40);
-    expect(r.liquido).toBe(40 - HORAS_EXAME_MEDICO);
+    expect(r).toEqual({ bruto: 40, liquido: 32, indisponivel: 8 });
+  });
+
+  // Pedido do usuário: exame médico e treinamento NÃO reduzem HH disponível (a
+  // pessoa está "no expediente", só não em campo numa OS) — só folga e férias tiram
+  // a pessoa do dia por completo. calcularHhTecnico nem aceita mais diasExameMedico
+  // (removido do parâmetro) — calcularCapacidadeSemana em si continua descontando
+  // exame/treinamento normalmente pra quem passa esses dados direto (a Programação,
+  // onde o desconto é intencional).
+  it('dia de exame médico não reduz mais HH disponível (diferente de calcularCapacidadeSemana puro)', () => {
+    const disponibilidadePorDia = new Map(DIAS_SEMANA_37.map(d => [d.data, 8]));
+    const r = calcularHhTecnico({
+      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), feriasIntervalo: null,
+    });
+    expect(r).toEqual({ bruto: 40, liquido: 40, indisponivel: 0 });
   });
 
   it('fim de semana não conta nem pro bruto nem pro líquido', () => {
     const disponibilidadePorDia = new Map(DIAS_SEMANA_37.map(d => [d.data, 8]));
     const r = calcularHhTecnico({
-      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), diasExameMedico: new Set(), feriasIntervalo: null,
+      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), feriasIntervalo: null,
     });
     expect(r.bruto).toBe(40); // 5 dias úteis x 8h, SAB/DOM fora mesmo tendo entrada no mapa
   });

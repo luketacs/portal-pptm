@@ -162,7 +162,7 @@
     var(--diamante-azul-escuro) 75% 100%
   );
 }
-.pcm-logo-diamante { height: 46px; width: auto; object-fit: contain; }
+.pcm-logo-diamante { height: 68px; width: auto; object-fit: contain; }
 .pcm-company-info { border-left-color: rgba(30, 58, 95, .15); }
 .pcm-report-title { color: #475569; opacity: 1; }
 .pcm-periodo-info { background-color: rgba(255, 255, 255, .7); color: #334155; border: 1px solid rgba(30, 58, 95, .1); }

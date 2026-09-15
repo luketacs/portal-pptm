@@ -134,20 +134,27 @@ export interface HhTecnico {
   indisponivel: number;
 }
 
-// "Bruto" = disponibilidade nos dias úteis sem descontar nada (folga/férias/exame);
-// "líquido" = calcularCapacidadeSemana (com os descontos, ver manutencao-regras.ts);
-// "indisponível" = a diferença — HH perdido pra folga, férias ou exame médico.
+// "Bruto" = disponibilidade nos dias úteis sem descontar nada; "líquido" =
+// calcularCapacidadeSemana (com os descontos, ver manutencao-regras.ts), mas só de
+// folga e férias — pedido do usuário: exame médico e treinamento contam como HH
+// disponível normalmente (a pessoa está "no expediente", só não em campo numa OS),
+// diferente de folga/férias, que tiram a pessoa do dia por completo. Por isso passa
+// diasExameMedico vazio pra calcularCapacidadeSemana (não recebe horasTreinamentoPorDia
+// nenhum, então treinamento já nunca descontava aqui) — calcularCapacidadeSemana em si
+// continua descontando exame/treinamento normalmente pra quem a usa direto (capacidade/
+// saldo da Programação, onde esse desconto é intencional, ver "Quanto desconta da
+// capacidade" no formulário de Treinamento). "Indisponível" = a diferença — HH perdido
+// só pra folga ou férias agora.
 export function calcularHhTecnico(params: {
   dias: DiaSemana[];
   disponibilidadePorDia: Map<string, number>;
   diasFolga: Set<string>;
-  diasExameMedico: Set<string>;
   feriasIntervalo: { dataInicio: string; dataFim: string } | null;
 }): HhTecnico {
   const bruto = params.dias
     .filter(d => d.label !== 'SAB' && d.label !== 'DOM')
     .reduce((soma, d) => soma + (params.disponibilidadePorDia.get(d.data) ?? 0), 0);
-  const liquido = calcularCapacidadeSemana(params);
+  const liquido = calcularCapacidadeSemana({ ...params, diasExameMedico: new Set() });
   return {
     bruto: Math.round(bruto * 100) / 100,
     liquido,
