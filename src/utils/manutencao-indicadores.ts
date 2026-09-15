@@ -34,7 +34,11 @@ function contarExecucao(
   const executadas = executadaPorGrupo.filter(Boolean).length;
   return {
     programadas, executadas, naoExecutadas: programadas - executadas,
-    atendimento: programadas > 0 ? round2((executadas / programadas) * 100) : 0,
+    // 0 programadas = 100%, não 0% — nada previsto pro período é, por definição,
+    // cumprido por completo (nada ficou faltando). Pedido do usuário: uma área como
+    // SPCI sem nenhuma ordem do plano numa semana não deve aparecer como "0%" de
+    // Cumprimento do Plano (lê como falha total), e sim 100%.
+    atendimento: programadas > 0 ? round2((executadas / programadas) * 100) : 100,
   };
 }
 

@@ -77,8 +77,8 @@ describe('somarContagem', () => {
     expect(somarContagem(a, b)).toEqual({ programadas: 22, executadas: 2, naoExecutadas: 20, atendimento: 9.09 });
   });
 
-  it('0 programadas no total não quebra (atendimento 0)', () => {
+  it('0 programadas no total não quebra e lê como 100% (nada previsto, nada faltando)', () => {
     const zero = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 0 };
-    expect(somarContagem(zero, zero)).toEqual(zero);
+    expect(somarContagem(zero, zero)).toEqual({ programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 });
   });
 });

@@ -86,12 +86,14 @@ export function segundaDaSemanaISO(ano: number, semana: number): Date {
 }
 
 // Soma duas contagens brutas e deriva o % do total — nunca faz média de percentuais já
-// calculados (um grupo com 2 ordens a 100% e outro com 20 a 0% não é "50%").
+// calculados (um grupo com 2 ordens a 100% e outro com 20 a 0% não é "50%"). 0
+// programadas no total = 100%, mesmo critério de contarExecucao() em
+// manutencao-indicadores.ts (nada previsto = cumprido por completo, não "0%").
 export function somarContagem(a: ContagemExecucao, b: ContagemExecucao): ContagemExecucao {
   const programadas = a.programadas + b.programadas;
   const executadas = a.executadas + b.executadas;
   return {
     programadas, executadas, naoExecutadas: programadas - executadas,
-    atendimento: programadas > 0 ? Math.round((executadas / programadas) * 10000) / 100 : 0,
+    atendimento: programadas > 0 ? Math.round((executadas / programadas) * 10000) / 100 : 100,
   };
 }

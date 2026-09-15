@@ -584,7 +584,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       if (lista) lista.push(indicadores);
       else porMes.set(mes, [indicadores]);
     }
-    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 0 };
+    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 };
     return this.mesesHistoricoIso().map(mes => {
       const semanas = porMes.get(mes) ?? [];
       const geral = semanas.reduce((acc, ind) => somarContagem(acc, ind.geral), zero);
@@ -653,7 +653,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // somarContagem antes de virar %, em vez de usar o % de uma semana isolada.
   private pontosEvolucaoGeralMensal = computed<{ mes: string; atendimento: number; cumprimento: number }[]>(() => {
     const inicioAoVivoIso = paraIso(segundaDaSemanaISO(2026, 37));
-    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 0 };
+    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 };
     const geralPorMes = new Map<string, ContagemExecucao>();
     const planoPorMes = new Map<string, ContagemExecucao>();
     for (const item of this.historicoService.itens()) {
@@ -680,7 +680,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
 
   private pontosEvolucaoPorAreaMensal = computed<Map<CategoriaIndicador, Map<string, { atendimento: number; cumprimento: number }>>>(() => {
     const inicioAoVivoIso = paraIso(segundaDaSemanaISO(2026, 37));
-    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 0 };
+    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 };
     const geralPorCategoria = new Map(CATEGORIAS_INDICADOR.map(c => [c, new Map<string, ContagemExecucao>()]));
     const planoPorCategoria = new Map(CATEGORIAS_INDICADOR.map(c => [c, new Map<string, ContagemExecucao>()]));
     for (const item of this.historicoService.itens()) {
@@ -796,7 +796,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     const historicoDoAno = this.historicoService.itens().filter(item =>
       Number(item.semanaInicio.slice(0, 4)) === anoAtual && item.semanaInicio < inicioAoVivoIso);
 
-    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 0 };
+    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 };
     const somarHistorico = (categoria: CategoriaIndicador | 'GERAL', plano: boolean) => historicoDoAno
       .filter(i => i.categoria === categoria)
       .reduce((acc, i) => somarContagem(acc, plano

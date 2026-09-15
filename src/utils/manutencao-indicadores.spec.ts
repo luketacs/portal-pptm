@@ -24,11 +24,14 @@ function sigma(numeroOs: string, executantes: { matricula: string; data: string 
 }
 
 describe('calcularIndicadoresSemana', () => {
-  it('sem nenhuma ordem, tudo zerado e status "Abaixo da Meta" (zero não bate meta nenhuma)', () => {
+  it('sem nenhuma ordem, atendimento 100% (nada previsto = nada faltando) e status "Dentro da Meta"', () => {
+    // Pedido do usuário: 0 programadas deve ler como 100%, não 0% — uma área (ou
+    // semana) sem nenhuma ordem do plano não "falhou", simplesmente não tinha nada
+    // previsto. Antes lia como "Abaixo da Meta" (0% não bate meta nenhuma).
     const r = calcularIndicadoresSemana({ ordens: [], sigmaPorOs: {}, matchColaborador });
-    expect(r.geral).toEqual({ programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 0 });
+    expect(r.geral).toEqual({ programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 });
     expect(r.porArea).toEqual([]);
-    expect(r.statusGeral).toBe('Abaixo da Meta');
+    expect(r.statusGeral).toBe('Dentro da Meta');
   });
 
   it('conta executada quando o apontamento bate com a matrícula, mesmo em dia diferente do previsto (mesma semana)', () => {
@@ -93,16 +96,21 @@ describe('calcularIndicadoresSemana', () => {
   });
 
   it('status "Dentro da Meta" exige atendimento E cumprimento acima da meta ao mesmo tempo', () => {
-    // 10 ordens todas executadas -> atendimento 100% (>= META_ATENDIMENTO); nenhuma do
-    // plano -> cumprimentoPlano.atendimento fica 0 (sem programadas do plano) -> abaixo.
-    const ordens = Array.from({ length: 10 }, (_, i) =>
-      ordem({ id: `o${i}`, numeroOs: String(i + 1), tecnicoMatricula: '111', diasPrevistos: ['2026-09-21'] }));
+    // 19 corretivas executadas -> atendimento geral 95% (>= META_ATENDIMENTO). 1
+    // preventiva NÃO executada -> cumprimentoPlano 0% (< META_CUMPRIMENTO), mesmo com
+    // o geral batendo meta — precisa das duas, uma sozinha não basta. (0 programadas
+    // do plano não serve mais pra testar isso: agora lê como 100%, não como "falha".)
+    const corretivas = Array.from({ length: 19 }, (_, i) =>
+      ordem({ id: `c${i}`, numeroOs: String(i + 1), tecnicoMatricula: '111', tipoServico: 'CORRETIVA', diasPrevistos: ['2026-09-21'] }));
+    const preventivaNaoExecutada = ordem({ id: 'p1', numeroOs: '999', tecnicoMatricula: '111', tipoServico: 'PREVENTIVA', diasPrevistos: ['2026-09-21'] });
+    const ordens = [...corretivas, preventivaNaoExecutada];
     const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {};
-    for (let i = 0; i < 10; i++) Object.assign(sigmaPorOs, sigma(String(i + 1).padStart(6, '0'), [{ matricula: '111', data: '2026-09-21' }]));
+    for (let i = 0; i < 19; i++) Object.assign(sigmaPorOs, sigma(String(i + 1).padStart(6, '0'), [{ matricula: '111', data: '2026-09-21' }]));
+    // '000999' (a preventiva) fica de fora do sigmaPorOs -> nunca executada.
     const r = calcularIndicadoresSemana({ ordens, sigmaPorOs, matchColaborador });
-    expect(r.geral.atendimento).toBe(100);
+    expect(r.geral.atendimento).toBe(95);
     expect(r.geral.atendimento).toBeGreaterThanOrEqual(META_ATENDIMENTO);
-    expect(r.cumprimentoPlano.programadas).toBe(0);
+    expect(r.cumprimentoPlano.atendimento).toBe(0);
     expect(r.statusGeral).not.toBe('Dentro da Meta');
   });
 
