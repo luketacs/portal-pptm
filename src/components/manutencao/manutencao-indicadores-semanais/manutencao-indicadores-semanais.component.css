@@ -236,3 +236,91 @@
   margin: 14px 0 8px;
 }
 .pcm-horas-tecnico-subtitulo:first-child { margin-top: 0; }
+
+/* ── Impressão / PDF — relatório formal, não "dashboard" ──────────────────────
+   window.print() captura o DOM como está NA HORA — se o usuário clicar em "Gerar
+   Relatório" sem antes rolar a tela inteira, os blocos que dependem de
+   VisivelNaTelaDirective (.pcm-em-vista, ver acima) nunca ganharam a classe e
+   ficam com opacity:0 pra sempre: os dois gráficos de Evolução saem em branco no
+   PDF. E além do bug, os cards com ícone colorido em círculo, sombra e barra em
+   degradê pesam pro visual de "template de dashboard" — pro documento impresso
+   (diferente da tela, que continua como está) troca por um visual mais formal:
+   sem ícone, sem sombra, sem degradê, cabeçalho mais sóbrio. */
+@media print {
+  /* Mostra tudo no estado final, direto — sem depender de scroll ter acontecido. */
+  .pcm-card,
+  .pcm-section,
+  .pcm-linha-tempo-bloco,
+  .pcm-linha-tempo-area {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .pcm-linha-tempo-linha {
+    animation: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+  .pcm-linha-tempo-destaque {
+    animation: none !important;
+    opacity: .35 !important;
+    r: 8;
+  }
+  .pcm-linha-tempo-rotulo-final {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+
+  /* Ícone colorido em círculo — decoração de dashboard, não informação. Some no
+     impresso; o título/valor já dizem tudo o que importa. */
+  .pcm-card-icone { display: none; }
+  .pcm-card-title { padding-right: 0; }
+
+  /* Cartões e blocos de gráfico: borda fina em vez de sombra + fundo liso em vez
+     de degradê — sombra em PDF costuma sair como uma mancha cinza, não como
+     profundidade de verdade. */
+  .pcm-card {
+    background: #fff;
+    box-shadow: none;
+    border: 1px solid #e2e8f0;
+  }
+  .pcm-linha-tempo-bloco,
+  .pcm-linha-tempo-area {
+    box-shadow: none;
+  }
+
+  /* Cabeçalho mais sóbrio — mantém a faixa de 4 cores da marca (assinatura visual
+     real do Manual de Identidade), mas tira o degradê pastel de fundo. */
+  .pcm-header {
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .pcm-periodo-info {
+    background: #fff;
+    border: 1px solid #cbd5e1;
+  }
+
+  /* Barras (HH por Equipamento/Atividade, Horas por Técnico): cor sólida em vez de
+     degradê — mesmo raciocínio da sombra, degradê em impressora/PDF alinhado à
+     borda arredondada às vezes serrilha. */
+  .pcm-hh-barra-fill { background: #2563eb; }
+  .pcm-hh-barra-fill--apontada { background: #16a34a; }
+  .pcm-hh-barra-fill--programada { background: #2563eb; }
+  .pcm-hh-barra-fill--disponivel { background: #cbd5e1; }
+
+  .pcm-horas-tecnico-card {
+    border: 1px solid #e2e8f0;
+    break-inside: avoid;
+  }
+
+  /* Grid de cards de Horas por Técnico vira tabela compacta no impresso — com 15-20+
+     técnicos, um card por pessoa (cada um com 3 barras) ocupa páginas inteiras;
+     uma tabela cabe todo mundo em poucas linhas, mais fácil de conferir que "achar
+     o card de alguém no meio de uma grade". As classes .pcm-somente-impressao/
+     .pcm-somente-tela controlam qual das duas versões aparece em cada meio. */
+  .pcm-somente-tela { display: none !important; }
+}
+
+.pcm-somente-impressao { display: none; }
+@media print {
+  .pcm-somente-impressao { display: table; }
+}

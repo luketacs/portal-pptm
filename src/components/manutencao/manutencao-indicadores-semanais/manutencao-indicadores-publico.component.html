@@ -162,7 +162,7 @@
       } @else {
         @if (rankingHorasApontadasEletrica().length > 0) {
           <h3 class="pcm-horas-tecnico-subtitulo">Elétrica</h3>
-          <div class="pcm-horas-tecnico-grid">
+          <div class="pcm-horas-tecnico-grid pcm-somente-tela">
             @for (item of rankingHorasApontadasEletrica(); track item.colaborador.matricula) {
               <div class="pcm-horas-tecnico-card">
                 <div class="text-sm font-semibold text-gray-700 truncate mb-1.5" [title]="item.colaborador.nome">{{ item.colaborador.nome }}</div>
@@ -196,10 +196,24 @@
               </div>
             }
           </div>
+          <table class="pcm-somente-impressao pcm-table">
+            <thead><tr><th>Técnico</th><th>Apontada</th><th>Programada</th><th>Disponível</th><th>Eficiência</th></tr></thead>
+            <tbody>
+              @for (item of rankingHorasApontadasEletrica(); track item.colaborador.matricula; let i = $index) {
+                <tr [class]="i % 2 === 0 ? 'pcm-even-row' : 'pcm-odd-row'">
+                  <td class="pcm-area-name">{{ item.colaborador.nome }}</td>
+                  <td>{{ item.horasApontadas }}h</td>
+                  <td>{{ item.horasProgramadas }}h</td>
+                  <td>{{ item.horasDisponiveis }}h</td>
+                  <td><strong class="pcm-percentage">{{ item.eficiencia }}%</strong></td>
+                </tr>
+              }
+            </tbody>
+          </table>
         }
         @if (rankingHorasApontadasMecanica().length > 0) {
           <h3 class="pcm-horas-tecnico-subtitulo">Mecânica</h3>
-          <div class="pcm-horas-tecnico-grid">
+          <div class="pcm-horas-tecnico-grid pcm-somente-tela">
             @for (item of rankingHorasApontadasMecanica(); track item.colaborador.matricula) {
               <div class="pcm-horas-tecnico-card">
                 <div class="text-sm font-semibold text-gray-700 truncate mb-1.5" [title]="item.colaborador.nome">{{ item.colaborador.nome }}</div>
@@ -233,8 +247,22 @@
               </div>
             }
           </div>
+          <table class="pcm-somente-impressao pcm-table">
+            <thead><tr><th>Técnico</th><th>Apontada</th><th>Programada</th><th>Disponível</th><th>Eficiência</th></tr></thead>
+            <tbody>
+              @for (item of rankingHorasApontadasMecanica(); track item.colaborador.matricula; let i = $index) {
+                <tr [class]="i % 2 === 0 ? 'pcm-even-row' : 'pcm-odd-row'">
+                  <td class="pcm-area-name">{{ item.colaborador.nome }}</td>
+                  <td>{{ item.horasApontadas }}h</td>
+                  <td>{{ item.horasProgramadas }}h</td>
+                  <td>{{ item.horasDisponiveis }}h</td>
+                  <td><strong class="pcm-percentage">{{ item.eficiencia }}%</strong></td>
+                </tr>
+              }
+            </tbody>
+          </table>
         }
-        <p class="text-xs text-gray-400 mt-2">Horas Programadas/Eficiência só calculadas pra Elétrica/Mecânica — mesma restrição do HH acima. Barras na escala da própria Hora Disponível do técnico.</p>
+        <p class="text-xs text-gray-400 mt-2 pcm-somente-tela">Horas Programadas/Eficiência só calculadas pra Elétrica/Mecânica — mesma restrição do HH acima. Barras na escala da própria Hora Disponível do técnico.</p>
       }
     </section>
 
