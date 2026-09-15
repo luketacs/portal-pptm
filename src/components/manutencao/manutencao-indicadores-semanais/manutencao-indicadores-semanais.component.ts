@@ -144,6 +144,18 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   private matchColaborador = (matricula: string | null, nome: string) =>
     this.apontamentosService.matchColaboradorDaOrdem(matricula, nome);
 
+  // Ordens de um colaborador específico — casadas pela MATRÍCULA (via matchColaborador,
+  // que prioriza tecnicoMatricula e só cai pro nome como fallback), nunca por
+  // `o.tecnicoNome === colaborador.nome` direto. Mesmo motivo documentado em
+  // chaveTecnico() da Programação (manutencao-programacao.component.ts): o texto de
+  // tecnicoNome pode ter sido digitado com acento/typo diferente do cadastrado em
+  // matriculas.json mesmo com a matrícula certa gravada — nome exato some ordens
+  // inteiras da conta (reportado: Antônio Nivaldo aparecia com Programada/Apontada
+  // zeradas numa semana em que ele tinha OS executadas de verdade).
+  private ordensDoColaborador(ordens: ManutencaoOrdem[], colaborador: Colaborador): ManutencaoOrdem[] {
+    return ordens.filter(o => this.matchColaborador(o.tecnicoMatricula, o.tecnicoNome)?.matricula === colaborador.matricula);
+  }
+
   isAdmin = computed(() => this.authService.currentUser()?.role === 'Admin');
 
   async ngOnInit(): Promise<void> {
@@ -363,7 +375,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       const dias = diasDaSemana(semanaIso);
       const ordensDaSemanaTodas = ordensTodas.filter(o => o.semanaInicio === semanaIso);
       for (const colaborador of tecnicos) {
-        const ordensDoTecnico = ordensDaSemanaTodas.filter(o => o.tecnicoNome === colaborador.nome);
+        const ordensDoTecnico = this.ordensDoColaborador(ordensDaSemanaTodas, colaborador);
         const r = calcularHhTecnico({
           dias,
           disponibilidadePorDia: new Map(dias.map(d => [d.data, this.apontamentosService.disponibilidadeNoDia(colaborador, d.data)])),
@@ -411,7 +423,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       const dias = diasDaSemana(semanaIso);
       const ordensDaSemanaTodas = ordensTodas.filter(o => o.semanaInicio === semanaIso);
       for (const item of resultado) {
-        const ordensDoTecnico = ordensDaSemanaTodas.filter(o => o.tecnicoNome === item.colaborador.nome);
+        const ordensDoTecnico = this.ordensDoColaborador(ordensDaSemanaTodas, item.colaborador);
         for (const o of ordensDoTecnico.filter(x => x.tipo === 'ordem')) {
           const horas = o.duracaoHoras ?? 0;
           item.horasProgramadas += horas;
