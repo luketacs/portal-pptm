@@ -1,5 +1,6 @@
-import { calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento } from './manutencao-dashboard';
+import { calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, ordemExecutadaAgrupada } from './manutencao-dashboard';
 import { HORAS_EXAME_MEDICO } from './manutencao-regras';
+import { ConsultaSigmaResultado, ManutencaoOrdem } from '../models/manutencao-programacao.model';
 
 const DIAS_SEMANA_37 = [
   { data: '2026-09-07', label: 'SEG' },
@@ -10,6 +11,18 @@ const DIAS_SEMANA_37 = [
   { data: '2026-09-12', label: 'SAB' },
   { data: '2026-09-13', label: 'DOM' },
 ];
+
+function ordem(overrides: Partial<ManutencaoOrdem> = {}): ManutencaoOrdem {
+  return {
+    id: 'o1', tipo: 'ordem', area: 'ELETRICA', categoriaIndicador: 'ELETRICA', semanaInicio: '2026-09-07',
+    numeroOs: '45203', semOs: false, descricao: 'Reparar sirene', equipamento: null, equipamentosRelacionados: null,
+    recursos: null, loto: null, areaAtuacao: null, duracaoHoras: 6.5, tipoServico: 'CORRETIVA',
+    tecnicoNome: 'Antônio Nivaldo', tecnicoMatricula: '20006136', diasPrevistos: ['2026-09-08'], status: 'PEND',
+    observacoes: null, reuniaoHorario: null, reuniaoLocal: null, planoPreventivoId: null, checklist: null,
+    criadoPorId: null, criadoPorNome: '', createdAt: new Date('2026-09-01'),
+    ...overrides,
+  };
+}
 
 describe('calcularKpiExecucao', () => {
   it('retorna 0/0/0% quando não há ordens', () => {
@@ -119,5 +132,70 @@ describe('calcularHhTecnico', () => {
       dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), diasExameMedico: new Set(), feriasIntervalo: null,
     });
     expect(r.bruto).toBe(40); // 5 dias úteis x 8h, SAB/DOM fora mesmo tendo entrada no mapa
+  });
+});
+
+describe('ordemExecutadaAgrupada', () => {
+  const matchPorMatricula = (matricula: string | null) =>
+    matricula === '20006136' ? { matricula: '20006136' } : null;
+
+  it('sem número de OS, nunca é executada', () => {
+    const o = ordem({ numeroOs: null });
+    expect(ordemExecutadaAgrupada([o], {}, matchPorMatricula)).toEqual([false]);
+  });
+
+  it('OS sem resultado do SIGMA, nunca é executada', () => {
+    const o = ordem();
+    expect(ordemExecutadaAgrupada([o], {}, matchPorMatricula)).toEqual([false]);
+  });
+
+  it('colaborador resolvido (individual): exige apontamento DAQUELA matrícula dentro da semana', () => {
+    const executada = ordem();
+    const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
+      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '20006136' }] },
+    };
+    expect(ordemExecutadaAgrupada([executada], sigmaPorOs, matchPorMatricula)).toEqual([true]);
+
+    // Apontamento existe, mas é de outra matrícula — não conta pra esse técnico específico.
+    const outraPessoa: Record<string, ConsultaSigmaResultado> = {
+      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '11111111' }] },
+    };
+    expect(ordemExecutadaAgrupada([executada], outraPessoa, matchPorMatricula)).toEqual([false]);
+  });
+
+  it('apontamento fora da semana (mesmo com matrícula certa) não conta como executada', () => {
+    const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
+      '045203': { os: null, apontamentos: [{ data: '2026-09-21', status: 'EXEC', executante: '20006136' }] }, // semana seguinte
+    };
+    expect(ordemExecutadaAgrupada([ordem()], sigmaPorOs, matchPorMatricula)).toEqual([false]);
+  });
+
+  it('apontamento em dia da semana diferente do diasPrevistos ainda conta (semana inteira, não o dia exato)', () => {
+    const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
+      // diasPrevistos da ordem é '2026-09-08' (terça); apontamento caiu na sexta, mesma semana.
+      '045203': { os: null, apontamentos: [{ data: '2026-09-11', status: 'EXEC', executante: '20006136' }] },
+    };
+    expect(ordemExecutadaAgrupada([ordem()], sigmaPorOs, matchPorMatricula)).toEqual([true]);
+  });
+
+  it('Apoio programado por empresa/equipe (colaborador nunca resolve): cai pra "qualquer apontamento na semana"', () => {
+    // tecnicoNome = "SERVPLEX" não é ninguém em matriculas.json — matchColaborador sempre null aqui.
+    const apoioOrdem = ordem({ area: 'APOIO', categoriaIndicador: 'REFRIGERACAO', tecnicoNome: 'SERVPLEX', tecnicoMatricula: null });
+    const semApontamento: Record<string, ConsultaSigmaResultado> = { '045203': { os: null, apontamentos: [] } };
+    expect(ordemExecutadaAgrupada([apoioOrdem], semApontamento, matchPorMatricula)).toEqual([false]);
+
+    const comApontamentoDeQualquerUm: Record<string, ConsultaSigmaResultado> = {
+      '045203': { os: null, apontamentos: [{ data: '2026-09-10', status: 'EXEC', executante: '55555555' }] },
+    };
+    expect(ordemExecutadaAgrupada([apoioOrdem], comApontamentoDeQualquerUm, matchPorMatricula)).toEqual([true]);
+  });
+
+  it('agrupa por número de OS: só executada quando TODAS as linhas do grupo estão OK', () => {
+    const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
+      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '20006136' }] }, // só a matrícula da linha 1
+    };
+    const linha1 = ordem({ id: 'l1' });
+    const linha2 = ordem({ id: 'l2', tecnicoMatricula: '77777777' }); // outra pessoa, sem apontamento dela
+    expect(ordemExecutadaAgrupada([linha1, linha2], sigmaPorOs, matchPorMatricula)).toEqual([false]);
   });
 });

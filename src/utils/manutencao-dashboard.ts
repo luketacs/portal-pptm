@@ -30,6 +30,24 @@ function domingoDaSemana(segundaIso: string): string {
 // apontamento existia mas nunca contava como "executada". `matchColaborador` é
 // injetado (em vez de ApontamentosService direto) pra manter esta função pura/testável
 // sem Angular.
+//
+// Apoio programa por EMPRESA/EQUIPE (tecnicoNome = "SERVPLEX"/"OPERAÇÃO"/"TOP
+// ANDAIMES"...), não por pessoa cadastrada em matriculas.json (ver comentário em
+// manutencao-programacao.component.ts) — matchColaborador nunca resolve um indivíduo
+// pra esse texto, então `colaborador` vem null. Antes disso zerava a linha inteira
+// (`!!colaborador &&` já falhava ali), fazendo TODA ordem de Apoio contar como "nunca
+// executada" mesmo com apontamento real batendo no SIGMA (reportado: ordens de Apoio
+// executadas na semana, aparecendo zeradas no Desempenho por Área). Sem uma pessoa
+// específica pra cobrar, cai pra "qualquer apontamento bateu dentro da semana dessa
+// OS" — mesmo princípio de sempre (semana inteira, não o dia previsto exato), só que
+// sem exigir que o apontamento seja de uma matrícula em particular.
+//
+// Restrito a area==='APOIO': pra Elétrica/Mecânica um `colaborador` não resolvido quase
+// sempre é indício de problema de dado (nome com typo não reconhecido nem como
+// pessoa nem como equipe de Apoio) — mais seguro continuar marcando como "não
+// executada" nesse caso do que aceitar qualquer apontamento da OS como se fosse
+// daquele técnico específico. Só Apoio tem esse "sem pessoa específica pra cobrar" por
+// design (programado por empresa/equipe, não por indivíduo).
 export function ordemExecutadaAgrupada(
   ordens: ManutencaoOrdem[],
   sigmaPorOs: Record<string, ConsultaSigmaResultado>,
@@ -49,9 +67,10 @@ export function ordemExecutadaAgrupada(
     if (!resultado) return false;
     return linhas.every(o => {
       const domingo = domingoDaSemana(o.semanaInicio);
+      const dentroDaSemana = (a: { data: string }) => a.data >= o.semanaInicio && a.data <= domingo;
       const colaborador = matchColaborador(o.tecnicoMatricula, o.tecnicoNome ?? '');
-      return !!colaborador && resultado.apontamentos.some(a =>
-        a.executante === colaborador.matricula && a.data >= o.semanaInicio && a.data <= domingo);
+      if (!colaborador) return o.area === 'APOIO' && resultado.apontamentos.some(dentroDaSemana);
+      return resultado.apontamentos.some(a => a.executante === colaborador.matricula && dentroDaSemana(a));
     });
   });
 }
