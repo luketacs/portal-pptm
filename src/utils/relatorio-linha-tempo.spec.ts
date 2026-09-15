@@ -157,12 +157,21 @@ describe('posicionarRotulosFinais', () => {
     expect(r.yRotuloCumprimento - r.yRotuloAtendimento).toBeGreaterThanOrEqual(18);
   });
 
-  it('cumprimento fisicamente acima de atendimento (valores cruzados): ainda afasta o suficiente', () => {
-    // Regressão do relatado: cumprimento com valor bem maior que atendimento faz o
-    // ponto dele ficar bem mais alto (Y menor) — sem a separação mínima, o rótulo
-    // "abaixo do ponto de cumprimento" colide com o "acima do ponto de atendimento".
-    const r = posicionarRotulosFinais({ yPontoAtendimento: 100, yPontoCumprimento: 60, ...BOUNDS });
+  it('atendimento fisicamente acima de cumprimento: rótulo de atendimento fica em cima (ordem dos rótulos bate com a ordem dos pontos)', () => {
+    const r = posicionarRotulosFinais({ yPontoAtendimento: 60, yPontoCumprimento: 100, ...BOUNDS });
+    expect(r.yRotuloAtendimento).toBeLessThan(r.yRotuloCumprimento);
     expect(r.yRotuloCumprimento - r.yRotuloAtendimento).toBeGreaterThanOrEqual(18);
+  });
+
+  it('cumprimento fisicamente acima de atendimento: rótulo de CUMPRIMENTO fica em cima, não o de atendimento', () => {
+    // Regressão relatada: antes o rótulo de Atendimento sempre ficava em cima (não
+    // importava o valor), então quando Cumprimento tinha o valor maior (ponto mais
+    // alto na tela), o rótulo "98%" do Atendimento aparecia acima do rótulo "100%" do
+    // Cumprimento — invertido em relação à posição real dos pontos. Agora quem tem o
+    // ponto mais alto (Y menor) fica com o rótulo de cima, seja qual for a série.
+    const r = posicionarRotulosFinais({ yPontoAtendimento: 100, yPontoCumprimento: 60, ...BOUNDS });
+    expect(r.yRotuloCumprimento).toBeLessThan(r.yRotuloAtendimento);
+    expect(r.yRotuloAtendimento - r.yRotuloCumprimento).toBeGreaterThanOrEqual(18);
   });
 
   it('ponto no topo do gráfico (valor em 100%): rótulo de atendimento não vaza pra cima da margem', () => {
