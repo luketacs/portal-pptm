@@ -12,24 +12,34 @@
     </div>
     <div class="flex items-center gap-2 flex-shrink-0">
       @if (!horizonteAtivo() && atendimentoProgramacao(); as at) {
-        <button type="button" (click)="atualizarAtendimento()" [disabled]="sigmaAtualizando()" [title]="atendimentoTooltip(at)"
-          class="relative flex-shrink-0 w-16 h-16 disabled:opacity-50">
-          <svg viewBox="0 0 36 36" class="w-16 h-16" [class.opacity-40]="at.rastreaveis === 0">
-            <path d="M18 2 a 16 16 0 0 1 0 32 a 16 16 0 0 1 0 -32" fill="none" stroke="currentColor" stroke-width="3.5" class="text-slate-100" />
-            <path d="M18 2 a 16 16 0 0 1 0 32 a 16 16 0 0 1 0 -32" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" pathLength="100"
-              [class]="gaugeCorClass(at)" [attr.stroke-dasharray]="at.percentual + ' 100'" />
-          </svg>
-          <span class="absolute inset-0 flex items-center justify-center text-sm font-bold text-gray-700">
-            @if (sigmaAtualizando()) {
-              <svg class="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-              </svg>
-            } @else {
-              {{ at.rastreaveis > 0 ? at.percentual + '%' : '—' }}
-            }
-          </span>
-        </button>
+        <!-- Reportado: o gauge só mostrava o %, a quantidade de OS (rastreaveis/executadas)
+             ficava escondida só no title (tooltip), difícil de enxergar sem passar o mouse.
+             Agora também aparece por extenso embaixo do gauge, sempre visível. -->
+        <div class="flex flex-col items-center flex-shrink-0">
+          <button type="button" (click)="atualizarAtendimento()" [disabled]="sigmaAtualizando()" [title]="atendimentoTooltip(at)"
+            class="relative flex-shrink-0 w-16 h-16 disabled:opacity-50">
+            <svg viewBox="0 0 36 36" class="w-16 h-16" [class.opacity-40]="at.rastreaveis === 0">
+              <path d="M18 2 a 16 16 0 0 1 0 32 a 16 16 0 0 1 0 -32" fill="none" stroke="currentColor" stroke-width="3.5" class="text-slate-100" />
+              <path d="M18 2 a 16 16 0 0 1 0 32 a 16 16 0 0 1 0 -32" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" pathLength="100"
+                [class]="gaugeCorClass(at)" [attr.stroke-dasharray]="at.percentual + ' 100'" />
+            </svg>
+            <span class="absolute inset-0 flex items-center justify-center text-sm font-bold text-gray-700">
+              @if (sigmaAtualizando()) {
+                <svg class="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+              } @else {
+                {{ at.rastreaveis > 0 ? at.percentual + '%' : '—' }}
+              }
+            </span>
+          </button>
+          @if (at.rastreaveis > 0) {
+            <p class="text-[11px] font-semibold text-gray-600 mt-0.5 whitespace-nowrap" [title]="atendimentoTooltip(at)">
+              {{ at.executadas }}/{{ at.rastreaveis }} OS{{ at.parciais > 0 ? ' (+' + at.parciais + ' parcial' + (at.parciais > 1 ? 'is' : '') + ')' : '' }}
+            </p>
+          }
+        </div>
       }
       @if ((areaFixa && areaFixa !== 'APOIO') || podeEditar()) {
         <div class="relative">
@@ -394,7 +404,10 @@
                   [class]="gaugeCorClass(preventivasGauge())" [attr.stroke-dasharray]="(preventivasGauge().percentual / 100 * 282.7) + ' 282.7'" />
                 <text x="100" y="95" text-anchor="middle" fill="#1e293b" style="font-size: 40px; font-weight: 700;">{{ preventivasGauge().percentual }}%</text>
               </svg>
-              <p class="text-[10px] text-gray-500 -mt-1 whitespace-nowrap">{{ preventivasGauge().programadas }}/{{ preventivasGauge().total }} programadas</p>
+              <!-- Reportado: o % gigante dentro do gauge (40px) deixava essa contagem —
+                   a informação que mais importa pra notar acúmulo tipo "20 numa semana só" —
+                   pequena demais (10px) e colada nele, difícil de ler. -->
+              <p class="text-xs font-semibold text-gray-700 whitespace-nowrap">{{ preventivasGauge().programadas }}/{{ preventivasGauge().total }} programadas</p>
             </div>
           }
         </div>
