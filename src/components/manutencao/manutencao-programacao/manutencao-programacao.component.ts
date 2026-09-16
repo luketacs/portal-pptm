@@ -1679,6 +1679,24 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       .slice(0, 8);
   });
 
+  // Sugestão automática de vínculo pela DESCRIÇÃO — sem isso, quem digita o lançamento
+  // com o nome de um plano existente mas esquece (ou nem sabe) de ir buscar no campo
+  // "Plano preventivo" separado nunca vincula nada, e o ciclo daquele plano não avança.
+  // Foi exatamente essa lacuna que gerou a duplicata real da OPERAÇÃO (Stacker 01/02,
+  // TCLD): alguém lançou "L-OP-1M STACKER 01" avulso, sem vincular, e 2 semanas depois
+  // o mesmo plano apontou como "vencendo" de novo e ganhou OUTRA ordem. Casamento por
+  // nome EXATO (normalizado — sem acento/maiúscula/espaço extra), não substring: um
+  // match parcial daria falso positivo demais pra sugerir sozinho; substring ainda dá
+  // pra achar manualmente no campo de busca abaixo.
+  formSugestaoVinculoPorDescricao = computed<PlanoManutencao | null>(() => {
+    if (this.formPlanoPreventivoId()) return null; // já vinculado, nada a sugerir
+    const descricao = normalizarTexto(this.formDescricao());
+    if (descricao.length < 4) return null;
+    const area = this.formArea();
+    return this.manutencaoPlanosService.planos()
+      .find(p => p.ativo && p.area === area && normalizarTexto(p.nome) === descricao) ?? null;
+  });
+
   vincularPlano(plano: PlanoManutencao): void {
     this.formPlanoPreventivoId.set(plano.id);
     this.formPlanoPreventivoDataPrevista.set(proximaExecucaoPlano(

@@ -1383,6 +1383,16 @@
               <button type="button" (click)="desvincularPlano()" title="Desvincular" class="text-green-600 hover:text-green-800 flex-shrink-0 text-xs font-semibold px-2 py-1">Desvincular</button>
             </div>
           } @else {
+            @if (formSugestaoVinculoPorDescricao(); as sugestao) {
+              <div class="flex items-center justify-between gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 mb-2">
+                <div class="min-w-0">
+                  <p class="text-xs font-semibold text-amber-800 truncate">Essa descrição bate com o plano "{{ sugestao.nome }}"</p>
+                  <p class="text-[11px] text-amber-600">Vincular pra contar essa execução e avançar o ciclo dele — sem isso, ele pode voltar a sugerir a mesma tarefa em breve.</p>
+                </div>
+                <button type="button" (click)="vincularPlano(sugestao)"
+                  class="flex-shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700">Vincular</button>
+              </div>
+            }
             <input type="text" [ngModel]="formVincularPlanoTexto()" (ngModelChange)="formVincularPlanoTexto.set($event)"
               placeholder="Buscar por equipamento ou tarefa — pra contar/avançar uma preventiva que ficou de fora da lista sugerida da semana"
               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
