@@ -1201,15 +1201,23 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return sugestoesDaSemana(this.planosComProximaDaArea(), inicioSemana, fimSemana, this.regrasNovasValemNaSemana());
   });
 
-  // Apoio (a partir da semana 39, ver regrasNovasValemHoje): corte por equipe em vez de
-  // corte único de área — ver LIMITE_PREVENTIVAS_POR_EQUIPE_APOIO/limitarPorEquipeApoio.
-  // Elétrica/Mecânica (e Apoio antes da semana 39) continuam com o corte de área único
-  // de sempre. NUNCA aplicado em preventivasVencendoTodas nem em preventivasAtrasadas —
-  // as duas continuam mostrando o backlog real, sem esconder nada atrasado por causa
-  // do corte por equipe.
+  // Apoio: corte por equipe em vez de corte único de área — ver
+  // LIMITE_PREVENTIVAS_POR_EQUIPE_APOIO/limitarPorEquipeApoio. Elétrica/Mecânica
+  // continuam com o corte de área único de sempre. NUNCA aplicado em
+  // preventivasVencendoTodas nem em preventivasAtrasadas — as duas continuam mostrando
+  // o backlog real, sem esconder nada atrasado por causa do corte por equipe.
+  //
+  // Gate por regrasNovasValemNaSemana (semana EM EXIBIÇÃO), não regrasNovasValemHoje —
+  // diferente de planosComProximaDaArea (Regra A, que grava permanentemente no ciclo e
+  // por isso precisa do HOJE real), este corte só afeta o que aparece na tela pra quem
+  // está olhando a semana escolhida no filtro, sem efeito colateral nenhum — mesma
+  // lógica do corte de área que ele substitui. Gatear pelo hoje real fazia o limite só
+  // "ligar" quando o calendário de verdade alcançasse a semana 39, mesmo que o usuário
+  // já estivesse olhando a semana 39 pelo filtro bem antes disso — reportado: "o
+  // balanceamento ainda não está bom" ao testar a semana 39 antes da data chegar lá.
   preventivasVencendo = computed(() => {
     const todas = this.preventivasVencendoTodas();
-    if (this.areaFixa === 'APOIO' && this.regrasNovasValemHoje()) {
+    if (this.areaFixa === 'APOIO' && this.regrasNovasValemNaSemana()) {
       return limitarPorEquipeApoio(todas, this.LIMITE_PREVENTIVAS_POR_EQUIPE_APOIO);
     }
     return todas.slice(0, this.loteePreventivasPorSemana());
@@ -1224,7 +1232,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // — pra Apoio (a partir da semana 39) vira um resumo por equipe (ex.: "SERVPLEX: 5/12
   // · OPERAÇÃO: 5/8 · BMS: 3/3"), já que o corte agora é por equipe, não por área.
   preventivasVencendoLabel = computed(() => {
-    if (this.areaFixa === 'APOIO' && this.regrasNovasValemHoje()) {
+    if (this.areaFixa === 'APOIO' && this.regrasNovasValemNaSemana()) {
       const resumo = resumoPorEquipeApoio(this.preventivasVencendoTodas(), this.LIMITE_PREVENTIVAS_POR_EQUIPE_APOIO)
         .filter(r => r.total > 0);
       if (resumo.length === 0) return '';
