@@ -37,7 +37,6 @@ interface FichaImpressaoOs {
   loto: string | null;
   duracaoHoras: number | null;
   checklist: string[] | null;
-  tipoServico: string | null;
   tecnicos: string[];
 }
 
@@ -452,11 +451,16 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // ver listaFiltrada). Agrupa por número de OS (uma OS com apoio de 2+ técnicos, ver
   // criarApoioTecnicosSeNecessario, vira 2+ linhas em manutencao_programacao, mas é 1
   // ficha só, com todos os técnicos listados — nunca duplica o checklist).
+  //
+  // Só PREVENTIVA — pedido explícito do usuário: corretiva/melhoria não tem plano nem
+  // checklist, a ficha inteira (não só a seção de checklist) não deve nem ser gerada
+  // pra elas.
   fichasParaImprimir = computed<FichaImpressaoOs[]>(() => {
     const porChave = new Map<string, ManutencaoOrdem[]>();
     let semOsIdx = 0;
     for (const o of this.listaFiltrada()) {
       if (o.tipo !== 'ordem') continue;
+      if ((o.tipoServico || '').toUpperCase() !== 'PREVENTIVA') continue;
       const chave = o.numeroOs?.trim() ? o.numeroOs.trim() : `sem-os-${semOsIdx++}`;
       const lista = porChave.get(chave);
       if (lista) lista.push(o); else porChave.set(chave, [o]);
@@ -468,7 +472,6 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       loto: linhas[0].loto,
       duracaoHoras: linhas[0].duracaoHoras,
       checklist: linhas[0].checklist,
-      tipoServico: linhas[0].tipoServico,
       tecnicos: linhas.map(l => l.tecnicoNome),
     }));
   });
