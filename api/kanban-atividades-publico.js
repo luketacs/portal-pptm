@@ -139,7 +139,7 @@ export default async function handler(req, res) {
 
     const { data, error } = await supabase
       .from('manutencao_programacao')
-      .select('numero_os, descricao, equipamento, tecnico_nome, tecnico_matricula, area, duracao_horas, loto, dias_previstos')
+      .select('numero_os, descricao, equipamento, tecnico_nome, tecnico_matricula, area, duracao_horas, loto, dias_previstos, checklist')
       .eq('tipo', 'ordem')
       .in('area', ['ELETRICA', 'MECANICA'])
       .overlaps('dias_previstos', diasAcumulados);
@@ -208,6 +208,7 @@ export default async function handler(req, res) {
         equipamento: linhas[0].equipamento,
         area: linhas[0].area,
         loto: linhas[0].loto,
+        checklist: linhas[0].checklist ?? null,
         tecnicos: linhas.map(l => ({ nome: l.tecnico_nome, duracaoHoras: l.duracao_horas })),
       });
     }
