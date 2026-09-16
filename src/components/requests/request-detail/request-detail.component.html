@@ -81,7 +81,20 @@
               </select>
             </div>
           }
-          <div><p class="text-sm text-gray-500">Tipo de Material</p><p class="font-semibold text-gray-800 mt-1">{{ req.materialType }}</p></div>
+          <div>
+            <label for="materialType" class="text-sm text-gray-500">Tipo de Material</label>
+            <select
+              id="materialType"
+              [ngModel]="editableRequest().materialType"
+              (ngModelChange)="updateEditableRequest({ materialType: $event })"
+              [disabled]="!canEditRequest()"
+              class="mt-1 font-semibold text-gray-800 w-full p-2 border rounded-md disabled:bg-gray-100 disabled:border-gray-200 disabled:text-gray-500 enabled:border-gray-300 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+            >
+              @for (mt of materialTypes; track mt) {
+                <option [value]="mt">{{ mt }}</option>
+              }
+            </select>
+          </div>
           
           <div>
             <label for="workOrder" class="text-sm text-gray-500">Ordem de Serviço</label>

@@ -5,7 +5,7 @@ import { Subscription } from 'rxjs';
 import { RequestService } from '../../../services/request.service';
 import { AuthService } from '../../../services/auth.service';
 import { EmailService } from '../../../services/email.service';
-import { PurchaseRequest, RequestStatus, Priority } from '../../../models/request.model';
+import { PurchaseRequest, RequestStatus, Priority, MaterialType } from '../../../models/request.model';
 import { UserProfile } from '../../../models/user.model';
 import { FormsModule } from '@angular/forms';
 import { NotificationService } from '../../../services/notification.service';
@@ -40,6 +40,7 @@ export class RequestDetailComponent implements OnDestroy {
   // Form options
   priorities: Priority[] = ['Baixa', 'Média', 'Alta', 'Emergencial'];
   units = ['un', 'kg', 'm', 'caixa', 'L', 'p'];
+  materialTypes: MaterialType[] = ['Mecânica', 'Elétrica', 'Automação', 'SPCI', 'Refrigeração', 'Outros'];
 
   // Signals for actions
   rejectionReason = signal('');
