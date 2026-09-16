@@ -1176,6 +1176,15 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // cadastro, não limite de rotina.
   private readonly LIMITE_PREVENTIVAS_MECANICA = 120;
 
+  // Elétrica: mesma auditoria da Mecânica — só 21 dos 306 planos ativos já tinham ciclo
+  // registrado, o resto dependia da data_inicial crua da importação (45 planos
+  // vencendo juntos numa semana só). Perfil de periodicidade bem mais longo que
+  // Mecânica (predomina 6M/12M, só 25 planos de ciclo semanal/quinzenal) — carga real
+  // observada numa simulação de 30 semanas, já com as âncoras corrigidas e a parada da
+  // planta considerada: ~10-11/semana, bem uniforme. Dimensionado com folga acima do
+  // pico (11) — rede de segurança, não limite de rotina.
+  private readonly LIMITE_PREVENTIVAS_ELETRICA = 25;
+
   // Planos da área, cada um já com a próxima execução calculada a partir do ciclo mais
   // recente (ver planosComProximaExecucao em utils/manutencao-planos.ts) — substitui o
   // antigo planosPreventivosDaArea+planosJaProgramados: não precisa mais de uma lista de
@@ -1187,18 +1196,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // objeto usado no @for da tabela e passado pra programarDaPreventiva já carregue a
   // data alinhada.
   //
-  // Apoio e Mecânica usam agenda TIME-BASED (planosComProximaExecucaoFixa/
+  // Apoio, Mecânica e Elétrica usam agenda TIME-BASED (planosComProximaExecucaoFixa/
   // proximaDataFixa), não completion-based — pedido explícito do usuário: "não existe
   // backlog, estamos começando do zero", igual o modelo de plano cíclico do SAP PM.
-  // Mecânica entrou pro mesmo modelo depois de auditar os dados (só 22 dos 358 planos
-  // já tinham ciclo registrado, os outros 336 dependiam direto da data_inicial crua da
-  // importação em lote — 87 planos vencendo juntos na mesma semana). Diferente do
-  // resto das regras "novas" desta função, essa troca de MODELO não fica atrás do gate
-  // de regrasNovasValemHoje: é uma correção definitiva de como essas áreas sempre
-  // deviam ter funcionado, não uma regra de exibição por semana — vale imediatamente.
-  // Elétrica ainda não mudou (planosComProximaExecucao, completion-based, como sempre
-  // foi) — revisão dela é a próxima etapa.
-  private readonly AREAS_TIME_BASED: readonly ManutencaoArea[] = ['APOIO', 'MECANICA'];
+  // Mecânica/Elétrica entraram pro mesmo modelo depois de auditar os dados (só uma
+  // fração pequena dos planos ativos já tinha ciclo registrado, o resto dependia
+  // direto da data_inicial crua da importação em lote — dezenas de planos vencendo
+  // juntos na mesma semana em cada área). Diferente do resto das regras "novas" desta
+  // função, essa troca de MODELO não fica atrás do gate de regrasNovasValemHoje: é uma
+  // correção definitiva de como essas áreas sempre deviam ter funcionado, não uma
+  // regra de exibição por semana — vale imediatamente.
+  private readonly AREAS_TIME_BASED: readonly ManutencaoArea[] = ['APOIO', 'MECANICA', 'ELETRICA'];
 
   private planosComProximaDaArea = computed<PlanoComProximaData[]>(() => {
     const area = this.areaFixa;
@@ -1289,6 +1297,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
     if (this.areaFixa === 'MECANICA' && this.regrasNovasValemNaSemana()) {
       return todas.slice(0, this.LIMITE_PREVENTIVAS_MECANICA);
+    }
+    if (this.areaFixa === 'ELETRICA' && this.regrasNovasValemNaSemana()) {
+      return todas.slice(0, this.LIMITE_PREVENTIVAS_ELETRICA);
     }
     return todas.slice(0, this.loteePreventivasPorSemana());
   });
