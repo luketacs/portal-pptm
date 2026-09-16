@@ -983,27 +983,28 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   private materiaisDisponiveisSigma = signal<SigmaBacklogItem[]>([]);
   materiaisDisponiveisAtualizadoEm = signal<number | null>(null);
 
-  // Quantas OS's tinham material 100% disponível (prontas) mas sumiram da lista final
-  // só por não terem batido com o backlog aberto do SIGMA — reportado: "ordens da aba
-  // aguardando retirada não aparecem". Sem isso, "nenhuma OS pronta ainda" (normal, dia
-  // a dia) e "tinha OS pronta mas o SIGMA não confirmou nenhuma" (SIGMA fora do ar/
-  // instável, ou número de OS do Almoxarifado não bate com o do SIGMA) mostravam a
-  // MESMA mensagem genérica — impossível de distinguir só olhando a tela.
-  private materiaisDisponiveisSemMatchSigma = signal(0);
-
-  materiaisDisponiveisFiltrado = computed<Array<OrdemComMaterialDisponivel & { descricao: string; equipamento: string; tipoServico: string; statusCodigo: string }>>(() => {
-    if (!this.areaFixa || this.areaFixa === 'APOIO') return [];
-    if (!this.regrasNovasValemNaSemana()) return [];
+  // BUG CORRIGIDO: essa lógica antes vivia num computed só (materiaisDisponiveisFiltrado)
+  // que escrevia num signal (.set()) de dentro da própria função de derivação — Angular
+  // não permite escrever em signal de dentro de computed/effect. Em dev isso lança
+  // NG0600 (erro visível); em produção a checagem é removida e vira corrupção SILENCIOSA
+  // do grafo reativo — reportado: trocar a semana no filtro não atualizava os dados, e o
+  // modal de Novo Lançamento abria com campos vazios (Tipo/Dias previstos), mesmo depois
+  // de recarregar a página. Corrigido calculando os DOIS resultados (lista final + quantas
+  // OS's prontas ficaram sem match no SIGMA) num único computed puro, sem escrita nenhuma
+  // — os dois computeds públicos abaixo só leem cada pedaço dele.
+  private materiaisDisponiveisResultado = computed<{
+    lista: Array<OrdemComMaterialDisponivel & { descricao: string; equipamento: string; tipoServico: string; statusCodigo: string }>;
+    semMatchSigma: number;
+  }>(() => {
+    if (!this.areaFixa || this.areaFixa === 'APOIO') return { lista: [], semMatchSigma: 0 };
+    if (!this.regrasNovasValemNaSemana()) return { lista: [], semMatchSigma: 0 };
     const { comSA } = this.almoxarifadoService.calcularAguardandoRetirada(this.almoxMovimentacoes(), this.almoxSasAbertas());
     const prontas = ordensComMaterialTotalmenteDisponivel(this.almoxSasAbertas(), comSA, normalizarNumeroOs);
-    if (prontas.length === 0) {
-      this.materiaisDisponiveisSemMatchSigma.set(0);
-      return [];
-    }
+    if (prontas.length === 0) return { lista: [], semMatchSigma: 0 };
     const sigmaPorNumero = new Map(this.materiaisDisponiveisSigma().map(item => [normalizarNumeroOs(item.numeroOs), item]));
     const jaProgramados = this.numerosOsJaProgramados();
-    const resultado: Array<OrdemComMaterialDisponivel & { descricao: string; equipamento: string; tipoServico: string; statusCodigo: string }> = [];
-    let semMatch = 0;
+    const lista: Array<OrdemComMaterialDisponivel & { descricao: string; equipamento: string; tipoServico: string; statusCodigo: string }> = [];
+    let semMatchSigma = 0;
     for (const p of prontas) {
       if (jaProgramados.has(p.numeroOs)) continue;
       // Sem match no backlog aberto do SIGMA = já concluída/cancelada, ou de outra
@@ -1013,17 +1014,18 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       // ou se o número de OS do Almoxarifado não normalizar igual ao do SIGMA — por
       // isso conta em vez de só descartar, pra dar pra distinguir dos dois casos na tela.
       const sigma = sigmaPorNumero.get(p.numeroOs);
-      if (!sigma) { semMatch++; continue; }
-      resultado.push({ ...p, descricao: sigma.descricao, equipamento: sigma.equipamento, tipoServico: sigma.tipoServico, statusCodigo: sigma.statusCodigo });
+      if (!sigma) { semMatchSigma++; continue; }
+      lista.push({ ...p, descricao: sigma.descricao, equipamento: sigma.equipamento, tipoServico: sigma.tipoServico, statusCodigo: sigma.statusCodigo });
     }
-    this.materiaisDisponiveisSemMatchSigma.set(semMatch);
-    return resultado;
+    return { lista, semMatchSigma };
   });
+
+  materiaisDisponiveisFiltrado = computed(() => this.materiaisDisponiveisResultado().lista);
 
   // Mensagem pro caso "tinha OS pronta, mas nenhuma bateu com o SIGMA" — só faz sentido
   // quando a lista final está vazia mesmo assim (senão a tabela já aparece normalmente).
   materiaisDisponiveisMensagemSemMatch(): string | null {
-    const semMatch = this.materiaisDisponiveisSemMatchSigma();
+    const semMatch = this.materiaisDisponiveisResultado().semMatchSigma;
     if (semMatch === 0 || this.materiaisDisponiveisFiltrado().length > 0) return null;
     return `${semMatch} OS${semMatch > 1 ? 's têm' : ' tem'} material 100% disponível no Almoxarifado, mas o SIGMA não confirmou nenhuma como aberta — pode ser instabilidade na consulta ao SIGMA (tente "Atualizar") ou o número de OS não bater entre as duas fontes.`;
   }
