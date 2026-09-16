@@ -463,7 +463,10 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       item.horasDisponiveis = Math.round(item.horasDisponiveis * 100) / 100;
       item.eficiencia = item.horasProgramadas > 0 ? Math.round((item.horasApontadas / item.horasProgramadas) * 1000) / 10 : 0;
     }
-    return resultado.sort((a, b) => b.horasApontadas - a.horasApontadas);
+    // Pedido do usuário: ordem alfabética por nome (era por horas apontadas, maior
+    // primeiro) — essa tabela é de consulta/referência, não um ranking de desempenho,
+    // então alfabética facilita achar um técnico específico de cara.
+    return resultado.sort((a, b) => a.colaborador.nome.localeCompare(b.colaborador.nome, 'pt-BR'));
   }
 
   rankingHorasApontadasEletrica = computed<HorasTecnicoItem[]>(() => this.calcularHorasPorTecnico(this.tecnicosEletrica()));

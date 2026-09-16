@@ -344,6 +344,8 @@
           <p class="text-sm text-red-600 py-1">{{ materiaisDisponiveisErro() }}</p>
         } @else if (materiaisDisponiveisMensagemBloqueio(); as msg) {
           <p class="text-sm text-gray-400 py-1">{{ msg }}</p>
+        } @else if (materiaisDisponiveisMensagemSemMatch(); as msg) {
+          <p class="text-sm text-amber-600 py-1">{{ msg }}</p>
         } @else if (materiaisDisponiveisFiltrado().length === 0) {
           <p class="text-sm text-gray-400 py-1">Nenhuma OS com todo o material disponível pra essa área no momento.</p>
         } @else {
