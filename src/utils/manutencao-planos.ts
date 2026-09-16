@@ -68,28 +68,40 @@ export function planosComProximaExecucao(
   });
 }
 
+// Identificador de equipamento pra agrupamento (Regra A/B abaixo) — usa o TAG KKS
+// (`tagKks`), não o nome livre (`equipamento`): pedido explícito do usuário ("a questão
+// do mesmo equipamento é o mesmo KKS que quero dizer") — o mesmo equipamento físico
+// pode estar escrito de formas diferentes entre planos distintos (abreviação, typo),
+// enquanto o KKS é o identificador técnico estável. Sem KKS cadastrado, o plano nunca
+// agrupa com nenhum outro — usa o próprio id (sempre único) como chave, em vez de
+// arriscar juntar equipamentos diferentes por engano quando não dá pra confirmar que
+// são o mesmo.
+function chaveEquipamento(p: PlanoManutencao): string {
+  const kks = p.tagKks?.trim();
+  return kks ? `${p.area}||KKS:${kks}` : `${p.area}||SEM_KKS:${p.id}`;
+}
+
 export interface PlanoAlinhadoPorEquipamento extends PlanoComProximaData {
   // Data original ANTES do alinhamento — null quando o plano não foi alinhado (é o
   // único do seu equipamento no mês, ou já era o mais cedo do grupo).
   proximaDataOriginal: string | null;
 }
 
-// Pedido do usuário: 2+ planos do MESMO equipamento (mesma área, equipamento.trim()
-// igual — mesma convenção de igualdade do Quadro de LOTO e da detecção de OS duplicada
-// em manutencao-programacao.component.ts) cuja próxima execução caia no MESMO MÊS DE
-// CALENDÁRIO não devem gerar duas visitas separadas (ex.: um plano mensal e um
-// trimestral do mesmo equipamento, ambos vencendo em setembro, saem juntos). Todo o
-// grupo passa a usar a data MAIS CEDO entre eles — nunca a mais tarde, pra nenhum plano
-// ficar mais atrasado do que já estava sozinho; o de ciclo mais longo só é atendido um
-// pouco antes do que seu próprio cálculo pediria. Sem limite de distância dentro do
-// mês (confirmado com o usuário): mesmo que as datas originais estejam em pontas
-// opostas do mês, alinha do mesmo jeito — pior caso é "um pouco cedo demais", nunca
-// atrasa. "Mesmo mês" comparado como string 'YYYY-MM' — separa corretamente dezembro
-// de um ano de janeiro do ano seguinte, sem caso especial.
+// Pedido do usuário: 2+ planos do MESMO equipamento (mesmo KKS, ver chaveEquipamento,
+// dentro da mesma área) cuja próxima execução caia no MESMO MÊS DE CALENDÁRIO não devem
+// gerar duas visitas separadas (ex.: um plano mensal e um trimestral do mesmo
+// equipamento, ambos vencendo em setembro, saem juntos). Todo o grupo passa a usar a
+// data MAIS CEDO entre eles — nunca a mais tarde, pra nenhum plano ficar mais atrasado
+// do que já estava sozinho; o de ciclo mais longo só é atendido um pouco antes do que
+// seu próprio cálculo pediria. Sem limite de distância dentro do mês (confirmado com o
+// usuário): mesmo que as datas originais estejam em pontas opostas do mês, alinha do
+// mesmo jeito — pior caso é "um pouco cedo demais", nunca atrasa. "Mesmo mês" comparado
+// como string 'YYYY-MM' — separa corretamente dezembro de um ano de janeiro do ano
+// seguinte, sem caso especial.
 export function alinharDatasPorEquipamento(planos: PlanoComProximaData[]): PlanoAlinhadoPorEquipamento[] {
   const porEquipamento = new Map<string, number[]>();
   planos.forEach((p, i) => {
-    const chave = `${p.area}||${p.equipamento.trim()}`;
+    const chave = chaveEquipamento(p);
     const lista = porEquipamento.get(chave);
     if (lista) lista.push(i);
     else porEquipamento.set(chave, [i]);
@@ -169,7 +181,7 @@ export function limitarPorEquipeApoio(
   const porSlot = new Map<string, PlanoComProximaData[]>();
   const ordemSlots: string[] = [];
   for (const p of planosOrdenados) {
-    const chave = `${p.area}||${p.equipamento.trim()}||${p.proximaData}`;
+    const chave = `${chaveEquipamento(p)}||${p.proximaData}`;
     const slot = porSlot.get(chave);
     if (slot) slot.push(p);
     else { porSlot.set(chave, [p]); ordemSlots.push(chave); }
@@ -205,7 +217,7 @@ export function resumoPorEquipeApoio(
   const vagasPorEquipe = new Map<ChaveEquipeApoio, Set<string>>();
   for (const p of planosOrdenados) {
     const equipe = inferirCategoriaIndicadorPorTecnico(p.responsavel ?? '') ?? EQUIPE_APOIO_NAO_CLASSIFICADA;
-    const chaveVaga = `${p.area}||${p.equipamento.trim()}||${p.proximaData}`;
+    const chaveVaga = `${chaveEquipamento(p)}||${p.proximaData}`;
     const set = vagasPorEquipe.get(equipe);
     if (set) set.add(chaveVaga);
     else vagasPorEquipe.set(equipe, new Set([chaveVaga]));

@@ -122,16 +122,16 @@ function comProxima(overrides: Partial<PlanoManutencao> = {}, proximaData: strin
 
 describe('alinharDatasPorEquipamento', () => {
   it('não alinha quando as próximas datas caem em meses diferentes', () => {
-    const a = comProxima({ id: 'a', equipamento: 'M01' }, '2026-08-15');
-    const b = comProxima({ id: 'b', equipamento: 'M01' }, '2026-09-10');
+    const a = comProxima({ id: 'a', tagKks: 'M01' }, '2026-08-15');
+    const b = comProxima({ id: 'b', tagKks: 'M01' }, '2026-09-10');
     const resultado = alinharDatasPorEquipamento([a, b]);
     expect(resultado.find(p => p.id === 'a')).toEqual({ ...a, proximaDataOriginal: null });
     expect(resultado.find(p => p.id === 'b')).toEqual({ ...b, proximaDataOriginal: null });
   });
 
-  it('alinha pra data mais cedo quando 2 planos do mesmo equipamento caem no mesmo mês (mensal + trimestral)', () => {
-    const mensal = comProxima({ id: 'mensal', equipamento: 'M01', periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)' }, '2026-09-05');
-    const trimestral = comProxima({ id: 'trimestral', equipamento: 'M01', periodicidadeValor: 3, periodicidadeUnidade: 'Mes(es)' }, '2026-09-25');
+  it('alinha pra data mais cedo quando 2 planos do mesmo KKS caem no mesmo mês (mensal + trimestral)', () => {
+    const mensal = comProxima({ id: 'mensal', tagKks: 'M01', periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)' }, '2026-09-05');
+    const trimestral = comProxima({ id: 'trimestral', tagKks: 'M01', periodicidadeValor: 3, periodicidadeUnidade: 'Mes(es)' }, '2026-09-25');
     const resultado = alinharDatasPorEquipamento([mensal, trimestral]);
     const mensalAlinhado = resultado.find(p => p.id === 'mensal')!;
     const trimestralAlinhado = resultado.find(p => p.id === 'trimestral')!;
@@ -141,58 +141,69 @@ describe('alinharDatasPorEquipamento', () => {
     expect(trimestralAlinhado.proximaDataOriginal).toBe('2026-09-25');
   });
 
-  it('3+ planos do mesmo equipamento no mesmo mês alinham todos pra data mais cedo entre eles', () => {
+  it('3+ planos do mesmo KKS no mesmo mês alinham todos pra data mais cedo entre eles', () => {
     const planos = [
-      comProxima({ id: 'p1', equipamento: 'M01' }, '2026-09-12'),
-      comProxima({ id: 'p2', equipamento: 'M01' }, '2026-09-03'),
-      comProxima({ id: 'p3', equipamento: 'M01' }, '2026-09-28'),
+      comProxima({ id: 'p1', tagKks: 'M01' }, '2026-09-12'),
+      comProxima({ id: 'p2', tagKks: 'M01' }, '2026-09-03'),
+      comProxima({ id: 'p3', tagKks: 'M01' }, '2026-09-28'),
     ];
     const resultado = alinharDatasPorEquipamento(planos);
     expect(resultado.map(p => p.proximaData)).toEqual(['2026-09-03', '2026-09-03', '2026-09-03']);
   });
 
-  it('não mistura equipamento de mesmo nome em áreas diferentes', () => {
-    const mecanica = comProxima({ id: 'mec', area: 'MECANICA', equipamento: 'M01' }, '2026-09-03');
-    const eletrica = comProxima({ id: 'ele', area: 'ELETRICA', equipamento: 'M01' }, '2026-09-20');
+  it('não mistura mesmo KKS em áreas diferentes', () => {
+    const mecanica = comProxima({ id: 'mec', area: 'MECANICA', tagKks: 'M01' }, '2026-09-03');
+    const eletrica = comProxima({ id: 'ele', area: 'ELETRICA', tagKks: 'M01' }, '2026-09-20');
     const resultado = alinharDatasPorEquipamento([mecanica, eletrica]);
     expect(resultado.find(p => p.id === 'mec')!.proximaDataOriginal).toBe(null);
     expect(resultado.find(p => p.id === 'ele')!.proximaDataOriginal).toBe(null);
   });
 
-  it('não mistura planos de equipamentos diferentes, mesmo mês, mesma área', () => {
-    const m01 = comProxima({ id: 'm01', equipamento: 'M01' }, '2026-09-03');
-    const m02 = comProxima({ id: 'm02', equipamento: 'M02' }, '2026-09-20');
+  it('não mistura planos de KKS diferentes, mesmo mês, mesma área', () => {
+    const m01 = comProxima({ id: 'm01', tagKks: 'M01' }, '2026-09-03');
+    const m02 = comProxima({ id: 'm02', tagKks: 'M02' }, '2026-09-20');
     const resultado = alinharDatasPorEquipamento([m01, m02]);
     expect(resultado.find(p => p.id === 'm01')!.proximaDataOriginal).toBe(null);
     expect(resultado.find(p => p.id === 'm02')!.proximaDataOriginal).toBe(null);
   });
 
-  it('não altera quando só existe 1 plano ativo pra aquele equipamento', () => {
-    const unico = comProxima({ id: 'unico', equipamento: 'M01' }, '2026-09-10');
+  it('não altera quando só existe 1 plano ativo pra aquele KKS', () => {
+    const unico = comProxima({ id: 'unico', tagKks: 'M01' }, '2026-09-10');
     const resultado = alinharDatasPorEquipamento([unico]);
     expect(resultado[0]).toEqual({ ...unico, proximaDataOriginal: null });
   });
 
   it('vira o ano corretamente: dezembro de um ano não alinha com janeiro do ano seguinte', () => {
-    const dezembro = comProxima({ id: 'dez', equipamento: 'M01' }, '2026-12-29');
-    const janeiro = comProxima({ id: 'jan', equipamento: 'M01' }, '2027-01-02');
+    const dezembro = comProxima({ id: 'dez', tagKks: 'M01' }, '2026-12-29');
+    const janeiro = comProxima({ id: 'jan', tagKks: 'M01' }, '2027-01-02');
     const resultado = alinharDatasPorEquipamento([dezembro, janeiro]);
     expect(resultado.find(p => p.id === 'dez')!.proximaDataOriginal).toBe(null);
     expect(resultado.find(p => p.id === 'jan')!.proximaDataOriginal).toBe(null);
   });
 
-  it('ignora espaço extra no equipamento (trim) na hora de casar', () => {
-    const comEspaco = comProxima({ id: 'a', equipamento: ' M01 ' }, '2026-09-20');
-    const semEspaco = comProxima({ id: 'b', equipamento: 'M01' }, '2026-09-05');
+  it('ignora espaço extra no KKS (trim) na hora de casar', () => {
+    const comEspaco = comProxima({ id: 'a', tagKks: ' M01 ' }, '2026-09-20');
+    const semEspaco = comProxima({ id: 'b', tagKks: 'M01' }, '2026-09-05');
     const resultado = alinharDatasPorEquipamento([comEspaco, semEspaco]);
     expect(resultado.find(p => p.id === 'a')!.proximaData).toBe('2026-09-05');
     expect(resultado.find(p => p.id === 'b')!.proximaData).toBe('2026-09-05');
   });
+
+  it('não agrupa por nome de equipamento igual quando nenhum dos planos tem KKS cadastrado', () => {
+    // Pedido do usuário: "mesmo equipamento" é o mesmo KKS, não o nome livre — sem KKS
+    // em nenhum dos dois, mais seguro não arriscar juntar equipamentos diferentes só
+    // porque o campo de texto livre `equipamento` bateu.
+    const a = comProxima({ id: 'a', equipamento: 'BOMBA 01', tagKks: null }, '2026-09-20');
+    const b = comProxima({ id: 'b', equipamento: 'BOMBA 01', tagKks: null }, '2026-09-05');
+    const resultado = alinharDatasPorEquipamento([a, b]);
+    expect(resultado.find(p => p.id === 'a')!.proximaDataOriginal).toBe(null);
+    expect(resultado.find(p => p.id === 'b')!.proximaDataOriginal).toBe(null);
+  });
 });
 
 describe('limitarPorEquipeApoio', () => {
-  function planoApoio(id: string, responsavel: string | null, proximaData: string, equipamento = id) {
-    return comProxima({ id, area: 'APOIO', responsavel, equipamento }, proximaData);
+  function planoApoio(id: string, responsavel: string | null, proximaData: string, kks = id) {
+    return comProxima({ id, area: 'APOIO', responsavel, tagKks: kks }, proximaData);
   }
 
   it('corta pra N por equipe, mantendo a ordem de prioridade recebida', () => {
@@ -243,8 +254,8 @@ describe('limitarPorEquipeApoio', () => {
 });
 
 describe('resumoPorEquipeApoio', () => {
-  function planoApoio(id: string, responsavel: string | null, proximaData: string, equipamento = id) {
-    return comProxima({ id, area: 'APOIO', responsavel, equipamento }, proximaData);
+  function planoApoio(id: string, responsavel: string | null, proximaData: string, kks = id) {
+    return comProxima({ id, area: 'APOIO', responsavel, tagKks: kks }, proximaData);
   }
 
   it('conta vagas (equipamento+data distintos) por equipe, com mostrados = min(total, limite)', () => {
