@@ -248,6 +248,14 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     requestAnimationFrame(passo);
   }
 
+  // "Pessoas vendo agora" — um id por carregamento de página (aba nova = sessão nova;
+  // dar F5 gera outro id, não é "lembrar" a pessoa entre visitas, só contar abas abertas
+  // agora). Enviado de carona no próprio poll de ~3min (ver atualizar() abaixo), sem
+  // requisição extra — o servidor (api/indicadores-manutencao-publico.js) grava o sinal
+  // de vida e devolve quantas sessões deram sinal recentemente.
+  private readonly sessaoId = crypto.randomUUID();
+  pessoasVendoAgora = signal<number | null>(null);
+
   // ── Dados brutos (fetch público, sem Bearer token) ──────────────────────────
   private ordensRaw = signal<ManutencaoOrdem[]>([]);
   private feriasRaw = signal<FeriasTecnico[]>([]);
@@ -289,7 +297,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   async atualizar(): Promise<void> {
     this.carregando.set(true);
     try {
-      const resp = await fetch('/api/indicadores-manutencao-publico');
+      const resp = await fetch(`/api/indicadores-manutencao-publico?sessaoId=${encodeURIComponent(this.sessaoId)}`);
       const body = await resp.json().catch(() => null);
       if (!resp.ok || !body?.success) throw new Error(body?.error || 'Falha ao carregar os indicadores.');
       this.ordensRaw.set((body.ordens as OrdemPublicaRaw[]).map(paraManutencaoOrdem));
@@ -297,6 +305,9 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
       this.historicoRaw.set(body.historico as HistoricoItemPublico[]);
       this.manuaisRaw.set(body.manuais as IndicadorManualPublico[]);
       this.sigmaPorOsRaw.set(body.sigmaPorOs as Record<string, ConsultaSigmaResultado>);
+      // null quando a consulta de presença falhou no servidor (best-effort) — a tela
+      // simplesmente não mostra o badge nesse caso, em vez de exibir "0 pessoas".
+      this.pessoasVendoAgora.set(typeof body.pessoasVendoAgora === 'number' ? body.pessoasVendoAgora : null);
       this.ultimaAtualizacaoEm.set(new Date());
       this.errorMessage.set('');
     } catch (err: unknown) {

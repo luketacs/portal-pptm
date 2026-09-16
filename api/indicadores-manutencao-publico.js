@@ -125,6 +125,31 @@ export default async function handler(req, res) {
       console.error('[indicadores-manutencao-publico] SIGMA indisponível:', sigmaError.message);
     }
 
+    // "Pessoas vendo agora" — reaproveita o próprio poll de ~3min que a página já faz
+    // (sem requisição extra): cada aba manda seu sessaoId (gerado uma vez por
+    // carregamento de página, via crypto.randomUUID no cliente) na query string, esta
+    // function grava/atualiza o "sinal de vida" dela em manutencao_indicadores_presenca
+    // e conta quantas sessões deram sinal nos últimos 6min (2x o intervalo de poll, pra
+    // não "piscar" entre uma leva de poll e outra). Limpa sessões velhas (>15min) de
+    // passagem, sem precisar de cron/job separado. Best-effort — nunca deve derrubar o
+    // resto da resposta.
+    let pessoasVendoAgora = null;
+    const sessaoId = typeof req.query?.sessaoId === 'string' ? req.query.sessaoId.trim().slice(0, 100) : '';
+    try {
+      if (sessaoId) {
+        await supabase.from('manutencao_indicadores_presenca')
+          .upsert({ sessao_id: sessaoId, visto_em: new Date().toISOString() }, { onConflict: 'sessao_id' });
+        await supabase.from('manutencao_indicadores_presenca')
+          .delete().lt('visto_em', new Date(Date.now() - 15 * 60 * 1000).toISOString());
+      }
+      const { count } = await supabase.from('manutencao_indicadores_presenca')
+        .select('sessao_id', { count: 'exact', head: true })
+        .gte('visto_em', new Date(Date.now() - 6 * 60 * 1000).toISOString());
+      pessoasVendoAgora = count ?? null;
+    } catch (presencaError) {
+      console.error('[indicadores-manutencao-publico] Presença indisponível:', presencaError.message);
+    }
+
     return res.status(200).json({
       success: true,
       atualizadoEm: Date.now(),
@@ -133,6 +158,7 @@ export default async function handler(req, res) {
       historico: historicoRows.map(mapHistorico),
       manuais: manuaisRows.map(mapManual),
       sigmaPorOs,
+      pessoasVendoAgora,
     });
   } catch (error) {
     console.error('[indicadores-manutencao-publico] Erro:', error);

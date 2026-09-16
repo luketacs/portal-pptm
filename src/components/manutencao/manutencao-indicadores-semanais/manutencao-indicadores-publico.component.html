@@ -79,6 +79,11 @@
         <div class="pcm-status-badge" [style.background-color]="statusCor(indicadores().statusGeral)">
           STATUS GERAL: {{ indicadores().statusGeral }}
         </div>
+        @if (pessoasVendoAgora(); as n) {
+          <div class="pcm-pessoas-vendo pcm-somente-tela" title="Quantas abas dessa página estão abertas agora — atualiza a cada poll (poucos minutos), não é em tempo real exato.">
+            👁 {{ n }} {{ n === 1 ? 'pessoa vendo agora' : 'pessoas vendo agora' }}
+          </div>
+        }
       </div>
     </header>
 

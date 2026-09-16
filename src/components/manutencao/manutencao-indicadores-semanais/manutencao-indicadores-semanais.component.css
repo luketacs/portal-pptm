@@ -168,6 +168,22 @@
 .pcm-periodo-info { background-color: rgba(255, 255, 255, .7); color: #334155; border: 1px solid rgba(30, 58, 95, .1); }
 .pcm-status-badge { color: #fff; }
 
+/* "N pessoas vendo agora" — só na tela pública (pcm-somente-tela some no impresso, não
+   faz sentido num PDF). Mesmo estilo de badge do pcm-periodo-info, cor levemente verde
+   pra sugerir "ao vivo" sem competir visualmente com o status geral. */
+.pcm-pessoas-vendo {
+  display: inline-block;
+  margin-top: 5px;
+  margin-left: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: .8rem;
+  font-weight: 600;
+  background-color: rgba(76, 175, 80, .12);
+  color: #2e7d32;
+  border: 1px solid rgba(76, 175, 80, .25);
+}
+
 /* Botões/links principais da barra de controle (toggle Semana/Mês, Atualizar,
    Gerar Relatório, Importar histórico) — troca o azul genérico do Tailwind
    (bg-blue-600/text-blue-600) pelo azul escuro oficial da marca. Só afeta esta tela:
