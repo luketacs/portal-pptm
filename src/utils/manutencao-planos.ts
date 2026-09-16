@@ -84,6 +84,31 @@ export function planosComProximaExecucaoFixa(
   });
 }
 
+// Salas/equipamentos fisicamente vizinhos que o usuário confirmou que devem sair
+// SEMPRE juntos (mesma visita), mesmo sendo KKS distintos — "aproveitar a viagem".
+// Cada array é um grupo; todo KKS dentro de um grupo aponta pra uma chave só em
+// chaveEquipamento, abaixo. Confirmado pelo usuário em 2026-09-16.
+const GRUPOS_EQUIPAMENTO_VIZINHO: readonly (readonly string[])[] = [
+  // SERVPLEX
+  ['90SAA05AH616', '90SAA05AH617', '90SAA05AH618', '90SAA05AH619', '90SAA05AH620'], // Prédio 25 — Coordenação e Engenharia
+  ['AC90EAD01AH015', 'AC90EAD01AH017', 'AC90EAD01AH019', 'AC90EAD01AH020'], // Salas Elétricas Stacker 01/02
+  ['AC90SAG03AH504', 'AC90SAG03AH505', 'AC90SAG03AH506', 'AC90SAG03AH508'], // CCOT 01/02, Automação, PT
+  ['AC90SAS21AH507', 'AC90SAS21AH508', 'AC90SAS21AH509'], // Cofre, Planejamento/Supervisão, Oficina Elétrica
+  ['AC91EAC01AH012', 'AC91EAC01AH013', 'AC91EAC01AH014'], // Salas Elétricas TC 05/06/07 (Self)
+  ['SRC91EAD10AH004', 'SRC91EAD20AH004'], // Cabines Stacker 01/02 (refrigeração)
+  // BMS
+  ['TCLD91EAC05AF001', 'TCLD91EAC06AF001', 'SPCI91EAC07'], // Torres de Transferência 05/06/07
+  [
+    'SPCI91EAD10', 'SPCI91EAD10001', 'SPCI91EAD10002', 'SPCI91EAD10003', 'SPCI91EAD10004',
+    'SPCI91EAD10005', 'SPCI91EAD10006', 'SPCI91EAD20001', 'TC91ECA33AF001',
+  ], // Stackers 01/02 + Correia ECA 33
+  ['TC91ECA41AF001', 'TC91ECA42AF001'], // Correias ECA 41/42
+  ['TC91ECA43AF001', 'TC91ECA44AF001'], // Correias ECA 43/44
+];
+const CHAVE_GRUPO_POR_KKS: ReadonlyMap<string, string> = new Map(
+  GRUPOS_EQUIPAMENTO_VIZINHO.flatMap((grupo, i) => grupo.map(kks => [kks, `GRUPO_${i}`] as const)),
+);
+
 // Identificador de equipamento pra agrupamento (Regra A/B abaixo) — usa o TAG KKS
 // (`tagKks`), não o nome livre (`equipamento`): pedido explícito do usuário ("a questão
 // do mesmo equipamento é o mesmo KKS que quero dizer") — o mesmo equipamento físico
@@ -91,10 +116,13 @@ export function planosComProximaExecucaoFixa(
 // enquanto o KKS é o identificador técnico estável. Sem KKS cadastrado, o plano nunca
 // agrupa com nenhum outro — usa o próprio id (sempre único) como chave, em vez de
 // arriscar juntar equipamentos diferentes por engano quando não dá pra confirmar que
-// são o mesmo.
+// são o mesmo. Exceção: KKS que faz parte de um GRUPOS_EQUIPAMENTO_VIZINHO agrupa com
+// os outros do mesmo grupo, não só consigo mesmo.
 function chaveEquipamento(p: PlanoManutencao): string {
   const kks = p.tagKks?.trim();
-  return kks ? `${p.area}||KKS:${kks}` : `${p.area}||SEM_KKS:${p.id}`;
+  if (!kks) return `${p.area}||SEM_KKS:${p.id}`;
+  const grupo = CHAVE_GRUPO_POR_KKS.get(kks);
+  return grupo ? `${p.area}||${grupo}` : `${p.area}||KKS:${kks}`;
 }
 
 export interface PlanoAlinhadoPorEquipamento extends PlanoComProximaData {

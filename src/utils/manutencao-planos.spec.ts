@@ -209,6 +209,25 @@ describe('alinharDatasPorEquipamento', () => {
     expect(resultado.find(p => p.id === 'b')!.proximaData).toBe('2026-09-05');
   });
 
+  // Pedido do usuário: salas/equipamentos fisicamente vizinhos (Apoio, SERVPLEX/BMS)
+  // devem sair sempre juntos, mesmo sendo KKS diferentes — "aproveitar a viagem" (ver
+  // GRUPOS_EQUIPAMENTO_VIZINHO). Usa 2 KKS reais de um grupo confirmado (Prédio 25).
+  it('KKS de salas vizinhas confirmadas (GRUPOS_EQUIPAMENTO_VIZINHO) alinham entre si mesmo sendo KKS diferentes', () => {
+    const a = comProxima({ id: 'a', area: 'APOIO', tagKks: '90SAA05AH616' }, '2026-09-20');
+    const b = comProxima({ id: 'b', area: 'APOIO', tagKks: '90SAA05AH617' }, '2026-09-05');
+    const resultado = alinharDatasPorEquipamento([a, b]);
+    expect(resultado.find(p => p.id === 'a')!.proximaData).toBe('2026-09-05');
+    expect(resultado.find(p => p.id === 'b')!.proximaData).toBe('2026-09-05');
+  });
+
+  it('KKS fora de qualquer grupo confirmado não alinha com um KKS que está num grupo', () => {
+    const doGrupo = comProxima({ id: 'a', area: 'APOIO', tagKks: '90SAA05AH616' }, '2026-09-20');
+    const foraDoGrupo = comProxima({ id: 'b', area: 'APOIO', tagKks: 'KKS-QUALQUER-NAO-AGRUPADO' }, '2026-09-05');
+    const resultado = alinharDatasPorEquipamento([doGrupo, foraDoGrupo]);
+    expect(resultado.find(p => p.id === 'a')!.proximaDataOriginal).toBe(null);
+    expect(resultado.find(p => p.id === 'b')!.proximaDataOriginal).toBe(null);
+  });
+
   it('não agrupa por nome de equipamento igual quando nenhum dos planos tem KKS cadastrado', () => {
     // Pedido do usuário: "mesmo equipamento" é o mesmo KKS, não o nome livre — sem KKS
     // em nenhum dos dois, mais seguro não arriscar juntar equipamentos diferentes só
