@@ -1,4 +1,7 @@
-import { calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva, periodicidadeEmDias, preventivaVencendo } from './manutencao-preventivas';
+import {
+  calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva, periodicidadeEmDias,
+  preventivaVencendo, proximaDataFixa,
+} from './manutencao-preventivas';
 
 describe('calcularProximaData', () => {
   it('soma dias quando a unidade é Dia(s)', () => {
@@ -23,6 +26,31 @@ describe('calcularProximaData', () => {
 
   it('reproduz o plano real AC90EAD01AH015 (ciclo de 1 mês)', () => {
     expect(calcularProximaData('2025-08-09', 1, 'Mes(es)')).toBe('2025-09-09');
+  });
+});
+
+describe('proximaDataFixa', () => {
+  it('âncora já no futuro: retorna a própria âncora, sem avançar', () => {
+    expect(proximaDataFixa('2026-10-01', 1, 'Mes(es)', '2026-09-16')).toBe('2026-10-01');
+  });
+
+  it('âncora no passado: avança ciclo a ciclo até a primeira ocorrência >= referência', () => {
+    expect(proximaDataFixa('2026-01-01', 1, 'Mes(es)', '2026-09-16')).toBe('2026-10-01');
+  });
+
+  it('não depende de execução real nenhuma — mesma âncora e referência sempre dão o mesmo resultado, ao contrário de calcularProximaData (completion-based)', () => {
+    const a = proximaDataFixa('2026-01-15', 1, 'Mes(es)', '2026-09-16');
+    const b = proximaDataFixa('2026-01-15', 1, 'Mes(es)', '2026-09-16');
+    expect(a).toBe(b);
+    expect(a).toBe('2026-10-15');
+  });
+
+  it('funciona com ciclo trimestral, mantendo o dia do mês da âncora', () => {
+    expect(proximaDataFixa('2026-01-15', 3, 'Mes(es)', '2026-09-16')).toBe('2026-10-15');
+  });
+
+  it('referência exatamente igual à âncora: não avança (é a própria ocorrência)', () => {
+    expect(proximaDataFixa('2026-09-16', 1, 'Mes(es)', '2026-09-16')).toBe('2026-09-16');
   });
 });
 

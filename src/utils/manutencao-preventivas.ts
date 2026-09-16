@@ -17,6 +17,29 @@ export function calcularProximaData(
   return d.toISOString().slice(0, 10);
 }
 
+// Agenda TIME-BASED (âncora fixa) — usada só pro Apoio (SERVPLEX/OPERAÇÃO/BMS, ver
+// planosComProximaExecucaoFixa): a próxima data NUNCA "anda" por causa de quando o
+// plano foi executado de verdade — é sempre o próximo ponto da sequência
+// dataAncora, dataAncora+ciclo, dataAncora+2*ciclo, ... que seja >= referenciaIso.
+// Diferente de calcularProximaData (completion-based, ainda usado por
+// Elétrica/Mecânica), que reparte a partir da ÚLTIMA EXECUÇÃO real registrada em
+// manutencao_ciclos. Pedido explícito do usuário: "não existe backlog, estamos
+// começando do zero" — igual o modelo padrão de plano cíclico do SAP PM (agenda por
+// calendário fixo, independente de quando cada execução foi confirmada). Como
+// consequência intencional: um plano do Apoio nunca aparece "atrasado" além da
+// tolerância normal, porque a data sempre pula pro próximo compromisso futuro, nunca
+// fica presa no passado.
+export function proximaDataFixa(
+  dataAncora: string, valor: number, unidade: PeriodicidadeUnidade, referenciaIso: string,
+): string {
+  let atual = dataAncora;
+  // Bound de segurança — nenhuma âncora realista fica milhares de ciclos atrás.
+  for (let i = 0; i < 2000 && atual < referenciaIso; i++) {
+    atual = calcularProximaData(atual, valor, unidade)!;
+  }
+  return atual;
+}
+
 // Vence especificamente DENTRO da semana em exibição (inicioSemanaIso a fimSemanaIso) —
 // não é cumulativo: um plano com próxima data antes do início da semana selecionada
 // pertence à semana em que ele foi programado pra aparecer (ver a redistribuição

@@ -1,6 +1,6 @@
 import {
   calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva, periodicidadeEmDias,
-  preventivaVencendo, PeriodicidadeUnidade,
+  preventivaVencendo, proximaDataFixa, PeriodicidadeUnidade,
 } from './manutencao-preventivas';
 import { CategoriaIndicador, ManutencaoArea, PlanoManutencao } from '../models/manutencao-programacao.model';
 
@@ -64,6 +64,22 @@ export function planosComProximaExecucao(
     const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, plantaParada);
     const ultimoCiclo = ultimoCicloPorPlano.get(p.id) ?? null;
     const proximaData = proximaExecucaoPlano(p.dataInicial, efetiva.valor, efetiva.unidade, ultimoCiclo);
+    return { ...p, proximaData };
+  });
+}
+
+// Variante TIME-BASED de planosComProximaExecucao — usada só pro Apoio (ver
+// proximaDataFixa): a próxima execução vem da própria data_inicial do plano
+// (âncora), avançando por ciclos fixos até a próxima ocorrência >= referenciaIso,
+// SEM olhar manutencao_ciclos/última execução real. Pedido do usuário: "não existe
+// backlog, começando do zero" — Elétrica/Mecânica continuam em
+// planosComProximaExecucao (completion-based), sem mudança.
+export function planosComProximaExecucaoFixa(
+  planos: PlanoManutencao[], plantaParada: boolean, referenciaIso: string,
+): PlanoComProximaData[] {
+  return planos.filter(p => p.ativo).map(p => {
+    const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, plantaParada);
+    const proximaData = proximaDataFixa(p.dataInicial, efetiva.valor, efetiva.unidade, referenciaIso);
     return { ...p, proximaData };
   });
 }
@@ -155,38 +171,53 @@ export function sugestoesDaSemana(
 
 export const EQUIPE_APOIO_NAO_CLASSIFICADA = 'NAO_CLASSIFICADO' as const;
 export type ChaveEquipeApoio = CategoriaIndicador | typeof EQUIPE_APOIO_NAO_CLASSIFICADA;
+export type LimitePorEquipeApoio = Partial<Record<ChaveEquipeApoio, number>>;
 
-// Cap do Apoio: no máx. `limitePorEquipe` sugestões por equipe (SERVPLEX/OPERAÇÃO/BMS,
-// ver inferirCategoriaIndicadorPorTecnico) por semana — substitui, só pra área APOIO, o
-// corte único de LOTE_PREVENTIVAS_POR_SEMANA no componente (que hoje deixa uma equipe
-// engolir o espaço das outras, reportado: 20 sugestões de Refrigeração, nada de
-// Operação/BMS). Mesma filosofia do corte de área que já existe: fatia os N primeiros
-// de uma fila JÁ ORDENADA por prioridade (ver sugestoesDaSemana), recalculada a cada
-// render — quem não entra não é empurrado pra nenhuma data específica, só continua no
-// backlog e aparece sozinho numa semana futura assim que virar top-N da fila da PRÓPRIA
-// equipe (mesmo raciocínio do comentário de LOTE_PREVENTIVAS_POR_SEMANA no componente).
+// Equipe sem limite configurado (ex.: MECANICA/ELETRICA nunca aparecem aqui, já que
+// inferirCategoriaIndicadorPorTecnico só devolve REFRIGERACAO/LIMP_OPERACIONAL/SPCI/
+// null) cai nesse teto conservador — nunca fica sem corte nenhum.
+const LIMITE_PADRAO_EQUIPE_NAO_CONFIGURADA = 5;
+
+// Cap do Apoio: no máx. N sugestões por equipe (SERVPLEX/OPERAÇÃO/BMS, ver
+// inferirCategoriaIndicadorPorTecnico) por semana, UM LIMITE DIFERENTE POR EQUIPE (ver
+// `limitePorEquipe`) — substitui, só pra área APOIO, o corte único de
+// LOTE_PREVENTIVAS_POR_SEMANA no componente (que deixava uma equipe engolir o espaço
+// das outras, reportado: 20 sugestões de Refrigeração, nada de Operação/BMS). Mesma
+// filosofia do corte de área que já existe: fatia os N primeiros de uma fila JÁ
+// ORDENADA por prioridade (ver sugestoesDaSemana), recalculada a cada render — quem não
+// entra não é empurrado pra nenhuma data específica, só continua no backlog e aparece
+// sozinho numa semana futura assim que virar top-N da fila da PRÓPRIA equipe.
 //
-// Cap ESTRITO em cima de PLANOS, não de "vagas"/equipamento — reportado: a versão
-// anterior contava um grupo de mesmo equipamento+data como 1 vaga só (pedido do
-// usuário original: "em casos de mesmo equipamento, o sistema pode colocar mais de
-// 5"), mas isso deixava passar 44 planos de uma vez quando muitas tarefas diferentes
-// do mesmo KKS caíam juntas — o usuário confirmou depois que isso NUNCA pode
-// acontecer, o limite de 5 é rígido, sem exceção. alinharDatasPorEquipamento continua
-// alinhando a DATA de planos do mesmo equipamento (isso não infla contagem nenhuma),
-// só o corte aqui virou sem exceção.
+// Cap ESTRITO em cima de PLANOS, não de "vagas"/equipamento — a versão anterior contava
+// um grupo de mesmo equipamento+data como 1 vaga só, mas isso deixava passar 44 planos
+// de uma vez quando muitas tarefas diferentes do mesmo KKS caíam juntas — o usuário
+// confirmou que isso NUNCA pode acontecer, o corte é rígido, sem exceção.
+// alinharDatasPorEquipamento continua alinhando a DATA de planos do mesmo equipamento
+// (isso não infla contagem nenhuma), só o corte aqui virou sem exceção.
+//
+// Por que um número POR EQUIPE, e não mais um valor único (era 5 fixo pra todas):
+// depois de migrar o Apoio pro modelo time-based (agenda fixa, sem backlog — ver
+// proximaDataFixa) e corrigir os dados contra o SAP, uma semana normal de verdade já
+// varia bastante de equipe pra equipe — em especial a OPERAÇÃO, que tem várias tarefas
+// de ciclo CURTO (semanal/quinzenal, ex. "L-OP-1S TRIPPERS") que aparecem toda semana
+// por definição, não por erro. Um teto único de 5 cortaria trabalho real e legítimo
+// toda semana pra essa equipe. Por isso virou um teto por equipe, dimensionado acima do
+// pico real observado — funciona como rede de segurança contra erro de cadastro (o
+// cenário das 44 ordens de um erro de duplicação), não como limite de rotina.
 //
 // `responsavel` vazio/não reconhecido cai no balde NAO_CLASSIFICADO, com cota PRÓPRIA —
 // assim não estoura silenciosamente o orçamento de uma equipe conhecida nem some da
 // lista sem nenhum corte.
 export function limitarPorEquipeApoio(
-  planosOrdenados: PlanoComProximaData[], limitePorEquipe: number,
+  planosOrdenados: PlanoComProximaData[], limitePorEquipe: LimitePorEquipeApoio,
 ): PlanoComProximaData[] {
   const contagemPorEquipe = new Map<ChaveEquipeApoio, number>();
   const resultado: PlanoComProximaData[] = [];
   for (const p of planosOrdenados) {
     const equipe = inferirCategoriaIndicadorPorTecnico(p.responsavel ?? '') ?? EQUIPE_APOIO_NAO_CLASSIFICADA;
+    const limite = limitePorEquipe[equipe] ?? LIMITE_PADRAO_EQUIPE_NAO_CONFIGURADA;
     const usados = contagemPorEquipe.get(equipe) ?? 0;
-    if (usados >= limitePorEquipe) continue;
+    if (usados >= limite) continue;
     contagemPorEquipe.set(equipe, usados + 1);
     resultado.push(p);
   }
@@ -205,7 +236,7 @@ export interface ResumoEquipeApoio {
 // porque o corte é um top-N sequencial simples por equipe, sem nenhum outro motivo de
 // exclusão.
 export function resumoPorEquipeApoio(
-  planosOrdenados: PlanoComProximaData[], limitePorEquipe: number,
+  planosOrdenados: PlanoComProximaData[], limitePorEquipe: LimitePorEquipeApoio,
 ): ResumoEquipeApoio[] {
   const totalPorEquipe = new Map<ChaveEquipeApoio, number>();
   for (const p of planosOrdenados) {
@@ -213,7 +244,9 @@ export function resumoPorEquipeApoio(
     totalPorEquipe.set(equipe, (totalPorEquipe.get(equipe) ?? 0) + 1);
   }
   return [...totalPorEquipe.entries()]
-    .map(([equipe, total]) => ({ equipe, total, mostrados: Math.min(total, limitePorEquipe) }))
+    .map(([equipe, total]) => ({
+      equipe, total, mostrados: Math.min(total, limitePorEquipe[equipe] ?? LIMITE_PADRAO_EQUIPE_NAO_CONFIGURADA),
+    }))
     .sort((a, b) => b.total - a.total);
 }
 

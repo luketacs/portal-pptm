@@ -21,8 +21,9 @@ import {
 } from '../../../utils/manutencao-regras';
 import {
   alinharDatasPorEquipamento, ChaveEquipeApoio, EQUIPE_APOIO_NAO_CLASSIFICADA, inferirCategoriaIndicador,
-  inferirCategoriaIndicadorPorTecnico, limitarPorEquipeApoio, PlanoComProximaData, planosAtrasados,
-  planosComProximaExecucao, proximaExecucaoPlano, resumoPorEquipeApoio, sugestoesDaSemana,
+  inferirCategoriaIndicadorPorTecnico, limitarPorEquipeApoio, LimitePorEquipeApoio, PlanoComProximaData,
+  planosAtrasados, planosComProximaExecucao, planosComProximaExecucaoFixa, proximaExecucaoPlano,
+  resumoPorEquipeApoio, sugestoesDaSemana,
 } from '../../../utils/manutencao-planos';
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
 
@@ -1148,11 +1149,22 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   private loteePreventivasPorSemana = computed(() =>
     this.regrasNovasValemNaSemana() ? this.LOTE_PREVENTIVAS_POR_SEMANA_NOVO : this.LOTE_PREVENTIVAS_POR_SEMANA_ANTIGO);
 
-  // Apoio: no máximo 5 sugestões por equipe (SERVPLEX/OPERAÇÃO/BMS) por semana, em vez
-  // do corte único por área — reportado: 20 sugestões vieram tudo de Refrigeração,
-  // Operação/BMS de fora, porque a ordenação por prioridade deixava a Refrigeração
-  // consumir sozinha as vagas do corte de área. Ver limitarPorEquipeApoio.
-  private readonly LIMITE_PREVENTIVAS_POR_EQUIPE_APOIO = 5;
+  // Apoio: teto por equipe (SERVPLEX/OPERAÇÃO/BMS) em vez do corte único por área —
+  // reportado originalmente: 20 sugestões vieram tudo de Refrigeração, Operação/BMS de
+  // fora, porque a ordenação por prioridade deixava a Refrigeração consumir sozinha as
+  // vagas do corte de área. Ver limitarPorEquipeApoio.
+  //
+  // Valores por equipe, não mais 5 fixo pra todas: depois de migrar o Apoio pro modelo
+  // time-based e corrigir os dados contra o SAP (ver planosComProximaExecucaoFixa), o
+  // volume real de uma semana normal varia por equipe — a OPERAÇÃO em especial tem
+  // várias tarefas de ciclo semanal/quinzenal que aparecem toda semana por definição
+  // (não é erro). Dimensionado acima do pico real observado (~21/semana pra
+  // SERVPLEX/OPERAÇÃO, ~7 pra BMS, numa simulação de 16 semanas em cima dos dados já
+  // corrigidos) — funciona como rede de segurança contra erro de cadastro (o cenário
+  // das 44 ordens de uma duplicação), não como limite de rotina.
+  private readonly LIMITE_PREVENTIVAS_POR_EQUIPE_APOIO: LimitePorEquipeApoio = {
+    REFRIGERACAO: 25, LIMP_OPERACIONAL: 25, SPCI: 10, [EQUIPE_APOIO_NAO_CLASSIFICADA]: 10,
+  };
 
   // Planos da área, cada um já com a próxima execução calculada a partir do ciclo mais
   // recente (ver planosComProximaExecucao em utils/manutencao-planos.ts) — substitui o
@@ -1164,12 +1176,26 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // roda aqui, antes de qualquer filtro de semana/corte, pra garantir que o MESMO
   // objeto usado no @for da tabela e passado pra programarDaPreventiva já carregue a
   // data alinhada.
+  //
+  // Apoio usa agenda TIME-BASED (planosComProximaExecucaoFixa/proximaDataFixa), não
+  // completion-based — pedido explícito do usuário: "não existe backlog, estamos
+  // começando do zero", igual o modelo de plano cíclico do SAP PM. Diferente do resto
+  // das regras "novas" desta função, essa troca de MODELO não fica atrás do gate de
+  // regrasNovasValemHoje: é uma correção definitiva de como o Apoio sempre devia ter
+  // funcionado, não uma regra de exibição por semana — vale imediatamente, sem esperar
+  // o calendário real chegar em 2026-09-21. Elétrica/Mecânica não mudam
+  // (planosComProximaExecucao, completion-based, como sempre foi).
   private planosComProximaDaArea = computed<PlanoComProximaData[]>(() => {
     const area = this.areaFixa;
     if (!area) return [];
     const planosDaArea = this.manutencaoPlanosService.planos().filter(p => p.area === area);
-    const ultimoCicloPorPlano = new Map(planosDaArea.map(p => [p.id, this.manutencaoPlanosService.ultimoCicloDoPlano(p.id)]));
-    const comProxima = planosComProximaExecucao(planosDaArea, ultimoCicloPorPlano, this.plantaParadaAtiva());
+    const comProxima = area === 'APOIO'
+      ? planosComProximaExecucaoFixa(planosDaArea, this.plantaParadaAtiva(), this.hojeInicioSemanaIso)
+      : planosComProximaExecucao(
+          planosDaArea,
+          new Map(planosDaArea.map(p => [p.id, this.manutencaoPlanosService.ultimoCicloDoPlano(p.id)])),
+          this.plantaParadaAtiva(),
+        );
     return this.regrasNovasValemHoje() ? alinharDatasPorEquipamento(comProxima) : comProxima;
   });
 

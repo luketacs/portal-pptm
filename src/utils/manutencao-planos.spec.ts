@@ -2,7 +2,7 @@ import { PlanoManutencao } from '../models/manutencao-programacao.model';
 import {
   alinharDatasPorEquipamento, EQUIPE_APOIO_NAO_CLASSIFICADA, gerarGradeMensal, inferirCategoriaIndicador,
   inferirCategoriaIndicadorPorTecnico, limitarPorEquipeApoio, planosAtrasados, planosComProximaExecucao,
-  proximaExecucaoPlano, resumoPorEquipeApoio, sugestoesDaSemana,
+  planosComProximaExecucaoFixa, proximaExecucaoPlano, resumoPorEquipeApoio, sugestoesDaSemana,
 } from './manutencao-planos';
 
 function plano(overrides: Partial<PlanoManutencao> = {}): PlanoManutencao {
@@ -81,6 +81,26 @@ describe('planosComProximaExecucao', () => {
     // Efetiva vira 1 Mes(es) — mas sem ciclo registrado ainda, proximaData continua sendo
     // a data inicial (a planta parada só afeta o cálculo a PARTIR de um ciclo existente).
     expect(resultado[0].proximaData).toBe('2026-08-01');
+  });
+});
+
+describe('planosComProximaExecucaoFixa', () => {
+  it('ignora plano inativo', () => {
+    const planos = [plano({ id: 'p1', ativo: false })];
+    expect(planosComProximaExecucaoFixa(planos, false, '2026-09-16')).toEqual([]);
+  });
+
+  it('próxima execução vem da âncora (data inicial), nunca de execução real — diferente de planosComProximaExecucao', () => {
+    const planos = [plano({ id: 'p1', dataInicial: '2026-01-15', periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)' })];
+    const resultado = planosComProximaExecucaoFixa(planos, false, '2026-09-16');
+    expect(resultado[0].proximaData).toBe('2026-10-15');
+  });
+
+  it('planta parada força ciclo curto pra mensal, igual planosComProximaExecucao', () => {
+    const planos = [plano({ id: 'p1', dataInicial: '2026-09-01', periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)' })];
+    const resultado = planosComProximaExecucaoFixa(planos, true, '2026-09-16');
+    // Efetiva vira 1 Mes(es) a partir de 2026-09-01 -> próxima ocorrência é 2026-10-01.
+    expect(resultado[0].proximaData).toBe('2026-10-01');
   });
 });
 
@@ -208,7 +228,7 @@ describe('limitarPorEquipeApoio', () => {
 
   it('corta pra N por equipe, mantendo a ordem de prioridade recebida', () => {
     const planos = Array.from({ length: 7 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
-    const resultado = limitarPorEquipeApoio(planos, 5);
+    const resultado = limitarPorEquipeApoio(planos, {});
     expect(resultado.map(p => p.id)).toEqual(['sp0', 'sp1', 'sp2', 'sp3', 'sp4']);
   });
 
@@ -216,7 +236,7 @@ describe('limitarPorEquipeApoio', () => {
     const servplex = Array.from({ length: 6 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
     const operacao = Array.from({ length: 6 }, (_, i) => planoApoio(`op${i}`, 'OPERAÇÃO', '2026-09-10'));
     const bms = Array.from({ length: 6 }, (_, i) => planoApoio(`bms${i}`, 'BMS', '2026-09-10'));
-    const resultado = limitarPorEquipeApoio([...servplex, ...operacao, ...bms], 5);
+    const resultado = limitarPorEquipeApoio([...servplex, ...operacao, ...bms], {});
     expect(resultado.filter(p => p.id.startsWith('sp'))).toHaveLength(5);
     expect(resultado.filter(p => p.id.startsWith('op'))).toHaveLength(5);
     expect(resultado.filter(p => p.id.startsWith('bms'))).toHaveLength(5);
@@ -230,28 +250,45 @@ describe('limitarPorEquipeApoio', () => {
   // equipamento+data.
   it('mesmo quando vários planos compartilham equipamento+data, o corte de N por equipe continua rígido', () => {
     const mesmoEquipamento = Array.from({ length: 10 }, (_, i) => planoApoio(`kks${i}`, 'SERVPLEX', '2026-09-15', 'BOMBA-01'));
-    const resultado = limitarPorEquipeApoio(mesmoEquipamento, 5);
+    const resultado = limitarPorEquipeApoio(mesmoEquipamento, {});
     expect(resultado).toHaveLength(5);
   });
 
   it('6º plano de uma equipe já no limite fica de fora', () => {
     const planos = Array.from({ length: 6 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
-    const resultado = limitarPorEquipeApoio(planos, 5);
+    const resultado = limitarPorEquipeApoio(planos, {});
     expect(resultado.map(p => p.id)).not.toContain('sp5');
   });
 
   it('responsavel vazio ou não reconhecido cai no balde NAO_CLASSIFICADO, com cota própria', () => {
     const naoClassificados = Array.from({ length: 6 }, (_, i) => planoApoio(`nc${i}`, i % 2 === 0 ? null : 'TOP ANDAIMES', '2026-09-10'));
     const servplex = Array.from({ length: 5 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
-    const resultado = limitarPorEquipeApoio([...naoClassificados, ...servplex], 5);
+    const resultado = limitarPorEquipeApoio([...naoClassificados, ...servplex], {});
     expect(resultado.filter(p => p.id.startsWith('nc'))).toHaveLength(5);
     expect(resultado.filter(p => p.id.startsWith('sp'))).toHaveLength(5);
   });
 
   it('não muta o array de entrada', () => {
     const planos = Array.from({ length: 7 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
-    limitarPorEquipeApoio(planos, 5);
+    limitarPorEquipeApoio(planos, {});
     expect(planos).toHaveLength(7);
+  });
+
+  // Depois de migrar pro modelo time-based, o teto deixou de ser um valor único (5)
+  // igual pra todas as equipes — cada equipe pode ter um teto diferente, dimensionado
+  // pelo volume real dela (ver comentário de LIMITE_PREVENTIVAS_POR_EQUIPE_APOIO no
+  // componente). Equipe sem entrada no Record cai no padrão conservador (5).
+  it('aceita um limite diferente por equipe — equipe sem entrada cai no padrão (5)', () => {
+    const servplex = Array.from({ length: 10 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
+    const operacao = Array.from({ length: 10 }, (_, i) => planoApoio(`op${i}`, 'OPERAÇÃO', '2026-09-10'));
+    const bms = Array.from({ length: 10 }, (_, i) => planoApoio(`bms${i}`, 'BMS', '2026-09-10'));
+    const resultado = limitarPorEquipeApoio(
+      [...servplex, ...operacao, ...bms],
+      { REFRIGERACAO: 8, LIMP_OPERACIONAL: 2 },
+    );
+    expect(resultado.filter(p => p.id.startsWith('sp'))).toHaveLength(8);
+    expect(resultado.filter(p => p.id.startsWith('op'))).toHaveLength(2);
+    expect(resultado.filter(p => p.id.startsWith('bms'))).toHaveLength(5);
   });
 });
 
@@ -263,7 +300,7 @@ describe('resumoPorEquipeApoio', () => {
   it('conta planos (1 por plano, não por equipamento) por equipe, com mostrados = min(total, limite)', () => {
     const servplex = Array.from({ length: 12 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
     const bms = Array.from({ length: 3 }, (_, i) => planoApoio(`bms${i}`, 'BMS', '2026-09-10'));
-    const resultado = resumoPorEquipeApoio([...servplex, ...bms], 5);
+    const resultado = resumoPorEquipeApoio([...servplex, ...bms], {});
     expect(resultado.find(r => r.equipe === 'REFRIGERACAO')).toEqual({ equipe: 'REFRIGERACAO', total: 12, mostrados: 5 });
     expect(resultado.find(r => r.equipe === 'SPCI')).toEqual({ equipe: 'SPCI', total: 3, mostrados: 3 });
   });
@@ -273,12 +310,12 @@ describe('resumoPorEquipeApoio', () => {
       planoApoio('a', 'SERVPLEX', '2026-09-15', 'BOMBA-01'),
       planoApoio('b', 'SERVPLEX', '2026-09-15', 'BOMBA-01'),
     ];
-    const resultado = resumoPorEquipeApoio(par, 5);
+    const resultado = resumoPorEquipeApoio(par, {});
     expect(resultado.find(r => r.equipe === 'REFRIGERACAO')).toEqual({ equipe: 'REFRIGERACAO', total: 2, mostrados: 2 });
   });
 
   it('responsavel não reconhecido cai em NAO_CLASSIFICADO', () => {
-    const resultado = resumoPorEquipeApoio([planoApoio('a', 'TOP ANDAIMES', '2026-09-10')], 5);
+    const resultado = resumoPorEquipeApoio([planoApoio('a', 'TOP ANDAIMES', '2026-09-10')], {});
     expect(resultado.find(r => r.equipe === EQUIPE_APOIO_NAO_CLASSIFICADA)).toEqual({ equipe: EQUIPE_APOIO_NAO_CLASSIFICADA, total: 1, mostrados: 1 });
   });
 });
