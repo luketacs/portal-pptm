@@ -1208,12 +1208,32 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // regra de exibição por semana — vale imediatamente.
   private readonly AREAS_TIME_BASED: readonly ManutencaoArea[] = ['APOIO', 'MECANICA', 'ELETRICA'];
 
+  // Referência usada pra calcular a próxima data (time-based) — normalmente é o hoje
+  // real, mas se a semana de hoje já estiver FECHADA (Admin fechou a programação
+  // dela), a sugestão não pode "nascer presa" numa semana onde não dá mais pra criar/
+  // editar lançamento nenhum. Pedido do usuário: se a parada da planta for encerrada
+  // no meio de uma semana já fechada, os planos que cairiam nela devem passar a
+  // aparecer a partir da PRÓXIMA semana aberta, não citando uma semana morta. Avança
+  // semana a semana (raro passar de 1 iteração, mas cobre o caso de mais de uma
+  // semana seguida fechada) até achar a primeira aberta. Só entra na conta de
+  // "próxima data" — planosAtrasados continua usando o hoje real puro, porque fechar
+  // semana não muda se algo está de fato atrasado.
+  private referenciaProximaDataTimeBased = computed(() => {
+    let candidata = this.hojeInicioSemanaIso;
+    while (this.manutencaoService.semanaEstaFechada(candidata)) {
+      const proxima = new Date(candidata + 'T00:00:00');
+      proxima.setDate(proxima.getDate() + 7);
+      candidata = paraIso(proxima);
+    }
+    return candidata;
+  });
+
   private planosComProximaDaArea = computed<PlanoComProximaData[]>(() => {
     const area = this.areaFixa;
     if (!area) return [];
     const planosDaArea = this.manutencaoPlanosService.planos().filter(p => p.area === area);
     const comProxima = this.AREAS_TIME_BASED.includes(area)
-      ? planosComProximaExecucaoFixa(planosDaArea, this.plantaParadaAtiva(), this.hojeInicioSemanaIso)
+      ? planosComProximaExecucaoFixa(planosDaArea, this.plantaParadaAtiva(), this.referenciaProximaDataTimeBased())
       : planosComProximaExecucao(
           planosDaArea,
           new Map(planosDaArea.map(p => [p.id, this.manutencaoPlanosService.ultimoCicloDoPlano(p.id)])),
