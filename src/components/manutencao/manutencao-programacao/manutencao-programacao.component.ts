@@ -1166,6 +1166,16 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     REFRIGERACAO: 25, LIMP_OPERACIONAL: 25, SPCI: 10, [EQUIPE_APOIO_NAO_CLASSIFICADA]: 10,
   };
 
+  // Mecânica não tem conceito de equipe (responsavel sempre vazio) — o corte aqui é um
+  // valor único pra área inteira, não mais o LOTE_PREVENTIVAS_POR_SEMANA_NOVO genérico
+  // (25, pensado pra Elétrica/Apoio antigos). Auditoria mostrou que ~1/3 dos 358 planos
+  // são de ciclo semanal/quinzenal (aparecem toda semana por definição) — carga real
+  // observada numa simulação de 20 semanas, já com as âncoras corrigidas: ~78-92/semana,
+  // confirmado pelo usuário como volume real esperado (planta grande, muito
+  // equipamento). Dimensionado acima do pico (92) — rede de segurança contra erro de
+  // cadastro, não limite de rotina.
+  private readonly LIMITE_PREVENTIVAS_MECANICA = 120;
+
   // Planos da área, cada um já com a próxima execução calculada a partir do ciclo mais
   // recente (ver planosComProximaExecucao em utils/manutencao-planos.ts) — substitui o
   // antigo planosPreventivosDaArea+planosJaProgramados: não precisa mais de uma lista de
@@ -1177,19 +1187,24 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // objeto usado no @for da tabela e passado pra programarDaPreventiva já carregue a
   // data alinhada.
   //
-  // Apoio usa agenda TIME-BASED (planosComProximaExecucaoFixa/proximaDataFixa), não
-  // completion-based — pedido explícito do usuário: "não existe backlog, estamos
-  // começando do zero", igual o modelo de plano cíclico do SAP PM. Diferente do resto
-  // das regras "novas" desta função, essa troca de MODELO não fica atrás do gate de
-  // regrasNovasValemHoje: é uma correção definitiva de como o Apoio sempre devia ter
-  // funcionado, não uma regra de exibição por semana — vale imediatamente, sem esperar
-  // o calendário real chegar em 2026-09-21. Elétrica/Mecânica não mudam
-  // (planosComProximaExecucao, completion-based, como sempre foi).
+  // Apoio e Mecânica usam agenda TIME-BASED (planosComProximaExecucaoFixa/
+  // proximaDataFixa), não completion-based — pedido explícito do usuário: "não existe
+  // backlog, estamos começando do zero", igual o modelo de plano cíclico do SAP PM.
+  // Mecânica entrou pro mesmo modelo depois de auditar os dados (só 22 dos 358 planos
+  // já tinham ciclo registrado, os outros 336 dependiam direto da data_inicial crua da
+  // importação em lote — 87 planos vencendo juntos na mesma semana). Diferente do
+  // resto das regras "novas" desta função, essa troca de MODELO não fica atrás do gate
+  // de regrasNovasValemHoje: é uma correção definitiva de como essas áreas sempre
+  // deviam ter funcionado, não uma regra de exibição por semana — vale imediatamente.
+  // Elétrica ainda não mudou (planosComProximaExecucao, completion-based, como sempre
+  // foi) — revisão dela é a próxima etapa.
+  private readonly AREAS_TIME_BASED: readonly ManutencaoArea[] = ['APOIO', 'MECANICA'];
+
   private planosComProximaDaArea = computed<PlanoComProximaData[]>(() => {
     const area = this.areaFixa;
     if (!area) return [];
     const planosDaArea = this.manutencaoPlanosService.planos().filter(p => p.area === area);
-    const comProxima = area === 'APOIO'
+    const comProxima = this.AREAS_TIME_BASED.includes(area)
       ? planosComProximaExecucaoFixa(planosDaArea, this.plantaParadaAtiva(), this.hojeInicioSemanaIso)
       : planosComProximaExecucao(
           planosDaArea,
@@ -1271,6 +1286,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const todas = this.preventivasVencendoTodas();
     if (this.areaFixa === 'APOIO' && this.regrasNovasValemNaSemana()) {
       return limitarPorEquipeApoio(todas, this.LIMITE_PREVENTIVAS_POR_EQUIPE_APOIO);
+    }
+    if (this.areaFixa === 'MECANICA' && this.regrasNovasValemNaSemana()) {
+      return todas.slice(0, this.LIMITE_PREVENTIVAS_MECANICA);
     }
     return todas.slice(0, this.loteePreventivasPorSemana());
   });
