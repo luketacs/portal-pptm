@@ -68,6 +68,60 @@ export function planosComProximaExecucao(
   });
 }
 
+export interface PlanoAlinhadoPorEquipamento extends PlanoComProximaData {
+  // Data original ANTES do alinhamento — null quando o plano não foi alinhado (é o
+  // único do seu equipamento no mês, ou já era o mais cedo do grupo).
+  proximaDataOriginal: string | null;
+}
+
+// Pedido do usuário: 2+ planos do MESMO equipamento (mesma área, equipamento.trim()
+// igual — mesma convenção de igualdade do Quadro de LOTO e da detecção de OS duplicada
+// em manutencao-programacao.component.ts) cuja próxima execução caia no MESMO MÊS DE
+// CALENDÁRIO não devem gerar duas visitas separadas (ex.: um plano mensal e um
+// trimestral do mesmo equipamento, ambos vencendo em setembro, saem juntos). Todo o
+// grupo passa a usar a data MAIS CEDO entre eles — nunca a mais tarde, pra nenhum plano
+// ficar mais atrasado do que já estava sozinho; o de ciclo mais longo só é atendido um
+// pouco antes do que seu próprio cálculo pediria. Sem limite de distância dentro do
+// mês (confirmado com o usuário): mesmo que as datas originais estejam em pontas
+// opostas do mês, alinha do mesmo jeito — pior caso é "um pouco cedo demais", nunca
+// atrasa. "Mesmo mês" comparado como string 'YYYY-MM' — separa corretamente dezembro
+// de um ano de janeiro do ano seguinte, sem caso especial.
+export function alinharDatasPorEquipamento(planos: PlanoComProximaData[]): PlanoAlinhadoPorEquipamento[] {
+  const porEquipamento = new Map<string, number[]>();
+  planos.forEach((p, i) => {
+    const chave = `${p.area}||${p.equipamento.trim()}`;
+    const lista = porEquipamento.get(chave);
+    if (lista) lista.push(i);
+    else porEquipamento.set(chave, [i]);
+  });
+
+  const resultado: PlanoAlinhadoPorEquipamento[] = planos.map(p => ({ ...p, proximaDataOriginal: null }));
+
+  for (const indices of porEquipamento.values()) {
+    if (indices.length < 2) continue;
+    const porMes = new Map<string, number[]>();
+    for (const i of indices) {
+      const mes = planos[i].proximaData.slice(0, 7); // 'YYYY-MM'
+      const lista = porMes.get(mes);
+      if (lista) lista.push(i);
+      else porMes.set(mes, [i]);
+    }
+    for (const idxDoMes of porMes.values()) {
+      if (idxDoMes.length < 2) continue;
+      const dataAlvo = idxDoMes.reduce(
+        (min, i) => (planos[i].proximaData < min ? planos[i].proximaData : min),
+        planos[idxDoMes[0]].proximaData,
+      );
+      for (const i of idxDoMes) {
+        if (planos[i].proximaData !== dataAlvo) {
+          resultado[i] = { ...resultado[i], proximaData: dataAlvo, proximaDataOriginal: planos[i].proximaData };
+        }
+      }
+    }
+  }
+  return resultado;
+}
+
 // Planos cuja próxima execução cai dentro da semana em exibição, ordenados por
 // prioridade — mesma regra combinada com o usuário pro sistema antigo (ver
 // preventivasVencendoTodas no componente): antes do corte de regras novas, só pela data
@@ -85,6 +139,80 @@ export function sugestoesDaSemana(
       if (diasA !== diasB) return diasB - diasA;
       return a.proximaData.localeCompare(b.proximaData);
     });
+}
+
+export const EQUIPE_APOIO_NAO_CLASSIFICADA = 'NAO_CLASSIFICADO' as const;
+export type ChaveEquipeApoio = CategoriaIndicador | typeof EQUIPE_APOIO_NAO_CLASSIFICADA;
+
+// Cap do Apoio: no máx. `limitePorEquipe` sugestões por equipe (SERVPLEX/OPERAÇÃO/BMS,
+// ver inferirCategoriaIndicadorPorTecnico) por semana — substitui, só pra área APOIO, o
+// corte único de LOTE_PREVENTIVAS_POR_SEMANA no componente (que hoje deixa uma equipe
+// engolir o espaço das outras, reportado: 20 sugestões de Refrigeração, nada de
+// Operação/BMS). Mesma filosofia do corte de área que já existe: fatia os N primeiros
+// de uma fila JÁ ORDENADA por prioridade (ver sugestoesDaSemana), recalculada a cada
+// render — quem não entra não é empurrado pra nenhuma data específica, só continua no
+// backlog e aparece sozinho numa semana futura assim que virar top-N da fila da PRÓPRIA
+// equipe (mesmo raciocínio do comentário de LOTE_PREVENTIVAS_POR_SEMANA no componente).
+//
+// Um grupo de planos já alinhados ao MESMO equipamento+data por alinharDatasPorEquipamento
+// conta como 1 vaga só, não 1 por plano — pedido explícito do usuário ("em casos de
+// mesmo equipamento, o sistema pode colocar mais de 5"): a lista pode ter mais de
+// `limitePorEquipe` linhas numa semana, desde que o excedente venha "de carona" num
+// equipamento já contado.
+//
+// `responsavel` vazio/não reconhecido cai no balde NAO_CLASSIFICADO, com cota PRÓPRIA —
+// assim não estoura silenciosamente o orçamento de uma equipe conhecida nem some da
+// lista sem nenhum corte.
+export function limitarPorEquipeApoio(
+  planosOrdenados: PlanoComProximaData[], limitePorEquipe: number,
+): PlanoComProximaData[] {
+  const porSlot = new Map<string, PlanoComProximaData[]>();
+  const ordemSlots: string[] = [];
+  for (const p of planosOrdenados) {
+    const chave = `${p.area}||${p.equipamento.trim()}||${p.proximaData}`;
+    const slot = porSlot.get(chave);
+    if (slot) slot.push(p);
+    else { porSlot.set(chave, [p]); ordemSlots.push(chave); }
+  }
+
+  const contagemPorEquipe = new Map<ChaveEquipeApoio, number>();
+  const idsIncluidos = new Set<string>();
+  for (const chave of ordemSlots) {
+    const slot = porSlot.get(chave)!;
+    const equipe = inferirCategoriaIndicadorPorTecnico(slot[0].responsavel ?? '') ?? EQUIPE_APOIO_NAO_CLASSIFICADA;
+    const usados = contagemPorEquipe.get(equipe) ?? 0;
+    if (usados >= limitePorEquipe) continue;
+    contagemPorEquipe.set(equipe, usados + 1);
+    for (const p of slot) idsIncluidos.add(p.id);
+  }
+  return planosOrdenados.filter(p => idsIncluidos.has(p.id));
+}
+
+export interface ResumoEquipeApoio {
+  equipe: ChaveEquipeApoio;
+  total: number; // vagas (equipamento+data distintos) pendentes pra essa equipe
+  mostrados: number; // quantas entraram no corte de limitePorEquipe
+}
+
+// Contagem por equipe (mesma unidade de "vaga" de limitarPorEquipeApoio: equipamento+
+// data distintos, não 1 por plano) pra montar o resumo "SERVPLEX: 5/12 · BMS: 3/3" no
+// lugar do texto único "Mostrando N de M pendentes" que a área inteira usa hoje —
+// mostrados é sempre min(total, limitePorEquipe) porque o corte é um top-N sequencial
+// simples por equipe, sem nenhum outro motivo de exclusão.
+export function resumoPorEquipeApoio(
+  planosOrdenados: PlanoComProximaData[], limitePorEquipe: number,
+): ResumoEquipeApoio[] {
+  const vagasPorEquipe = new Map<ChaveEquipeApoio, Set<string>>();
+  for (const p of planosOrdenados) {
+    const equipe = inferirCategoriaIndicadorPorTecnico(p.responsavel ?? '') ?? EQUIPE_APOIO_NAO_CLASSIFICADA;
+    const chaveVaga = `${p.area}||${p.equipamento.trim()}||${p.proximaData}`;
+    const set = vagasPorEquipe.get(equipe);
+    if (set) set.add(chaveVaga);
+    else vagasPorEquipe.set(equipe, new Set([chaveVaga]));
+  }
+  return [...vagasPorEquipe.entries()]
+    .map(([equipe, vagas]) => ({ equipe, total: vagas.size, mostrados: Math.min(vagas.size, limitePorEquipe) }))
+    .sort((a, b) => b.total - a.total);
 }
 
 export interface PlanoAtrasado extends PlanoComProximaData {

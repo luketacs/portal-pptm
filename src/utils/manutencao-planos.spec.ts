@@ -1,7 +1,8 @@
 import { PlanoManutencao } from '../models/manutencao-programacao.model';
 import {
-  gerarGradeMensal, inferirCategoriaIndicador, inferirCategoriaIndicadorPorTecnico, planosAtrasados,
-  planosComProximaExecucao, proximaExecucaoPlano, sugestoesDaSemana,
+  alinharDatasPorEquipamento, EQUIPE_APOIO_NAO_CLASSIFICADA, gerarGradeMensal, inferirCategoriaIndicador,
+  inferirCategoriaIndicadorPorTecnico, limitarPorEquipeApoio, planosAtrasados, planosComProximaExecucao,
+  proximaExecucaoPlano, resumoPorEquipeApoio, sugestoesDaSemana,
 } from './manutencao-planos';
 
 function plano(overrides: Partial<PlanoManutencao> = {}): PlanoManutencao {
@@ -112,6 +113,160 @@ describe('sugestoesDaSemana', () => {
     );
     const resultado = sugestoesDaSemana(planos, '2026-09-07', '2026-09-11', true);
     expect(resultado.map(p => p.id)).toEqual(['anual', 'mensal']);
+  });
+});
+
+function comProxima(overrides: Partial<PlanoManutencao> = {}, proximaData: string) {
+  return { ...plano(overrides), proximaData };
+}
+
+describe('alinharDatasPorEquipamento', () => {
+  it('não alinha quando as próximas datas caem em meses diferentes', () => {
+    const a = comProxima({ id: 'a', equipamento: 'M01' }, '2026-08-15');
+    const b = comProxima({ id: 'b', equipamento: 'M01' }, '2026-09-10');
+    const resultado = alinharDatasPorEquipamento([a, b]);
+    expect(resultado.find(p => p.id === 'a')).toEqual({ ...a, proximaDataOriginal: null });
+    expect(resultado.find(p => p.id === 'b')).toEqual({ ...b, proximaDataOriginal: null });
+  });
+
+  it('alinha pra data mais cedo quando 2 planos do mesmo equipamento caem no mesmo mês (mensal + trimestral)', () => {
+    const mensal = comProxima({ id: 'mensal', equipamento: 'M01', periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)' }, '2026-09-05');
+    const trimestral = comProxima({ id: 'trimestral', equipamento: 'M01', periodicidadeValor: 3, periodicidadeUnidade: 'Mes(es)' }, '2026-09-25');
+    const resultado = alinharDatasPorEquipamento([mensal, trimestral]);
+    const mensalAlinhado = resultado.find(p => p.id === 'mensal')!;
+    const trimestralAlinhado = resultado.find(p => p.id === 'trimestral')!;
+    expect(mensalAlinhado.proximaData).toBe('2026-09-05');
+    expect(mensalAlinhado.proximaDataOriginal).toBe(null);
+    expect(trimestralAlinhado.proximaData).toBe('2026-09-05');
+    expect(trimestralAlinhado.proximaDataOriginal).toBe('2026-09-25');
+  });
+
+  it('3+ planos do mesmo equipamento no mesmo mês alinham todos pra data mais cedo entre eles', () => {
+    const planos = [
+      comProxima({ id: 'p1', equipamento: 'M01' }, '2026-09-12'),
+      comProxima({ id: 'p2', equipamento: 'M01' }, '2026-09-03'),
+      comProxima({ id: 'p3', equipamento: 'M01' }, '2026-09-28'),
+    ];
+    const resultado = alinharDatasPorEquipamento(planos);
+    expect(resultado.map(p => p.proximaData)).toEqual(['2026-09-03', '2026-09-03', '2026-09-03']);
+  });
+
+  it('não mistura equipamento de mesmo nome em áreas diferentes', () => {
+    const mecanica = comProxima({ id: 'mec', area: 'MECANICA', equipamento: 'M01' }, '2026-09-03');
+    const eletrica = comProxima({ id: 'ele', area: 'ELETRICA', equipamento: 'M01' }, '2026-09-20');
+    const resultado = alinharDatasPorEquipamento([mecanica, eletrica]);
+    expect(resultado.find(p => p.id === 'mec')!.proximaDataOriginal).toBe(null);
+    expect(resultado.find(p => p.id === 'ele')!.proximaDataOriginal).toBe(null);
+  });
+
+  it('não mistura planos de equipamentos diferentes, mesmo mês, mesma área', () => {
+    const m01 = comProxima({ id: 'm01', equipamento: 'M01' }, '2026-09-03');
+    const m02 = comProxima({ id: 'm02', equipamento: 'M02' }, '2026-09-20');
+    const resultado = alinharDatasPorEquipamento([m01, m02]);
+    expect(resultado.find(p => p.id === 'm01')!.proximaDataOriginal).toBe(null);
+    expect(resultado.find(p => p.id === 'm02')!.proximaDataOriginal).toBe(null);
+  });
+
+  it('não altera quando só existe 1 plano ativo pra aquele equipamento', () => {
+    const unico = comProxima({ id: 'unico', equipamento: 'M01' }, '2026-09-10');
+    const resultado = alinharDatasPorEquipamento([unico]);
+    expect(resultado[0]).toEqual({ ...unico, proximaDataOriginal: null });
+  });
+
+  it('vira o ano corretamente: dezembro de um ano não alinha com janeiro do ano seguinte', () => {
+    const dezembro = comProxima({ id: 'dez', equipamento: 'M01' }, '2026-12-29');
+    const janeiro = comProxima({ id: 'jan', equipamento: 'M01' }, '2027-01-02');
+    const resultado = alinharDatasPorEquipamento([dezembro, janeiro]);
+    expect(resultado.find(p => p.id === 'dez')!.proximaDataOriginal).toBe(null);
+    expect(resultado.find(p => p.id === 'jan')!.proximaDataOriginal).toBe(null);
+  });
+
+  it('ignora espaço extra no equipamento (trim) na hora de casar', () => {
+    const comEspaco = comProxima({ id: 'a', equipamento: ' M01 ' }, '2026-09-20');
+    const semEspaco = comProxima({ id: 'b', equipamento: 'M01' }, '2026-09-05');
+    const resultado = alinharDatasPorEquipamento([comEspaco, semEspaco]);
+    expect(resultado.find(p => p.id === 'a')!.proximaData).toBe('2026-09-05');
+    expect(resultado.find(p => p.id === 'b')!.proximaData).toBe('2026-09-05');
+  });
+});
+
+describe('limitarPorEquipeApoio', () => {
+  function planoApoio(id: string, responsavel: string | null, proximaData: string, equipamento = id) {
+    return comProxima({ id, area: 'APOIO', responsavel, equipamento }, proximaData);
+  }
+
+  it('corta pra N por equipe, mantendo a ordem de prioridade recebida', () => {
+    const planos = Array.from({ length: 7 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
+    const resultado = limitarPorEquipeApoio(planos, 5);
+    expect(resultado.map(p => p.id)).toEqual(['sp0', 'sp1', 'sp2', 'sp3', 'sp4']);
+  });
+
+  it('equipes diferentes têm cotas independentes — uma equipe cheia não consome a cota de outra', () => {
+    const servplex = Array.from({ length: 6 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
+    const operacao = Array.from({ length: 6 }, (_, i) => planoApoio(`op${i}`, 'OPERAÇÃO', '2026-09-10'));
+    const bms = Array.from({ length: 6 }, (_, i) => planoApoio(`bms${i}`, 'BMS', '2026-09-10'));
+    const resultado = limitarPorEquipeApoio([...servplex, ...operacao, ...bms], 5);
+    expect(resultado.filter(p => p.id.startsWith('sp'))).toHaveLength(5);
+    expect(resultado.filter(p => p.id.startsWith('op'))).toHaveLength(5);
+    expect(resultado.filter(p => p.id.startsWith('bms'))).toHaveLength(5);
+  });
+
+  it('grupo de 2 planos já alinhados ao mesmo equipamento+data conta como 1 vaga só — pode sair mais de N linhas', () => {
+    const singles = Array.from({ length: 4 }, (_, i) => planoApoio(`single${i}`, 'SERVPLEX', '2026-09-10'));
+    const par = [
+      planoApoio('par-a', 'SERVPLEX', '2026-09-15', 'BOMBA-01'),
+      planoApoio('par-b', 'SERVPLEX', '2026-09-15', 'BOMBA-01'),
+    ];
+    const resultado = limitarPorEquipeApoio([...singles, ...par], 5);
+    expect(resultado.map(p => p.id)).toEqual(['single0', 'single1', 'single2', 'single3', 'par-a', 'par-b']);
+  });
+
+  it('6º slot (não-pareado) de uma equipe já no limite fica de fora', () => {
+    const planos = Array.from({ length: 6 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
+    const resultado = limitarPorEquipeApoio(planos, 5);
+    expect(resultado.map(p => p.id)).not.toContain('sp5');
+  });
+
+  it('responsavel vazio ou não reconhecido cai no balde NAO_CLASSIFICADO, com cota própria', () => {
+    const naoClassificados = Array.from({ length: 6 }, (_, i) => planoApoio(`nc${i}`, i % 2 === 0 ? null : 'TOP ANDAIMES', '2026-09-10'));
+    const servplex = Array.from({ length: 5 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
+    const resultado = limitarPorEquipeApoio([...naoClassificados, ...servplex], 5);
+    expect(resultado.filter(p => p.id.startsWith('nc'))).toHaveLength(5);
+    expect(resultado.filter(p => p.id.startsWith('sp'))).toHaveLength(5);
+  });
+
+  it('não muta o array de entrada', () => {
+    const planos = Array.from({ length: 7 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
+    limitarPorEquipeApoio(planos, 5);
+    expect(planos).toHaveLength(7);
+  });
+});
+
+describe('resumoPorEquipeApoio', () => {
+  function planoApoio(id: string, responsavel: string | null, proximaData: string, equipamento = id) {
+    return comProxima({ id, area: 'APOIO', responsavel, equipamento }, proximaData);
+  }
+
+  it('conta vagas (equipamento+data distintos) por equipe, com mostrados = min(total, limite)', () => {
+    const servplex = Array.from({ length: 12 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
+    const bms = Array.from({ length: 3 }, (_, i) => planoApoio(`bms${i}`, 'BMS', '2026-09-10'));
+    const resultado = resumoPorEquipeApoio([...servplex, ...bms], 5);
+    expect(resultado.find(r => r.equipe === 'REFRIGERACAO')).toEqual({ equipe: 'REFRIGERACAO', total: 12, mostrados: 5 });
+    expect(resultado.find(r => r.equipe === 'SPCI')).toEqual({ equipe: 'SPCI', total: 3, mostrados: 3 });
+  });
+
+  it('um grupo de mesmo equipamento+data conta como 1 vaga só no total', () => {
+    const par = [
+      planoApoio('a', 'SERVPLEX', '2026-09-15', 'BOMBA-01'),
+      planoApoio('b', 'SERVPLEX', '2026-09-15', 'BOMBA-01'),
+    ];
+    const resultado = resumoPorEquipeApoio(par, 5);
+    expect(resultado.find(r => r.equipe === 'REFRIGERACAO')).toEqual({ equipe: 'REFRIGERACAO', total: 1, mostrados: 1 });
+  });
+
+  it('responsavel não reconhecido cai em NAO_CLASSIFICADO', () => {
+    const resultado = resumoPorEquipeApoio([planoApoio('a', 'TOP ANDAIMES', '2026-09-10')], 5);
+    expect(resultado.find(r => r.equipe === EQUIPE_APOIO_NAO_CLASSIFICADA)).toEqual({ equipe: EQUIPE_APOIO_NAO_CLASSIFICADA, total: 1, mostrados: 1 });
   });
 });
 

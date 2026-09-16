@@ -20,8 +20,9 @@ import {
   encontrarOrdemDuplicada, podeEditarSemanaFechada, recursosParaEspelho,
 } from '../../../utils/manutencao-regras';
 import {
-  inferirCategoriaIndicador, inferirCategoriaIndicadorPorTecnico, PlanoComProximaData, planosAtrasados,
-  planosComProximaExecucao, proximaExecucaoPlano, sugestoesDaSemana,
+  alinharDatasPorEquipamento, ChaveEquipeApoio, EQUIPE_APOIO_NAO_CLASSIFICADA, inferirCategoriaIndicador,
+  inferirCategoriaIndicadorPorTecnico, limitarPorEquipeApoio, PlanoComProximaData, planosAtrasados,
+  planosComProximaExecucao, proximaExecucaoPlano, resumoPorEquipeApoio, sugestoesDaSemana,
 } from '../../../utils/manutencao-planos';
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
 
@@ -1106,20 +1107,44 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   private regrasNovasValemNaSemana = computed(() => this.semanaFiltro() >= this.PRIMEIRA_SEMANA_REGRAS_NOVAS);
 
+  // Diferente de regrasNovasValemNaSemana (baseada na semana EM EXIBIÇÃO — certa pra
+  // regras só de exibição, tipo ordenação/corte por lote, sem efeito colateral) — o
+  // alinhamento por equipamento (alinharDatasPorEquipamento) grava a data alinhada de
+  // forma PERMANENTE no ciclo do plano (ver registrarCicloSeVinculoMudou, que lê
+  // formPlanoPreventivoDataPrevista, preenchido a partir do próprio proximaData da
+  // sugestão clicada), e preventivasAtrasadas precisa ficar independente da semana
+  // filtrada (ver comentário de planosAtrasados em manutencao-planos.ts). Por isso
+  // compara contra o HOJE real, não contra semanaFiltro(): antes do corte nada muda;
+  // da semana 39 em diante (sempre, não só quando 39 estiver selecionada no filtro)
+  // passa a valer alinharDatasPorEquipamento/limitarPorEquipeApoio abaixo.
+  private regrasNovasValemHoje = computed(() => this.hojeInicioSemanaIso >= this.PRIMEIRA_SEMANA_REGRAS_NOVAS);
+
   private loteePreventivasPorSemana = computed(() =>
     this.regrasNovasValemNaSemana() ? this.LOTE_PREVENTIVAS_POR_SEMANA_NOVO : this.LOTE_PREVENTIVAS_POR_SEMANA_ANTIGO);
+
+  // Apoio: no máximo 5 sugestões por equipe (SERVPLEX/OPERAÇÃO/BMS) por semana, em vez
+  // do corte único por área — reportado: 20 sugestões vieram tudo de Refrigeração,
+  // Operação/BMS de fora, porque a ordenação por prioridade deixava a Refrigeração
+  // consumir sozinha as vagas do corte de área. Ver limitarPorEquipeApoio.
+  private readonly LIMITE_PREVENTIVAS_POR_EQUIPE_APOIO = 5;
 
   // Planos da área, cada um já com a próxima execução calculada a partir do ciclo mais
   // recente (ver planosComProximaExecucao em utils/manutencao-planos.ts) — substitui o
   // antigo planosPreventivosDaArea+planosJaProgramados: não precisa mais de uma lista de
   // exclusão separada, porque a próxima data já avança sozinha a cada ciclo registrado
   // (não fica presa depois da primeira programação, como o sistema antigo ficava).
+  // A partir da semana 39 (ver regrasNovasValemHoje), planos do MESMO equipamento
+  // vencendo no mesmo mês são alinhados pra sair juntos (alinharDatasPorEquipamento) —
+  // roda aqui, antes de qualquer filtro de semana/corte, pra garantir que o MESMO
+  // objeto usado no @for da tabela e passado pra programarDaPreventiva já carregue a
+  // data alinhada.
   private planosComProximaDaArea = computed<PlanoComProximaData[]>(() => {
     const area = this.areaFixa;
     if (!area) return [];
     const planosDaArea = this.manutencaoPlanosService.planos().filter(p => p.area === area);
     const ultimoCicloPorPlano = new Map(planosDaArea.map(p => [p.id, this.manutencaoPlanosService.ultimoCicloDoPlano(p.id)]));
-    return planosComProximaExecucao(planosDaArea, ultimoCicloPorPlano, this.plantaParadaAtiva());
+    const comProxima = planosComProximaExecucao(planosDaArea, ultimoCicloPorPlano, this.plantaParadaAtiva());
+    return this.regrasNovasValemHoje() ? alinharDatasPorEquipamento(comProxima) : comProxima;
   });
 
   // Parada da planta (Admin-only, ver "Gerenciar" no menu) — enquanto ativa, ciclo
@@ -1176,14 +1201,47 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return sugestoesDaSemana(this.planosComProximaDaArea(), inicioSemana, fimSemana, this.regrasNovasValemNaSemana());
   });
 
-  preventivasVencendo = computed(() => this.preventivasVencendoTodas().slice(0, this.loteePreventivasPorSemana()));
+  // Apoio (a partir da semana 39, ver regrasNovasValemHoje): corte por equipe em vez de
+  // corte único de área — ver LIMITE_PREVENTIVAS_POR_EQUIPE_APOIO/limitarPorEquipeApoio.
+  // Elétrica/Mecânica (e Apoio antes da semana 39) continuam com o corte de área único
+  // de sempre. NUNCA aplicado em preventivasVencendoTodas nem em preventivasAtrasadas —
+  // as duas continuam mostrando o backlog real, sem esconder nada atrasado por causa
+  // do corte por equipe.
+  preventivasVencendo = computed(() => {
+    const todas = this.preventivasVencendoTodas();
+    if (this.areaFixa === 'APOIO' && this.regrasNovasValemHoje()) {
+      return limitarPorEquipeApoio(todas, this.LIMITE_PREVENTIVAS_POR_EQUIPE_APOIO);
+    }
+    return todas.slice(0, this.loteePreventivasPorSemana());
+  });
 
-  // "Mostrando os 20 mais urgentes de 356" quando tem mais na fila do que o lote mostra.
+  private readonly NOME_EQUIPE_APOIO: Record<ChaveEquipeApoio, string> = {
+    REFRIGERACAO: 'SERVPLEX', LIMP_OPERACIONAL: 'OPERAÇÃO', SPCI: 'BMS',
+    MECANICA: 'Mecânica', ELETRICA: 'Elétrica', [EQUIPE_APOIO_NAO_CLASSIFICADA]: 'Não classificado',
+  };
+
+  // "Mostrando os 20 mais urgentes de 356" quando tem mais na fila do que o lote mostra
+  // — pra Apoio (a partir da semana 39) vira um resumo por equipe (ex.: "SERVPLEX: 5/12
+  // · OPERAÇÃO: 5/8 · BMS: 3/3"), já que o corte agora é por equipe, não por área.
   preventivasVencendoLabel = computed(() => {
+    if (this.areaFixa === 'APOIO' && this.regrasNovasValemHoje()) {
+      const resumo = resumoPorEquipeApoio(this.preventivasVencendoTodas(), this.LIMITE_PREVENTIVAS_POR_EQUIPE_APOIO)
+        .filter(r => r.total > 0);
+      if (resumo.length === 0) return '';
+      return resumo.map(r => `${this.NOME_EQUIPE_APOIO[r.equipe]}: ${r.mostrados}/${r.total}`).join(' · ');
+    }
     const total = this.preventivasVencendoTodas().length;
     const mostrados = this.preventivasVencendo().length;
     return total > mostrados ? `Mostrando os ${mostrados} mais urgentes de ${total} pendentes` : '';
   });
+
+  // Rótulo de equipe por linha, na tabela de Preventivas do Apoio — resolve a confusão
+  // original de não dar pra ver de cara qual linha é de qual equipe (todas misturadas
+  // numa lista só). Mesma inferência de limitarPorEquipeApoio/resumoPorEquipeApoio.
+  equipeDoPlano(plano: PlanoComProximaData): string {
+    const equipe = inferirCategoriaIndicadorPorTecnico(plano.responsavel ?? '') ?? EQUIPE_APOIO_NAO_CLASSIFICADA;
+    return this.NOME_EQUIPE_APOIO[equipe];
+  }
 
   // OS já criadas a partir de um plano preventivo, com dia dentro da semana
   // selecionada — usado só pra calcular o velocímetro (quanto da leva da semana já foi
