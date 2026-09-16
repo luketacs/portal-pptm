@@ -327,7 +327,12 @@ export class ManutencaoPlanosComponent implements OnInit {
   formTagKks = signal('');
   formArea = signal<ManutencaoArea>('ELETRICA');
   formEspecialidade = signal('');
-  formAtividadesTexto = signal(''); // uma atividade por linha
+  // Passo a passo do checklist, em ordem — cada item é uma linha (ver
+  // adicionarAtividade/moverAtividade/removerAtividade). Trocou de textarea livre (um
+  // campo só, sem reordenar) pra lista editável — pedido do usuário: digitar tudo
+  // num campo só não dava pra organizar/reordenar direito.
+  formAtividadesLista = signal<string[]>([]);
+  formAtividadeDigitando = signal('');
   formPeriodicidadePreset = signal<string>('Mensal');
   formPeriodicidadeValor = signal(1);
   formPeriodicidadeUnidade = signal<PeriodicidadeUnidade>('Mes(es)');
@@ -388,7 +393,8 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formTagKks.set('');
     this.formArea.set('ELETRICA');
     this.formEspecialidade.set('');
-    this.formAtividadesTexto.set('');
+    this.formAtividadesLista.set([]);
+    this.formAtividadeDigitando.set('');
     this.formPeriodicidadePreset.set('Mensal');
     this.formPeriodicidadeValor.set(1);
     this.formPeriodicidadeUnidade.set('Mes(es)');
@@ -411,7 +417,8 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formTagKks.set(plano.tagKks ?? '');
     this.formArea.set(plano.area);
     this.formEspecialidade.set(plano.especialidade ?? '');
-    this.formAtividadesTexto.set(plano.atividades.join('\n'));
+    this.formAtividadesLista.set([...plano.atividades]);
+    this.formAtividadeDigitando.set('');
     const preset = PERIODICIDADE_PRESETS.find(p => p.valor === plano.periodicidadeValor && p.unidade === plano.periodicidadeUnidade);
     this.formPeriodicidadePreset.set(preset ? preset.label : 'Personalizada');
     this.formPeriodicidadeValor.set(plano.periodicidadeValor);
@@ -432,6 +439,31 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formAberto.set(false);
   }
 
+  adicionarAtividade(texto: string): void {
+    const t = texto.trim();
+    if (!t) return;
+    this.formAtividadesLista.update(lista => [...lista, t]);
+    this.formAtividadeDigitando.set('');
+  }
+
+  removerAtividade(index: number): void {
+    this.formAtividadesLista.update(lista => lista.filter((_, i) => i !== index));
+  }
+
+  atualizarTextoAtividade(index: number, texto: string): void {
+    this.formAtividadesLista.update(lista => lista.map((item, i) => (i === index ? texto : item)));
+  }
+
+  moverAtividade(index: number, direcao: -1 | 1): void {
+    this.formAtividadesLista.update(lista => {
+      const novoIndex = index + direcao;
+      if (novoIndex < 0 || novoIndex >= lista.length) return lista;
+      const copia = [...lista];
+      [copia[index], copia[novoIndex]] = [copia[novoIndex], copia[index]];
+      return copia;
+    });
+  }
+
   podeConfirmar = computed(() =>
     !this.isProcessando() && this.formNome().trim().length > 0 && this.formEquipamento().trim().length > 0
     && this.formPeriodicidadeValor() > 0 && !!this.formDataInicial());
@@ -440,7 +472,7 @@ export class ManutencaoPlanosComponent implements OnInit {
     if (!this.podeConfirmar()) return;
     this.isProcessando.set(true);
     try {
-      const atividades = this.formAtividadesTexto().split('\n').map(a => a.trim()).filter(Boolean);
+      const atividades = this.formAtividadesLista().map(a => a.trim()).filter(Boolean);
       const idEdicao = this.formIdEdicao();
       if (idEdicao) {
         await this.manutencaoPlanosService.editar(idEdicao, {
