@@ -222,17 +222,19 @@ describe('limitarPorEquipeApoio', () => {
     expect(resultado.filter(p => p.id.startsWith('bms'))).toHaveLength(5);
   });
 
-  it('grupo de 2 planos já alinhados ao mesmo equipamento+data conta como 1 vaga só — pode sair mais de N linhas', () => {
-    const singles = Array.from({ length: 4 }, (_, i) => planoApoio(`single${i}`, 'SERVPLEX', '2026-09-10'));
-    const par = [
-      planoApoio('par-a', 'SERVPLEX', '2026-09-15', 'BOMBA-01'),
-      planoApoio('par-b', 'SERVPLEX', '2026-09-15', 'BOMBA-01'),
-    ];
-    const resultado = limitarPorEquipeApoio([...singles, ...par], 5);
-    expect(resultado.map(p => p.id)).toEqual(['single0', 'single1', 'single2', 'single3', 'par-a', 'par-b']);
+  // Reportado: a versão anterior contava um grupo de mesmo equipamento+data como 1 vaga
+  // só (pedido original do usuário), o que deixou passar 44 planos de uma vez quando
+  // muitas tarefas do mesmo KKS caíam juntas — o usuário confirmou depois que o limite
+  // de 5 é RÍGIDO, sem exceção nenhuma pra "mesmo equipamento". Corte agora é estrito
+  // em cima de planos, nunca deixa passar de N mesmo quando vários compartilham
+  // equipamento+data.
+  it('mesmo quando vários planos compartilham equipamento+data, o corte de N por equipe continua rígido', () => {
+    const mesmoEquipamento = Array.from({ length: 10 }, (_, i) => planoApoio(`kks${i}`, 'SERVPLEX', '2026-09-15', 'BOMBA-01'));
+    const resultado = limitarPorEquipeApoio(mesmoEquipamento, 5);
+    expect(resultado).toHaveLength(5);
   });
 
-  it('6º slot (não-pareado) de uma equipe já no limite fica de fora', () => {
+  it('6º plano de uma equipe já no limite fica de fora', () => {
     const planos = Array.from({ length: 6 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
     const resultado = limitarPorEquipeApoio(planos, 5);
     expect(resultado.map(p => p.id)).not.toContain('sp5');
@@ -258,7 +260,7 @@ describe('resumoPorEquipeApoio', () => {
     return comProxima({ id, area: 'APOIO', responsavel, tagKks: kks }, proximaData);
   }
 
-  it('conta vagas (equipamento+data distintos) por equipe, com mostrados = min(total, limite)', () => {
+  it('conta planos (1 por plano, não por equipamento) por equipe, com mostrados = min(total, limite)', () => {
     const servplex = Array.from({ length: 12 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
     const bms = Array.from({ length: 3 }, (_, i) => planoApoio(`bms${i}`, 'BMS', '2026-09-10'));
     const resultado = resumoPorEquipeApoio([...servplex, ...bms], 5);
@@ -266,13 +268,13 @@ describe('resumoPorEquipeApoio', () => {
     expect(resultado.find(r => r.equipe === 'SPCI')).toEqual({ equipe: 'SPCI', total: 3, mostrados: 3 });
   });
 
-  it('um grupo de mesmo equipamento+data conta como 1 vaga só no total', () => {
+  it('planos que compartilham equipamento+data contam 1 por plano no total (sem exceção)', () => {
     const par = [
       planoApoio('a', 'SERVPLEX', '2026-09-15', 'BOMBA-01'),
       planoApoio('b', 'SERVPLEX', '2026-09-15', 'BOMBA-01'),
     ];
     const resultado = resumoPorEquipeApoio(par, 5);
-    expect(resultado.find(r => r.equipe === 'REFRIGERACAO')).toEqual({ equipe: 'REFRIGERACAO', total: 1, mostrados: 1 });
+    expect(resultado.find(r => r.equipe === 'REFRIGERACAO')).toEqual({ equipe: 'REFRIGERACAO', total: 2, mostrados: 2 });
   });
 
   it('responsavel não reconhecido cai em NAO_CLASSIFICADO', () => {

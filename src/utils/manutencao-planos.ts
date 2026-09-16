@@ -166,11 +166,14 @@ export type ChaveEquipeApoio = CategoriaIndicador | typeof EQUIPE_APOIO_NAO_CLAS
 // backlog e aparece sozinho numa semana futura assim que virar top-N da fila da PRÓPRIA
 // equipe (mesmo raciocínio do comentário de LOTE_PREVENTIVAS_POR_SEMANA no componente).
 //
-// Um grupo de planos já alinhados ao MESMO equipamento+data por alinharDatasPorEquipamento
-// conta como 1 vaga só, não 1 por plano — pedido explícito do usuário ("em casos de
-// mesmo equipamento, o sistema pode colocar mais de 5"): a lista pode ter mais de
-// `limitePorEquipe` linhas numa semana, desde que o excedente venha "de carona" num
-// equipamento já contado.
+// Cap ESTRITO em cima de PLANOS, não de "vagas"/equipamento — reportado: a versão
+// anterior contava um grupo de mesmo equipamento+data como 1 vaga só (pedido do
+// usuário original: "em casos de mesmo equipamento, o sistema pode colocar mais de
+// 5"), mas isso deixava passar 44 planos de uma vez quando muitas tarefas diferentes
+// do mesmo KKS caíam juntas — o usuário confirmou depois que isso NUNCA pode
+// acontecer, o limite de 5 é rígido, sem exceção. alinharDatasPorEquipamento continua
+// alinhando a DATA de planos do mesmo equipamento (isso não infla contagem nenhuma),
+// só o corte aqui virou sem exceção.
 //
 // `responsavel` vazio/não reconhecido cai no balde NAO_CLASSIFICADO, com cota PRÓPRIA —
 // assim não estoura silenciosamente o orçamento de uma equipe conhecida nem some da
@@ -178,52 +181,39 @@ export type ChaveEquipeApoio = CategoriaIndicador | typeof EQUIPE_APOIO_NAO_CLAS
 export function limitarPorEquipeApoio(
   planosOrdenados: PlanoComProximaData[], limitePorEquipe: number,
 ): PlanoComProximaData[] {
-  const porSlot = new Map<string, PlanoComProximaData[]>();
-  const ordemSlots: string[] = [];
-  for (const p of planosOrdenados) {
-    const chave = `${chaveEquipamento(p)}||${p.proximaData}`;
-    const slot = porSlot.get(chave);
-    if (slot) slot.push(p);
-    else { porSlot.set(chave, [p]); ordemSlots.push(chave); }
-  }
-
   const contagemPorEquipe = new Map<ChaveEquipeApoio, number>();
-  const idsIncluidos = new Set<string>();
-  for (const chave of ordemSlots) {
-    const slot = porSlot.get(chave)!;
-    const equipe = inferirCategoriaIndicadorPorTecnico(slot[0].responsavel ?? '') ?? EQUIPE_APOIO_NAO_CLASSIFICADA;
+  const resultado: PlanoComProximaData[] = [];
+  for (const p of planosOrdenados) {
+    const equipe = inferirCategoriaIndicadorPorTecnico(p.responsavel ?? '') ?? EQUIPE_APOIO_NAO_CLASSIFICADA;
     const usados = contagemPorEquipe.get(equipe) ?? 0;
     if (usados >= limitePorEquipe) continue;
     contagemPorEquipe.set(equipe, usados + 1);
-    for (const p of slot) idsIncluidos.add(p.id);
+    resultado.push(p);
   }
-  return planosOrdenados.filter(p => idsIncluidos.has(p.id));
+  return resultado;
 }
 
 export interface ResumoEquipeApoio {
   equipe: ChaveEquipeApoio;
-  total: number; // vagas (equipamento+data distintos) pendentes pra essa equipe
-  mostrados: number; // quantas entraram no corte de limitePorEquipe
+  total: number; // planos pendentes pra essa equipe
+  mostrados: number; // quantos entraram no corte de limitePorEquipe
 }
 
-// Contagem por equipe (mesma unidade de "vaga" de limitarPorEquipeApoio: equipamento+
-// data distintos, não 1 por plano) pra montar o resumo "SERVPLEX: 5/12 · BMS: 3/3" no
-// lugar do texto único "Mostrando N de M pendentes" que a área inteira usa hoje —
-// mostrados é sempre min(total, limitePorEquipe) porque o corte é um top-N sequencial
-// simples por equipe, sem nenhum outro motivo de exclusão.
+// Contagem por equipe (1 por PLANO, mesma unidade estrita de limitarPorEquipeApoio) pra
+// montar o resumo "SERVPLEX: 5/12 · BMS: 3/3" no lugar do texto único "Mostrando N de M
+// pendentes" que a área inteira usa hoje — mostrados é sempre min(total, limitePorEquipe)
+// porque o corte é um top-N sequencial simples por equipe, sem nenhum outro motivo de
+// exclusão.
 export function resumoPorEquipeApoio(
   planosOrdenados: PlanoComProximaData[], limitePorEquipe: number,
 ): ResumoEquipeApoio[] {
-  const vagasPorEquipe = new Map<ChaveEquipeApoio, Set<string>>();
+  const totalPorEquipe = new Map<ChaveEquipeApoio, number>();
   for (const p of planosOrdenados) {
     const equipe = inferirCategoriaIndicadorPorTecnico(p.responsavel ?? '') ?? EQUIPE_APOIO_NAO_CLASSIFICADA;
-    const chaveVaga = `${chaveEquipamento(p)}||${p.proximaData}`;
-    const set = vagasPorEquipe.get(equipe);
-    if (set) set.add(chaveVaga);
-    else vagasPorEquipe.set(equipe, new Set([chaveVaga]));
+    totalPorEquipe.set(equipe, (totalPorEquipe.get(equipe) ?? 0) + 1);
   }
-  return [...vagasPorEquipe.entries()]
-    .map(([equipe, vagas]) => ({ equipe, total: vagas.size, mostrados: Math.min(vagas.size, limitePorEquipe) }))
+  return [...totalPorEquipe.entries()]
+    .map(([equipe, total]) => ({ equipe, total, mostrados: Math.min(total, limitePorEquipe) }))
     .sort((a, b) => b.total - a.total);
 }
 
