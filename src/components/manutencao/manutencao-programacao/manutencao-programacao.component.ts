@@ -37,6 +37,7 @@ interface FichaImpressaoOs {
   loto: string | null;
   duracaoHoras: number | null;
   checklist: string[] | null;
+  tipoServico: string | null;
   tecnicos: string[];
 }
 
@@ -467,6 +468,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       loto: linhas[0].loto,
       duracaoHoras: linhas[0].duracaoHoras,
       checklist: linhas[0].checklist,
+      tipoServico: linhas[0].tipoServico,
       tecnicos: linhas.map(l => l.tecnicoNome),
     }));
   });

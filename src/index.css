@@ -110,6 +110,14 @@ input, button, textarea, select { font: inherit; }
     margin-left: 0 !important;
     padding: 1.5rem !important;
     width: 100% !important;
+    /* app-main usa overflow-y-auto (scroll) + flex-1 (altura travada) pra rolar na
+       tela — impresso, isso corta o conteúdo na altura da viewport e faz o
+       navegador ignorar os saltos de página forçados (break-after) das fichas
+       dentro dele, empilhando mais de uma por folha. Sem limite de altura/overflow
+       na impressão, o fluxo normal de página volta a valer. */
+    overflow: visible !important;
+    height: auto !important;
+    flex: none !important;
   }
 
   .print-only {
