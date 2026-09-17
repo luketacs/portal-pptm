@@ -377,6 +377,21 @@ export class ManutencaoPlanosComponent implements OnInit {
   // Continua sendo texto livre (datalist não bloqueia digitar algo fora da lista).
   catalogoEquipamentos = computed(() => this.manutencaoProgramacaoService.equipamentos());
 
+  // Sugestões customizadas pro campo acima — trocou o <datalist> nativo (autocomplete
+  // do navegador, sem controle nenhum de estilo — feio e desalinhado, ver captura de
+  // tela do usuário) por um dropdown próprio, mesmo padrão visual dos outros pickers
+  // desta tela (copiar checklist). Continua sendo texto livre: clicar numa sugestão
+  // preenche rápido, mas Enter/+ ainda aceita qualquer texto digitado, dentro ou fora
+  // do catálogo.
+  formEquipamentosRelacionadosCandidatos = computed<string[]>(() => {
+    const termo = this.formEquipamentosRelacionadosDigitando().trim().toLowerCase();
+    if (!termo) return [];
+    const jaAdicionados = new Set(this.formEquipamentosRelacionadosLista().map(e => e.toUpperCase()));
+    return this.catalogoEquipamentos()
+      .filter(eq => eq.toLowerCase().includes(termo) && !jaAdicionados.has(eq.toUpperCase()))
+      .slice(0, 8);
+  });
+
   adicionarEquipamentoRelacionado(valor: string): void {
     const v = valor.trim();
     if (!v) return;

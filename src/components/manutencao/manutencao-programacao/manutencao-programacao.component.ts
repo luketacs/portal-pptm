@@ -1826,6 +1826,19 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formApoioDiasPorRecurso.update(({ [valor]: _removido, ...resto }) => resto);
   }
 
+  // Sugestões customizadas — trocou o <datalist> nativo (autocomplete do navegador,
+  // sem controle de estilo, ver captura de tela do usuário) por um dropdown próprio,
+  // mesmo padrão visual dos outros pickers da tela. Continua texto livre: Enter/+
+  // aceita qualquer valor digitado, dentro ou fora do catálogo.
+  formEquipamentosRelacionadosCandidatos = computed<string[]>(() => {
+    const termo = this.formEquipamentosRelacionadosDigitando().trim().toLowerCase();
+    if (!termo) return [];
+    const jaAdicionados = new Set(this.formEquipamentosRelacionadosLista().map(e => e.toUpperCase()));
+    return this.equipamentos()
+      .filter(eq => eq.toLowerCase().includes(termo) && !jaAdicionados.has(eq.toUpperCase()))
+      .slice(0, 8);
+  });
+
   adicionarEquipamentoRelacionado(valor: string): void {
     const v = valor.trim();
     if (!v) return;

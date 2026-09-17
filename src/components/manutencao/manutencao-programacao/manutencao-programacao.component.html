@@ -1365,16 +1365,21 @@
           <div class="flex gap-1.5">
             <input type="text" [ngModel]="formEquipamentosRelacionadosDigitando()" (ngModelChange)="formEquipamentosRelacionadosDigitando.set($event)"
               (keydown.enter)="$event.preventDefault(); adicionarEquipamentoRelacionado(formEquipamentosRelacionadosDigitando())"
-              placeholder="Outro equipamento (ex.: esteira relacionada)" list="programacao-equipamentos-catalogo"
+              placeholder="Outro equipamento (ex.: esteira relacionada)" autocomplete="off"
               class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             <button type="button" (click)="adicionarEquipamentoRelacionado(formEquipamentosRelacionadosDigitando())" title="Adicionar"
               class="px-3 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-semibold">+</button>
           </div>
-          <datalist id="programacao-equipamentos-catalogo">
-            @for (eq of equipamentos(); track eq) {
-              <option [value]="eq"></option>
-            }
-          </datalist>
+          @if (formEquipamentosRelacionadosCandidatos().length > 0) {
+            <div class="mt-1.5 space-y-1 max-h-40 overflow-y-auto">
+              @for (eq of formEquipamentosRelacionadosCandidatos(); track eq) {
+                <button type="button" (click)="adicionarEquipamentoRelacionado(eq)"
+                  class="w-full text-left rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition">
+                  {{ eq }}
+                </button>
+              }
+            </div>
+          }
           <p class="text-[11px] text-gray-400 mt-1">Só preencha se esse serviço exige mais de um equipamento com o mesmo status de LOTO ao mesmo tempo — cada um entra no Quadro de LOTO junto com "{{ formEquipamento() || 'Equipamento' }}".</p>
         </div>
 
