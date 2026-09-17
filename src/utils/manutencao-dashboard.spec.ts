@@ -1,4 +1,4 @@
-import { calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, ordemExecutadaAgrupada } from './manutencao-dashboard';
+import { calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, ordemExecutadaAgrupada } from './manutencao-dashboard';
 import { ConsultaSigmaResultado, ManutencaoOrdem } from '../models/manutencao-programacao.model';
 
 const DIAS_SEMANA_37 = [
@@ -171,20 +171,20 @@ describe('ordemExecutadaAgrupada', () => {
   it('colaborador resolvido (individual): exige apontamento DAQUELA matrícula dentro da semana', () => {
     const executada = ordem();
     const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
-      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '20006136' }] },
+      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '20006136', horas: 6.5 }] },
     };
     expect(ordemExecutadaAgrupada([executada], sigmaPorOs, matchPorMatricula)).toEqual(['executada']);
 
     // Apontamento existe, mas é de outra matrícula — não conta pra esse técnico específico.
     const outraPessoa: Record<string, ConsultaSigmaResultado> = {
-      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '11111111' }] },
+      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '11111111', horas: 6.5 }] },
     };
     expect(ordemExecutadaAgrupada([executada], outraPessoa, matchPorMatricula)).toEqual(['nao-executada']);
   });
 
   it('apontamento fora da semana (mesmo com matrícula certa) não conta como executada', () => {
     const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
-      '045203': { os: null, apontamentos: [{ data: '2026-09-21', status: 'EXEC', executante: '20006136' }] }, // semana seguinte
+      '045203': { os: null, apontamentos: [{ data: '2026-09-21', status: 'EXEC', executante: '20006136', horas: 6.5 }] }, // semana seguinte
     };
     expect(ordemExecutadaAgrupada([ordem()], sigmaPorOs, matchPorMatricula)).toEqual(['nao-executada']);
   });
@@ -192,7 +192,7 @@ describe('ordemExecutadaAgrupada', () => {
   it('apontamento em dia da semana diferente do diasPrevistos ainda conta (semana inteira, não o dia exato)', () => {
     const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
       // diasPrevistos da ordem é '2026-09-08' (terça); apontamento caiu na sexta, mesma semana.
-      '045203': { os: null, apontamentos: [{ data: '2026-09-11', status: 'EXEC', executante: '20006136' }] },
+      '045203': { os: null, apontamentos: [{ data: '2026-09-11', status: 'EXEC', executante: '20006136', horas: 6.5 }] },
     };
     expect(ordemExecutadaAgrupada([ordem()], sigmaPorOs, matchPorMatricula)).toEqual(['executada']);
   });
@@ -204,14 +204,14 @@ describe('ordemExecutadaAgrupada', () => {
     expect(ordemExecutadaAgrupada([apoioOrdem], semApontamento, matchPorMatricula)).toEqual(['nao-executada']);
 
     const comApontamentoDeQualquerUm: Record<string, ConsultaSigmaResultado> = {
-      '045203': { os: null, apontamentos: [{ data: '2026-09-10', status: 'EXEC', executante: '55555555' }] },
+      '045203': { os: null, apontamentos: [{ data: '2026-09-10', status: 'EXEC', executante: '55555555', horas: 6.5 }] },
     };
     expect(ordemExecutadaAgrupada([apoioOrdem], comApontamentoDeQualquerUm, matchPorMatricula)).toEqual(['executada']);
   });
 
   it('agrupa por número de OS: só "executada" quando TODAS as linhas do grupo estão OK — com só 1 delas OK, é "parcial"', () => {
     const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
-      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '20006136' }] }, // só a matrícula da linha 1
+      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '20006136', horas: 6.5 }] }, // só a matrícula da linha 1
     };
     const linha1 = ordem({ id: 'l1' });
     const linha2 = ordem({ id: 'l2', tecnicoMatricula: '77777777' }); // outra pessoa, sem apontamento dela
@@ -224,12 +224,77 @@ describe('ordemExecutadaAgrupada', () => {
   // esse "faltou só uma parte" (caso real: OS 45095, Rafael Bruno + Antônio José).
   it('agrupa por número de OS: "parcial" quando SÓ ALGUMAS linhas do grupo têm apontamento (nem todas, nem nenhuma)', () => {
     const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
-      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '20006136' }] }, // só a matrícula da linha 1
+      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '20006136', horas: 6.5 }] }, // só a matrícula da linha 1
     };
     const matchDuasMatriculas = (matricula: string | null) =>
       matricula === '20006136' ? { matricula: '20006136' } : matricula === '77777777' ? { matricula: '77777777' } : null;
     const linha1 = ordem({ id: 'l1' });
     const linha2 = ordem({ id: 'l2', tecnicoMatricula: '77777777' }); // colaborador resolvido, mas sem apontamento dele
     expect(ordemExecutadaAgrupada([linha1, linha2], sigmaPorOs, matchDuasMatriculas)).toEqual(['parcial']);
+  });
+});
+
+// Reportado: "horas apontadas" mostrava a duração PROGRAMADA da ordem inteira assim
+// que ela virava "executada" (ex.: colaborador com 26h "apontadas" sem ter apontado
+// nada perto disso) — essas cobrem a soma real, separada do status de execução acima.
+describe('horasApontadasDoColaborador', () => {
+  it('soma as horas REAIS do apontamento, não a duração programada da ordem', () => {
+    const o = ordem({ duracaoHoras: 8 }); // programado 8h
+    const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
+      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '20006136', horas: 2.5 }] }, // apontou só 2,5h
+    };
+    expect(horasApontadasDoColaborador([o], sigmaPorOs, '20006136')).toBe(2.5);
+  });
+
+  it('não conta apontamento de outra matrícula, mesmo que a OS tenha apontamento de alguém', () => {
+    const o = ordem();
+    const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
+      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '11111111', horas: 6.5 }] },
+    };
+    expect(horasApontadasDoColaborador([o], sigmaPorOs, '20006136')).toBe(0);
+  });
+
+  it('não conta apontamento fora da semana da ordem', () => {
+    const o = ordem();
+    const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
+      '045203': { os: null, apontamentos: [{ data: '2026-09-21', status: 'EXEC', executante: '20006136', horas: 6.5 }] }, // semana seguinte
+    };
+    expect(horasApontadasDoColaborador([o], sigmaPorOs, '20006136')).toBe(0);
+  });
+
+  it('soma múltiplos apontamentos da mesma pessoa na mesma OS/semana', () => {
+    const o = ordem();
+    const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
+      '045203': {
+        os: null,
+        apontamentos: [
+          { data: '2026-09-08', status: 'EXEC', executante: '20006136', horas: 4 },
+          { data: '2026-09-09', status: 'EXEC', executante: '20006136', horas: 3.5 },
+        ],
+      },
+    };
+    expect(horasApontadasDoColaborador([o], sigmaPorOs, '20006136')).toBe(7.5);
+  });
+
+  it('agrupa por OS — não soma o apontamento 2x quando a mesma pessoa tem 2 linhas na mesma OS', () => {
+    const linha1 = ordem({ id: 'l1' });
+    const linha2 = ordem({ id: 'l2' }); // mesmo numeroOs, mesma pessoa (ex.: erro de cadastro duplicado)
+    const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
+      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '20006136', horas: 6.5 }] },
+    };
+    expect(horasApontadasDoColaborador([linha1, linha2], sigmaPorOs, '20006136')).toBe(6.5);
+  });
+
+  it('apontamento sem hora início/fim válida (horas=null) soma 0, não quebra', () => {
+    const o = ordem();
+    const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
+      '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '20006136', horas: null }] },
+    };
+    expect(horasApontadasDoColaborador([o], sigmaPorOs, '20006136')).toBe(0);
+  });
+
+  it('sem número de OS ou sem resultado do SIGMA, soma 0', () => {
+    expect(horasApontadasDoColaborador([ordem({ numeroOs: null })], {}, '20006136')).toBe(0);
+    expect(horasApontadasDoColaborador([ordem()], {}, '20006136')).toBe(0);
   });
 });

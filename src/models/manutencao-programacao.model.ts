@@ -215,6 +215,10 @@ export interface SigmaApontamento {
   data: string; // 'YYYY-MM-DD'
   status: string;
   executante: string; // matrícula de quem apontou (campo "Executante" do export)
+  // Horas REAIS desse apontamento (Hora Final - Hora Inicial, menos almoço) — null
+  // quando a linha do SIGMA não tinha hora início/fim válida. Ver
+  // calcularHorasPorTecnico em manutencao-indicadores-semanais.component.ts.
+  horas: number | null;
 }
 
 export interface ConsultaSigmaResultado {

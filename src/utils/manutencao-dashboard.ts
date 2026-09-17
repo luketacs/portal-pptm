@@ -88,6 +88,47 @@ export function ordemExecutadaAgrupada(
   });
 }
 
+// Soma as horas REAIS apontadas por UM colaborador específico (matrícula), dentro da
+// semana de cada ordem — reportado: "horas apontadas" estava contando a duração
+// PROGRAMADA da ordem inteira assim que ela virava "executada" (ver
+// ordemExecutadaAgrupada acima), não o que a pessoa de fato apontou no SIGMA. Um
+// colaborador com uma ordem de 8h programada que apontou só 2h (ou nem apontou, e
+// outro colega da mesma OS que apontou fez a ordem contar como "executada") aparecia
+// com 8h "apontadas" — número que não existe em lugar nenhum do apontamento real dele.
+// Agrupa por número de OS (mesmo motivo de ordemExecutadaAgrupada: apoio dividido
+// entre 2+ linhas da mesma OS não pode somar o apontamento da mesma pessoa 2x) e soma
+// só os apontamentos cujo executante bate com a matrícula recebida, dentro da semana
+// da ordem (segunda até domingo, mesmo critério de "dentro da semana" de sempre — não
+// só os dias PREVISTOS, pra cobrir troca de dia dentro da mesma semana).
+export function horasApontadasDoColaborador(
+  ordens: ManutencaoOrdem[],
+  sigmaPorOs: Record<string, ConsultaSigmaResultado>,
+  matricula: string,
+): number {
+  const porOs = new Map<string, ManutencaoOrdem[]>();
+  let semOsIdx = 0;
+  for (const o of ordens) {
+    const chave = o.numeroOs?.trim() ? normalizarNumeroOs(o.numeroOs) : `__sem-os-${semOsIdx++}`;
+    const lista = porOs.get(chave);
+    if (lista) lista.push(o);
+    else porOs.set(chave, [o]);
+  }
+
+  let total = 0;
+  for (const linhas of porOs.values()) {
+    if (!linhas[0].numeroOs?.trim()) continue;
+    const resultado = sigmaPorOs[normalizarNumeroOs(linhas[0].numeroOs!)];
+    if (!resultado) continue;
+    const domingo = domingoDaSemana(linhas[0].semanaInicio);
+    for (const a of resultado.apontamentos) {
+      if (a.executante !== matricula) continue;
+      if (a.data < linhas[0].semanaInicio || a.data > domingo) continue;
+      total += a.horas ?? 0;
+    }
+  }
+  return total;
+}
+
 export interface KpiExecucao {
   programadas: number;
   executadas: number;

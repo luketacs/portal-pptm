@@ -17,7 +17,7 @@ import {
 import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, linhaRetaAreaPath, linhaRetaPath, posicionarRotulosFinais } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
 import { MESES_ABREV } from '../../../utils/relatorio-mensal-pcm';
-import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
+import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
 import { encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
@@ -415,12 +415,16 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // 100% ao vivo, a partir do que já roda no resto desta tela (ManutencaoOrdem +
   // consulta ao SIGMA) — NÃO usa a tabela `apontamentos` (essa é alimentada por upload
   // manual de planilha e pode ficar semanas desatualizada, como aconteceu). Programada
-  // = soma de duracaoHoras de toda ordem do técnico no período; Apontada = a mesma
-  // soma, só das ordens que o SIGMA confirma executadas (ordemExecutadaAgrupada, o
-  // mesmo critério usado em "Desempenho por Área" e em statusExecucao() da
-  // Programação — se uma OS já aparece como executada lá, ela também conta aqui);
-  // Disponível = mesma fórmula de hhTotais (calcularHhTecnico), só que por pessoa em
-  // vez de somada. Só Elétrica/Mecânica, mesma restrição do HH acima.
+  // = soma de duracaoHoras de toda ordem do técnico no período; Apontada = soma das
+  // horas REAIS que o SIGMA registra pra esse colaborador especificamente (Hora Final
+  // - Hora Inicial de cada apontamento, ver horasApontadasDoColaborador) — reportado:
+  // antes usava a duração PROGRAMADA da ordem inteira assim que ela virava "executada"
+  // (ordemExecutadaAgrupada), o que superestimava sempre que o apontamento real
+  // divergia do estimado (ex.: colaborador aparecia com "26h apontadas" sem ter
+  // apontado nada perto disso). ordemExecutadaAgrupada continua valendo pra "Desempenho
+  // por Área"/statusExecucao() (esses são sobre STATUS — aconteceu ou não —, não sobre
+  // quantidade de hora). Disponível = mesma fórmula de hhTotais (calcularHhTecnico), só
+  // que por pessoa em vez de somada. Só Elétrica/Mecânica, mesma restrição do HH acima.
   // Pedido do usuário: tirar esse colaborador específico desses gráficos (não do
   // cadastro/matriculas.json em si, só da exibição aqui).
   private readonly NOMES_EXCLUIDOS_HORAS = new Set(['JOAQUIM NETO']);
@@ -442,12 +446,11 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       const ordensDaSemanaTodas = ordensTodas.filter(o => o.semanaInicio === semanaIso);
       for (const item of resultado) {
         const ordensDoTecnico = this.ordensDoColaborador(ordensDaSemanaTodas, item.colaborador);
-        for (const o of ordensDoTecnico.filter(x => x.tipo === 'ordem')) {
-          const horas = o.duracaoHoras ?? 0;
-          item.horasProgramadas += horas;
-          const [status] = ordemExecutadaAgrupada([o], sigmaPorOs, this.matchColaborador);
-          if (status === 'executada') item.horasApontadas += horas;
+        const ordensDoTecnicoTipoOrdem = ordensDoTecnico.filter(x => x.tipo === 'ordem');
+        for (const o of ordensDoTecnicoTipoOrdem) {
+          item.horasProgramadas += o.duracaoHoras ?? 0;
         }
+        item.horasApontadas += horasApontadasDoColaborador(ordensDoTecnicoTipoOrdem, sigmaPorOs, item.colaborador.matricula);
         const r = calcularHhTecnico({
           dias,
           disponibilidadePorDia: new Map(dias.map(d => [d.data, this.apontamentosService.disponibilidadeNoDia(item.colaborador, d.data)])),

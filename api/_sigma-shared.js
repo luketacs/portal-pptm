@@ -23,8 +23,32 @@ export const OS_COL = {
 };
 // Export "apontamentos" (sem aspas):
 export const APONT_COL = {
-  executante: 4, areaManutencao: 6, statusOperacao: 8, data: 9, osProtheus: 20,
+  executante: 4, areaManutencao: 6, statusOperacao: 8, data: 9,
+  horaInicial: 10, horaFinal: 11, intervaloAlmoco: 12, osProtheus: 20,
 };
+
+// Mesma lógica de src/utils/relatorio-apontamentos.ts (parseHoraDecimal/
+// calcularHorasEntre/temAlmoco) — portada pra cá porque esta function roda isolada
+// (Vercel function, sem import de código Angular). Horas REAIS apontadas (Hora Final -
+// Hora Inicial, descontando 1h de almoço quando marcado), não a duração PROGRAMADA da
+// ordem — ver uso em manutencao-indicadores-semanais.component.ts (calcularHorasPorTecnico).
+function parseHoraDecimal(valor) {
+  const v = String(valor ?? '').trim();
+  const m = /^(\d{1,2}):(\d{2})/.exec(v);
+  if (m) return Number(m[1]) + Number(m[2]) / 60;
+  const f = parseFloat(v.replace(',', '.'));
+  return Number.isFinite(f) ? f : null;
+}
+function calcularHorasApontamento(horaInicial, horaFinal, intervaloAlmoco) {
+  const hIni = parseHoraDecimal(horaInicial);
+  const hFim = parseHoraDecimal(horaFinal);
+  if (hIni === null || hFim === null) return null;
+  let fim = hFim;
+  if (fim < hIni) fim += 24; // cruzou a meia-noite
+  const bruta = fim - hIni;
+  const almoco = intervaloAlmoco === 1 || intervaloAlmoco === '1' || String(intervaloAlmoco ?? '').toLowerCase().includes('s');
+  return Math.max(almoco ? bruta - 1 : bruta, 0);
+}
 
 export const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
@@ -138,6 +162,10 @@ export async function carregarDados() {
       // SE FOI AQUELA PESSOA especificamente que apontou, não só "alguém" na OS (ver
       // uso em kanban-atividades-publico.js).
       executante: (row[APONT_COL.executante] || '').trim(),
+      // Horas REAIS desse apontamento específico (Hora Final - Hora Inicial, menos
+      // almoço) — null quando a linha não tem hora início/fim válida. Ver
+      // calcularHorasPorTecnico no Acompanhamento de Indicadores Semanais.
+      horas: calcularHorasApontamento(row[APONT_COL.horaInicial], row[APONT_COL.horaFinal], row[APONT_COL.intervaloAlmoco]),
     });
     apontamentosPorOs.set(numeroOs, lista);
   }

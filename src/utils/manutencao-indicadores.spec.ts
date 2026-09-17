@@ -22,7 +22,7 @@ function sigma(numeroOs: string, executantes: { matricula: string; data: string 
   return {
     [numeroOs]: {
       os: null,
-      apontamentos: executantes.map(e => ({ data: e.data, status: 'EXEC', executante: e.matricula })),
+      apontamentos: executantes.map(e => ({ data: e.data, status: 'EXEC', executante: e.matricula, horas: null })),
     },
   };
 }
