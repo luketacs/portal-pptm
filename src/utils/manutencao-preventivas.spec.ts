@@ -52,6 +52,26 @@ describe('proximaDataFixa', () => {
   it('referência exatamente igual à âncora: não avança (é a própria ocorrência)', () => {
     expect(proximaDataFixa('2026-09-16', 1, 'Mes(es)', '2026-09-16')).toBe('2026-09-16');
   });
+
+  it('sem ultimoCicloIso (padrão), comportamento não muda — ocorrência atual repete até a referência passar dela', () => {
+    expect(proximaDataFixa('2026-09-14', 1, 'Semana(s)', '2026-09-17')).toBe('2026-09-21');
+  });
+
+  it('ocorrência atual já tem ciclo registrado: pula pra próxima, mesmo com a referência ainda dentro dela', () => {
+    expect(proximaDataFixa('2026-09-14', 1, 'Semana(s)', '2026-09-17', '2026-09-21')).toBe('2026-09-28');
+  });
+
+  it('ciclo registrado é ANTERIOR à ocorrência atual: não pula (ocorrência ainda não foi coberta)', () => {
+    expect(proximaDataFixa('2026-09-14', 1, 'Semana(s)', '2026-09-17', '2026-09-14')).toBe('2026-09-21');
+  });
+
+  it('ciclo registrado cobre mais de uma ocorrência de uma vez (ex.: técnico adiantou serviço)', () => {
+    expect(proximaDataFixa('2026-09-01', 1, 'Semana(s)', '2026-09-02', '2026-09-22')).toBe('2026-09-29');
+  });
+
+  it('ultimoCicloIso null (nunca programado) equivale a não passar o argumento', () => {
+    expect(proximaDataFixa('2026-09-14', 1, 'Semana(s)', '2026-09-17', null)).toBe('2026-09-21');
+  });
 });
 
 describe('preventivaVencendo', () => {

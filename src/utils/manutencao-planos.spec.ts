@@ -102,6 +102,29 @@ describe('planosComProximaExecucaoFixa', () => {
     // Efetiva vira 1 Mes(es) a partir de 2026-09-01 -> próxima ocorrência é 2026-10-01.
     expect(resultado[0].proximaData).toBe('2026-10-01');
   });
+
+  it('sem ultimoCicloPorPlano (padrão), comportamento não muda', () => {
+    const planos = [plano({ id: 'p1', dataInicial: '2026-09-14', periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)' })];
+    expect(planosComProximaExecucaoFixa(planos, false, '2026-09-17')[0].proximaData).toBe('2026-09-21');
+  });
+
+  it('plano já com ciclo registrado pra ocorrência atual some da semana — corrige o bug reportado (programar não tirava o plano da lista)', () => {
+    const planos = [plano({ id: 'p1', dataInicial: '2026-09-14', periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)' })];
+    const ultimoCiclo = new Map([['p1', '2026-09-21']]);
+    const resultado = planosComProximaExecucaoFixa(planos, false, '2026-09-17', ultimoCiclo);
+    expect(resultado[0].proximaData).toBe('2026-09-28');
+  });
+
+  it('ciclo registrado de outro plano não afeta os demais (lookup é por id)', () => {
+    const planos = [
+      plano({ id: 'p1', dataInicial: '2026-09-14', periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)' }),
+      plano({ id: 'p2', dataInicial: '2026-09-14', periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)' }),
+    ];
+    const ultimoCiclo = new Map([['p1', '2026-09-21']]);
+    const resultado = planosComProximaExecucaoFixa(planos, false, '2026-09-17', ultimoCiclo);
+    expect(resultado.find(p => p.id === 'p1')!.proximaData).toBe('2026-09-28');
+    expect(resultado.find(p => p.id === 'p2')!.proximaData).toBe('2026-09-21');
+  });
 });
 
 describe('sugestoesDaSemana', () => {

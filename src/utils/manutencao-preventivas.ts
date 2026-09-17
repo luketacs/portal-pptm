@@ -29,12 +29,25 @@ export function calcularProximaData(
 // consequência intencional: um plano do Apoio nunca aparece "atrasado" além da
 // tolerância normal, porque a data sempre pula pro próximo compromisso futuro, nunca
 // fica presa no passado.
+//
+// `ultimoCicloIso` (opcional): data prevista do último ciclo já REGISTRADO pro plano
+// (ver ManutencaoPlanosService.registrarCiclo, chamado toda vez que uma OS é
+// vinculada/criada a partir dele — igual pra área time-based e completion-based).
+// Reportado: programar o plano dentro da semana não tirava ele da lista de
+// "Preventivas vencendo" — a sequência de âncora não sabia que aquela ocorrência já
+// tinha sido atendida, então continuava devolvendo a mesma proximaData a semana
+// inteira. Trata "já tem ciclo registrado pra essa ocorrência (ou depois dela)" do
+// mesmo jeito que "data no passado": avança pra próxima ocorrência da sequência. Não
+// muda o comportamento "sem backlog" (a sequência de âncora continua a mesma,
+// independente de quando cada execução real aconteceu) — só evita repetir uma
+// ocorrência que já foi programada.
 export function proximaDataFixa(
   dataAncora: string, valor: number, unidade: PeriodicidadeUnidade, referenciaIso: string,
+  ultimoCicloIso: string | null = null,
 ): string {
   let atual = dataAncora;
   // Bound de segurança — nenhuma âncora realista fica milhares de ciclos atrás.
-  for (let i = 0; i < 2000 && atual < referenciaIso; i++) {
+  for (let i = 0; i < 2000 && (atual < referenciaIso || (ultimoCicloIso !== null && atual <= ultimoCicloIso)); i++) {
     atual = calcularProximaData(atual, valor, unidade)!;
   }
   return atual;

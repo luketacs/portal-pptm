@@ -1280,13 +1280,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const area = this.areaFixa;
     if (!area) return [];
     const planosDaArea = this.manutencaoPlanosService.planos().filter(p => p.area === area);
+    const ultimoCicloPorPlano = new Map(planosDaArea.map(p => [p.id, this.manutencaoPlanosService.ultimoCicloDoPlano(p.id)]));
     const comProxima = this.AREAS_TIME_BASED.includes(area)
-      ? planosComProximaExecucaoFixa(planosDaArea, this.plantaParadaAtiva(), this.referenciaProximaDataTimeBased())
-      : planosComProximaExecucao(
-          planosDaArea,
-          new Map(planosDaArea.map(p => [p.id, this.manutencaoPlanosService.ultimoCicloDoPlano(p.id)])),
-          this.plantaParadaAtiva(),
-        );
+      ? planosComProximaExecucaoFixa(planosDaArea, this.plantaParadaAtiva(), this.referenciaProximaDataTimeBased(), ultimoCicloPorPlano)
+      : planosComProximaExecucao(planosDaArea, ultimoCicloPorPlano, this.plantaParadaAtiva());
     return this.regrasNovasValemHoje() ? alinharDatasPorEquipamento(comProxima) : comProxima;
   });
 

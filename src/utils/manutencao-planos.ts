@@ -68,18 +68,26 @@ export function planosComProximaExecucao(
   });
 }
 
-// Variante TIME-BASED de planosComProximaExecucao — usada só pro Apoio (ver
-// proximaDataFixa): a próxima execução vem da própria data_inicial do plano
-// (âncora), avançando por ciclos fixos até a próxima ocorrência >= referenciaIso,
-// SEM olhar manutencao_ciclos/última execução real. Pedido do usuário: "não existe
-// backlog, começando do zero" — Elétrica/Mecânica continuam em
-// planosComProximaExecucao (completion-based), sem mudança.
+// Variante TIME-BASED de planosComProximaExecucao — usada pra Apoio/Mecânica/Elétrica
+// (ver proximaDataFixa): a próxima execução vem da própria data_inicial do plano
+// (âncora), avançando por ciclos fixos até a próxima ocorrência >= referenciaIso.
+// Pedido do usuário: "não existe backlog, começando do zero" — a sequência de âncora
+// nunca depende de QUANDO a execução real aconteceu.
+//
+// `ultimoCicloPorPlano` (mesmo Map que planosComProximaExecucao já usa, ver
+// ManutencaoPlanosService.ultimoCicloDoPlano): sem ele, a ocorrência calculada não
+// sabia que já tinha sido programada nessa semana (ver proximaDataFixa) — o plano
+// continuava aparecendo em "Preventivas vencendo" o resto da semana mesmo depois de
+// virar uma OS. Passa o último ciclo registrado do plano pra proximaDataFixa pular
+// pra próxima ocorrência quando já houver ciclo cobrindo a atual.
 export function planosComProximaExecucaoFixa(
   planos: PlanoManutencao[], plantaParada: boolean, referenciaIso: string,
+  ultimoCicloPorPlano: Map<string, string | null> = new Map(),
 ): PlanoComProximaData[] {
   return planos.filter(p => p.ativo).map(p => {
     const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, plantaParada);
-    const proximaData = proximaDataFixa(p.dataInicial, efetiva.valor, efetiva.unidade, referenciaIso);
+    const ultimoCiclo = ultimoCicloPorPlano.get(p.id) ?? null;
+    const proximaData = proximaDataFixa(p.dataInicial, efetiva.valor, efetiva.unidade, referenciaIso, ultimoCiclo);
     return { ...p, proximaData };
   });
 }
