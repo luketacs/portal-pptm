@@ -24,6 +24,7 @@
   { "nome": "Hilton Nascimento",     "matricula": "20005483", "area": "Operação", "disponibilidade": 9.5 },
   { "nome": "Ronney Rocha",          "matricula": "20000674", "area": "Operação", "disponibilidade": 9.5 },
   { "nome": "Carlos Augusto",        "matricula": "20006314", "area": "Operação", "disponibilidade": 9.5 },
+  { "nome": "Alexandre Gomes",       "matricula": "20005480", "area": "Mecânica", "disponibilidade": 9.5, "disponibilidade_pos_corte": 6.5 },
   { "nome": "Mauro Teixeira",        "matricula": "20006309", "area": "Elétrica", "disponibilidade": 9.5, "disponibilidade_pos_corte": 6.5 },
   { "nome": "Anderson Felipe",       "matricula": "20004602", "area": "Operação", "disponibilidade": 9.5 },
   { "nome": "Pascoal Cardoso",       "matricula": "20005485", "area": "Operação", "disponibilidade": 9.5 },

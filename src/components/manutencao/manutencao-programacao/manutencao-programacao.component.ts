@@ -2125,13 +2125,28 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
   }
 
+  // Pessoas que saíram da equipe numa semana CONHECIDA — ficam fora do seletor de
+  // técnico só a partir dela (semanaFiltro() é a referência: o seletor é sempre pra
+  // programar/editar algo NA semana em exibição). Continuam em matriculas.json/
+  // apontamentosService.colaboradores() pra não quebrar matchColaborador nas ordens
+  // antigas que já executaram de verdade (ver mesmo mapa/motivo em
+  // manutencao-indicadores-semanais.component.ts — reportado: tirar do cadastro direto,
+  // como foi feito antes com Alexandre Gomes, ver commit 32ee905, virou 9 ordens da
+  // Mecânica da semana 37 marcadas "Não Executadas" à toa).
+  private readonly INATIVO_A_PARTIR_DE: Record<string, string> = { 'ALEXANDRE GOMES': '2026-09-14' };
+
   private tecnicosPorArea(area: ManutencaoArea): { nome: string; matricula: string | null }[] {
     if (area === 'APOIO') {
       return this.equipesApoio().map(e => ({ nome: e.nome, matricula: null }));
     }
     const termo = area === 'ELETRICA' ? 'ELETR' : 'MECAN';
+    const semana = this.semanaFiltro();
     return this.apontamentosService.colaboradores()
       .filter(c => normalizarTexto(c.area).includes(termo))
+      .filter(c => {
+        const corte = this.INATIVO_A_PARTIR_DE[normalizarTexto(c.nome)];
+        return !corte || semana < corte;
+      })
       .map(c => ({ nome: c.nome, matricula: c.matricula }))
       .sort((a, b) => a.nome.localeCompare(b.nome));
   }

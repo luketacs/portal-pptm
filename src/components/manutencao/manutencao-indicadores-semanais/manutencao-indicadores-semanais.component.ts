@@ -429,12 +429,38 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // cadastro/matriculas.json em si, só da exibição aqui).
   private readonly NOMES_EXCLUIDOS_HORAS = new Set(['JOAQUIM NETO']);
 
+  // Pessoas que saíram da equipe numa semana CONHECIDA — diferente de
+  // NOMES_EXCLUIDOS_HORAS (exclusão permanente, sem data, ex. Joaquim Neto): ficam de
+  // fora só das semanas A PARTIR da saída, continuando normais nas semanas anteriores.
+  // Caso real: ALEXANDRE GOMES trabalhou normalmente até a semana 37 e só fica
+  // indisponível a partir da semana 38 (2026-09-14, pedido do usuário 2026-09-17) — ele
+  // PRECISA continuar em matriculas.json (matchColaborador usa o cadastro completo pra
+  // achar quem apontou no SIGMA em ordens antigas, ver ordemExecutadaAgrupada; tirar ele
+  // de lá quebrava o status de execução das ordens que ele de fato fez, reportado: 9
+  // ordens da Mecânica da semana 37 viraram "Não Executadas" à toa depois da remoção,
+  // ver commit 32ee905, revertido). Esse mapa só controla se a LINHA dele aparece nesta
+  // tabela de HH, sem afetar matching de status em lugar nenhum.
+  private readonly INATIVO_A_PARTIR_DE: Record<string, string> = { 'ALEXANDRE GOMES': '2026-09-14' };
+
+  // true se existe pelo menos uma semana do período em exibição ANTES do corte de
+  // inatividade da pessoa (ou se ela não tem corte nenhum) — período inteiramente
+  // depois do corte não mostra a linha; período que cruza o corte mostra, mas só soma
+  // as semanas anteriores a ele (ver calcularHorasPorTecnico).
+  private tecnicoRelevanteNoPeriodo(nomeNorm: string): boolean {
+    const corte = this.INATIVO_A_PARTIR_DE[nomeNorm];
+    if (!corte) return true;
+    for (const semana of this.semanasDoPeriodoSet()) if (semana < corte) return true;
+    return false;
+  }
+
   private tecnicosEletrica = computed(() =>
     this.apontamentosService.colaboradores()
-      .filter(c => normalizarTexto(c.area).includes('ELETR') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))));
+      .filter(c => normalizarTexto(c.area).includes('ELETR') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))
+        && this.tecnicoRelevanteNoPeriodo(normalizarTexto(c.nome))));
   private tecnicosMecanica = computed(() =>
     this.apontamentosService.colaboradores()
-      .filter(c => normalizarTexto(c.area).includes('MECAN') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))));
+      .filter(c => normalizarTexto(c.area).includes('MECAN') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))
+        && this.tecnicoRelevanteNoPeriodo(normalizarTexto(c.nome))));
 
   private calcularHorasPorTecnico(tecnicos: Colaborador[]): HorasTecnicoItem[] {
     const ferias = this.manutencaoService.ferias();
@@ -445,6 +471,12 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       const dias = diasDaSemana(semanaIso);
       const ordensDaSemanaTodas = ordensTodas.filter(o => o.semanaInicio === semanaIso);
       for (const item of resultado) {
+        // Semana >= corte de inatividade da pessoa (ver INATIVO_A_PARTIR_DE) não soma
+        // nada pro período — ex.: Alexandre Gomes some das semanas 38 em diante, mas
+        // continua contando normal nas semanas anteriores dentro do mesmo período (modo
+        // Mês cruzando o corte).
+        const corte = this.INATIVO_A_PARTIR_DE[normalizarTexto(item.colaborador.nome)];
+        if (corte && semanaIso >= corte) continue;
         const ordensDoTecnico = this.ordensDoColaborador(ordensDaSemanaTodas, item.colaborador);
         const ordensDoTecnicoTipoOrdem = ordensDoTecnico.filter(x => x.tipo === 'ordem');
         for (const o of ordensDoTecnicoTipoOrdem) {

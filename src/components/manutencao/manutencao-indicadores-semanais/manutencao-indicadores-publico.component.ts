@@ -488,10 +488,26 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
 
   private readonly NOMES_EXCLUIDOS_HORAS = new Set(['JOAQUIM NETO']);
 
+  // Pessoas que saíram da equipe numa semana CONHECIDA (diferente de
+  // NOMES_EXCLUIDOS_HORAS, sem data) — ver o mesmo mapa/comentário em
+  // manutencao-indicadores-semanais.component.ts. Fica de fora só das semanas A PARTIR
+  // da saída; continua no cadastro (colaboradoresRaw/matriculas.json) pra não quebrar
+  // matchColaboradorDaOrdem nas ordens antigas que essa pessoa de fato executou.
+  private readonly INATIVO_A_PARTIR_DE: Record<string, string> = { 'ALEXANDRE GOMES': '2026-09-14' };
+
+  private tecnicoRelevanteNoPeriodo(nomeNorm: string): boolean {
+    const corte = this.INATIVO_A_PARTIR_DE[nomeNorm];
+    if (!corte) return true;
+    for (const semana of this.semanasDoPeriodoSet()) if (semana < corte) return true;
+    return false;
+  }
+
   private tecnicosEletrica = computed(() =>
-    this.colaboradoresRaw().filter(c => normalizarTexto(c.area).includes('ELETR') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))));
+    this.colaboradoresRaw().filter(c => normalizarTexto(c.area).includes('ELETR') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))
+      && this.tecnicoRelevanteNoPeriodo(normalizarTexto(c.nome))));
   private tecnicosMecanica = computed(() =>
-    this.colaboradoresRaw().filter(c => normalizarTexto(c.area).includes('MECAN') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))));
+    this.colaboradoresRaw().filter(c => normalizarTexto(c.area).includes('MECAN') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))
+      && this.tecnicoRelevanteNoPeriodo(normalizarTexto(c.nome))));
 
   private calcularHorasPorTecnico(tecnicos: Colaborador[]): HorasTecnicoItem[] {
     const ferias = this.feriasRaw();
@@ -502,6 +518,9 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
       const dias = diasDaSemana(semanaIso);
       const ordensDaSemanaTodas = ordensTodas.filter(o => o.semanaInicio === semanaIso);
       for (const item of resultado) {
+        // Semana >= corte de inatividade não soma pro período (ver INATIVO_A_PARTIR_DE).
+        const corte = this.INATIVO_A_PARTIR_DE[normalizarTexto(item.colaborador.nome)];
+        if (corte && semanaIso >= corte) continue;
         const ordensDoTecnico = this.ordensDoColaborador(ordensDaSemanaTodas, item.colaborador);
         const ordensDoTecnicoTipoOrdem = ordensDoTecnico.filter(x => x.tipo === 'ordem');
         for (const o of ordensDoTecnicoTipoOrdem) {
