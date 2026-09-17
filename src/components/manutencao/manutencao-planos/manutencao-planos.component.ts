@@ -8,7 +8,8 @@ import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { ExcelExportService } from '../../../services/excel-export.service';
 import {
-  CicloManutencao, ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem, PeriodicidadeUnidade, PlanoManutencao,
+  AtividadeChecklist, CicloManutencao, ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem, PeriodicidadeUnidade,
+  PlanoManutencao,
 } from '../../../models/manutencao-programacao.model';
 import { calcularProximaData, dataLimiteComTolerancia } from '../../../utils/manutencao-preventivas';
 import {
@@ -327,11 +328,12 @@ export class ManutencaoPlanosComponent implements OnInit {
   formTagKks = signal('');
   formArea = signal<ManutencaoArea>('ELETRICA');
   formEspecialidade = signal('');
-  // Passo a passo do checklist, em ordem — cada item é uma linha (ver
-  // adicionarAtividade/moverAtividade/removerAtividade). Trocou de textarea livre (um
-  // campo só, sem reordenar) pra lista editável — pedido do usuário: digitar tudo
-  // num campo só não dava pra organizar/reordenar direito.
-  formAtividadesLista = signal<string[]>([]);
+  // Passo a passo do checklist, em ordem — cada item é um passo, com sub-passos
+  // opcionais (ver adicionarAtividade/moverAtividade/removerAtividade e os
+  // equivalentes de sub-passo abaixo). Trocou de textarea livre (um campo só, sem
+  // reordenar) pra lista editável — pedido do usuário: digitar tudo num campo só não
+  // dava pra organizar/reordenar direito.
+  formAtividadesLista = signal<AtividadeChecklist[]>([]);
   formAtividadeDigitando = signal('');
   formPeriodicidadePreset = signal<string>('Mensal');
   formPeriodicidadeValor = signal(1);
@@ -442,7 +444,7 @@ export class ManutencaoPlanosComponent implements OnInit {
   adicionarAtividade(texto: string): void {
     const t = texto.trim();
     if (!t) return;
-    this.formAtividadesLista.update(lista => [...lista, t]);
+    this.formAtividadesLista.update(lista => [...lista, { texto: t, subPassos: [] }]);
     this.formAtividadeDigitando.set('');
   }
 
@@ -451,7 +453,38 @@ export class ManutencaoPlanosComponent implements OnInit {
   }
 
   atualizarTextoAtividade(index: number, texto: string): void {
-    this.formAtividadesLista.update(lista => lista.map((item, i) => (i === index ? texto : item)));
+    this.formAtividadesLista.update(lista => lista.map((item, i) => (i === index ? { ...item, texto } : item)));
+  }
+
+  // Sub-passos (opcionais — "se aplicável") de um passo específico, ex.: "Inspecionar
+  // motor" pode se desdobrar em "Verificar vazamento de óleo" / "Verificar ruído
+  // anormal". Mesma interação de reordenar/remover do passo principal, um nível abaixo.
+  adicionarSubPasso(indexPai: number, texto: string): void {
+    const t = texto.trim();
+    if (!t) return;
+    this.formAtividadesLista.update(lista => lista.map((item, i) =>
+      i === indexPai ? { ...item, subPassos: [...item.subPassos, t] } : item));
+  }
+
+  removerSubPasso(indexPai: number, indexFilho: number): void {
+    this.formAtividadesLista.update(lista => lista.map((item, i) =>
+      i === indexPai ? { ...item, subPassos: item.subPassos.filter((_, j) => j !== indexFilho) } : item));
+  }
+
+  atualizarTextoSubPasso(indexPai: number, indexFilho: number, texto: string): void {
+    this.formAtividadesLista.update(lista => lista.map((item, i) =>
+      i === indexPai ? { ...item, subPassos: item.subPassos.map((s, j) => (j === indexFilho ? texto : s)) } : item));
+  }
+
+  moverSubPasso(indexPai: number, indexFilho: number, direcao: -1 | 1): void {
+    this.formAtividadesLista.update(lista => lista.map((item, i) => {
+      if (i !== indexPai) return item;
+      const novoIndex = indexFilho + direcao;
+      if (novoIndex < 0 || novoIndex >= item.subPassos.length) return item;
+      const copia = [...item.subPassos];
+      [copia[indexFilho], copia[novoIndex]] = [copia[novoIndex], copia[indexFilho]];
+      return { ...item, subPassos: copia };
+    }));
   }
 
   moverAtividade(index: number, direcao: -1 | 1): void {
@@ -472,7 +505,9 @@ export class ManutencaoPlanosComponent implements OnInit {
     if (!this.podeConfirmar()) return;
     this.isProcessando.set(true);
     try {
-      const atividades = this.formAtividadesLista().map(a => a.trim()).filter(Boolean);
+      const atividades = this.formAtividadesLista()
+        .map(a => ({ texto: a.texto.trim(), subPassos: a.subPassos.map(s => s.trim()).filter(Boolean) }))
+        .filter(a => a.texto.length > 0);
       const idEdicao = this.formIdEdicao();
       if (idEdicao) {
         await this.manutencaoPlanosService.editar(idEdicao, {

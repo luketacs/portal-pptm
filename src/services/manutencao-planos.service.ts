@@ -3,7 +3,7 @@ import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
 import {
-  CicloManutencao, CreatePlanoManutencaoRequest, EditarPlanoManutencaoRequest,
+  AtividadeChecklist, CicloManutencao, CreatePlanoManutencaoRequest, EditarPlanoManutencaoRequest,
   ManutencaoArea, PeriodicidadeUnidade, PlanoManutencao,
 } from '../models/manutencao-programacao.model';
 
@@ -16,7 +16,7 @@ interface PlanoManutencaoRow {
   area: string;
   especialidade: string | null;
   descricao: string;
-  atividades: string[] | null;
+  atividades: AtividadeChecklist[] | null;
   periodicidade_valor: number;
   periodicidade_unidade: string;
   data_inicial: string;

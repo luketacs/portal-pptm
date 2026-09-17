@@ -4,8 +4,8 @@ import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
 import { podeEditarSemanaFechada } from '../utils/manutencao-regras';
 import {
-  CategoriaIndicador, ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest, EquipeApoioItem, FeriasTecnico,
-  ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, ParadaPlanta,
+  AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest,
+  EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, ParadaPlanta,
   RecursoEspecialItem, SigmaBacklogItem,
 } from '../models/manutencao-programacao.model';
 
@@ -33,7 +33,7 @@ interface ManutencaoOrdemRow {
   reuniao_horario: string | null;
   reuniao_local: string | null;
   plano_preventivo_id: string | null;
-  checklist: string[] | null;
+  checklist: AtividadeChecklist[] | null;
   criado_por_id: string | null;
   criado_por_nome: string;
   created_at: string;

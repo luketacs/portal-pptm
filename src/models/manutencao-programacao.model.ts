@@ -13,6 +13,15 @@ export type ManutencaoStatus = string;
 // igual feriado), com horário/local próprios — não bloqueia o resto da agenda do dia.
 export type ManutencaoTipo = 'ordem' | 'folga' | 'treinamento' | 'exame_medico' | 'reuniao';
 
+// Item de checklist (plano ou OS) — um passo, com sub-passos opcionais (ex.: "Inspecionar
+// motor" pode se desdobrar em "Verificar vazamento de óleo" / "Verificar ruído anormal").
+// subPassos sempre é um array (vazio = não se aplica), nunca null/undefined — mais simples
+// de checar "tem sub-passo?" (length > 0) em todo lugar que consome isso.
+export interface AtividadeChecklist {
+  texto: string;
+  subPassos: string[];
+}
+
 export interface ManutencaoOrdem {
   id: string;
   tipo: ManutencaoTipo;
@@ -50,7 +59,7 @@ export interface ManutencaoOrdem {
   planoPreventivoId: string | null;
   // Checklist copiado do plano preventivo no momento da programação (ver
   // PlanoManutencao.atividades) — null pra OS que não nasceu de um plano.
-  checklist: string[] | null;
+  checklist: AtividadeChecklist[] | null;
   criadoPorId: string | null;
   criadoPorNome: string;
   createdAt: Date;
@@ -79,7 +88,7 @@ export interface CreateManutencaoOrdemRequest {
   reuniaoHorario?: string;
   reuniaoLocal?: string;
   planoPreventivoId?: string;
-  checklist?: string[];
+  checklist?: AtividadeChecklist[];
 }
 
 // Periodicidade dos planos de manutenção preventiva — mesmos textos usados no export
@@ -100,7 +109,7 @@ export interface PlanoManutencao {
   area: ManutencaoArea;
   especialidade: string | null;
   descricao: string;
-  atividades: string[]; // checklist
+  atividades: AtividadeChecklist[]; // checklist
   periodicidadeValor: number;
   periodicidadeUnidade: PeriodicidadeUnidade;
   dataInicial: string; // 'YYYY-MM-DD'
@@ -136,7 +145,7 @@ export interface CreatePlanoManutencaoRequest {
   area: ManutencaoArea;
   especialidade?: string;
   descricao: string;
-  atividades?: string[];
+  atividades?: AtividadeChecklist[];
   periodicidadeValor: number;
   periodicidadeUnidade: PeriodicidadeUnidade;
   dataInicial: string;
@@ -156,7 +165,7 @@ export interface EditarPlanoManutencaoRequest {
   area: ManutencaoArea;
   especialidade: string | null;
   descricao: string;
-  atividades: string[];
+  atividades: AtividadeChecklist[];
   periodicidadeValor: number;
   periodicidadeUnidade: PeriodicidadeUnidade;
   dataInicial: string;
@@ -277,7 +286,7 @@ export interface EditarManutencaoOrdemRequest {
   reuniaoHorario: string | null;
   reuniaoLocal: string | null;
   planoPreventivoId: string | null;
-  checklist: string[] | null;
+  checklist: AtividadeChecklist[] | null;
 }
 
 // Ponto de indicador semanal importado da planilha "Painel de Indicadores de PCM" —

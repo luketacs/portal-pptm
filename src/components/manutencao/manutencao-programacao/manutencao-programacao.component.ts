@@ -11,8 +11,8 @@ import { ApontamentosService } from '../../../services/apontamentos.service';
 import { ExcelExportService, ProgramacaoSemanalGrupo, ProgramacaoSemanalLinha } from '../../../services/excel-export.service';
 import { AlmoxarifadoService, Movimentacao, Solicitacao } from '../../../services/almoxarifado.service';
 import {
-  CategoriaIndicador, ConsultaSigmaResultado, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo,
-  OperadorEscalaApoio, PlanoManutencao, RecursoEspecialItem, SigmaBacklogItem,
+  AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem,
+  ManutencaoTipo, OperadorEscalaApoio, PlanoManutencao, RecursoEspecialItem, SigmaBacklogItem,
 } from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, TURNO_LABEL, turnoNoDia } from '../../../utils/escala-apoio';
 import {
@@ -36,7 +36,7 @@ interface FichaImpressaoOs {
   equipamento: string | null;
   loto: string | null;
   duracaoHoras: number | null;
-  checklist: string[] | null;
+  checklist: AtividadeChecklist[] | null;
   tecnicos: string[];
 }
 
@@ -1709,7 +1709,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   private formPlanoPreventivoDataPrevista = signal<string | null>(null);
   // Checklist copiado do plano no momento do vínculo (ver PlanoManutencao.atividades) —
   // vai junto na OS (ver ManutencaoOrdem.checklist).
-  formChecklist = signal<string[]>([]);
+  formChecklist = signal<AtividadeChecklist[]>([]);
   formVincularPlanoTexto = signal('');
   formPlanoVinculado = computed<PlanoManutencao | null>(() => {
     const id = this.formPlanoPreventivoId();
