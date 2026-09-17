@@ -1577,6 +1577,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.quadroLotoAberto.update(v => !v);
   }
 
+  // Mesma ideia pra Escala de turno — pedido do usuário logo em seguida do LOTO.
+  escalaTurnoAberta = signal(true);
+  toggleEscalaTurno(): void {
+    this.escalaTurnoAberta.update(v => !v);
+  }
+
   // Formata o quadro de LOTO como texto simples (com emoji no lugar da cor), pra
   // colar direto no WhatsApp/e-mail — a tela em si exige login, então quem não tem
   // acesso ao Portal só recebe essa informação assim.
