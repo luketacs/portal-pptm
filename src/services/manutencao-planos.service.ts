@@ -126,9 +126,17 @@ export class ManutencaoPlanosService {
   }
 
   // Data do ciclo mais recente já registrado pro plano, ou null se nunca foi
-  // programado — insumo de proximaExecucaoPlano().
+  // programado — insumo de proximaExecucaoPlano()/proximaDataFixa (ambas usam isso pra
+  // saber se uma ocorrência já foi coberta). Exige ordemId preenchido: reportado — 36
+  // linhas de manutencao_ciclos (35 Apoio + 1 Elétrica, todas data_prevista=2026-09-21,
+  // ver auditoria) tinham ordem_id NULO — sobra de um script/teste anterior que inseriu
+  // ciclo direto sem nunca criar OS nenhuma (registrarCiclo, abaixo, sempre exige um
+  // ordemId real). Sem esse filtro, planosComProximaExecucaoFixa tratava essas linhas
+  // como "já programado" e pulava a ocorrência de verdade pro mês seguinte — sintoma:
+  // SERVPLEX/OPERAÇÃO da semana 39 sumiam inteiros da lista de sugestões sem nenhuma OS
+  // ter sido criada.
   ultimoCicloDoPlano(planoId: string): string | null {
-    const datas = this._ciclos().filter(c => c.planoId === planoId).map(c => c.dataPrevista);
+    const datas = this._ciclos().filter(c => c.planoId === planoId && !!c.ordemId).map(c => c.dataPrevista);
     return datas.length > 0 ? datas.sort().at(-1)! : null;
   }
 
