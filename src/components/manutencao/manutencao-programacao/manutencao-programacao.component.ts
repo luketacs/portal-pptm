@@ -1566,6 +1566,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   }
   quadroLoto = computed(() => this.quadroLotoCalc(this.ordensDaSemana(), this.diasDaSemanaAtual()));
 
+  // Recolher/expandir o Quadro de LOTO — pedido do usuário: o quadro pode ficar grande
+  // (muitos equipamentos/conflitos) e nem sempre precisa estar aberto pra quem só quer
+  // ver o resto da tela. Aberto por padrão (não muda o comportamento de hoje). Um único
+  // signal controla tanto a semana única quanto cada bloco do Horizonte de 4 semanas —
+  // é a mesma preferência ("quero ver o quadro de LOTO agora ou não"), não uma por
+  // bloco.
+  quadroLotoAberto = signal(true);
+  toggleQuadroLoto(): void {
+    this.quadroLotoAberto.update(v => !v);
+  }
+
   // Formata o quadro de LOTO como texto simples (com emoji no lugar da cor), pra
   // colar direto no WhatsApp/e-mail — a tela em si exige login, então quem não tem
   // acesso ao Portal só recebe essa informação assim.
