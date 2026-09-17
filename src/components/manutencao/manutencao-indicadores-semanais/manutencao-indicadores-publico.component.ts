@@ -28,7 +28,7 @@ import {
 } from '../../../utils/manutencao-indicadores';
 import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, linhaRetaAreaPath, linhaRetaPath, posicionarRotulosFinais } from '../../../utils/relatorio-linha-tempo';
 import { MESES_ABREV } from '../../../utils/relatorio-mensal-pcm';
-import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
+import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
 import { encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
@@ -503,12 +503,11 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
       const ordensDaSemanaTodas = ordensTodas.filter(o => o.semanaInicio === semanaIso);
       for (const item of resultado) {
         const ordensDoTecnico = this.ordensDoColaborador(ordensDaSemanaTodas, item.colaborador);
-        for (const o of ordensDoTecnico.filter(x => x.tipo === 'ordem')) {
-          const horas = o.duracaoHoras ?? 0;
-          item.horasProgramadas += horas;
-          const [status] = ordemExecutadaAgrupada([o], sigmaPorOs, this.matchColaboradorFn);
-          if (status === 'executada') item.horasApontadas += horas;
+        const ordensDoTecnicoTipoOrdem = ordensDoTecnico.filter(x => x.tipo === 'ordem');
+        for (const o of ordensDoTecnicoTipoOrdem) {
+          item.horasProgramadas += o.duracaoHoras ?? 0;
         }
+        item.horasApontadas += horasApontadasDoColaborador(ordensDoTecnicoTipoOrdem, sigmaPorOs, item.colaborador.matricula);
         const r = calcularHhTecnico({
           dias,
           disponibilidadePorDia: new Map(dias.map(d => [d.data, disponibilidadeNoDia(item.colaborador, d.data)])),
