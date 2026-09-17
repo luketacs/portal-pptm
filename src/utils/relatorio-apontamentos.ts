@@ -74,7 +74,6 @@ function normalizarAscii(texto: string): string {
 // Semanal por outros motivos, e um que está emprestado pode não ter apontado nada
 // numa semana específica (e mesmo assim precisa aparecer, com 0h).
 export const MATRICULAS_OPERACAO_EM_MANUTENCAO = new Set([
-  '20005480', // Alexandre Gomes
   '20006309', // Mauro Teixeira
   '20005985', // Joaquim Neto
   '710624',   // William

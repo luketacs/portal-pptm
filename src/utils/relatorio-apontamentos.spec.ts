@@ -269,7 +269,7 @@ describe('calcularHorasEOrdensApontadas', () => {
 describe('colaboradoresOperacaoEmManutencao', () => {
   function colaborador(overrides: Partial<ColaboradorHoras>): ColaboradorHoras {
     return {
-      matricula: '20005480', funcionario: 'Alexandre Gomes', area: 'Operação',
+      matricula: '20006309', funcionario: 'Mauro Teixeira', area: 'Operação',
       horasApontadas: 50, horasProgramadas: null, horasDisponiveis: null,
       qtdOrdens: 3, ordensLista: [], areasAtuacao: [],
       ...overrides,
@@ -278,7 +278,6 @@ describe('colaboradoresOperacaoEmManutencao', () => {
 
   function matriculasOperacao(): RegistroMatricula[] {
     return [
-      { matricula: '20005480', funcionario: 'Alexandre Gomes', area: 'Operação' },
       { matricula: '20006309', funcionario: 'Mauro Teixeira', area: 'Operação' },
       { matricula: '20005985', funcionario: 'Joaquim Neto', area: 'Operação' },
       { matricula: '710624', funcionario: 'William', area: 'Operação' },
@@ -288,21 +287,21 @@ describe('colaboradoresOperacaoEmManutencao', () => {
 
   it('so traz quem esta na lista fixa de emprestados pra manutencao, mesmo sendo todos da Operacao', () => {
     const r = colaboradoresOperacaoEmManutencao([colaborador({})], matriculasOperacao());
-    expect(r.map(c => c.matricula).sort()).toEqual(['20005480', '20005985', '20006309', '710624']);
+    expect(r.map(c => c.matricula).sort()).toEqual(['20005985', '20006309', '710624']);
   });
 
   it('usa os dados de horas/ordens de quem apontou algo no periodo', () => {
     const r = colaboradoresOperacaoEmManutencao(
-      [colaborador({ matricula: '20005480', horasApontadas: 42, qtdOrdens: 5 })], matriculasOperacao(),
+      [colaborador({ matricula: '20006309', horasApontadas: 42, qtdOrdens: 5 })], matriculasOperacao(),
     );
-    const alexandre = r.find(c => c.matricula === '20005480')!;
-    expect(alexandre.horasApontadas).toBe(42);
-    expect(alexandre.qtdOrdens).toBe(5);
+    const mauro = r.find(c => c.matricula === '20006309')!;
+    expect(mauro.horasApontadas).toBe(42);
+    expect(mauro.qtdOrdens).toBe(5);
   });
 
   it('zera quem esta na lista mas nao apontou nada no periodo (continua aparecendo)', () => {
     const r = colaboradoresOperacaoEmManutencao([], matriculasOperacao());
-    expect(r).toHaveLength(4);
+    expect(r).toHaveLength(3);
     const mauro = r.find(c => c.matricula === '20006309')!;
     expect(mauro.funcionario).toBe('Mauro Teixeira');
     expect(mauro.horasApontadas).toBe(0);
