@@ -335,6 +335,21 @@ export class ManutencaoPlanosComponent implements OnInit {
   // dava pra organizar/reordenar direito.
   formAtividadesLista = signal<AtividadeChecklist[]>([]);
   formAtividadeDigitando = signal('');
+  // Copiar checklist de outro plano já cadastrado — pedido do usuário: equipamento
+  // igual/gêmeo (Stacker 01/02, TC 05/06/07) tem checklist praticamente igual, sem
+  // motivo pra redigitar do zero toda vez. É uma cópia de verdade (não um vínculo) —
+  // editar um depois não muda o outro, de propósito: cada equipamento pode acumular
+  // uma diferença própria com o tempo.
+  formCopiarChecklistTexto = signal('');
+  formCopiarChecklistCandidatos = computed<PlanoManutencao[]>(() => {
+    const termo = this.formCopiarChecklistTexto().trim().toLowerCase();
+    if (termo.length < 2) return [];
+    const idAtual = this.formIdEdicao();
+    return this.manutencaoPlanosService.planos()
+      .filter(p => p.id !== idAtual && p.atividades.length > 0
+        && `${p.equipamento} ${p.nome}`.toLowerCase().includes(termo))
+      .slice(0, 8);
+  });
   formPeriodicidadePreset = signal<string>('Mensal');
   formPeriodicidadeValor = signal(1);
   formPeriodicidadeUnidade = signal<PeriodicidadeUnidade>('Mes(es)');
@@ -397,6 +412,7 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formEspecialidade.set('');
     this.formAtividadesLista.set([]);
     this.formAtividadeDigitando.set('');
+    this.formCopiarChecklistTexto.set('');
     this.formPeriodicidadePreset.set('Mensal');
     this.formPeriodicidadeValor.set(1);
     this.formPeriodicidadeUnidade.set('Mes(es)');
@@ -421,6 +437,7 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formEspecialidade.set(plano.especialidade ?? '');
     this.formAtividadesLista.set([...plano.atividades]);
     this.formAtividadeDigitando.set('');
+    this.formCopiarChecklistTexto.set('');
     const preset = PERIODICIDADE_PRESETS.find(p => p.valor === plano.periodicidadeValor && p.unidade === plano.periodicidadeUnidade);
     this.formPeriodicidadePreset.set(preset ? preset.label : 'Personalizada');
     this.formPeriodicidadeValor.set(plano.periodicidadeValor);
@@ -485,6 +502,20 @@ export class ManutencaoPlanosComponent implements OnInit {
       [copia[indexFilho], copia[novoIndex]] = [copia[novoIndex], copia[indexFilho]];
       return { ...item, subPassos: copia };
     }));
+  }
+
+  async copiarChecklistDe(plano: PlanoManutencao): Promise<void> {
+    if (this.formAtividadesLista().length > 0) {
+      const confirmou = await this.confirmDialogService.confirm(
+        `Substituir o checklist atual (${this.formAtividadesLista().length} passo(s)) pelo de "${plano.nome}" (${plano.equipamento})?`,
+      );
+      if (!confirmou) return;
+    }
+    // Cópia de verdade (deep clone) — editar o checklist copiado não pode alterar o
+    // plano de origem, e vice-versa.
+    this.formAtividadesLista.set(plano.atividades.map(a => ({ texto: a.texto, subPassos: [...a.subPassos] })));
+    this.formCopiarChecklistTexto.set('');
+    this.notificationService.showSuccess(`Checklist copiado de "${plano.nome}".`);
   }
 
   moverAtividade(index: number, direcao: -1 | 1): void {
