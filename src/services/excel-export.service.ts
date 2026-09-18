@@ -754,7 +754,7 @@ export class ExcelExportService {
     celDivisor.value = partes.join('   ·   ');
     celDivisor.font = { bold: true, size: 10, color: { argb: this.PROG_AZUL_TEXTO } };
     celDivisor.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL_CLARO } };
-    celDivisor.alignment = { horizontal: 'center', vertical: 'middle' };
+    celDivisor.alignment = { horizontal: 'left', vertical: 'middle' };
     row++;
 
     const linhas = grupo.linhas.length > 0 ? grupo.linhas : null;
