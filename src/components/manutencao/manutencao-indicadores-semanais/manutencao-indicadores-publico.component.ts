@@ -490,14 +490,20 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     };
   });
 
-  private readonly NOMES_EXCLUIDOS_HORAS = new Set(['JOAQUIM NETO']);
+  // Vazio hoje — ver o mesmo mapa/comentário em manutencao-indicadores-semanais.
+  // component.ts (Joaquim Neto migrou daqui pra INATIVO_A_PARTIR_DE quando a data
+  // exata da saída dele foi confirmada).
+  private readonly NOMES_EXCLUIDOS_HORAS = new Set<string>([]);
 
   // Pessoas que saíram da equipe numa semana CONHECIDA (diferente de
   // NOMES_EXCLUIDOS_HORAS, sem data) — ver o mesmo mapa/comentário em
   // manutencao-indicadores-semanais.component.ts. Fica de fora só das semanas A PARTIR
   // da saída; continua no cadastro (colaboradoresRaw/matriculas.json) pra não quebrar
   // matchColaboradorDaOrdem nas ordens antigas que essa pessoa de fato executou.
-  private readonly INATIVO_A_PARTIR_DE: Record<string, string> = { 'ALEXANDRE GOMES': '2026-09-14' };
+  private readonly INATIVO_A_PARTIR_DE: Record<string, string> = {
+    'ALEXANDRE GOMES': '2026-09-14',
+    'JOAQUIM NETO': '2026-08-24',
+  };
 
   private tecnicoRelevanteNoPeriodo(nomeNorm: string): boolean {
     const corte = this.INATIVO_A_PARTIR_DE[nomeNorm];

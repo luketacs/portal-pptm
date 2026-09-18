@@ -428,22 +428,30 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // por Área"/statusExecucao() (esses são sobre STATUS — aconteceu ou não —, não sobre
   // quantidade de hora). Disponível = mesma fórmula de hhTotais (calcularHhTecnico), só
   // que por pessoa em vez de somada. Só Elétrica/Mecânica, mesma restrição do HH acima.
-  // Pedido do usuário: tirar esse colaborador específico desses gráficos (não do
-  // cadastro/matriculas.json em si, só da exibição aqui).
-  private readonly NOMES_EXCLUIDOS_HORAS = new Set(['JOAQUIM NETO']);
+  // Pedido do usuário: tirar algum colaborador específico desses gráficos (não do
+  // cadastro/matriculas.json em si, só da exibição aqui) SEM data conhecida de saída —
+  // hoje vazio (Joaquim Neto migrou pra INATIVO_A_PARTIR_DE, ver abaixo, quando a data
+  // exata dele foi confirmada). Mantido pra um caso futuro sem data definida.
+  private readonly NOMES_EXCLUIDOS_HORAS = new Set<string>([]);
 
   // Pessoas que saíram da equipe numa semana CONHECIDA — diferente de
-  // NOMES_EXCLUIDOS_HORAS (exclusão permanente, sem data, ex. Joaquim Neto): ficam de
-  // fora só das semanas A PARTIR da saída, continuando normais nas semanas anteriores.
-  // Caso real: ALEXANDRE GOMES trabalhou normalmente até a semana 37 e só fica
-  // indisponível a partir da semana 38 (2026-09-14, pedido do usuário 2026-09-17) — ele
-  // PRECISA continuar em matriculas.json (matchColaborador usa o cadastro completo pra
-  // achar quem apontou no SIGMA em ordens antigas, ver ordemExecutadaAgrupada; tirar ele
-  // de lá quebrava o status de execução das ordens que ele de fato fez, reportado: 9
-  // ordens da Mecânica da semana 37 viraram "Não Executadas" à toa depois da remoção,
-  // ver commit 32ee905, revertido). Esse mapa só controla se a LINHA dele aparece nesta
-  // tabela de HH, sem afetar matching de status em lugar nenhum.
-  private readonly INATIVO_A_PARTIR_DE: Record<string, string> = { 'ALEXANDRE GOMES': '2026-09-14' };
+  // NOMES_EXCLUIDOS_HORAS (exclusão permanente, sem data): ficam de fora só das
+  // semanas A PARTIR da saída, continuando normais nas semanas anteriores. Precisam
+  // continuar em matriculas.json (matchColaborador usa o cadastro completo pra achar
+  // quem apontou no SIGMA em ordens antigas, ver ordemExecutadaAgrupada; tirar alguém
+  // de lá quebra o status de execução das ordens que essa pessoa de fato fez —
+  // reportado: 9 ordens da Mecânica viraram "Não Executadas" à toa depois de remover
+  // Alexandre Gomes do cadastro, ver commit 32ee905, revertido). Esse mapa só controla
+  // se a LINHA da pessoa aparece nesta tabela de HH, sem afetar matching de status em
+  // lugar nenhum.
+  //   ALEXANDRE GOMES — trabalhou normalmente até a semana 37, indisponível a partir
+  //     da semana 38 (2026-09-14, pedido do usuário 2026-09-17).
+  //   JOAQUIM NETO — trabalhou normalmente até a semana 34, indisponível a partir da
+  //     semana 35 (2026-08-24, pedido do usuário 2026-09-18).
+  private readonly INATIVO_A_PARTIR_DE: Record<string, string> = {
+    'ALEXANDRE GOMES': '2026-09-14',
+    'JOAQUIM NETO': '2026-08-24',
+  };
 
   // true se existe pelo menos uma semana do período em exibição ANTES do corte de
   // inatividade da pessoa (ou se ela não tem corte nenhum) — período inteiramente

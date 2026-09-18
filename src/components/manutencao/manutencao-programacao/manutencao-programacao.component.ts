@@ -2265,7 +2265,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // manutencao-indicadores-semanais.component.ts — reportado: tirar do cadastro direto,
   // como foi feito antes com Alexandre Gomes, ver commit 32ee905, virou 9 ordens da
   // Mecânica da semana 37 marcadas "Não Executadas" à toa).
-  private readonly INATIVO_A_PARTIR_DE: Record<string, string> = { 'ALEXANDRE GOMES': '2026-09-14' };
+  private readonly INATIVO_A_PARTIR_DE: Record<string, string> = {
+    'ALEXANDRE GOMES': '2026-09-14',
+    'JOAQUIM NETO': '2026-08-24',
+  };
 
   private tecnicosPorArea(area: ManutencaoArea): { nome: string; matricula: string | null }[] {
     if (area === 'APOIO') {
