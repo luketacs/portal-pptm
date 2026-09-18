@@ -2755,7 +2755,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const planoId = this.formPlanoPreventivoId();
     if (!ehOrdem || !planoId || planoId === this.formPlanoPreventivoIdOriginal()) return;
     const dataPrevista = this.formPlanoPreventivoDataPrevista() ?? [...this.formDiasSelecionados()].sort()[0];
-    if (!dataPrevista) return;
+    // Reportado: 2 ordens da Mecânica (TC06) ficaram com plano_preventivo_id preenchido
+    // mas SEM NENHUM ciclo registrado — o plano continuava "pendente" pra sempre, sem
+    // nenhum aviso na tela. Esse branch (plano vinculado, mas sem data pra registrar o
+    // ciclo — nem formPlanoPreventivoDataPrevista nem nenhum dia selecionado) retornava
+    // em silêncio antes; agora avisa, porque é um estado anômalo (o vínculo existe, só
+    // falta a data) que a pessoa precisa saber pra corrigir na hora, não descobrir
+    // semanas depois que o plano nunca saiu da lista.
+    if (!dataPrevista) {
+      this.notificationService.showError('OS salva e vinculada ao plano preventivo, mas sem data pra registrar o ciclo — o plano pode continuar aparecendo como pendente. Avise o suporte.');
+      return;
+    }
     try {
       await this.manutencaoPlanosService.registrarCiclo(planoId, dataPrevista, ordemId);
     } catch (err: unknown) {
