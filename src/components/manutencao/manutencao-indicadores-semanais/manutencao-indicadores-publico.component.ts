@@ -20,7 +20,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, WritableSignal, computed, effect, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, FeriasTecnico, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
+import { AtestadoTecnico, CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, FeriasTecnico, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
   META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, StatusGeralSemana,
@@ -29,7 +29,7 @@ import {
 import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, linhaRetaAreaPath, linhaRetaPath, posicionarRotulosFinais } from '../../../utils/relatorio-linha-tempo';
 import { MESES_ABREV } from '../../../utils/relatorio-mensal-pcm';
 import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
-import { encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
+import { encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
   paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem,
@@ -259,6 +259,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   // ── Dados brutos (fetch público, sem Bearer token) ──────────────────────────
   private ordensRaw = signal<ManutencaoOrdem[]>([]);
   private feriasRaw = signal<FeriasTecnico[]>([]);
+  private atestadosRaw = signal<AtestadoTecnico[]>([]);
   private historicoRaw = signal<HistoricoItemPublico[]>([]);
   private manuaisRaw = signal<IndicadorManualPublico[]>([]);
   private sigmaPorOsRaw = signal<Record<string, ConsultaSigmaResultado>>({});
@@ -302,6 +303,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
       if (!resp.ok || !body?.success) throw new Error(body?.error || 'Falha ao carregar os indicadores.');
       this.ordensRaw.set((body.ordens as OrdemPublicaRaw[]).map(paraManutencaoOrdem));
       this.feriasRaw.set(body.ferias as FeriasTecnico[]);
+      this.atestadosRaw.set(body.atestados as AtestadoTecnico[]);
       this.historicoRaw.set(body.historico as HistoricoItemPublico[]);
       this.manuaisRaw.set(body.manuais as IndicadorManualPublico[]);
       this.sigmaPorOsRaw.set(body.sigmaPorOs as Record<string, ConsultaSigmaResultado>);
@@ -461,6 +463,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
 
   hhTotais = computed(() => {
     const ferias = this.feriasRaw();
+    const atestados = this.atestadosRaw();
     const ordensTodas = this.ordensRaw();
     const tecnicos = this.tecnicosParaHh();
     let bruto = 0;
@@ -475,6 +478,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
           disponibilidadePorDia: new Map(dias.map(d => [d.data, disponibilidadeNoDia(colaborador, d.data)])),
           diasFolga: new Set(ordensDoTecnico.filter(o => o.tipo === 'folga').flatMap(o => o.diasPrevistos)),
           feriasIntervalo: encontrarFeriasNoIntervalo(ferias, colaborador.nome, dias.map(d => d.data)),
+          atestadoIntervalo: encontrarAtestadoNoIntervalo(atestados, colaborador.nome, dias.map(d => d.data)),
         });
         bruto += r.bruto;
         liquido += r.liquido;
@@ -511,6 +515,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
 
   private calcularHorasPorTecnico(tecnicos: Colaborador[]): HorasTecnicoItem[] {
     const ferias = this.feriasRaw();
+    const atestados = this.atestadosRaw();
     const ordensTodas = this.ordensRaw();
     const sigmaPorOs = this.sigmaPorOs();
     const resultado: HorasTecnicoItem[] = tecnicos.map(c => ({ colaborador: c, horasProgramadas: 0, horasApontadas: 0, horasDisponiveis: 0, eficiencia: 0 }));
@@ -532,6 +537,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
           disponibilidadePorDia: new Map(dias.map(d => [d.data, disponibilidadeNoDia(item.colaborador, d.data)])),
           diasFolga: new Set(ordensDoTecnico.filter(o => o.tipo === 'folga').flatMap(o => o.diasPrevistos)),
           feriasIntervalo: encontrarFeriasNoIntervalo(ferias, item.colaborador.nome, dias.map(d => d.data)),
+          atestadoIntervalo: encontrarAtestadoNoIntervalo(atestados, item.colaborador.nome, dias.map(d => d.data)),
         });
         item.horasDisponiveis += r.liquido;
       }

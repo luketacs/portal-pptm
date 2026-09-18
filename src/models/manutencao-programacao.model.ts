@@ -268,6 +268,19 @@ export interface FeriasTecnico {
   dataFim: string;    // ISO 'YYYY-MM-DD'
 }
 
+// Período de atestado médico de um técnico — mesmo formato de FeriasTecnico (período
+// contínuo, não preso a uma semana), diferente motivo. Conta como indisponível (dia
+// inteiro fora), igual férias — diferente de exame_medico (ManutencaoTipo), que só
+// desconta algumas horas do dia, não o dia todo.
+export interface AtestadoTecnico {
+  id: string;
+  tecnicoNome: string;
+  tecnicoMatricula: string | null;
+  area: ManutencaoArea;
+  dataInicio: string; // ISO 'YYYY-MM-DD'
+  dataFim: string;    // ISO 'YYYY-MM-DD'
+}
+
 export interface EditarManutencaoOrdemRequest {
   tipo: ManutencaoTipo;
   area: ManutencaoArea;

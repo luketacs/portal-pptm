@@ -123,6 +123,15 @@ describe('calcularHhTecnico', () => {
     expect(r).toEqual({ bruto: 40, liquido: 0, indisponivel: 40 });
   });
 
+  it('técnico de atestado médico a semana toda: indisponível = bruto, líquido = 0, igual férias', () => {
+    const disponibilidadePorDia = new Map(DIAS_SEMANA_37.map(d => [d.data, 8]));
+    const r = calcularHhTecnico({
+      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), feriasIntervalo: null,
+      atestadoIntervalo: { dataInicio: '2026-09-01', dataFim: '2026-09-30' },
+    });
+    expect(r).toEqual({ bruto: 40, liquido: 0, indisponivel: 40 });
+  });
+
   it('técnico de folga 1 dia: indisponível = disponibilidade daquele dia', () => {
     const disponibilidadePorDia = new Map(DIAS_SEMANA_37.map(d => [d.data, 8]));
     const r = calcularHhTecnico({

@@ -18,7 +18,7 @@ import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, linhaRetaArea
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
 import { MESES_ABREV } from '../../../utils/relatorio-mensal-pcm';
 import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
-import { encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
+import { encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
   paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem,
@@ -166,6 +166,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       await this.manutencaoService.load();
       await this.apontamentosService.loadColaboradores();
       await this.manutencaoService.loadFerias();
+      await this.manutencaoService.loadAtestados();
       await this.historicoService.load();
       await this.manuaisService.load();
     } catch {
@@ -386,6 +387,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // colidir dois períodos de férias na mesma chamada.
   hhTotais = computed(() => {
     const ferias = this.manutencaoService.ferias();
+    const atestados = this.manutencaoService.atestados();
     const ordensTodas = this.manutencaoService.ordens();
     const tecnicos = this.tecnicosParaHh();
     let bruto = 0;
@@ -400,6 +402,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
           disponibilidadePorDia: new Map(dias.map(d => [d.data, this.apontamentosService.disponibilidadeNoDia(colaborador, d.data)])),
           diasFolga: new Set(ordensDoTecnico.filter(o => o.tipo === 'folga').flatMap(o => o.diasPrevistos)),
           feriasIntervalo: encontrarFeriasNoIntervalo(ferias, colaborador.nome, dias.map(d => d.data)),
+          atestadoIntervalo: encontrarAtestadoNoIntervalo(atestados, colaborador.nome, dias.map(d => d.data)),
         });
         bruto += r.bruto;
         liquido += r.liquido;
@@ -464,6 +467,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
 
   private calcularHorasPorTecnico(tecnicos: Colaborador[]): HorasTecnicoItem[] {
     const ferias = this.manutencaoService.ferias();
+    const atestados = this.manutencaoService.atestados();
     const ordensTodas = this.manutencaoService.ordens();
     const sigmaPorOs = this.sigmaPorOs();
     const resultado: HorasTecnicoItem[] = tecnicos.map(c => ({ colaborador: c, horasProgramadas: 0, horasApontadas: 0, horasDisponiveis: 0, eficiencia: 0 }));
@@ -488,6 +492,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
           disponibilidadePorDia: new Map(dias.map(d => [d.data, this.apontamentosService.disponibilidadeNoDia(item.colaborador, d.data)])),
           diasFolga: new Set(ordensDoTecnico.filter(o => o.tipo === 'folga').flatMap(o => o.diasPrevistos)),
           feriasIntervalo: encontrarFeriasNoIntervalo(ferias, item.colaborador.nome, dias.map(d => d.data)),
+          atestadoIntervalo: encontrarAtestadoNoIntervalo(atestados, item.colaborador.nome, dias.map(d => d.data)),
         });
         item.horasDisponiveis += r.liquido;
       }

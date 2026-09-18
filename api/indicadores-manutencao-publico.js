@@ -48,6 +48,9 @@ function mapFerias(r) {
   };
 }
 
+// Mesmo formato de mapFerias, pra atestado médico (manutencao_atestados).
+const mapAtestado = mapFerias;
+
 // Mesmo mapeamento de ManutencaoIndicadoresHistoricoService.mapRow() (src/services/
 // manutencao-indicadores-historico.service.ts).
 function mapHistorico(r) {
@@ -94,16 +97,19 @@ export default async function handler(req, res) {
     const [
       { data: ordensRows, error: erroOrdens },
       { data: feriasRows, error: erroFerias },
+      { data: atestadosRows, error: erroAtestados },
       { data: historicoRows, error: erroHistorico },
       { data: manuaisRows, error: erroManuais },
     ] = await Promise.all([
       supabase.from('manutencao_programacao').select('*').order('semana_inicio', { ascending: false }),
       supabase.from('manutencao_ferias').select('id, tecnico_nome, tecnico_matricula, area, data_inicio, data_fim').order('data_inicio'),
+      supabase.from('manutencao_atestados').select('id, tecnico_nome, tecnico_matricula, area, data_inicio, data_fim').order('data_inicio'),
       supabase.from('manutencao_indicadores_historico').select('*').order('semana_inicio'),
       supabase.from('manutencao_indicadores_manuais').select('ano, chave, valor'),
     ]);
     if (erroOrdens) return res.status(500).json({ success: false, error: erroOrdens.message });
     if (erroFerias) return res.status(500).json({ success: false, error: erroFerias.message });
+    if (erroAtestados) return res.status(500).json({ success: false, error: erroAtestados.message });
     if (erroHistorico) return res.status(500).json({ success: false, error: erroHistorico.message });
     if (erroManuais) return res.status(500).json({ success: false, error: erroManuais.message });
 
@@ -155,6 +161,7 @@ export default async function handler(req, res) {
       atualizadoEm: Date.now(),
       ordens,
       ferias: feriasRows.map(mapFerias),
+      atestados: atestadosRows.map(mapAtestado),
       historico: historicoRows.map(mapHistorico),
       manuais: manuaisRows.map(mapManual),
       sigmaPorOs,

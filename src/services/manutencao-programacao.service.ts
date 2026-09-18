@@ -4,7 +4,7 @@ import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
 import { podeEditarSemanaFechada } from '../utils/manutencao-regras';
 import {
-  AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest,
+  AtestadoTecnico, AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest,
   EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, ParadaPlanta,
   RecursoEspecialItem, SigmaBacklogItem,
 } from '../models/manutencao-programacao.model';
@@ -100,6 +100,8 @@ export class ManutencaoProgramacaoService {
   // lançamento de atividade dentro do período.
   private _ferias = signal<FeriasTecnico[]>([]);
   ferias = this._ferias.asReadonly();
+  private _atestados = signal<AtestadoTecnico[]>([]);
+  atestados = this._atestados.asReadonly();
 
   // Recursos especiais (Munck/Guindaste/Andaime/Fontebras...) que espelham
   // automaticamente uma OS pro Apoio — no banco (editável por Admin), evita precisar
@@ -755,5 +757,79 @@ export class ManutencaoProgramacaoService {
     });
 
     await this.loadFerias();
+  }
+
+  // ── Atestado médico ──────────────────────────────────────────────────────────
+
+  async loadAtestados(): Promise<void> {
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_atestados')
+      .select('id, tecnico_nome, tecnico_matricula, area, data_inicio, data_fim')
+      .order('data_inicio');
+    if (error) throw new Error(error.message);
+    this._atestados.set((data ?? []).map(r => ({
+      id: r.id,
+      tecnicoNome: r.tecnico_nome,
+      tecnicoMatricula: r.tecnico_matricula,
+      area: r.area as ManutencaoArea,
+      dataInicio: r.data_inicio,
+      dataFim: r.data_fim,
+    })));
+  }
+
+  async criarAtestado(params: {
+    tecnicoNome: string; tecnicoMatricula: string | null; area: ManutencaoArea; dataInicio: string; dataFim: string;
+  }): Promise<void> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+    if (!params.tecnicoNome.trim()) throw new Error('Selecione o técnico.');
+    if (!params.dataInicio || !params.dataFim) throw new Error('Informe início e fim do atestado.');
+    if (params.dataFim < params.dataInicio) throw new Error('A data final não pode ser antes da inicial.');
+
+    const { error } = await this.supabaseService.client.from('manutencao_atestados').insert({
+      tecnico_nome: params.tecnicoNome,
+      tecnico_matricula: params.tecnicoMatricula,
+      area: params.area,
+      data_inicio: params.dataInicio,
+      data_fim: params.dataFim,
+      criado_por_id: user.id,
+      criado_por_nome: user.name,
+    });
+    if (error) throw new Error(error.message);
+
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'manutencao_atestado_criado',
+      resource_type: 'manutencao_atestados',
+      description: `${user.name} cadastrou atestado médico de ${params.tecnicoNome} (${params.dataInicio} a ${params.dataFim})`,
+    });
+
+    await this.loadAtestados();
+  }
+
+  async excluirAtestado(id: string): Promise<void> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+
+    const item = this._atestados().find(a => a.id === id);
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_atestados')
+      .delete()
+      .eq('id', id)
+      .select('id');
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) throw new Error('Não foi possível excluir (permissão do banco).');
+
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'manutencao_atestado_excluido',
+      resource_type: 'manutencao_atestados',
+      resource_id: id,
+      description: `${user.name} excluiu atestado médico de ${item?.tecnicoNome ?? ''}`,
+    });
+
+    await this.loadAtestados();
   }
 }

@@ -3,7 +3,7 @@
 // espelhamento de "Recursos" (quem entra na cópia da OS pro apoio) são as áreas que
 // mais geraram bug nesta funcionalidade (dado sutil errado, direção de checagem
 // faltando, recurso incluindo a si mesmo), por isso ganham teste dedicado.
-import { FeriasTecnico, ManutencaoOrdem } from '../models/manutencao-programacao.model';
+import { AtestadoTecnico, FeriasTecnico, ManutencaoOrdem } from '../models/manutencao-programacao.model';
 
 export const HORAS_EXAME_MEDICO = 3.5;
 // Treinamento desconta por dia (customizável por lançamento, ver duracaoHoras) — sem
@@ -27,21 +27,27 @@ export interface CalcularCapacidadeSemanaParams {
   // treinamento pra considerar.
   horasTreinamentoPorDia?: Map<string, number>;
   feriasIntervalo: { dataInicio: string; dataFim: string } | null;
+  // Período de atestado médico do técnico que toca a semana — mesmo efeito de
+  // feriasIntervalo (tira o dia inteiro da conta), motivo diferente. Opcional pra não
+  // quebrar quem já chama essa função sem considerar atestado.
+  atestadoIntervalo?: { dataInicio: string; dataFim: string } | null;
 }
 
 // Soma a disponibilidade base nos dias úteis (SEG-SEX — fim de semana é DSR, ninguém
-// trabalha por padrão). Folga e dias dentro do período de férias tiram o dia inteiro da
-// conta; exame médico (ASO) só desconta HORAS_EXAME_MEDICO daquele dia (o exame não toma
-// o dia todo); treinamento desconta o valor de horasTreinamentoPorDia daquele dia
-// (6,5 = dia todo, 3,5 = meio período, ou outro valor customizado no lançamento);
-// reunião não desconta nada (não bloqueia o resto da agenda do dia).
+// trabalha por padrão). Folga e dias dentro do período de férias OU atestado médico
+// tiram o dia inteiro da conta; exame médico (ASO) só desconta HORAS_EXAME_MEDICO
+// daquele dia (o exame não toma o dia todo); treinamento desconta o valor de
+// horasTreinamentoPorDia daquele dia (6,5 = dia todo, 3,5 = meio período, ou outro
+// valor customizado no lançamento); reunião não desconta nada (não bloqueia o resto da
+// agenda do dia).
 export function calcularCapacidadeSemana(params: CalcularCapacidadeSemanaParams): number {
-  const { dias, disponibilidadePorDia, diasFolga, diasExameMedico, horasTreinamentoPorDia, feriasIntervalo } = params;
+  const { dias, disponibilidadePorDia, diasFolga, diasExameMedico, horasTreinamentoPorDia, feriasIntervalo, atestadoIntervalo } = params;
   let total = 0;
   for (const dia of dias) {
     if (dia.label === 'SAB' || dia.label === 'DOM') continue;
     if (diasFolga.has(dia.data)) continue;
     if (feriasIntervalo && dia.data >= feriasIntervalo.dataInicio && dia.data <= feriasIntervalo.dataFim) continue;
+    if (atestadoIntervalo && dia.data >= atestadoIntervalo.dataInicio && dia.data <= atestadoIntervalo.dataFim) continue;
     let disponivel = disponibilidadePorDia.get(dia.data) ?? 0;
     if (diasExameMedico.has(dia.data)) disponivel = Math.max(0, disponivel - HORAS_EXAME_MEDICO);
     const horasTreinamento = horasTreinamentoPorDia?.get(dia.data);
@@ -55,6 +61,12 @@ export function calcularCapacidadeSemana(params: CalcularCapacidadeSemanaParams)
 export function encontrarFeriasNoIntervalo(ferias: FeriasTecnico[], tecnicoNome: string, diasIso: string[]): FeriasTecnico | null {
   if (diasIso.length === 0) return null;
   return ferias.find(f => f.tecnicoNome === tecnicoNome && diasIso.some(d => d >= f.dataInicio && d <= f.dataFim)) ?? null;
+}
+
+// Mesma ideia de encontrarFeriasNoIntervalo, pra atestado médico.
+export function encontrarAtestadoNoIntervalo(atestados: AtestadoTecnico[], tecnicoNome: string, diasIso: string[]): AtestadoTecnico | null {
+  if (diasIso.length === 0) return null;
+  return atestados.find(a => a.tecnicoNome === tecnicoNome && diasIso.some(d => d >= a.dataInicio && d <= a.dataFim)) ?? null;
 }
 
 // Folga já lançada pro técnico que toca algum dos dias informados — usada nos três

@@ -36,6 +36,7 @@ export interface ProgramacaoSemanalGrupo {
   tecnico: string;
   linhas: ProgramacaoSemanalLinha[];
   feriasAte?: string; // "DD/MM/AAAA" — presente quando o técnico está de férias na semana
+  atestadoAte?: string; // "DD/MM/AAAA" — presente quando o técnico está de atestado médico na semana
 }
 
 export interface ProgramacaoSemanalDia {
@@ -749,6 +750,7 @@ export class ExcelExportService {
     const partes = [grupo.tecnico];
     if (totalHoras > 0) partes.push(`${totalHoras.toFixed(2)}h programadas`);
     if (grupo.feriasAte) partes.push(`Férias até ${grupo.feriasAte}`);
+    if (grupo.atestadoAte) partes.push(`Atestado até ${grupo.atestadoAte}`);
     celDivisor.value = partes.join('   ·   ');
     celDivisor.font = { bold: true, size: 10, color: { argb: this.PROG_AZUL_TEXTO } };
     celDivisor.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL_CLARO } };

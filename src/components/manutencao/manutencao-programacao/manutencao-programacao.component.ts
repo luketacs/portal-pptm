@@ -11,12 +11,12 @@ import { ApontamentosService } from '../../../services/apontamentos.service';
 import { ExcelExportService, ProgramacaoSemanalGrupo, ProgramacaoSemanalLinha } from '../../../services/excel-export.service';
 import { AlmoxarifadoService, Movimentacao, Solicitacao } from '../../../services/almoxarifado.service';
 import {
-  AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem,
+  AtestadoTecnico, AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem,
   ManutencaoTipo, OperadorEscalaApoio, PlanoManutencao, RecursoEspecialItem, SigmaBacklogItem,
 } from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, TURNO_LABEL, turnoNoDia } from '../../../utils/escala-apoio';
 import {
-  HORAS_TREINAMENTO_DIA_TODO, calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo,
+  HORAS_TREINAMENTO_DIA_TODO, calcularCapacidadeSemana, encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo,
   encontrarOrdemDuplicada, podeEditarSemanaFechada, recursosParaEspelho,
 } from '../../../utils/manutencao-regras';
 import {
@@ -294,6 +294,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const grupos: ProgramacaoSemanalGrupo[] = this.grupos().map(g => ({
       tecnico: g.tecnico,
       feriasAte: g.ferias ? this.formatarDataBr(g.ferias.dataFim) : undefined,
+      atestadoAte: g.atestado ? this.formatarDataBr(g.atestado.dataFim) : undefined,
       linhas: g.ordens.map((o): ProgramacaoSemanalLinha => ({
         tipo: o.tipo,
         numeroOs: o.numeroOs,
@@ -505,6 +506,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return encontrarFeriasNoIntervalo(this.manutencaoService.ferias(), tecnicoNome, diasIso);
   }
 
+  // Mesma ideia de feriasNoIntervalo, pra atestado médico.
+  private atestadoNoIntervalo(tecnicoNome: string, diasIso: string[]): AtestadoTecnico | null {
+    return encontrarAtestadoNoIntervalo(this.manutencaoService.atestados(), tecnicoNome, diasIso);
+  }
+
   // Folga já lançada pro técnico que toca algum dos dias informados — se ele está de
   // folga, não deixa lançar mais nada (OS, treinamento, exame médico, outra folga)
   // nesses dias. `idExcluir` evita a folga se auto-bloquear quando ela mesma está
@@ -546,14 +552,21 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       else porTecnico.set(chave, { label, ordens: [o] });
     }
     const diasIso = dias.map(d => d.data);
-    // Técnico de férias na semana aparece mesmo sem nenhum lançamento — o objetivo é
-    // justamente avisar antes de alguém tentar programar algo pra ele.
+    // Técnico de férias/atestado na semana aparece mesmo sem nenhum lançamento — o
+    // objetivo é justamente avisar antes de alguém tentar programar algo pra ele.
     const area = this.areaFiltro();
     for (const f of this.manutencaoService.ferias()) {
       if (area !== 'todos' && f.area !== area) continue;
       const { chave, label } = this.chaveTecnico(f.tecnicoNome, f.tecnicoMatricula);
       if (porTecnico.has(chave)) continue;
       if (!diasIso.some(d => d >= f.dataInicio && d <= f.dataFim)) continue;
+      porTecnico.set(chave, { label, ordens: [] });
+    }
+    for (const a of this.manutencaoService.atestados()) {
+      if (area !== 'todos' && a.area !== area) continue;
+      const { chave, label } = this.chaveTecnico(a.tecnicoNome, a.tecnicoMatricula);
+      if (porTecnico.has(chave)) continue;
+      if (!diasIso.some(d => d >= a.dataInicio && d <= a.dataFim)) continue;
       porTecnico.set(chave, { label, ordens: [] });
     }
     return Array.from(porTecnico.values())
@@ -563,7 +576,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         const capacidade = this.capacidadeSemana(tecnico, ordensOrdenadas, dias);
         const saldo = capacidade !== null ? parseFloat((capacidade - totalHoras).toFixed(2)) : null;
         const ferias = this.feriasNoIntervalo(tecnico, diasIso);
-        return { tecnico, ordens: ordensOrdenadas, totalHoras, capacidade, saldo, ferias };
+        const atestado = this.atestadoNoIntervalo(tecnico, diasIso);
+        return { tecnico, ordens: ordensOrdenadas, totalHoras, capacidade, saldo, ferias, atestado };
       })
       .sort((a, b) => {
         const cmp = chaveOrdenacaoTecnico(a.tecnico).localeCompare(chaveOrdenacaoTecnico(b.tecnico));
@@ -601,6 +615,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       diasExameMedico: new Set(ordensDoTecnico.filter(o => o.tipo === 'exame_medico').flatMap(o => o.diasPrevistos)),
       horasTreinamentoPorDia,
       feriasIntervalo: this.feriasNoIntervalo(tecnicoNome, dias.map(d => d.data)),
+      atestadoIntervalo: this.atestadoNoIntervalo(tecnicoNome, dias.map(d => d.data)),
     });
   }
 
@@ -817,6 +832,83 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       this.notificationService.showSuccess('Férias removidas.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover férias.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  // ── Atestado médico — mesmo padrão de Férias acima ──────────────────────────────
+  readonly atestados = this.manutencaoService.atestados;
+  atestadoAberto = signal(false);
+  atestadoTecnicoNome = signal('');
+  atestadoTecnicoMatricula = signal('');
+  atestadoArea = signal<ManutencaoArea>('ELETRICA');
+  atestadoDataInicio = signal('');
+  atestadoDataFim = signal('');
+
+  tecnicosParaAtestado = computed(() => this.tecnicosPorArea(this.atestadoArea()));
+
+  abrirAtestado(): void {
+    this.atestadoArea.set(this.areaFixa === 'MECANICA' ? 'MECANICA' : 'ELETRICA');
+    this.atestadoTecnicoNome.set('');
+    this.atestadoTecnicoMatricula.set('');
+    this.atestadoDataInicio.set('');
+    this.atestadoDataFim.set('');
+    this.atestadoAberto.set(true);
+  }
+
+  fecharAtestado(): void {
+    this.atestadoAberto.set(false);
+  }
+
+  onAtestadoAreaSelected(area: ManutencaoArea): void {
+    this.atestadoArea.set(area);
+    this.atestadoTecnicoNome.set('');
+    this.atestadoTecnicoMatricula.set('');
+  }
+
+  onAtestadoTecnicoSelected(nome: string): void {
+    this.atestadoTecnicoNome.set(nome);
+    const colaborador = this.tecnicosParaAtestado().find(c => c.nome === nome);
+    this.atestadoTecnicoMatricula.set(colaborador?.matricula ?? '');
+  }
+
+  canConfirmarAtestado(): boolean {
+    return !this.isProcessando() && !!this.atestadoTecnicoNome().trim()
+      && !!this.atestadoDataInicio() && !!this.atestadoDataFim() && this.atestadoDataFim() >= this.atestadoDataInicio();
+  }
+
+  async adicionarAtestado(): Promise<void> {
+    if (!this.canConfirmarAtestado()) return;
+    this.isProcessando.set(true);
+    try {
+      await this.manutencaoService.criarAtestado({
+        tecnicoNome: this.atestadoTecnicoNome(),
+        tecnicoMatricula: this.atestadoTecnicoMatricula() || null,
+        area: this.atestadoArea(),
+        dataInicio: this.atestadoDataInicio(),
+        dataFim: this.atestadoDataFim(),
+      });
+      this.notificationService.showSuccess('Atestado médico cadastrado.');
+      this.atestadoTecnicoNome.set('');
+      this.atestadoTecnicoMatricula.set('');
+      this.atestadoDataInicio.set('');
+      this.atestadoDataFim.set('');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao cadastrar atestado médico.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
+  async removerAtestado(item: AtestadoTecnico): Promise<void> {
+    if (this.isProcessando() || !(await this.confirmDialogService.confirm(`Remover atestado médico de "${item.tecnicoNome}"?`))) return;
+    this.isProcessando.set(true);
+    try {
+      await this.manutencaoService.excluirAtestado(item.id);
+      this.notificationService.showSuccess('Atestado médico removido.');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover atestado médico.');
     } finally {
       this.isProcessando.set(false);
     }
@@ -2132,7 +2224,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       await this.apontamentosService.loadColaboradores();
       await this.manutencaoService.loadEquipamentos();
       if (this.areaFixa === 'APOIO') await this.carregarDadosApoio();
-      else await this.manutencaoService.loadFerias();
+      else {
+        await this.manutencaoService.loadFerias();
+        await this.manutencaoService.loadAtestados();
+      }
     } catch {
       this.errorMessage.set('Erro ao carregar a programação de manutenção.');
     }
@@ -2299,17 +2394,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   async confirmarReuniaoLote(): Promise<void> {
     if (!this.canConfirmarReuniaoLote()) return;
     const dias = this.reuniaoLoteDias();
-    // Quem já está de folga/férias em algum desses dias não entra — diferente de
-    // Feriado (que vale igual pra todo mundo), reunião é algo que a pessoa precisa
+    // Quem já está de folga/férias/atestado em algum desses dias não entra — diferente
+    // de Feriado (que vale igual pra todo mundo), reunião é algo que a pessoa precisa
     // comparecer, não faz sentido marcar pra quem não vai estar trabalhando.
     const bloqueados: string[] = [];
     const tecnicos = this.todosTecnicos().filter(t => {
-      const bloqueado = this.folgaNoIntervalo(t.nome, dias) || this.feriasNoIntervalo(t.nome, dias);
+      const bloqueado = this.folgaNoIntervalo(t.nome, dias) || this.feriasNoIntervalo(t.nome, dias) || this.atestadoNoIntervalo(t.nome, dias);
       if (bloqueado) bloqueados.push(t.nome);
       return !bloqueado;
     });
     if (tecnicos.length === 0) {
-      this.notificationService.showError('Todos os técnicos já estão de folga ou férias nesses dias — nenhuma reunião lançada.');
+      this.notificationService.showError('Todos os técnicos já estão de folga, férias ou atestado nesses dias — nenhuma reunião lançada.');
       return;
     }
 
@@ -2501,6 +2596,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     if (!origem || !nome || dias.length === 0) return null;
     const ferias = this.feriasNoIntervalo(nome, dias);
     if (ferias) return { motivo: `${nome} está de férias de ${this.formatarDataBr(ferias.dataInicio)} a ${this.formatarDataBr(ferias.dataFim)}.` };
+    const atestado = this.atestadoNoIntervalo(nome, dias);
+    if (atestado) return { motivo: `${nome} está de atestado médico de ${this.formatarDataBr(atestado.dataInicio)} a ${this.formatarDataBr(atestado.dataFim)}.` };
     const folga = this.folgaNoIntervalo(nome, dias);
     if (folga) return { motivo: `${nome} já está de folga em algum desses dias.` };
     if (origem.numeroOs && this.ordemDuplicada(origem.numeroOs, nome, dias)) {
@@ -2590,6 +2687,14 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return this.feriasNoIntervalo(nome, dias);
   });
 
+  // Mesma ideia de formTecnicoFerias, pra atestado médico.
+  formTecnicoAtestado = computed<AtestadoTecnico | null>(() => {
+    const nome = this.formTecnicoNome().trim();
+    const dias = this.formDiasSelecionados();
+    if (!nome || dias.length === 0) return null;
+    return this.atestadoNoIntervalo(nome, dias);
+  });
+
   // Folga bloqueia tudo nos dois sentidos: não dá pra lançar nada em cima de um dia
   // que já é folga do técnico (OS/treinamento/exame médico/reunião), E não dá pra
   // lançar folga em cima de um dia que já tem qualquer outra coisa marcada pra ele —
@@ -2637,7 +2742,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     if (this.isProcessando() || !this.formTecnicoNome().trim()) return false;
     if (this.formOrdemDuplicada()) return false;
     if (this.formOsEncerradaNoSigma()) return false;
-    if (this.formTecnicoFerias() || this.formTecnicoFolga()) return false;
+    if (this.formTecnicoFerias() || this.formTecnicoAtestado() || this.formTecnicoFolga()) return false;
     if (this.formRecursoSemDiasDeApoio()) return false;
     if (this.formTipo() === 'ordem') {
       return !!this.formDescricao().trim() && !!this.formLoto();
@@ -2900,9 +3005,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       const dias = this.apoioDiasDoRecurso(recurso);
       if (dias.length === 0) continue;
       const ferias = this.feriasNoIntervalo(tecnico.nome, dias);
+      const atestado = this.atestadoNoIntervalo(tecnico.nome, dias);
       const folga = this.folgaNoIntervalo(tecnico.nome, dias);
-      if (ferias || folga) {
-        this.notificationService.showError(`${tecnico.nome} está de ${ferias ? 'férias' : 'folga'} — não foi programado como apoio.`);
+      if (ferias || atestado || folga) {
+        const motivo = ferias ? 'férias' : atestado ? 'atestado médico' : 'folga';
+        this.notificationService.showError(`${tecnico.nome} está de ${motivo} — não foi programado como apoio.`);
         continue;
       }
       if (numero && this.ordemDuplicada(numero, tecnico.nome, dias)) {

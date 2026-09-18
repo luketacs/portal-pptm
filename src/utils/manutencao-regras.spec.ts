@@ -1,7 +1,7 @@
-import { ManutencaoOrdem, FeriasTecnico } from '../models/manutencao-programacao.model';
+import { ManutencaoOrdem, FeriasTecnico, AtestadoTecnico } from '../models/manutencao-programacao.model';
 import {
   HORAS_EXAME_MEDICO, HORAS_TREINAMENTO_DIA_TODO, HORAS_TREINAMENTO_MEIO_PERIODO,
-  calcularCapacidadeSemana, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo,
+  calcularCapacidadeSemana, encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo,
   encontrarOrdemDuplicada, podeEditarSemanaFechada, recursosParaEspelho,
 } from './manutencao-regras';
 
@@ -66,6 +66,23 @@ describe('calcularCapacidadeSemana', () => {
       feriasIntervalo: { dataInicio: '2026-09-01', dataFim: '2026-09-08' },
     });
     expect(total).toBe(24); // SEG e TER saem por férias, sobra QUA/QUI/SEX
+  });
+
+  it('tira o dia inteiro quando cai dentro do período de atestado médico, igual férias', () => {
+    const disponibilidadePorDia = new Map(DIAS_SEMANA_37.map(d => [d.data, 8]));
+    const total = calcularCapacidadeSemana({
+      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), diasExameMedico: new Set(),
+      feriasIntervalo: null, atestadoIntervalo: { dataInicio: '2026-09-01', dataFim: '2026-09-08' },
+    });
+    expect(total).toBe(24); // SEG e TER saem por atestado, sobra QUA/QUI/SEX
+  });
+
+  it('sem atestadoIntervalo (não informado), não desconta nada por atestado', () => {
+    const disponibilidadePorDia = new Map(DIAS_SEMANA_37.map(d => [d.data, 8]));
+    const total = calcularCapacidadeSemana({
+      dias: DIAS_SEMANA_37, disponibilidadePorDia, diasFolga: new Set(), diasExameMedico: new Set(), feriasIntervalo: null,
+    });
+    expect(total).toBe(40);
   });
 
   it('reproduz o caso do Carlos Jr: feriado na segunda, férias até terça, 13h/dia quarta a sexta', () => {
@@ -154,6 +171,25 @@ describe('encontrarFeriasNoIntervalo', () => {
 
   it('retorna null pra outro técnico sem férias cadastradas', () => {
     expect(encontrarFeriasNoIntervalo(ferias, 'Outro Técnico', ['2026-09-01'])).toBeNull();
+  });
+});
+
+describe('encontrarAtestadoNoIntervalo', () => {
+  const atestados: AtestadoTecnico[] = [
+    { id: 'a1', tecnicoNome: 'Carlos Jr', tecnicoMatricula: null, area: 'ELETRICA', dataInicio: '2026-08-31', dataFim: '2026-09-08' },
+  ];
+
+  it('encontra atestado que toca algum dos dias informados', () => {
+    expect(encontrarAtestadoNoIntervalo(atestados, 'Carlos Jr', ['2026-09-08', '2026-09-09']))
+      .toEqual(atestados[0]);
+  });
+
+  it('retorna null quando não há sobreposição', () => {
+    expect(encontrarAtestadoNoIntervalo(atestados, 'Carlos Jr', ['2026-09-09', '2026-09-10'])).toBeNull();
+  });
+
+  it('retorna null pra outro técnico sem atestado cadastrado', () => {
+    expect(encontrarAtestadoNoIntervalo(atestados, 'Outro Técnico', ['2026-09-01'])).toBeNull();
   });
 });
 

@@ -206,12 +206,13 @@ export interface HhTecnico {
 // continua descontando exame/treinamento normalmente pra quem a usa direto (capacidade/
 // saldo da Programação, onde esse desconto é intencional, ver "Quanto desconta da
 // capacidade" no formulário de Treinamento). "Indisponível" = a diferença — HH perdido
-// só pra folga ou férias agora.
+// só pra folga, férias ou atestado médico agora.
 export function calcularHhTecnico(params: {
   dias: DiaSemana[];
   disponibilidadePorDia: Map<string, number>;
   diasFolga: Set<string>;
   feriasIntervalo: { dataInicio: string; dataFim: string } | null;
+  atestadoIntervalo?: { dataInicio: string; dataFim: string } | null;
 }): HhTecnico {
   const bruto = params.dias
     .filter(d => d.label !== 'SAB' && d.label !== 'DOM')
