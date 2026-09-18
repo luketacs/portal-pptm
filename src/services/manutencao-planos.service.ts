@@ -300,15 +300,22 @@ export class ManutencaoPlanosService {
 
   // Registra o ciclo depois que a ordem já foi criada com sucesso (ver
   // programarDaPreventiva/criarOrdem na Programação) — não é Admin-only, pelo mesmo
-  // motivo de salvarNumeroOsReservado. UNIQUE(plano_id, data_prevista) no banco
-  // garante que duas programações da mesma ocorrência não geram dois ciclos; um
-  // conflito aqui não desfaz a ordem já criada (mesma filosofia best-effort que o
-  // fluxo antigo já tinha pra "avançar" o plano).
+  // motivo de salvarNumeroOsReservado. UNIQUE(plano_id, data_prevista) no banco impede
+  // duas LINHAS pro mesmo ciclo — usa upsert (em vez de insert-e-ignora-conflito) pra
+  // SOBRESCREVER ordem_id quando já existe uma linha pra essa ocorrência, não descartar
+  // silenciosamente. Reportado: plano do Apoio "programado duas vezes" continuava
+  // aparecendo como pendente — a ciclo já tinha uma linha (ordem_id NULO, de uma ordem
+  // apagada depois — a FK é ON DELETE SET NULL) ocupando esse (plano_id,
+  // data_prevista); o antigo insert-e-ignora-em-conflito batia nessa linha, tratava
+  // 23505 como "já registrado, tudo bem" e nunca atualizava o ordem_id pra apontar pra
+  // OS nova — ultimoCicloDoPlano (que só conta ciclo com ordem_id real, ver esse
+  // método) nunca via a ocorrência como coberta, então proximaData nunca avançava,
+  // mesmo com a OS de verdade criada.
   async registrarCiclo(planoId: string, dataPrevista: string, ordemId: string): Promise<void> {
     const { error } = await this.supabaseService.client
       .from('manutencao_ciclos')
-      .insert({ plano_id: planoId, data_prevista: dataPrevista, ordem_id: ordemId });
-    if (error && error.code !== '23505') throw new Error(error.message);
+      .upsert({ plano_id: planoId, data_prevista: dataPrevista, ordem_id: ordemId }, { onConflict: 'plano_id,data_prevista' });
+    if (error) throw new Error(error.message);
     await this.load();
   }
 
