@@ -300,7 +300,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         semOs: o.semOs,
         descricao: o.descricao,
         duracaoHoras: o.duracaoHoras,
-        equipamento: o.equipamento || '—',
+        equipamento: this.equipamentoComKks(o),
         recursos: o.tipo === 'reuniao' ? [o.reuniaoHorario, o.reuniaoLocal].filter(Boolean).join(' · ') || '—' : (o.recursos || '—'),
         loto: o.loto || '—',
         areaAtuacao: o.areaAtuacao || '—',
@@ -1407,6 +1407,14 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   kksDaOrdem(o: ManutencaoOrdem): string | null {
     if (!o.planoPreventivoId) return null;
     return this.manutencaoPlanosService.getById(o.planoPreventivoId)?.tagKks ?? null;
+  }
+
+  // Mesma info de kksDaOrdem, só que como texto plano — usado na planilha exportada
+  // (exportarSemana), que não tem coluna própria de KKS (ver ProgramacaoSemanalLinha).
+  private equipamentoComKks(o: ManutencaoOrdem): string {
+    const equipamento = o.equipamento || '—';
+    const kks = this.kksDaOrdem(o);
+    return kks ? `${equipamento} [${kks}]` : equipamento;
   }
 
   // OS já criadas a partir de um plano preventivo, com dia dentro da semana
