@@ -708,6 +708,7 @@
                           </td>
                           <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">
                             {{ o.equipamento || '—' }}
+                            @if (kksDaOrdem(o); as kks) { <span class="ml-1 text-[10px] font-mono font-semibold px-1 py-0.5 rounded bg-slate-100 text-slate-600" title="Tag KKS">{{ kks }}</span> }
                             @if (o.duracaoHoras) { <span class="ml-1 text-sm font-bold text-blue-700">{{ o.duracaoHoras }}h</span> }
                           </td>
                           <td class="py-1.5 pr-3 text-gray-600">{{ o.recursos || '—' }}</td>
@@ -812,6 +813,7 @@
                           <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
                           <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">
                             {{ o.equipamento || '—' }}
+                            @if (kksDaOrdem(o); as kks) { <span class="ml-1 text-[10px] font-mono font-semibold px-1 py-0.5 rounded bg-slate-100 text-slate-600" title="Tag KKS">{{ kks }}</span> }
                             @if (o.duracaoHoras) { <span class="ml-1 text-sm font-bold text-blue-700">{{ o.duracaoHoras }}h</span> }
                           </td>
                           <td class="py-1.5 pr-3 text-gray-600">{{ o.recursos || '—' }}</td>

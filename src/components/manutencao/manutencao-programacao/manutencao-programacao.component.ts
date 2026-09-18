@@ -1397,6 +1397,18 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return this.NOME_EQUIPE_APOIO[equipe];
   }
 
+  // Tag KKS do plano preventivo que originou a OS (ver PlanoManutencao.tagKks) — pedido
+  // do usuário: pro SERVPLEX (e demais equipes do Apoio), o campo "equipamento" da OS
+  // costuma ser um nome genérico de prédio/planta (ex. "PTPC", "PRÉDIO 25 -
+  // COORDENAÇÃO E ENGENHARIA PPTM"), igual pra vários planos diferentes — só o KKS
+  // (ex. 90SAA05AH620) diferencia qual sala/ativo específico é, e é isso que bate com a
+  // planilha de campo deles. null pra OS sem vínculo de plano (lançamento avulso) ou
+  // cujo plano não tem KKS cadastrado.
+  kksDaOrdem(o: ManutencaoOrdem): string | null {
+    if (!o.planoPreventivoId) return null;
+    return this.manutencaoPlanosService.getById(o.planoPreventivoId)?.tagKks ?? null;
+  }
+
   // OS já criadas a partir de um plano preventivo, com dia dentro da semana
   // selecionada — usado só pra calcular o velocímetro (quanto da leva da semana já foi
   // programado). Diferente de planosJaProgramados (que olha todas as semanas, pra
