@@ -519,6 +519,22 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return encontrarFolgaNoIntervalo(this.manutencaoService.ordens(), tecnicoNome, diasIso, idExcluir);
   }
 
+  // Sequência "está de férias? atestado? folga?" (nessa ordem de precedência) — estava
+  // remontada em 4 lugares diferentes (lote de Reunião, bloqueio do +Apoio, os 3
+  // formTecnico* do form principal, cópia de recursos pro apoio), cada um com sua
+  // própria ordem/mensagem. Ponto único de verdade pra ordem e pro texto de cada motivo.
+  private bloqueioDoTecnico(
+    nome: string, dias: string[], idExcluir?: string | null,
+  ): { tipo: 'ferias' | 'atestado' | 'folga'; motivo: string } | null {
+    const ferias = this.feriasNoIntervalo(nome, dias);
+    if (ferias) return { tipo: 'ferias', motivo: `${nome} está de férias de ${this.formatarDataBr(ferias.dataInicio)} a ${this.formatarDataBr(ferias.dataFim)}.` };
+    const atestado = this.atestadoNoIntervalo(nome, dias);
+    if (atestado) return { tipo: 'atestado', motivo: `${nome} está de atestado médico de ${this.formatarDataBr(atestado.dataInicio)} a ${this.formatarDataBr(atestado.dataFim)}.` };
+    const folga = this.folgaNoIntervalo(nome, dias, idExcluir);
+    if (folga) return { tipo: 'folga', motivo: `${nome} já está de folga em algum desses dias.` };
+    return null;
+  }
+
   // Mesma OS já lançada pro mesmo técnico em algum dos dias informados — evita
   // duplicar sem querer o mesmo lançamento (ex.: clicar duas vezes em Adicionar, ou
   // esquecer que já tinha lançado aquela OS pra ele). Compara o número normalizado
@@ -2402,7 +2418,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     // comparecer, não faz sentido marcar pra quem não vai estar trabalhando.
     const bloqueados: string[] = [];
     const tecnicos = this.todosTecnicos().filter(t => {
-      const bloqueado = this.folgaNoIntervalo(t.nome, dias) || this.feriasNoIntervalo(t.nome, dias) || this.atestadoNoIntervalo(t.nome, dias);
+      const bloqueado = !!this.bloqueioDoTecnico(t.nome, dias);
       if (bloqueado) bloqueados.push(t.nome);
       return !bloqueado;
     });
@@ -2597,12 +2613,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const nome = this.apoioTecnicoNome().trim();
     const dias = this.apoioDiasSelecionados();
     if (!origem || !nome || dias.length === 0) return null;
-    const ferias = this.feriasNoIntervalo(nome, dias);
-    if (ferias) return { motivo: `${nome} está de férias de ${this.formatarDataBr(ferias.dataInicio)} a ${this.formatarDataBr(ferias.dataFim)}.` };
-    const atestado = this.atestadoNoIntervalo(nome, dias);
-    if (atestado) return { motivo: `${nome} está de atestado médico de ${this.formatarDataBr(atestado.dataInicio)} a ${this.formatarDataBr(atestado.dataFim)}.` };
-    const folga = this.folgaNoIntervalo(nome, dias);
-    if (folga) return { motivo: `${nome} já está de folga em algum desses dias.` };
+    const bloqueio = this.bloqueioDoTecnico(nome, dias);
+    if (bloqueio) return bloqueio;
     if (origem.numeroOs && this.ordemDuplicada(origem.numeroOs, nome, dias)) {
       return { motivo: `${nome} já tem a OS ${origem.numeroOs} lançada em algum desses dias.` };
     }
@@ -3007,11 +3019,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     for (const { recurso, tecnico } of candidatos) {
       const dias = this.apoioDiasDoRecurso(recurso);
       if (dias.length === 0) continue;
-      const ferias = this.feriasNoIntervalo(tecnico.nome, dias);
-      const atestado = this.atestadoNoIntervalo(tecnico.nome, dias);
-      const folga = this.folgaNoIntervalo(tecnico.nome, dias);
-      if (ferias || atestado || folga) {
-        const motivo = ferias ? 'férias' : atestado ? 'atestado médico' : 'folga';
+      const bloqueio = this.bloqueioDoTecnico(tecnico.nome, dias);
+      if (bloqueio) {
+        const motivo = bloqueio.tipo === 'ferias' ? 'férias' : bloqueio.tipo === 'atestado' ? 'atestado médico' : 'folga';
         this.notificationService.showError(`${tecnico.nome} está de ${motivo} — não foi programado como apoio.`);
         continue;
       }
