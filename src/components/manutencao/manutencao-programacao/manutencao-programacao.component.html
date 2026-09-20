@@ -1042,10 +1042,10 @@
                           <svg class="h-4 w-4 text-gray-400 transition-transform flex-shrink-0" [class.rotate-90]="isGrupoExpandido('h:' + bloco.semana + ':tec:' + grupo.tecnico)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
                           <h3 class="text-sm font-bold text-gray-800 truncate">{{ grupo.tecnico }}</h3>
                           @if (grupo.ferias; as fer) {
-                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 flex-shrink-0">Férias até {{ formatarDataBr(fer.dataFim) }}</span>
+                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 flex-shrink-0" [title]="'Férias de ' + formatarDataBr(fer.dataInicio) + ' a ' + formatarDataBr(fer.dataFim)">Férias até {{ formatarDataBr(fer.dataFim) }}</span>
                           }
                           @if (grupo.atestado; as ates) {
-                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 flex-shrink-0">Atestado até {{ formatarDataBr(ates.dataFim) }}</span>
+                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 flex-shrink-0" [title]="'Atestado médico de ' + formatarDataBr(ates.dataInicio) + ' a ' + formatarDataBr(ates.dataFim)">Atestado até {{ formatarDataBr(ates.dataFim) }}</span>
                           }
                         </div>
                         <span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
@@ -1102,6 +1102,7 @@
                                   </td>
                                   <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">
                                     {{ o.equipamento || '—' }}
+                                    @if (kksDaOrdem(o); as kks) { <span class="ml-1 text-[10px] font-mono font-semibold px-1 py-0.5 rounded bg-slate-100 text-slate-600" title="Tag KKS">{{ kks }}</span> }
                                     @if (o.duracaoHoras) { <span class="ml-1 text-sm font-bold text-blue-700">{{ o.duracaoHoras }}h</span> }
                                   </td>
                                   <td class="py-1.5 pr-3 text-gray-600">{{ o.recursos || '—' }}</td>
@@ -1204,6 +1205,7 @@
                                   <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
                                   <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">
                                     {{ o.equipamento || '—' }}
+                                    @if (kksDaOrdem(o); as kks) { <span class="ml-1 text-[10px] font-mono font-semibold px-1 py-0.5 rounded bg-slate-100 text-slate-600" title="Tag KKS">{{ kks }}</span> }
                                     @if (o.duracaoHoras) { <span class="ml-1 text-sm font-bold text-blue-700">{{ o.duracaoHoras }}h</span> }
                                   </td>
                                   <td class="py-1.5 pr-3 text-gray-600">{{ o.recursos || '—' }}</td>
@@ -1252,6 +1254,7 @@
                               <th class="py-1 pr-3">Descrição</th>
                               <th class="py-1 pr-3">Área</th>
                               <th class="py-1 pr-3">Técnico</th>
+                              <th class="py-1 pr-3 text-center">Status</th>
                               <th class="py-1 pr-3"></th>
                             </tr>
                           </thead>
@@ -1272,6 +1275,15 @@
                                 <td class="py-1.5 pr-3 text-gray-800 max-w-xs"><span class="block truncate" [title]="o.descricao">{{ o.descricao }}</span></td>
                                 <td class="py-1.5 pr-3 text-gray-600">{{ areaLabel[o.area] }}</td>
                                 <td class="py-1.5 pr-3 text-gray-600">{{ o.tecnicoNome }}</td>
+                                <td class="py-1.5 pr-3 text-center">
+                                  @if (o.tipo === 'ordem') {
+                                    @if (statusOuExecucao(o); as st) {
+                                      <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="st.class">{{ st.label }}</span>
+                                    } @else {
+                                      <span class="text-xs text-gray-300">—</span>
+                                    }
+                                  }
+                                </td>
                                 <td class="py-1.5 pr-3 whitespace-nowrap text-center">
                                   @if (podeEditarSemana()) {
                                     <button (click)="toggleLinhaMenu(o.id, $event)" title="Ações" class="text-gray-400 hover:text-gray-700 hover:bg-slate-100 rounded-lg p-1.5 transition">
