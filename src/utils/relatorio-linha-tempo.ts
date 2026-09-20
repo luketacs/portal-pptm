@@ -109,6 +109,48 @@ export function calcularLinhaTempo(
 // entre cada par, igual ao <polyline> original) em vez de "points" — usado pela tela
 // de Indicadores Semanais, que precisa de <path> (não <polyline>) pro truque de
 // animação de "desenhar a linha" via pathLength/stroke-dashoffset.
+export interface LinhaTempoGeometriaEnriquecida extends LinhaTempoGeometria {
+  pathAtendimento: string;
+  pathCumprimento: string;
+  areaAtendimento: string;
+  ultimoAtendimento: number | null;
+  ultimoCumprimento: number | null;
+  yRotuloAtendimento: number | null;
+  yRotuloCumprimento: number | null;
+}
+
+// Enriquece a geometria crua de calcularLinhaTempo com path em <path> (segmento reto
+// entre pontos — precisa de <path>, não <polyline>, pra animação de "desenhar a linha"
+// via pathLength/stroke-dashoffset) + área de preenchimento sob a linha de Atendimento
+// (só essa, pra não empilhar duas áreas semitransparentes quando as duas séries andam
+// coladas) + posição dos rótulos "XX%" do ponto final. Usada pelos Indicadores Semanais
+// (autenticado e público) — estava reimplementada idêntica nos dois componentes.
+export function enriquecerGeometria(
+  geo: LinhaTempoGeometria | null, pontos: PontoLinhaTempo[],
+): LinhaTempoGeometriaEnriquecida | null {
+  if (!geo) return null;
+  const baseY = geo.altura - geo.margem.baixo;
+  const ultimo = pontos[pontos.length - 1];
+  const ultimoPontoAtendimento = geo.pontosAtendimento[geo.pontosAtendimento.length - 1];
+  const ultimoPontoCumprimento = geo.pontosCumprimento[geo.pontosCumprimento.length - 1];
+  const rotulos = ultimoPontoAtendimento && ultimoPontoCumprimento
+    ? posicionarRotulosFinais({
+        yPontoAtendimento: ultimoPontoAtendimento.y, yPontoCumprimento: ultimoPontoCumprimento.y,
+        margemTopo: geo.margem.topo, alturaUtil: baseY,
+      })
+    : null;
+  return {
+    ...geo,
+    pathAtendimento: linhaRetaPath(geo.pontosAtendimento),
+    pathCumprimento: linhaRetaPath(geo.pontosCumprimento),
+    areaAtendimento: linhaRetaAreaPath(geo.pontosAtendimento, baseY),
+    ultimoAtendimento: ultimo ? Math.round(ultimo.atendimento) : null,
+    ultimoCumprimento: ultimo ? Math.round(ultimo.cumprimento) : null,
+    yRotuloAtendimento: rotulos?.yRotuloAtendimento ?? null,
+    yRotuloCumprimento: rotulos?.yRotuloCumprimento ?? null,
+  };
+}
+
 export function linhaRetaPath(pontos: CoordenadaSvg[]): string {
   if (pontos.length === 0) return '';
   return `M ${pontos[0].x},${pontos[0].y}` + pontos.slice(1).map(p => ` L ${p.x},${p.y}`).join('');

@@ -6,8 +6,20 @@
 // dias originalmente previstos), sem duplicar nenhum dos dois.
 import { CategoriaIndicador, ConsultaSigmaResultado, ManutencaoOrdem } from '../models/manutencao-programacao.model';
 import { ordemExecutadaAgrupada } from './manutencao-dashboard';
+import { round2 } from './formatacao';
 
 export type StatusGeralSemana = 'Dentro da Meta' | 'Próximo da Meta' | 'Abaixo da Meta';
+
+// Cores por status geral — usada pelos Indicadores Semanais (autenticado + público) e
+// também pelos Relatórios PCM semanal/mensal (esses com fallback próprio pra status
+// desconhecido, já que o campo deles é string livre, não este union type — ver
+// relatorio-semanal-pcm.component.ts). Estava reimplementada com os mesmos valores em
+// 4 lugares diferentes.
+export const STATUS_GERAL_COR: Record<StatusGeralSemana, string> = {
+  'Dentro da Meta': '#4CAF50',
+  'Próximo da Meta': '#FF9800',
+  'Abaixo da Meta': '#F44336',
+};
 
 export const META_ATENDIMENTO = 95.0;
 export const META_CUMPRIMENTO = 95.0;
@@ -31,10 +43,6 @@ export const TETO_DISPONIBILIDADE_GLOBAL = 90.0;
 export const PISO_DIAS_NAVIO = 5.0;
 export const META_DIAS_NAVIO = 4.5;
 export const TETO_DIAS_NAVIO = 4.0;
-
-function round2(v: number): number {
-  return Math.round(v * 100) / 100;
-}
 
 // Índice de atingimento de meta em 3 trechos (0-75%, 75-100%, 100-125%), mesma régua da
 // planilha de PLR do Corporativo. Cobre os dois sentidos, decididos pela ordem de

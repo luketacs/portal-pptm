@@ -3,6 +3,8 @@
 // port fiel de _mapear_nome_programacao_para_matricula (mensal.py). Necessário
 // porque a Programação só tem primeiro nome/apelido, não a matrícula.
 
+import { normalizarAscii } from './formatacao';
+
 export interface RegistroMatricula {
   matricula: string;
   funcionario: string;
@@ -26,10 +28,6 @@ export const APELIDOS_PROGRAMACAO_MATRICULA: Record<string, string> = {
   // Mecânica). Confirmado contra os dados reais (planilha de Programação real).
   'ANT. JOSE': '20006162',
 };
-
-function normalizarAscii(texto: string): string {
-  return String(texto ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
-}
 
 export function normalizarNomeColaborador(valor: string): string {
   return normalizarAscii(valor).split(/\s+/).filter(Boolean).join(' ');

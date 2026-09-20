@@ -8,6 +8,7 @@ import {
   analisarPontosAtencaoEAcoesMensal, areasComMovimento, extrairHistoricoMeses, gerarDestaquesMensal, parseIndicadoresMensais,
 } from '../../../utils/relatorio-mensal-pcm';
 import { LinhaTempoGeometria, calcularLinhaTempo } from '../../../utils/relatorio-linha-tempo';
+import { STATUS_GERAL_COR } from '../../../utils/manutencao-indicadores';
 import { OrigemPrograma, RegistroMatricula, parseMatriculas } from '../../../utils/relatorio-colaboradores';
 import { HorasProgramadasPorColaborador, extrairHorasProgramadasSemana, extrairPeriodoAba } from '../../../utils/relatorio-programacao-semanal';
 import { agregarHorasPonto } from '../../../utils/relatorio-ponto';
@@ -50,7 +51,7 @@ function normalizarNomeAba(nome: string): string {
 
 const SEVERIDADE_LABEL: Record<PontoAtencao['severidade'], string> = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 const PRIORIDADE_LABEL: Record<AcaoPrioritaria['prioridade'], string> = { urgente: 'Urgente', alta: 'Alta', media: 'Média', baixa: 'Baixa' };
-const STATUS_COR: Record<string, string> = { 'Dentro da Meta': '#4CAF50', 'Próximo da Meta': '#FF9800', 'Abaixo da Meta': '#F44336' };
+const STATUS_COR: Record<string, string> = STATUS_GERAL_COR;
 
 // Port do gerador de Relatório Mensal PCM (Fase 1: KPIs do mês + acumulado do ano —
 // ver src/utils/relatorio-mensal-pcm.ts para o porquê da leitura por rótulo em vez

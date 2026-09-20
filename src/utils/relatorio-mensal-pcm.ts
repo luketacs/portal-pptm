@@ -13,6 +13,7 @@
 
 import { AcaoPrioritaria, Destaque, PontoAtencao } from './relatorio-semanal-pcm';
 import { PontoLinhaTempo } from './relatorio-linha-tempo';
+import { round2 } from './formatacao';
 
 export const META_ATENDIMENTO_MENSAL = 95.0;
 export const META_CUMPRIMENTO_MENSAL = 95.0;
@@ -24,6 +25,14 @@ export const MESES_COMPLETO: Record<MesAbrev, string> = {
   JAN: 'Janeiro', FEV: 'Fevereiro', MAR: 'Março', ABR: 'Abril', MAI: 'Maio', JUN: 'Junho',
   JUL: 'Julho', AGO: 'Agosto', SET: 'Setembro', OUT: 'Outubro', NOV: 'Novembro', DEZ: 'Dezembro',
 };
+
+// "SET/26" — rótulo curto de mês pro eixo X do gráfico de linha do tempo no modo Mensal
+// (Indicadores Semanais, autenticado e público — estava reimplementada idêntica nos
+// dois). Ano com 2 dígitos pra não brigar por espaço com o rótulo semanal ("S38").
+export function labelMesCurto(mesIso: string): string {
+  const [ano, mes] = mesIso.split('-');
+  return `${MESES_ABREV[Number(mes) - 1]}/${ano.slice(2)}`;
+}
 
 export const AREAS_PCM_MENSAL = [
   'MECÂNICA', 'ELÉTRICA', 'LUBRIFICAÇÃO', 'OPERAÇÃO', 'LIMPEZA OPERACIONAL', 'REFRIGERAÇÃO', 'SPCI',
@@ -87,10 +96,6 @@ export interface DadosAcumulado {
   metaAtendimento: number;
   metaCumprimento: number;
   qtdMeses: number;
-}
-
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 function pad2(n: number): string {

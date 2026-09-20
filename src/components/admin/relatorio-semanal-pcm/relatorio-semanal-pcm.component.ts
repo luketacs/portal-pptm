@@ -8,6 +8,7 @@ import {
   gerarDestaques, parseIndicadoresSemanais,
 } from '../../../utils/relatorio-semanal-pcm';
 import { LinhaTempoGeometria, calcularLinhaTempo } from '../../../utils/relatorio-linha-tempo';
+import { STATUS_GERAL_COR } from '../../../utils/manutencao-indicadores';
 import { parseMatriculas } from '../../../utils/relatorio-colaboradores';
 import {
   ColaboradorHoras, calcularHorasEOrdensApontadas, colaboradoresOperacaoEmManutencao, descricaoCurtaOrdem,
@@ -51,7 +52,10 @@ const SEVERIDADE_LABEL: Record<PontoAtencao['severidade'], string> = { alta: 'Al
 const PRIORIDADE_LABEL: Record<AcaoPrioritaria['prioridade'], string> = { urgente: 'Urgente', alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 
 // Cores por status geral — iguais às do relatório original (era literal no HTML: {dados['status_cor']}).
-const STATUS_COR: Record<string, string> = { 'Dentro da Meta': '#4CAF50', 'Próximo da Meta': '#FF9800', 'Abaixo da Meta': '#F44336' };
+// STATUS_GERAL_COR é o mesmo mapa usado pelos Indicadores Semanais (ver
+// manutencao-indicadores.ts) — aqui com fallback próprio porque este campo é string
+// livre (vem de planilha), não o union type fechado de lá.
+const STATUS_COR: Record<string, string> = STATUS_GERAL_COR;
 
 // Port do gerador de Relatório Semanal PCM (antes um app desktop em Python) — lê a
 // mesma planilha "Painel de Indicadores de PCM - 2026.xlsx" que a equipe já usa e

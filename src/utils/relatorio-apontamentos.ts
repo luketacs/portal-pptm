@@ -10,6 +10,7 @@
 import { OrigemPrograma, RegistroMatricula, mapearNomeProgramacaoParaMatricula, matriculaSuffix6, normalizarNomeColaborador } from './relatorio-colaboradores';
 import { HorasPontoPagina } from './relatorio-ponto';
 import { HorasProgramadasPorColaborador } from './relatorio-programacao-semanal';
+import { normalizarAscii, round2 } from './formatacao';
 
 export interface NomeNaoMapeado {
   origem: OrigemPrograma;
@@ -59,14 +60,6 @@ export interface DadosHoras {
 const MATRICULAS_EXCLUIDAS_RELATORIO = new Set(['20006139']);
 const MAX_H_LINHA = 24; // máximo físico por apontamento
 const MAX_H_DIA = 24;   // máximo físico por colaborador por dia
-
-function round2(valor: number): number {
-  return Math.round(valor * 100) / 100;
-}
-
-function normalizarAscii(texto: string): string {
-  return String(texto ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
-}
 
 // Colaboradores da Operação atualmente emprestados pra manutenção — lista mantida
 // manualmente (igual MATRICULAS_EXCLUIDAS_RELATORIO), porque não dá pra inferir

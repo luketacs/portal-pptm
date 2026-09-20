@@ -5,6 +5,7 @@
 // regras de destaques/pontos de atenção/ações prioritárias.
 
 import { PontoLinhaTempo } from './relatorio-linha-tempo';
+import { round2 } from './formatacao';
 
 export type StatusGeralSemana = 'Dentro da Meta' | 'Próximo da Meta' | 'Abaixo da Meta';
 export type ModoCalendarioSemana = 'ISO' | 'SIMPLES';
@@ -81,10 +82,6 @@ export interface Destaque {
   tipo: string;
   texto: string;
   detalhe: string;
-}
-
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 function pad2(n: number): string {

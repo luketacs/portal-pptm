@@ -18,6 +18,8 @@
 //    férias (ex.: ordem = "FÉRIAS 29/07 - 10/07") não têm duração numérica e são
 //    puladas naturalmente, sem precisar de detecção especial.
 
+import { round2 } from './formatacao';
+
 export interface HorasProgramadasPorColaborador {
   [nomeNormalizado: string]: number;
 }
@@ -37,10 +39,6 @@ interface CabecalhoMesclado {
 
 function normalizarRotulo(valor: unknown): string {
   return String(valor ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
-}
-
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 function parseDuracao(valor: unknown): number | null {

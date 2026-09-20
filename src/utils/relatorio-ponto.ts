@@ -11,16 +11,14 @@
 // duas quinzenas) — a extração de texto do PDF em si fica a cargo do componente
 // (via pdfjs-dist no navegador), essa função só processa o texto resultante.
 
+import { normalizarAscii, round2 } from './formatacao';
+
 export type TipoTurno = '4X4' | 'ADM_5X2' | 'OUTRO';
 
 export interface HorasPontoPagina {
   matricula6: string; // sufixo de 6 dígitos da matrícula, extraído do PDF
   turno: TipoTurno;
   horas: number;
-}
-
-function normalizarAscii(texto: string): string {
-  return texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
 }
 
 function classificarTurno(textoTurno: string): TipoTurno {
@@ -46,10 +44,6 @@ function diferencaHoras(entrada: string, saida: string): number {
   let fim = minutos(saida);
   if (fim < ini) fim += 24 * 60; // virada de turno (ex.: entra à noite, sai de manhã)
   return (fim - ini) / 60;
-}
-
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 // Procura uma linha com "MATR" (Matrícula) e pega o último número dela — no

@@ -23,11 +23,11 @@ import { FormsModule } from '@angular/forms';
 import { AtestadoTecnico, CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, FeriasTecnico, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
-  META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, StatusGeralSemana,
+  META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, STATUS_GERAL_COR, StatusGeralSemana,
   TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, indiceAtingimentoMeta,
 } from '../../../utils/manutencao-indicadores';
-import { LinhaTempoGeometria, PontoLinhaTempo, calcularLinhaTempo, linhaRetaAreaPath, linhaRetaPath, posicionarRotulosFinais } from '../../../utils/relatorio-linha-tempo';
-import { MESES_ABREV } from '../../../utils/relatorio-mensal-pcm';
+import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
+import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
 import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
 import { encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 import {
@@ -803,44 +803,14 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     return resultado;
   });
 
-  private enriquecerGeometria(geo: LinhaTempoGeometria | null, pontos: PontoLinhaTempo[]) {
-    if (!geo) return null;
-    const baseY = geo.altura - geo.margem.baixo;
-    const ultimo = pontos[pontos.length - 1];
-    const ultimoPontoAtendimento = geo.pontosAtendimento[geo.pontosAtendimento.length - 1];
-    const ultimoPontoCumprimento = geo.pontosCumprimento[geo.pontosCumprimento.length - 1];
-    // Posição dos rótulos "XX%" do ponto final calculada à parte (não é mais só
-    // "acima"/"abaixo" fixo) pra nunca colidir quando os dois valores ficam próximos,
-    // nem vazar pra fora do gráfico quando o ponto está bem no topo/base — ver
-    // posicionarRotulosFinais() em relatorio-linha-tempo.ts.
-    const rotulos = ultimoPontoAtendimento && ultimoPontoCumprimento
-      ? posicionarRotulosFinais({
-          yPontoAtendimento: ultimoPontoAtendimento.y, yPontoCumprimento: ultimoPontoCumprimento.y,
-          margemTopo: geo.margem.topo, alturaUtil: baseY,
-        })
-      : null;
-    return {
-      ...geo,
-      pathAtendimento: linhaRetaPath(geo.pontosAtendimento),
-      pathCumprimento: linhaRetaPath(geo.pontosCumprimento),
-      areaAtendimento: linhaRetaAreaPath(geo.pontosAtendimento, baseY),
-      ultimoAtendimento: ultimo ? Math.round(ultimo.atendimento) : null,
-      ultimoCumprimento: ultimo ? Math.round(ultimo.cumprimento) : null,
-      yRotuloAtendimento: rotulos?.yRotuloAtendimento ?? null,
-      yRotuloCumprimento: rotulos?.yRotuloCumprimento ?? null,
-    };
-  }
-
-  private labelMes(mesIso: string): string {
-    const [ano, mes] = mesIso.split('-');
-    return `${MESES_ABREV[Number(mes) - 1]}/${ano.slice(2)}`;
-  }
-
+  // enriquecerGeometria/labelMesCurto vêm dos utils compartilhados (ver
+  // relatorio-linha-tempo.ts/relatorio-mensal-pcm.ts) — estavam reimplementadas aqui e
+  // na tela autenticada, idênticas.
   linhaTempoGeral = computed(() => {
     const pontos = this.modoPeriodo() === 'mes'
-      ? this.pontosEvolucaoGeralMensal().map(p => ({ label: this.labelMes(p.mes), atendimento: p.atendimento, cumprimento: p.cumprimento }))
+      ? this.pontosEvolucaoGeralMensal().map(p => ({ label: labelMesCurto(p.mes), atendimento: p.atendimento, cumprimento: p.cumprimento }))
       : this.pontosEvolucaoGeral().map(p => ({ label: `S${numeroSemanaISO(p.semana)}`, atendimento: p.atendimento, cumprimento: p.cumprimento }));
-    return this.enriquecerGeometria(calcularLinhaTempo(pontos), pontos);
+    return enriquecerGeometria(calcularLinhaTempo(pontos), pontos);
   });
 
   linhaTempoPorArea = computed(() => {
@@ -850,10 +820,10 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
       const pontos = [...(mapaPorCategoria.get(categoria) ?? new Map()).entries()]
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([chave, v]): PontoLinhaTempo => ({
-          label: mensal ? this.labelMes(chave) : `S${numeroSemanaISO(chave)}`,
+          label: mensal ? labelMesCurto(chave) : `S${numeroSemanaISO(chave)}`,
           atendimento: v.atendimento, cumprimento: v.cumprimento,
         }));
-      return { categoria, label: CATEGORIA_LABEL[categoria], geometria: this.enriquecerGeometria(calcularLinhaTempo(pontos), pontos) };
+      return { categoria, label: CATEGORIA_LABEL[categoria], geometria: enriquecerGeometria(calcularLinhaTempo(pontos), pontos) };
     });
   });
 
@@ -901,8 +871,6 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   });
 
   statusCor(status: IndicadoresSemana['statusGeral']): string {
-    if (status === 'Dentro da Meta') return '#4CAF50';
-    if (status === 'Próximo da Meta') return '#FF9800';
-    return '#F44336';
+    return STATUS_GERAL_COR[status];
   }
 }
