@@ -403,6 +403,16 @@ export function extrairHistoricoContagensPorArea(rows: unknown[][], semanaAte: n
   return pontos;
 }
 
+// Esqueleto repetido entre analisarPontosAtencaoEAcoes (semanal) e sua versão mensal
+// (relatorio-mensal-pcm.ts): as regras de negócio que GERAM cada ponto de atenção/ação
+// divergem de propósito entre semanal e mensal (mensal compara com o acumulado do ano,
+// semanal não) — só a ordenação final por prioridade é idêntica nos dois.
+const PRIORIDADE_ORDEM: Record<AcaoPrioritaria['prioridade'], number> = { urgente: 0, alta: 1, media: 2, baixa: 3 };
+
+export function ordenarAcoesPorPrioridade(acoes: AcaoPrioritaria[]): AcaoPrioritaria[] {
+  return [...acoes].sort((a, b) => (PRIORIDADE_ORDEM[a.prioridade] ?? 4) - (PRIORIDADE_ORDEM[b.prioridade] ?? 4));
+}
+
 export function analisarPontosAtencaoEAcoes(
   dados: DadosSemana,
 ): { pontosAtencao: PontoAtencao[]; acoesPrioritarias: AcaoPrioritaria[] } {
@@ -626,8 +636,7 @@ export function analisarPontosAtencaoEAcoes(
   }
 
   // 9. Ordenação por prioridade e remoção de duplicatas
-  const prioridadeOrdem: Record<string, number> = { urgente: 0, alta: 1, media: 2, baixa: 3 };
-  acoesPrioritarias = [...acoesPrioritarias].sort((a, b) => (prioridadeOrdem[a.prioridade] ?? 4) - (prioridadeOrdem[b.prioridade] ?? 4));
+  acoesPrioritarias = ordenarAcoesPorPrioridade(acoesPrioritarias);
 
   const vistas = new Set<string>();
   const acoesUnicas: AcaoPrioritaria[] = [];

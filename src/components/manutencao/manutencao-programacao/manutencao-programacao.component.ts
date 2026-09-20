@@ -28,6 +28,7 @@ import {
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
+type TipoAfastamento = 'ferias' | 'atestado';
 
 // Ficha impressa por OS — ver fichasParaImprimir.
 interface FichaImpressaoOs {
@@ -775,156 +776,113 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   }
   escalaDaSemana = computed(() => this.escalaDaSemanaCalc(this.diasDaSemanaAtual()));
 
-  // ── Férias (Admin): período de férias por técnico, pra avisar/bloquear
+  // ── Férias/Atestado médico (Admin): período por técnico, pra avisar/bloquear
   // lançamento de atividade nesse período. Só faz sentido pra Elétrica/Mecânica.
+  // Os dois usam exatamente o mesmo fluxo (área -> técnico -> período) — um único
+  // modal parametrizado por `tipo`, em vez de duas cópias quase idênticas.
   readonly ferias = this.manutencaoService.ferias;
-  feriasAberto = signal(false);
-  feriasTecnicoNome = signal('');
-  feriasTecnicoMatricula = signal('');
-  feriasArea = signal<ManutencaoArea>('ELETRICA');
-  feriasDataInicio = signal('');
-  feriasDataFim = signal('');
-
-  tecnicosParaFerias = computed(() => this.tecnicosPorArea(this.feriasArea()));
-
-  abrirFerias(): void {
-    this.feriasArea.set(this.areaFixa === 'MECANICA' ? 'MECANICA' : 'ELETRICA');
-    this.feriasTecnicoNome.set('');
-    this.feriasTecnicoMatricula.set('');
-    this.feriasDataInicio.set('');
-    this.feriasDataFim.set('');
-    this.feriasAberto.set(true);
-  }
-
-  fecharFerias(): void {
-    this.feriasAberto.set(false);
-  }
-
-  onFeriasAreaSelected(area: ManutencaoArea): void {
-    this.feriasArea.set(area);
-    this.feriasTecnicoNome.set('');
-    this.feriasTecnicoMatricula.set('');
-  }
-
-  onFeriasTecnicoSelected(nome: string): void {
-    this.feriasTecnicoNome.set(nome);
-    const colaborador = this.tecnicosParaFerias().find(c => c.nome === nome);
-    this.feriasTecnicoMatricula.set(colaborador?.matricula ?? '');
-  }
-
-  canConfirmarFerias(): boolean {
-    return !this.isProcessando() && !!this.feriasTecnicoNome().trim()
-      && !!this.feriasDataInicio() && !!this.feriasDataFim() && this.feriasDataFim() >= this.feriasDataInicio();
-  }
-
-  async adicionarFerias(): Promise<void> {
-    if (!this.canConfirmarFerias()) return;
-    this.isProcessando.set(true);
-    try {
-      await this.manutencaoService.criarFerias({
-        tecnicoNome: this.feriasTecnicoNome(),
-        tecnicoMatricula: this.feriasTecnicoMatricula() || null,
-        area: this.feriasArea(),
-        dataInicio: this.feriasDataInicio(),
-        dataFim: this.feriasDataFim(),
-      });
-      this.notificationService.showSuccess('Férias cadastradas.');
-      this.feriasTecnicoNome.set('');
-      this.feriasTecnicoMatricula.set('');
-      this.feriasDataInicio.set('');
-      this.feriasDataFim.set('');
-    } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao cadastrar férias.');
-    } finally {
-      this.isProcessando.set(false);
-    }
-  }
-
-  async removerFerias(item: FeriasTecnico): Promise<void> {
-    if (this.isProcessando() || !(await this.confirmDialogService.confirm(`Remover férias de "${item.tecnicoNome}"?`))) return;
-    this.isProcessando.set(true);
-    try {
-      await this.manutencaoService.excluirFerias(item.id);
-      this.notificationService.showSuccess('Férias removidas.');
-    } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover férias.');
-    } finally {
-      this.isProcessando.set(false);
-    }
-  }
-
-  // ── Atestado médico — mesmo padrão de Férias acima ──────────────────────────────
   readonly atestados = this.manutencaoService.atestados;
-  atestadoAberto = signal(false);
-  atestadoTecnicoNome = signal('');
-  atestadoTecnicoMatricula = signal('');
-  atestadoArea = signal<ManutencaoArea>('ELETRICA');
-  atestadoDataInicio = signal('');
-  atestadoDataFim = signal('');
 
-  tecnicosParaAtestado = computed(() => this.tecnicosPorArea(this.atestadoArea()));
+  afastamentoModal = signal<{
+    tipo: TipoAfastamento;
+    area: ManutencaoArea;
+    tecnicoNome: string;
+    tecnicoMatricula: string;
+    dataInicio: string;
+    dataFim: string;
+  } | null>(null);
 
-  abrirAtestado(): void {
-    this.atestadoArea.set(this.areaFixa === 'MECANICA' ? 'MECANICA' : 'ELETRICA');
-    this.atestadoTecnicoNome.set('');
-    this.atestadoTecnicoMatricula.set('');
-    this.atestadoDataInicio.set('');
-    this.atestadoDataFim.set('');
-    this.atestadoAberto.set(true);
+  tecnicosParaAfastamento = computed(() => {
+    const modal = this.afastamentoModal();
+    return modal ? this.tecnicosPorArea(modal.area) : [];
+  });
+
+  itensAfastamento(tipo: TipoAfastamento): (FeriasTecnico | AtestadoTecnico)[] {
+    return tipo === 'ferias' ? this.ferias() : this.atestados();
   }
 
-  fecharAtestado(): void {
-    this.atestadoAberto.set(false);
+  abrirAfastamento(tipo: TipoAfastamento): void {
+    this.afastamentoModal.set({
+      tipo,
+      area: this.areaFixa === 'MECANICA' ? 'MECANICA' : 'ELETRICA',
+      tecnicoNome: '',
+      tecnicoMatricula: '',
+      dataInicio: '',
+      dataFim: '',
+    });
   }
 
-  onAtestadoAreaSelected(area: ManutencaoArea): void {
-    this.atestadoArea.set(area);
-    this.atestadoTecnicoNome.set('');
-    this.atestadoTecnicoMatricula.set('');
+  fecharAfastamento(): void {
+    this.afastamentoModal.set(null);
   }
 
-  onAtestadoTecnicoSelected(nome: string): void {
-    this.atestadoTecnicoNome.set(nome);
-    const colaborador = this.tecnicosParaAtestado().find(c => c.nome === nome);
-    this.atestadoTecnicoMatricula.set(colaborador?.matricula ?? '');
+  onAfastamentoAreaSelected(area: ManutencaoArea): void {
+    this.afastamentoModal.update(m => m && ({ ...m, area, tecnicoNome: '', tecnicoMatricula: '' }));
   }
 
-  canConfirmarAtestado(): boolean {
-    return !this.isProcessando() && !!this.atestadoTecnicoNome().trim()
-      && !!this.atestadoDataInicio() && !!this.atestadoDataFim() && this.atestadoDataFim() >= this.atestadoDataInicio();
+  onAfastamentoTecnicoSelected(nome: string): void {
+    const modal = this.afastamentoModal();
+    if (!modal) return;
+    const colaborador = this.tecnicosPorArea(modal.area).find(c => c.nome === nome);
+    this.afastamentoModal.set({ ...modal, tecnicoNome: nome, tecnicoMatricula: colaborador?.matricula ?? '' });
   }
 
-  async adicionarAtestado(): Promise<void> {
-    if (!this.canConfirmarAtestado()) return;
+  setAfastamentoDataInicio(valor: string): void {
+    this.afastamentoModal.update(m => m && ({ ...m, dataInicio: valor }));
+  }
+
+  setAfastamentoDataFim(valor: string): void {
+    this.afastamentoModal.update(m => m && ({ ...m, dataFim: valor }));
+  }
+
+  canConfirmarAfastamento(): boolean {
+    const modal = this.afastamentoModal();
+    return !!modal && !this.isProcessando() && !!modal.tecnicoNome.trim()
+      && !!modal.dataInicio && !!modal.dataFim && modal.dataFim >= modal.dataInicio;
+  }
+
+  async confirmarAfastamento(): Promise<void> {
+    const modal = this.afastamentoModal();
+    if (!modal || !this.canConfirmarAfastamento()) return;
+    const label = modal.tipo === 'ferias' ? 'férias' : 'atestado médico';
     this.isProcessando.set(true);
     try {
-      await this.manutencaoService.criarAtestado({
-        tecnicoNome: this.atestadoTecnicoNome(),
-        tecnicoMatricula: this.atestadoTecnicoMatricula() || null,
-        area: this.atestadoArea(),
-        dataInicio: this.atestadoDataInicio(),
-        dataFim: this.atestadoDataFim(),
-      });
-      this.notificationService.showSuccess('Atestado médico cadastrado.');
-      this.atestadoTecnicoNome.set('');
-      this.atestadoTecnicoMatricula.set('');
-      this.atestadoDataInicio.set('');
-      this.atestadoDataFim.set('');
+      const payload = {
+        tecnicoNome: modal.tecnicoNome,
+        tecnicoMatricula: modal.tecnicoMatricula || null,
+        area: modal.area,
+        dataInicio: modal.dataInicio,
+        dataFim: modal.dataFim,
+      };
+      if (modal.tipo === 'ferias') {
+        await this.manutencaoService.criarFerias(payload);
+        this.notificationService.showSuccess('Férias cadastradas.');
+      } else {
+        await this.manutencaoService.criarAtestado(payload);
+        this.notificationService.showSuccess('Atestado médico cadastrado.');
+      }
+      this.afastamentoModal.set({ ...modal, tecnicoNome: '', tecnicoMatricula: '', dataInicio: '', dataFim: '' });
     } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao cadastrar atestado médico.');
+      this.notificationService.showError(err instanceof Error ? err.message : `Erro ao cadastrar ${label}.`);
     } finally {
       this.isProcessando.set(false);
     }
   }
 
-  async removerAtestado(item: AtestadoTecnico): Promise<void> {
-    if (this.isProcessando() || !(await this.confirmDialogService.confirm(`Remover atestado médico de "${item.tecnicoNome}"?`))) return;
+  async removerAfastamento(tipo: TipoAfastamento, item: FeriasTecnico | AtestadoTecnico): Promise<void> {
+    const label = tipo === 'ferias' ? 'férias' : 'atestado médico';
+    if (this.isProcessando() || !(await this.confirmDialogService.confirm(`Remover ${label} de "${item.tecnicoNome}"?`))) return;
     this.isProcessando.set(true);
     try {
-      await this.manutencaoService.excluirAtestado(item.id);
-      this.notificationService.showSuccess('Atestado médico removido.');
+      if (tipo === 'ferias') {
+        await this.manutencaoService.excluirFerias(item.id);
+        this.notificationService.showSuccess('Férias removidas.');
+      } else {
+        await this.manutencaoService.excluirAtestado(item.id);
+        this.notificationService.showSuccess('Atestado médico removido.');
+      }
     } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover atestado médico.');
+      this.notificationService.showError(err instanceof Error ? err.message : `Erro ao remover ${label}.`);
     } finally {
       this.isProcessando.set(false);
     }

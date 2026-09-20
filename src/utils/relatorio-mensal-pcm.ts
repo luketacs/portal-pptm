@@ -11,7 +11,7 @@
 // acumulada na 18 (um a menos em cada). Buscar pelo rótulo evita repetir esse tipo
 // de descompasso se a planilha for reorganizada de novo no futuro.
 
-import { AcaoPrioritaria, Destaque, PontoAtencao } from './relatorio-semanal-pcm';
+import { AcaoPrioritaria, Destaque, ordenarAcoesPorPrioridade, PontoAtencao } from './relatorio-semanal-pcm';
 import { PontoLinhaTempo } from './relatorio-linha-tempo';
 import { round2 } from './formatacao';
 
@@ -430,8 +430,7 @@ export function analisarPontosAtencaoEAcoesMensal(
     });
   }
 
-  const prioridadeOrdem: Record<string, number> = { urgente: 0, alta: 1, media: 2, baixa: 3 };
-  acoesPrioritarias = [...acoesPrioritarias].sort((a, b) => (prioridadeOrdem[a.prioridade] ?? 4) - (prioridadeOrdem[b.prioridade] ?? 4));
+  acoesPrioritarias = ordenarAcoesPorPrioridade(acoesPrioritarias);
 
   return { pontosAtencao: pontosAtencao.slice(0, 5), acoesPrioritarias: acoesPrioritarias.slice(0, 5) };
 }
