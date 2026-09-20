@@ -748,6 +748,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   escalaApoio = this.manutencaoService.escalaApoio;
   readonly turnoLabel = TURNO_LABEL;
 
+  // Indireção pra indexar TURNO_LABEL a partir do template compartilhado (escalaTabelaTpl)
+  // — o contexto do ngTemplateOutlet não carrega o tipo Turno, então `turno` chega como
+  // `any`; indexar um Record<Turno,...> direto com isso é erro de compilação (TS7053).
+  turnoLabelFor(turno: Turno): string {
+    return this.turnoLabel[turno];
+  }
+
   private async carregarDadosApoio(): Promise<void> {
     try {
       await this.manutencaoService.loadApoioCadastros();
