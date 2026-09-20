@@ -12,6 +12,9 @@
 //   3. Depois do deploy, registrar o webhook chamando uma vez:
 //      https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<dominio>/api/telegram-material-bot&secret_token=<TELEGRAM_WEBHOOK_SECRET>
 
+import { extrairJsonObjects, extrairProdutoValido, fetchWithTimeout, montarUrlSigmaMaterial } from './_sigma-material-shared.js';
+import { createRateLimiter } from './_rate-limit-shared.js';
+
 // Orçamento pensado pra caber com folga num maxDuration de 15s (ver vercel.json):
 // pior caso é REQUEST_TIMEOUT_MS (consulta ao SIGMA) + até 2x TELEGRAM_SEND_TIMEOUT_MS
 // (envio original + 1 retry em texto puro se o MarkdownV2 falhar).
@@ -23,22 +26,8 @@ const TELEGRAM_SEND_TIMEOUT_MS = 8000;
 // abuso (mesmo padrão de api/fundo-fixo-public-request.js).
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 15;
-const rateLimitMap = new Map();
 const MAX_RATE_LIMIT_ENTRIES = 1000; // limite pra não crescer sem fim numa instância de longa duração
-
-function checkRateLimit(chatId) {
-  const now = Date.now();
-  const entry = rateLimitMap.get(chatId);
-  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
-    rateLimitMap.set(chatId, { windowStart: now, count: 1 });
-    if (rateLimitMap.size > MAX_RATE_LIMIT_ENTRIES) {
-      rateLimitMap.delete(rateLimitMap.keys().next().value);
-    }
-    return true;
-  }
-  entry.count += 1;
-  return entry.count <= RATE_LIMIT_MAX;
-}
+const checkRateLimit = createRateLimiter({ windowMs: RATE_LIMIT_WINDOW_MS, max: RATE_LIMIT_MAX, maxEntries: MAX_RATE_LIMIT_ENTRIES });
 
 // Dedup de update_id — o Telegram reenvia o mesmo update se não receber 200 rápido
 // (ex.: função demorou demais e a Vercel matou a execução no meio). Sem isso, um
@@ -58,42 +47,11 @@ function jaProcessado(updateId) {
   return false;
 }
 
-async function fetchWithTimeout(url, options, timeoutMs) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-// A API do SIGMA às vezes retorna múltiplos JSONs concatenados numa resposta só
-// (ex: saldo + produto) — mesma extração usada em api/material-proxy.js.
-function extrairJsonObjects(text) {
-  const results = [];
-  let depth = 0;
-  let start = -1;
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === '{') {
-      if (depth === 0) start = i;
-      depth++;
-    } else if (text[i] === '}') {
-      depth--;
-      if (depth === 0 && start !== -1) {
-        try { results.push(JSON.parse(text.substring(start, i + 1))); } catch {}
-        start = -1;
-      }
-    }
-  }
-  return results;
-}
-
 async function consultarMaterial(codigo) {
   const API_TOKEN = process.env.MATERIAL_API_TOKEN;
   if (!API_TOKEN) return { success: false, error: 'MATERIAL_API_TOKEN não configurado no servidor.' };
 
-  const url = `https://utepecem.xyz/sigma/api/getProduto?produto=${encodeURIComponent(codigo)}`;
+  const url = montarUrlSigmaMaterial(codigo);
 
   let response;
   try {
@@ -112,7 +70,7 @@ async function consultarMaterial(codigo) {
 
   const rawText = await response.text().catch(() => '');
   const jsonObjects = extrairJsonObjects(rawText);
-  const validResult = jsonObjects.find(obj => obj.success === true && obj.data && (obj.data.id || obj.data.texto_breve));
+  const validResult = extrairProdutoValido(jsonObjects);
   if (validResult) return validResult;
 
   try {

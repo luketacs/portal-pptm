@@ -1,4 +1,6 @@
-﻿const REQUEST_TIMEOUT_MS = 12000;
+﻿import { extrairJsonObjects, extrairProdutoValido, fetchWithTimeout, montarUrlSigmaMaterial } from './_sigma-material-shared.js';
+
+const REQUEST_TIMEOUT_MS = 12000;
 const MAX_RATE_LIMIT_RETRIES = 0;
 const BACKOFF_BASE_MS = 1000;
 
@@ -52,20 +54,6 @@ function parseJsonLenient(rawText) {
     }
 
     return { ok: false, value: null };
-  }
-}
-
-async function fetchWithTimeout(url, options, timeoutMs) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    return await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -129,26 +117,6 @@ async function fetchWithRateLimitBackoff(url, options) {
   throw new Error('Falha ao obter resposta da API externa.');
 }
 
-// Extrai todos os objetos JSON de uma string que pode ter múltiplos JSONs concatenados
-function extrairJsonObjects(text) {
-  const results = [];
-  let depth = 0;
-  let start = -1;
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === '{') {
-      if (depth === 0) start = i;
-      depth++;
-    } else if (text[i] === '}') {
-      depth--;
-      if (depth === 0 && start !== -1) {
-        try { results.push(JSON.parse(text.substring(start, i + 1))); } catch {}
-        start = -1;
-      }
-    }
-  }
-  return results;
-}
-
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
   : ['https://portalpptm.com', 'https://www.portalpptm.com', 'https://portalpptm.vercel.app', 'http://localhost:4200', 'http://localhost:3000'];
@@ -206,7 +174,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const url = `https://utepecem.xyz/sigma/api/getProduto?produto=${encodeURIComponent(code)}`;
+    const url = montarUrlSigmaMaterial(code);
 
     const response = await fetchWithRateLimitBackoff(url, {
       method: 'GET',
@@ -248,9 +216,7 @@ export default async function handler(req, res) {
     // A API pode retornar múltiplos JSONs concatenados (ex: saldo + produto)
     // Extrai todos os objetos JSON e usa o que tem success:true com dados do produto
     const jsonObjects = extrairJsonObjects(rawText);
-    const validResult = jsonObjects.find(obj =>
-      obj.success === true && obj.data && (obj.data.id || obj.data.texto_breve)
-    );
+    const validResult = extrairProdutoValido(jsonObjects);
 
     if (validResult) {
       return res.status(200).json(validResult);
