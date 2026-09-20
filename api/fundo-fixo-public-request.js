@@ -19,6 +19,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
+import { createRateLimiter } from './_rate-limit-shared.js';
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://portalpptm.com').split(',');
 const BUCKET = 'fundo-fixo-anexos';
@@ -37,21 +38,8 @@ const ALLOWED_TYPES = {
 // Um rate limit por ação — mesmos limites de cada function original (request: 5/min,
 // upload-url: 8/min, a URL assinada sozinha não grava nada, só "reserva" um caminho).
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
-const rateLimitMapRequest = new Map();
-const rateLimitMapUploadUrl = new Map();
-
-function checkRateLimit(map, ip, max) {
-  const now = Date.now();
-  const entry = map.get(ip) || { count: 0, start: now };
-  if (now - entry.start > RATE_LIMIT_WINDOW_MS) {
-    map.set(ip, { count: 1, start: now });
-    return true;
-  }
-  if (entry.count >= max) return false;
-  entry.count++;
-  map.set(ip, entry);
-  return true;
-}
+const checkRateLimitRequest = createRateLimiter({ windowMs: RATE_LIMIT_WINDOW_MS, max: 5 });
+const checkRateLimitUploadUrl = createRateLimiter({ windowMs: RATE_LIMIT_WINDOW_MS, max: 8 });
 
 function sanitize(value, maxLength) {
   if (typeof value !== 'string') return '';
@@ -64,7 +52,7 @@ function mesAtual() {
 }
 
 async function handleRequest(req, res, ip, supabase) {
-  if (!checkRateLimit(rateLimitMapRequest, ip, 5)) {
+  if (!checkRateLimitRequest(ip)) {
     return res.status(429).json({ success: false, error: 'Muitas requisições. Tente novamente em instantes.' });
   }
 
@@ -144,7 +132,7 @@ async function handleRequest(req, res, ip, supabase) {
 }
 
 async function handleUploadUrl(req, res, ip, supabase) {
-  if (!checkRateLimit(rateLimitMapUploadUrl, ip, 8)) {
+  if (!checkRateLimitUploadUrl(ip)) {
     return res.status(429).json({ success: false, error: 'Muitas requisições. Tente novamente em instantes.' });
   }
 

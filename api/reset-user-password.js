@@ -1,22 +1,17 @@
 // Função serverless para resetar senha de usuário com segurança
 // Usa service_role_key no servidor (NUNCA no frontend)
 
+import { createRateLimiter } from './_rate-limit-shared.js';
+
 const MAX_FIELD_LENGTH = 200;
 
 // Rate limiting simples em memória (por IP, por minuto)
-const rateLimitMap = new Map();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 10;
+const checkRateLimit = createRateLimiter({ windowMs: RATE_LIMIT_WINDOW_MS, max: RATE_LIMIT_MAX_REQUESTS });
 
 function isRateLimited(ip) {
-  const now = Date.now();
-  const entry = rateLimitMap.get(ip);
-  if (!entry || now - entry.start > RATE_LIMIT_WINDOW_MS) {
-    rateLimitMap.set(ip, { start: now, count: 1 });
-    return false;
-  }
-  entry.count++;
-  return entry.count > RATE_LIMIT_MAX_REQUESTS;
+  return !checkRateLimit(ip);
 }
 
 function sanitizeString(value) {

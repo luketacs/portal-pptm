@@ -4,6 +4,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import XLSX from 'xlsx';
+import { resolverUsuarioAutenticado } from './_auth-shared.js';
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://portalpptm.com').split(',');
 const BATCH_SIZE = 500;
@@ -30,18 +31,13 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.replace('Bearer ', '').trim();
-  if (!token) return res.status(401).json({ error: 'Token não fornecido.' });
-
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
   // Verificar usuário e role Admin
-  const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-  if (userError || !user) return res.status(401).json({ error: 'Token inválido.' });
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-  if (profile?.role !== 'Admin') return res.status(403).json({ error: 'Apenas administradores podem importar dados.' });
+  const auth = await resolverUsuarioAutenticado(req, supabase);
+  if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
+  if (auth.role !== 'Admin') return res.status(403).json({ error: 'Apenas administradores podem importar dados.' });
+  const user = auth.user;
 
   const { tipo, fileData, fileName } = req.body || {};
   if (!tipo || !fileData) return res.status(400).json({ error: 'Campos obrigatórios: tipo, fileData.' });
