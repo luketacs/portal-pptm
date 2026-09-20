@@ -259,7 +259,7 @@
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-slate-100">
-            @for (s of listaFiltrada(); track s.id) {
+            @for (s of listaPaginada(); track s.id) {
               <tr class="hover:bg-slate-50">
                 <td class="px-3 py-2 text-center text-gray-500 whitespace-nowrap">{{ formatDate(s.dataSolicitacao) }}</td>
                 <td class="px-3 py-2 text-center text-gray-800 font-medium">
@@ -395,6 +395,23 @@
           </tbody>
         </table>
       </div>
+      @if (totalPages() > 1) {
+        <div class="flex items-center justify-between mt-4 text-sm text-gray-600">
+          <span>Mostrando {{ startItem() }}–{{ endItem() }} de {{ listaFiltrada().length }}</span>
+          <div class="flex gap-1">
+            <button (click)="goToPage(currentPage() - 1)" [disabled]="currentPage() === 1"
+              class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 disabled:opacity-40">&#8249;</button>
+            @for (p of visiblePages(); track p) {
+              <button (click)="goToPage(p)"
+                [class]="p === currentPage() ? 'px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold' : 'px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100'">
+                {{ p }}
+              </button>
+            }
+            <button (click)="goToPage(currentPage() + 1)" [disabled]="currentPage() === totalPages()"
+              class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 disabled:opacity-40">&#8250;</button>
+          </div>
+        </div>
+      }
     } @else {
       <div class="app-card p-10 text-center text-gray-400">
         Nenhuma solicitação encontrada para os filtros atuais.

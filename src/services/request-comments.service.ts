@@ -6,7 +6,7 @@ import type { CommentRow } from '../models/database.types';
 @Injectable({
   providedIn: 'root'
 })
-export class HistoryService {
+export class RequestCommentsService {
   private supabase = this.supabaseService.client;
 
   comments = signal<RequestComment[]>([]);
@@ -62,7 +62,7 @@ export class HistoryService {
     await this.loadComments(requestId);
   }
 
-  clearHistory(): void {
+  clearComments(): void {
     this.comments.set([]);
   }
 }

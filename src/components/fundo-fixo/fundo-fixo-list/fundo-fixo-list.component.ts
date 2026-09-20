@@ -11,6 +11,7 @@ import { UserService } from '../../../services/user.service';
 import { ExcelExportService, FechamentoFundoFixoLinha } from '../../../services/excel-export.service';
 import { FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSetor, FundoFixoSolicitacao, FundoFixoStatus } from '../../../models/fundo-fixo.model';
 import { proximoMes, valorPagoNaForma } from '../../../utils/fundo-fixo-calc';
+import { createClientPageItems, createPageNavigation } from '../../../utils/pagination';
 
 type StatusFiltro = 'todos' | FundoFixoStatus;
 
@@ -227,6 +228,19 @@ export class FundoFixoListComponent implements OnInit {
       return true;
     });
   });
+
+  // Paginação (lista já vem inteira do FundoFixoService, filtrada em memória).
+  private pageNav = createPageNavigation(computed(() => this.listaFiltrada().length), 15);
+  currentPage = this.pageNav.currentPage;
+  totalPages = this.pageNav.totalPages;
+  startItem = this.pageNav.startItem;
+  endItem = this.pageNav.endItem;
+  visiblePages = this.pageNav.visiblePages;
+  listaPaginada = createClientPageItems(computed(() => this.listaFiltrada()), this.pageNav);
+
+  goToPage(page: number): void {
+    this.pageNav.goToPage(page);
+  }
 
   constructor(
     private route: ActivatedRoute,

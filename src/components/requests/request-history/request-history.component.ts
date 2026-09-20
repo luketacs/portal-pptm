@@ -1,6 +1,6 @@
 import { Component, Input, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HistoryService } from '../../../services/history.service';
+import { RequestCommentsService } from '../../../services/request-comments.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
 import { FormsModule } from '@angular/forms';
@@ -18,21 +18,21 @@ export class RequestHistoryComponent implements OnInit, OnDestroy {
   newComment = '';
 
   constructor(
-    public historyService: HistoryService,
+    public commentsService: RequestCommentsService,
     private authService: AuthService,
     private notificationService: NotificationService
   ) {}
 
   ngOnInit(): void {
     if (this.requestId) {
-      this.historyService.loadComments(this.requestId).catch(error => {
+      this.commentsService.loadComments(this.requestId).catch(error => {
         console.error('Error loading comments:', error);
       });
     }
   }
 
   ngOnDestroy(): void {
-    this.historyService.clearHistory();
+    this.commentsService.clearComments();
   }
 
   async addComment(): Promise<void> {
@@ -42,7 +42,7 @@ export class RequestHistoryComponent implements OnInit, OnDestroy {
     if (!user) return;
 
     try {
-      await this.historyService.addComment(this.requestId, user.id, this.newComment.trim());
+      await this.commentsService.addComment(this.requestId, user.id, this.newComment.trim());
       this.newComment = '';
       this.notificationService.showSuccess('Comentário adicionado.');
     } catch (error) {

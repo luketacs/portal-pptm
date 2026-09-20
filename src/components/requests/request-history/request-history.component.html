@@ -2,12 +2,12 @@
   <div class="tabs">
     <button class="tab active">
       <span class="tab-icon"></span>
-      Comentários ({{ historyService.comments().length }})
+      Comentários ({{ commentsService.comments().length }})
     </button>
   </div>
 
   <!-- Loading -->
-  @if (historyService.isLoading()) {
+  @if (commentsService.isLoading()) {
     <div class="loading">
       <div class="spinner"></div>
       <p>Carregando...</p>
@@ -15,7 +15,7 @@
   }
 
   <!-- Comentários -->
-  @if (!historyService.isLoading()) {
+  @if (!commentsService.isLoading()) {
     <div class="comments-section">
       <!-- Formulário de novo comentário -->
       <div class="comment-form">
@@ -34,11 +34,11 @@
 
       <!-- Lista de comentários -->
       <div class="comments-list">
-        @if (historyService.comments().length === 0) {
+        @if (commentsService.comments().length === 0) {
           <p class="empty-state">Nenhum comentário ainda. Seja o primeiro!</p>
         }
 
-        @for (comment of historyService.comments(); track comment.id) {
+        @for (comment of commentsService.comments(); track comment.id) {
           <div class="comment-item">
             <div class="comment-header">
               <strong>{{ comment.user_name }}</strong>
