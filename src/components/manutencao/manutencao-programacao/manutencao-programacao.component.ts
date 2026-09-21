@@ -34,6 +34,7 @@ import { QuadroLotoTabelaComponent } from './quadro-loto-tabela/quadro-loto-tabe
 import { GerenciarRecursosModalComponent } from './gerenciar-recursos-modal/gerenciar-recursos-modal.component';
 import { GerenciarApoioModalComponent } from './gerenciar-apoio-modal/gerenciar-apoio-modal.component';
 import { ModalFeriadoComponent } from './modal-feriado/modal-feriado.component';
+import { ModalReprogramarComponent } from './modal-reprogramar/modal-reprogramar.component';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 type TipoAfastamento = 'ferias' | 'atestado';
@@ -148,7 +149,7 @@ function domingoDaSemana(segundaIso: string): string {
   standalone: true,
   imports: [
     CommonModule, FormsModule, EscalaTurnoTabelaComponent, FichaImpressaoComponent, QuadroLotoTabelaComponent, GerenciarRecursosModalComponent,
-    GerenciarApoioModalComponent, ModalFeriadoComponent,
+    GerenciarApoioModalComponent, ModalFeriadoComponent, ModalReprogramarComponent,
   ],
   templateUrl: './manutencao-programacao.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -2817,59 +2818,5 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.isProcessando.set(false);
     if (erros === 0) this.notificationService.showSuccess('Apoio(s) vinculado(s) excluído(s) também.');
     else this.notificationService.showError(`${erros} de ${vinculadas.length} vínculo(s) não puderam ser excluídos.`);
-  }
-
-  // ── Reprogramar (mover ordem pra outra semana) ───────────────────────────────
-  // Diferente de Editar: mexe em semana_inicio, que o formulário normal nunca toca
-  // (a tela inteira opera sobre a semana filtrada no momento). Dias dentro da semana
-  // nova são preenchidos automaticamente como dias úteis (Seg-Sex) — dá pra ajustar
-  // depois em "Editar" se precisar de dias específicos.
-  reprogramarAlvo = signal<ManutencaoOrdem | null>(null);
-  reprogramarNovaSemana = signal('');
-  reprogramarRecalcular = signal(false);
-
-  abrirReprogramar(o: ManutencaoOrdem): void {
-    this.reprogramarAlvo.set(o);
-    const atual = this.semanas.findIndex(s => s.value === o.semanaInicio);
-    const proxima = atual >= 0 && atual + 1 < this.semanas.length ? this.semanas[atual + 1].value : this.semanas[this.semanas.length - 1].value;
-    this.reprogramarNovaSemana.set(proxima);
-    this.reprogramarRecalcular.set(false);
-  }
-
-  fecharReprogramar(): void {
-    this.reprogramarAlvo.set(null);
-  }
-
-  async confirmarReprogramar(): Promise<void> {
-    const ordem = this.reprogramarAlvo();
-    const novaSemana = this.reprogramarNovaSemana();
-    if (!ordem || !novaSemana || this.isProcessando()) return;
-    this.isProcessando.set(true);
-    try {
-      const novosDias = diasDaSemana(novaSemana).filter(d => d.label !== 'SAB' && d.label !== 'DOM').map(d => d.data);
-      await this.manutencaoService.reprogramarOrdem(ordem.id, novaSemana, novosDias);
-
-      // "Recalcular" muda a data_prevista do ciclo pra essa reprogramação — sem isso
-      // (o default), o ciclo mantém a data original e a cadência do plano continua a
-      // mesma, exatamente o comportamento pedido: uma reprogramação pontual não deve
-      // empurrar as próximas execuções já previstas.
-      if (this.reprogramarRecalcular() && ordem.planoPreventivoId) {
-        const ciclo = this.manutencaoPlanosService.ciclos().find(c => c.ordemId === ordem.id);
-        if (ciclo) {
-          try {
-            await this.manutencaoPlanosService.recalcularCiclo(ciclo.id, novaSemana);
-          } catch (err: unknown) {
-            this.notificationService.showError(err instanceof Error ? err.message : 'Reprogramado, mas não deu pra recalcular a próxima data do plano.');
-          }
-        }
-      }
-
-      this.notificationService.showSuccess('Ordem reprogramada.');
-      this.fecharReprogramar();
-    } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao reprogramar.');
-    } finally {
-      this.isProcessando.set(false);
-    }
   }
 }
