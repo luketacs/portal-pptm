@@ -36,6 +36,7 @@ import { GerenciarApoioModalComponent } from './gerenciar-apoio-modal/gerenciar-
 import { ModalFeriadoComponent } from './modal-feriado/modal-feriado.component';
 import { ModalReprogramarComponent } from './modal-reprogramar/modal-reprogramar.component';
 import { AfastamentoModalComponent } from './afastamento-modal/afastamento-modal.component';
+import { ModalReuniaoLoteComponent } from './modal-reuniao-lote/modal-reuniao-lote.component';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 
@@ -149,7 +150,7 @@ function domingoDaSemana(segundaIso: string): string {
   standalone: true,
   imports: [
     CommonModule, FormsModule, EscalaTurnoTabelaComponent, FichaImpressaoComponent, QuadroLotoTabelaComponent, GerenciarRecursosModalComponent,
-    GerenciarApoioModalComponent, ModalFeriadoComponent, ModalReprogramarComponent, AfastamentoModalComponent,
+    GerenciarApoioModalComponent, ModalFeriadoComponent, ModalReprogramarComponent, AfastamentoModalComponent, ModalReuniaoLoteComponent,
   ],
   templateUrl: './manutencao-programacao.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -1961,77 +1962,6 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // pessoa, e lá quem aparece é empresa/equipe).
   todosTecnicos = computed(() => todosTecnicos(this.apontamentosService.colaboradores(), this.equipesApoio(), this.semanaFiltro()));
 
-  // ── Reunião (lançada em lote pra toda a equipe, igual feriado) ─────────
-  reuniaoLoteAberto = signal(false);
-  reuniaoLoteDias = signal<string[]>([]);
-  reuniaoLoteTitulo = signal('Reunião');
-  reuniaoLoteHorario = signal('');
-  reuniaoLoteLocal = signal('');
-
-  abrirReuniaoLote(): void {
-    this.reuniaoLoteDias.set([]);
-    this.reuniaoLoteTitulo.set('Reunião');
-    this.reuniaoLoteHorario.set('');
-    this.reuniaoLoteLocal.set('');
-    this.reuniaoLoteAberto.set(true);
-  }
-
-  fecharReuniaoLote(): void {
-    this.reuniaoLoteAberto.set(false);
-  }
-
-  toggleDiaReuniaoLote(dataIso: string): void {
-    const atual = this.reuniaoLoteDias();
-    this.reuniaoLoteDias.set(
-      atual.includes(dataIso) ? atual.filter(d => d !== dataIso) : [...atual, dataIso].sort(),
-    );
-  }
-
-  canConfirmarReuniaoLote(): boolean {
-    return this.reuniaoLoteDias().length > 0 && !!this.reuniaoLoteHorario().trim() && !!this.reuniaoLoteLocal().trim()
-      && this.todosTecnicos().length > 0 && !this.isProcessando();
-  }
-
-  async confirmarReuniaoLote(): Promise<void> {
-    if (!this.canConfirmarReuniaoLote()) return;
-    const dias = this.reuniaoLoteDias();
-    // Quem já está de folga/férias/atestado em algum desses dias não entra — diferente
-    // de Feriado (que vale igual pra todo mundo), reunião é algo que a pessoa precisa
-    // comparecer, não faz sentido marcar pra quem não vai estar trabalhando.
-    const bloqueados: string[] = [];
-    const tecnicos = this.todosTecnicos().filter(t => {
-      const bloqueado = !!this.bloqueioDoTecnico(t.nome, dias);
-      if (bloqueado) bloqueados.push(t.nome);
-      return !bloqueado;
-    });
-    if (tecnicos.length === 0) {
-      this.notificationService.showError('Todos os técnicos já estão de folga, férias ou atestado nesses dias — nenhuma reunião lançada.');
-      return;
-    }
-
-    const titulo = this.reuniaoLoteTitulo().trim() || 'Reunião';
-    const aviso = bloqueados.length > 0
-      ? `\n\n${bloqueados.length} técnico(s) de folga/férias nesses dias não vão entrar: ${bloqueados.join(', ')}.`
-      : '';
-    if (!(await this.confirmDialogService.confirm(`Lançar "${titulo}" pra ${tecnicos.length} técnicos (Elétrica + Mecânica)?${aviso}`))) return;
-
-    this.isProcessando.set(true);
-    try {
-      await this.manutencaoService.criarReuniaoEmLote({
-        diasPrevistos: dias,
-        titulo,
-        horario: this.reuniaoLoteHorario(),
-        local: this.reuniaoLoteLocal(),
-        tecnicos,
-      });
-      this.notificationService.showSuccess(`"${titulo}" lançada pra ${tecnicos.length} técnicos.${bloqueados.length > 0 ? ` (${bloqueados.length} de folga/férias não entraram)` : ''}`);
-      this.fecharReuniaoLote();
-    } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao lançar reunião.');
-    } finally {
-      this.isProcessando.set(false);
-    }
-  }
 
   // ── Criar/Editar OS ────────────────────────────────────────────────────
   abrirCriar(): void {
