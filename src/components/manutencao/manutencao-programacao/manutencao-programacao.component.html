@@ -561,41 +561,6 @@
       </div>
     </ng-template>
 
-    <ng-template #escalaTabelaTpl let-dias="dias" let-escalaDaSemana="escalaDaSemana">
-      <div class="overflow-x-auto">
-        <table class="min-w-full text-sm">
-          <thead>
-            <tr class="text-left text-xs text-gray-500 uppercase">
-              <th class="py-1 pr-3">Equipe</th>
-              @for (dia of dias; track dia.data) {
-                <th class="py-1 px-1 text-center">{{ dia.label }}</th>
-              }
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-100">
-            @for (linha of escalaDaSemana; track linha.equipe) {
-              <tr>
-                <td class="py-1.5 pr-3">
-                  <span class="font-semibold text-gray-700">Equipe {{ linha.equipe }}</span>
-                  <span class="block text-[11px] text-gray-400 max-w-56 truncate" [title]="linha.integrantesLabel">
-                    {{ linha.integrantesLabel }}
-                  </span>
-                </td>
-                @for (cel of linha.turnos; track cel.data) {
-                  <td class="py-1.5 px-1 text-center">
-                    <span class="inline-block w-7 h-7 leading-7 rounded text-xs font-bold"
-                      [class]="cel.turno === 'D' ? 'bg-blue-100 text-blue-700' : cel.turno === 'N' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-400'"
-                      [title]="turnoLabelFor(cel.turno)">
-                      {{ cel.turno }}
-                    </span>
-                  </td>
-                }
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    </ng-template>
 
     @if (!horizonteAtivo()) {
     <!-- Quadro de bloqueios (LOTO) — sempre as duas áreas juntas, pra qualquer equipe
@@ -640,7 +605,7 @@
           </button>
         </div>
         @if (escalaTurnoAberta()) {
-          <ng-container *ngTemplateOutlet="escalaTabelaTpl; context: { dias: diasDaSemanaAtual(), escalaDaSemana: escalaDaSemana() }"></ng-container>
+          <app-escala-turno-tabela [dias]="diasDaSemanaAtual()" [escalaDaSemana]="escalaDaSemana()" />
         }
       </div>
     }
@@ -978,7 +943,7 @@
                   </button>
                 </div>
                 @if (escalaTurnoAberta()) {
-                  <ng-container *ngTemplateOutlet="escalaTabelaTpl; context: { dias: bloco.dias, escalaDaSemana: bloco.escalaDaSemana }"></ng-container>
+                  <app-escala-turno-tabela [dias]="bloco.dias" [escalaDaSemana]="bloco.escalaDaSemana" />
                 }
               </div>
             }

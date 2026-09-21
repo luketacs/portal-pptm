@@ -14,7 +14,7 @@ import {
   AtestadoTecnico, AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem,
   ManutencaoTipo, OperadorEscalaApoio, PlanoManutencao, RecursoEspecialItem, SigmaBacklogItem,
 } from '../../../models/manutencao-programacao.model';
-import { EquipeApoio, Turno, TURNO_LABEL, turnoNoDia } from '../../../utils/escala-apoio';
+import { EquipeApoio, Turno, turnoNoDia } from '../../../utils/escala-apoio';
 import {
   HORAS_TREINAMENTO_DIA_TODO, bloqueioDoTecnico, calcularCapacidadeSemana, conflitoLotoTitle, diaMesPadded, diasDaSemana,
   encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo, encontrarOrdemDuplicada, formatarDataBr,
@@ -28,6 +28,7 @@ import {
   resumoPorEquipeApoio, sugestoesDaSemana,
 } from '../../../utils/manutencao-planos';
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
+import { EscalaTurnoTabelaComponent } from './escala-turno-tabela/escala-turno-tabela.component';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 type TipoAfastamento = 'ferias' | 'atestado';
@@ -151,7 +152,7 @@ function domingoDaSemana(segundaIso: string): string {
 @Component({
   selector: 'app-manutencao-programacao',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, EscalaTurnoTabelaComponent],
   templateUrl: './manutencao-programacao.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -708,14 +709,6 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // calculado, só o registro de quem está em qual equipe é que é editável.
   equipesApoio = this.manutencaoService.equipesApoio;
   escalaApoio = this.manutencaoService.escalaApoio;
-  readonly turnoLabel = TURNO_LABEL;
-
-  // Indireção pra indexar TURNO_LABEL a partir do template compartilhado (escalaTabelaTpl)
-  // — o contexto do ngTemplateOutlet não carrega o tipo Turno, então `turno` chega como
-  // `any`; indexar um Record<Turno,...> direto com isso é erro de compilação (TS7053).
-  turnoLabelFor(turno: Turno): string {
-    return this.turnoLabel[turno];
-  }
 
   private async carregarDadosApoio(): Promise<void> {
     try {
