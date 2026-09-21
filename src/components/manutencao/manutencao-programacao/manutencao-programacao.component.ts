@@ -29,20 +29,10 @@ import {
 } from '../../../utils/manutencao-planos';
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
 import { EscalaTurnoTabelaComponent } from './escala-turno-tabela/escala-turno-tabela.component';
+import { FichaImpressaoComponent } from './ficha-impressao/ficha-impressao.component';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 type TipoAfastamento = 'ferias' | 'atestado';
-
-// Ficha impressa por OS — ver fichasParaImprimir.
-interface FichaImpressaoOs {
-  numeroOs: string | null;
-  descricao: string;
-  equipamento: string | null;
-  loto: string | null;
-  duracaoHoras: number | null;
-  checklist: AtividadeChecklist[] | null;
-  tecnicos: string[];
-}
 
 const AREA_LABEL: Record<ManutencaoArea, string> = {
   ELETRICA: 'Elétrica',
@@ -152,7 +142,7 @@ function domingoDaSemana(segundaIso: string): string {
 @Component({
   selector: 'app-manutencao-programacao',
   standalone: true,
-  imports: [CommonModule, FormsModule, EscalaTurnoTabelaComponent],
+  imports: [CommonModule, FormsModule, EscalaTurnoTabelaComponent, FichaImpressaoComponent],
   templateUrl: './manutencao-programacao.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -414,43 +404,6 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     });
   }
   listaFiltrada = computed(() => this.listaFiltradaCalc(this.ordensDaSemana()));
-
-  // Ficha impressa por OS — pedido do usuário: o executante de campo não tem acesso
-  // nenhum ao checklist hoje (nem a tela de Programação, nem o quadro público da
-  // oficina mostram isso); antigamente se imprimia OS por OS, mas isso deixou de ser
-  // viável (mão de obra). Em vez de reimplantar aquele fluxo manual, uma folha por OS,
-  // impressa em lote a partir do que já está filtrado na tela (área/técnico/busca —
-  // ver listaFiltrada). Agrupa por número de OS (uma OS com apoio de 2+ técnicos, ver
-  // criarApoioTecnicosSeNecessario, vira 2+ linhas em manutencao_programacao, mas é 1
-  // ficha só, com todos os técnicos listados — nunca duplica o checklist).
-  //
-  // Só PREVENTIVA — pedido explícito do usuário: corretiva/melhoria não tem plano nem
-  // checklist, a ficha inteira (não só a seção de checklist) não deve nem ser gerada
-  // pra elas.
-  fichasParaImprimir = computed<FichaImpressaoOs[]>(() => {
-    const porChave = new Map<string, ManutencaoOrdem[]>();
-    let semOsIdx = 0;
-    for (const o of this.listaFiltrada()) {
-      if (o.tipo !== 'ordem') continue;
-      if ((o.tipoServico || '').toUpperCase() !== 'PREVENTIVA') continue;
-      const chave = o.numeroOs?.trim() ? o.numeroOs.trim() : `sem-os-${semOsIdx++}`;
-      const lista = porChave.get(chave);
-      if (lista) lista.push(o); else porChave.set(chave, [o]);
-    }
-    return [...porChave.values()].map(linhas => ({
-      numeroOs: linhas[0].numeroOs,
-      descricao: linhas[0].descricao,
-      equipamento: linhas[0].equipamento,
-      loto: linhas[0].loto,
-      duracaoHoras: linhas[0].duracaoHoras,
-      checklist: linhas[0].checklist,
-      tecnicos: linhas.map(l => l.tecnicoNome),
-    }));
-  });
-
-  imprimirChecklists(): void {
-    setTimeout(() => window.print(), 50);
-  }
 
   // Agrupada por técnico — usado nas telas de área única (mais perto do que a planilha
   // já mostra hoje, bloco por executante). Cada grupo já sai com a capacidade da semana

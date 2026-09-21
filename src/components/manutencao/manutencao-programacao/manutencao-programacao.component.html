@@ -151,11 +151,11 @@
         }
         Exportar
       </button>
-      <button (click)="imprimirChecklists()" [disabled]="fichasParaImprimir().length === 0"
+      <button (click)="fichaImpressao.imprimir()" [disabled]="fichaImpressao.fichas().length === 0"
         title="Imprime uma folha por OS (com checklist) pra entregar em campo — respeita os filtros de área/técnico/busca aplicados"
         class="inline-flex items-center gap-2 bg-white text-slate-600 text-sm font-semibold py-2.5 px-4 rounded-lg border border-slate-300 hover:bg-slate-50 transition disabled:opacity-50">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6v-8z" /></svg>
-        Imprimir checklists ({{ fichasParaImprimir().length }})
+        Imprimir checklists ({{ fichaImpressao.fichas().length }})
       </button>
       @if (podeEditarSemana()) {
         <button (click)="abrirCriar()"
@@ -2007,75 +2007,4 @@
   </div>
 }
 
-<!-- Fichas impressas por OS (checklist pro executante de campo) — só existe pra
-     impressão (ver imprimirChecklists/fichasParaImprimir), escondida na tela normal.
-     Uma folha por OS, respeitando os filtros de área/técnico/busca já aplicados na
-     tela. Sem depender de nenhum acesso do técnico ao sistema — a folha impressa é
-     entregue em mãos, mesmo fluxo de antes, só sem precisar imprimir uma por uma. -->
-<div class="hidden print:block p-6">
-  @for (ficha of fichasParaImprimir(); track ficha.numeroOs + ficha.descricao; let last = $last) {
-    <div class="border border-slate-400 rounded-lg p-5 break-inside-avoid" [class.mb-6]="!last" [class.break-after-page]="!last">
-      <div class="flex items-start justify-between gap-4 border-b border-slate-300 pb-3 mb-3">
-        <div>
-          <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Ordem de Serviço</p>
-          <h2 class="text-lg font-bold text-slate-800">{{ ficha.numeroOs || 'Sem número (criar OS)' }}</h2>
-        </div>
-        <div class="text-right">
-          <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">LOTO</p>
-          <p class="text-base font-bold text-slate-800">{{ ficha.loto || '—' }}</p>
-        </div>
-      </div>
-
-      <p class="text-sm font-semibold text-slate-800 mb-3">{{ ficha.descricao }}</p>
-
-      <div class="grid grid-cols-3 gap-3 text-sm mb-4">
-        <div>
-          <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Equipamento</p>
-          <p class="text-slate-800">{{ ficha.equipamento || '—' }}</p>
-        </div>
-        <div>
-          <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Técnico(s)</p>
-          <p class="text-slate-800">{{ ficha.tecnicos.join(', ') }}</p>
-        </div>
-        <div>
-          <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Duração estimada</p>
-          <p class="text-slate-800">{{ ficha.duracaoHoras ? ficha.duracaoHoras + 'h' : '—' }}</p>
-        </div>
-      </div>
-
-      <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Checklist</p>
-      @if (ficha.checklist && ficha.checklist.length > 0) {
-        <div class="space-y-2">
-          @for (item of ficha.checklist; track $index) {
-            <div>
-              <div class="flex items-start gap-2 text-sm text-slate-800">
-                <span class="flex-shrink-0 w-4 h-4 border-2 border-slate-500 rounded-sm mt-0.5"></span>
-                <span>{{ item.texto }}</span>
-              </div>
-              @if (item.subPassos.length > 0) {
-                <div class="ml-6 mt-1 space-y-1">
-                  @for (sub of item.subPassos; track $index) {
-                    <div class="flex items-start gap-2 text-xs text-slate-600">
-                      <span class="flex-shrink-0 w-3 h-3 border-2 border-slate-400 rounded-sm mt-0.5"></span>
-                      <span>{{ sub }}</span>
-                    </div>
-                  }
-                </div>
-              }
-            </div>
-          }
-        </div>
-      } @else {
-        <p class="text-sm text-slate-400 italic">Sem checklist cadastrado no plano — registrar atividades realizadas abaixo.</p>
-      }
-
-      <div class="mt-4 pt-3 border-t border-slate-200">
-        <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Observações / atividades realizadas</p>
-        <div class="h-16 border border-slate-200 rounded"></div>
-      </div>
-    </div>
-  }
-  @if (fichasParaImprimir().length === 0) {
-    <p class="text-slate-500">Nenhuma OS pra imprimir com os filtros atuais.</p>
-  }
-</div>
+<app-ficha-impressao #fichaImpressao [listaFiltrada]="listaFiltrada()" />
