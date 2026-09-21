@@ -88,7 +88,7 @@
                 </button>
               }
               @if (isAdmin() && areaFixa === 'APOIO') {
-                <button (click)="gerenciarApoioAberto.set(true); menuAcoesAberto.set(false)"
+                <button (click)="gerenciarApoioModal.abrir(); menuAcoesAberto.set(false)"
                   class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
                   Gerenciar Apoio
                 </button>
@@ -1658,75 +1658,7 @@
   </div>
 }
 
-<!-- Modal: Gerenciar Apoio (cadastro de equipes/empresas + escala de turno) -->
-@if (gerenciarApoioAberto()) {
-  <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" (click)="gerenciarApoioAberto.set(false)">
-    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[85vh] overflow-y-auto" (click)="$event.stopPropagation()">
-      <h3 class="text-lg font-bold text-gray-800 mb-4">Gerenciar Apoio</h3>
-
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <div>
-          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Equipes / Empresas</p>
-          <div class="flex gap-2 mb-3">
-            <input type="text" [ngModel]="novaEquipeApoioNome()" (ngModelChange)="novaEquipeApoioNome.set($event)"
-              placeholder="Ex.: NOVA EMPRESA" (keydown.enter)="adicionarEquipeApoio()"
-              class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            <button (click)="adicionarEquipeApoio()" [disabled]="isProcessando() || !novaEquipeApoioNome().trim()"
-              class="bg-blue-600 text-white text-sm font-semibold px-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">+</button>
-          </div>
-          <div class="space-y-1 max-h-64 overflow-y-auto">
-            @for (item of equipesApoio(); track item.id) {
-              <div class="flex items-center justify-between gap-2 text-sm bg-slate-50 rounded-lg px-3 py-1.5">
-                <span class="text-gray-700">{{ item.nome }}</span>
-                <button (click)="removerEquipeApoio(item)" [disabled]="isProcessando()" title="Remover"
-                  class="text-gray-400 hover:text-red-600 transition disabled:opacity-50">✕</button>
-              </div>
-            }
-            @if (equipesApoio().length === 0) {
-              <p class="text-sm text-gray-400">Nenhuma equipe/empresa cadastrada.</p>
-            }
-          </div>
-        </div>
-
-        <div>
-          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Escala de turno (operadores)</p>
-          <div class="flex gap-2 mb-3">
-            <input type="text" [ngModel]="novoOperadorNome()" (ngModelChange)="novoOperadorNome.set($event)"
-              placeholder="Nome do operador" (keydown.enter)="adicionarOperadorEscala()"
-              class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            <select [ngModel]="novoOperadorEquipe()" (ngModelChange)="novoOperadorEquipe.set($event)"
-              class="w-16 rounded-lg border border-slate-300 px-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-              @for (eq of equipesApoioOpcoes; track eq) {
-                <option [value]="eq">{{ eq }}</option>
-              }
-            </select>
-            <button (click)="adicionarOperadorEscala()" [disabled]="isProcessando() || !novoOperadorNome().trim()"
-              class="bg-blue-600 text-white text-sm font-semibold px-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">+</button>
-          </div>
-          <div class="space-y-1 max-h-64 overflow-y-auto">
-            @for (item of escalaApoio(); track item.id) {
-              <div class="flex items-center justify-between gap-2 text-sm bg-slate-50 rounded-lg px-3 py-1.5">
-                <span class="text-gray-700 truncate">
-                  <span class="inline-block w-5 h-5 leading-5 text-center rounded bg-blue-100 text-blue-700 text-[10px] font-bold mr-1">{{ item.equipe }}</span>
-                  {{ item.nome }}
-                </span>
-                <button (click)="removerOperadorEscala(item)" [disabled]="isProcessando()" title="Remover"
-                  class="text-gray-400 hover:text-red-600 transition disabled:opacity-50 flex-shrink-0">✕</button>
-              </div>
-            }
-            @if (escalaApoio().length === 0) {
-              <p class="text-sm text-gray-400">Nenhum operador cadastrado.</p>
-            }
-          </div>
-        </div>
-      </div>
-
-      <div class="flex justify-end mt-6">
-        <button (click)="gerenciarApoioAberto.set(false)" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Fechar</button>
-      </div>
-    </div>
-  </div>
-}
+<app-gerenciar-apoio-modal #gerenciarApoioModal />
 
 <app-gerenciar-recursos-modal #gerenciarRecursosModal />
 

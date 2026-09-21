@@ -11,7 +11,7 @@ import { ApontamentosService } from '../../../services/apontamentos.service';
 import { ExcelExportService, ProgramacaoSemanalGrupo, ProgramacaoSemanalLinha } from '../../../services/excel-export.service';
 import { AlmoxarifadoService, Movimentacao, Solicitacao } from '../../../services/almoxarifado.service';
 import {
-  AtestadoTecnico, AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem,
+  AtestadoTecnico, AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, FeriasTecnico, ManutencaoArea, ManutencaoOrdem,
   ManutencaoTipo, OperadorEscalaApoio, PlanoManutencao, SigmaBacklogItem,
 } from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, turnoNoDia } from '../../../utils/escala-apoio';
@@ -32,6 +32,7 @@ import { EscalaTurnoTabelaComponent } from './escala-turno-tabela/escala-turno-t
 import { FichaImpressaoComponent } from './ficha-impressao/ficha-impressao.component';
 import { QuadroLotoTabelaComponent } from './quadro-loto-tabela/quadro-loto-tabela.component';
 import { GerenciarRecursosModalComponent } from './gerenciar-recursos-modal/gerenciar-recursos-modal.component';
+import { GerenciarApoioModalComponent } from './gerenciar-apoio-modal/gerenciar-apoio-modal.component';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 type TipoAfastamento = 'ferias' | 'atestado';
@@ -146,6 +147,7 @@ function domingoDaSemana(segundaIso: string): string {
   standalone: true,
   imports: [
     CommonModule, FormsModule, EscalaTurnoTabelaComponent, FichaImpressaoComponent, QuadroLotoTabelaComponent, GerenciarRecursosModalComponent,
+    GerenciarApoioModalComponent,
   ],
   templateUrl: './manutencao-programacao.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -802,67 +804,6 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       }
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : `Erro ao remover ${label}.`);
-    } finally {
-      this.isProcessando.set(false);
-    }
-  }
-
-  // ── Gerenciar Apoio (Admin): cadastro de equipes/empresas e da escala de turno ──
-  gerenciarApoioAberto = signal(false);
-  novaEquipeApoioNome = signal('');
-  novoOperadorNome = signal('');
-  novoOperadorEquipe = signal<EquipeApoio>('A');
-  readonly equipesApoioOpcoes: EquipeApoio[] = ['A', 'B', 'C', 'D'];
-
-  async adicionarEquipeApoio(): Promise<void> {
-    if (this.isProcessando()) return;
-    this.isProcessando.set(true);
-    try {
-      await this.manutencaoService.criarEquipeApoio(this.novaEquipeApoioNome());
-      this.novaEquipeApoioNome.set('');
-      this.notificationService.showSuccess('Equipe/empresa adicionada.');
-    } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao adicionar equipe/empresa.');
-    } finally {
-      this.isProcessando.set(false);
-    }
-  }
-
-  async removerEquipeApoio(item: EquipeApoioItem): Promise<void> {
-    if (this.isProcessando() || !(await this.confirmDialogService.confirm(`Remover "${item.nome}" do cadastro? Lançamentos já feitos com essa equipe não são afetados.`))) return;
-    this.isProcessando.set(true);
-    try {
-      await this.manutencaoService.excluirEquipeApoio(item.id);
-      this.notificationService.showSuccess('Equipe/empresa removida.');
-    } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover equipe/empresa.');
-    } finally {
-      this.isProcessando.set(false);
-    }
-  }
-
-  async adicionarOperadorEscala(): Promise<void> {
-    if (this.isProcessando()) return;
-    this.isProcessando.set(true);
-    try {
-      await this.manutencaoService.criarOperadorEscala(this.novoOperadorNome(), this.novoOperadorEquipe());
-      this.novoOperadorNome.set('');
-      this.notificationService.showSuccess('Operador adicionado à escala.');
-    } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao adicionar operador.');
-    } finally {
-      this.isProcessando.set(false);
-    }
-  }
-
-  async removerOperadorEscala(item: OperadorEscalaApoio): Promise<void> {
-    if (this.isProcessando() || !(await this.confirmDialogService.confirm(`Remover "${item.nome}" da escala?`))) return;
-    this.isProcessando.set(true);
-    try {
-      await this.manutencaoService.excluirOperadorEscala(item.id);
-      this.notificationService.showSuccess('Operador removido da escala.');
-    } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover operador.');
     } finally {
       this.isProcessando.set(false);
     }
