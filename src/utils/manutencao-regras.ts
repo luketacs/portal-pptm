@@ -3,7 +3,8 @@
 // espelhamento de "Recursos" (quem entra na cópia da OS pro apoio) são as áreas que
 // mais geraram bug nesta funcionalidade (dado sutil errado, direção de checagem
 // faltando, recurso incluindo a si mesmo), por isso ganham teste dedicado.
-import { AtestadoTecnico, FeriasTecnico, ManutencaoOrdem } from '../models/manutencao-programacao.model';
+import { AtestadoTecnico, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem } from '../models/manutencao-programacao.model';
+import { Colaborador } from '../services/apontamentos.service';
 
 export const HORAS_EXAME_MEDICO = 3.5;
 // Treinamento desconta por dia (customizável por lançamento, ver duracaoHoras) — sem
@@ -115,4 +116,134 @@ export function recursosParaEspelho(recursosOriginais: string[], ehODestinatario
 // dois lugares.
 export function podeEditarSemanaFechada(semanaFechada: boolean, ehAdmin: boolean): boolean {
   return !semanaFechada || ehAdmin;
+}
+
+// ── Helpers de data/texto da Programação — movidos do componente pra dar pra usar nos
+// subcomponentes extraídos (modais) sem depender de método privado do host. ──────────
+
+const DIAS_SEMANA_LABEL = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB', 'DOM'];
+
+export function paraIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Datas reais (não rótulos) da semana SEG–SEX a partir da segunda-feira ('YYYY-MM-DD').
+export function diasDaSemana(segundaIso: string): { data: string; label: string }[] {
+  const [ano, mes, dia] = segundaIso.split('-').map(Number);
+  return DIAS_SEMANA_LABEL.map((label, i) => {
+    const d = new Date(ano, mes - 1, dia + i);
+    return { data: paraIso(d), label };
+  });
+}
+
+export function normalizarTexto(v: string): string {
+  return v.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+}
+
+// Mesma normalização usada em api/sigma-ordens-proxy.js — precisa bater pra achar a
+// chave certa no resultado (o SIGMA usa número de OS com 6 dígitos e zero à esquerda).
+export function normalizarNumeroOs(v: string): string {
+  const s = v.trim();
+  return /^\d+$/.test(s) ? s.padStart(6, '0') : s.toUpperCase();
+}
+
+export function formatarDataBr(dataIso: string): string {
+  const [ano, mes, dia] = dataIso.split('-');
+  return `${dia}/${mes}/${ano}`;
+}
+
+export function diaMesPadded(dataIso: string): string {
+  const [, mes, dia] = dataIso.split('-');
+  return `${dia}/${mes}`;
+}
+
+// LOTO (bloqueio do equipamento) tem só essas 3 opções — é o que evita duas equipes
+// baterem de frente (uma precisando do equipamento rodando, outra precisando parado).
+const LOTO_BADGE: Record<string, string> = {
+  LOTO: 'bg-red-100 text-red-700',
+  'SEM LOTO': 'bg-slate-100 text-slate-600',
+  FUNCIONANDO: 'bg-green-100 text-green-700',
+};
+const LOTO_BADGE_PADRAO = 'bg-slate-50 text-slate-400';
+
+export function lotoBadgeClass(loto: string): string {
+  return LOTO_BADGE[loto.toUpperCase()] ?? LOTO_BADGE_PADRAO;
+}
+
+// Dica curta do hover nativo (title) do quadro de LOTO — o detalhe completo fica no
+// painel de clique, não faz sentido duplicar tudo aqui também.
+export function conflitoLotoTitle(itens: { status: string; descricao: string; tecnicos: string[] }[]): string {
+  return `Conflito: ${itens.map(i => `${i.status} (${i.tecnicos.join(', ')})`).join(' vs. ')} — clique pra ver detalhes`;
+}
+
+// ── Validação de bloqueio do técnico (férias/atestado/folga) e de OS duplicada —
+// promovidas de métodos privados do componente pra função pura, pra dar pra chamar dos
+// modais extraídos (Reunião em lote, +Apoio) sem depender do host. ──────────────────
+
+// Sequência "está de férias? atestado? folga?" (nessa ordem de precedência) — ponto
+// único de verdade pra ordem e pro texto de cada motivo.
+export function bloqueioDoTecnico(
+  ferias: FeriasTecnico[], atestados: AtestadoTecnico[], ordens: ManutencaoOrdem[],
+  nome: string, dias: string[], idExcluir?: string | null,
+): { tipo: 'ferias' | 'atestado' | 'folga'; motivo: string } | null {
+  const feriasEncontrada = encontrarFeriasNoIntervalo(ferias, nome, dias);
+  if (feriasEncontrada) {
+    return { tipo: 'ferias', motivo: `${nome} está de férias de ${formatarDataBr(feriasEncontrada.dataInicio)} a ${formatarDataBr(feriasEncontrada.dataFim)}.` };
+  }
+  const atestado = encontrarAtestadoNoIntervalo(atestados, nome, dias);
+  if (atestado) {
+    return { tipo: 'atestado', motivo: `${nome} está de atestado médico de ${formatarDataBr(atestado.dataInicio)} a ${formatarDataBr(atestado.dataFim)}.` };
+  }
+  const folga = encontrarFolgaNoIntervalo(ordens, nome, dias, idExcluir);
+  if (folga) return { tipo: 'folga', motivo: `${nome} já está de folga em algum desses dias.` };
+  return null;
+}
+
+// Mesma OS já lançada pro mesmo técnico em algum dos dias informados — compara o número
+// normalizado (mesma lógica da consulta ao SIGMA), não o texto digitado.
+export function ordemDuplicada(
+  ordens: ManutencaoOrdem[], numeroOs: string, tecnicoNome: string, diasIso: string[], idExcluir?: string | null,
+): ManutencaoOrdem | null {
+  if (!numeroOs.trim()) return null;
+  return encontrarOrdemDuplicada(ordens, normalizarNumeroOs(numeroOs), tecnicoNome, diasIso, normalizarNumeroOs, idExcluir);
+}
+
+// ── Lista de técnicos por área — promovida de método privado do componente. ─────────
+
+// Técnicos que saíram da área mas cuja matrícula continua na planilha de colaboradores —
+// tirar do cadastro direto faz ordens antigas (que já executaram de verdade) aparecerem
+// erradas como "Não Executadas" pra semanas anteriores ao corte (ver mesmo mapa/motivo em
+// manutencao-indicadores-semanais.component.ts).
+export const TECNICOS_INATIVOS_A_PARTIR_DE: Record<string, string> = {
+  'ALEXANDRE GOMES': '2026-09-14',
+  'JOAQUIM NETO': '2026-08-24',
+};
+
+export function tecnicosPorArea(
+  area: ManutencaoArea, colaboradores: Colaborador[], equipesApoio: EquipeApoioItem[], semanaFiltro: string,
+): { nome: string; matricula: string | null }[] {
+  if (area === 'APOIO') {
+    return equipesApoio.map(e => ({ nome: e.nome, matricula: null }));
+  }
+  const termo = area === 'ELETRICA' ? 'ELETR' : 'MECAN';
+  return colaboradores
+    .filter(c => normalizarTexto(c.area).includes(termo))
+    .filter(c => {
+      const corte = TECNICOS_INATIVOS_A_PARTIR_DE[normalizarTexto(c.nome)];
+      return !corte || semanaFiltro < corte;
+    })
+    .map(c => ({ nome: c.nome, matricula: c.matricula }))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
+// Todos os técnicos das duas áreas (Elétrica + Mecânica) — usado no lançamento de
+// feriado/reunião, que valem pra equipe toda. Apoio fica de fora (folga/reunião são
+// conceitos por pessoa, e lá quem aparece é empresa/equipe).
+export function todosTecnicos(
+  colaboradores: Colaborador[], equipesApoio: EquipeApoioItem[], semanaFiltro: string,
+): { nome: string; matricula: string | null; area: ManutencaoArea }[] {
+  return [
+    ...tecnicosPorArea('ELETRICA', colaboradores, equipesApoio, semanaFiltro).map(c => ({ ...c, area: 'ELETRICA' as ManutencaoArea })),
+    ...tecnicosPorArea('MECANICA', colaboradores, equipesApoio, semanaFiltro).map(c => ({ ...c, area: 'MECANICA' as ManutencaoArea })),
+  ];
 }

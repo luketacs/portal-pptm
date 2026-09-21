@@ -1,8 +1,10 @@
-import { ManutencaoOrdem, FeriasTecnico, AtestadoTecnico } from '../models/manutencao-programacao.model';
+import { ManutencaoOrdem, FeriasTecnico, AtestadoTecnico, EquipeApoioItem } from '../models/manutencao-programacao.model';
+import { Colaborador } from '../services/apontamentos.service';
 import {
   HORAS_EXAME_MEDICO, HORAS_TREINAMENTO_DIA_TODO, HORAS_TREINAMENTO_MEIO_PERIODO,
-  calcularCapacidadeSemana, encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo,
-  encontrarOrdemDuplicada, podeEditarSemanaFechada, recursosParaEspelho,
+  bloqueioDoTecnico, calcularCapacidadeSemana, diasDaSemana, encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo,
+  encontrarFolgaNoIntervalo, encontrarOrdemDuplicada, ordemDuplicada, paraIso, podeEditarSemanaFechada, recursosParaEspelho,
+  tecnicosPorArea, todosTecnicos,
 } from './manutencao-regras';
 
 const DIAS_SEMANA_37 = [
@@ -14,6 +16,12 @@ const DIAS_SEMANA_37 = [
   { data: '2026-09-12', label: 'SAB' },
   { data: '2026-09-13', label: 'DOM' },
 ];
+
+function colaborador(overrides: Partial<Colaborador>): Colaborador {
+  return {
+    nome: 'Técnico', matricula: '000001', area: 'ELETRICA', email: '', nomeNorm: 'TECNICO', disponibilidade: 8, ...overrides,
+  };
+}
 
 function ordem(overrides: Partial<ManutencaoOrdem>): ManutencaoOrdem {
   return {
@@ -273,5 +281,114 @@ describe('podeEditarSemanaFechada', () => {
 
   it('Admin continua editando mesmo com a semana fechada', () => {
     expect(podeEditarSemanaFechada(true, true)).toBe(true);
+  });
+});
+
+describe('diasDaSemana', () => {
+  it('gera os 7 dias SEG-DOM a partir da segunda-feira, com o rótulo certo em cada um', () => {
+    expect(diasDaSemana('2026-09-07')).toEqual(DIAS_SEMANA_37);
+  });
+
+  it('vira o mês corretamente quando a semana cruza a virada (ex.: segunda em 29/06)', () => {
+    const dias = diasDaSemana('2026-06-29');
+    expect(dias.map(d => d.data)).toEqual(['2026-06-29', '2026-06-30', '2026-07-01', '2026-07-02', '2026-07-03', '2026-07-04', '2026-07-05']);
+  });
+});
+
+describe('paraIso', () => {
+  it('formata uma Date como YYYY-MM-DD com zero à esquerda', () => {
+    expect(paraIso(new Date(2026, 0, 5))).toBe('2026-01-05');
+  });
+});
+
+describe('bloqueioDoTecnico', () => {
+  const ferias: FeriasTecnico[] = [
+    { id: 'f1', tecnicoNome: 'Carlos Jr', tecnicoMatricula: null, area: 'ELETRICA', dataInicio: '2026-08-31', dataFim: '2026-09-08' },
+  ];
+  const atestados: AtestadoTecnico[] = [
+    { id: 'a1', tecnicoNome: 'Leandro Rodrigues', tecnicoMatricula: null, area: 'ELETRICA', dataInicio: '2026-09-07', dataFim: '2026-09-09' },
+  ];
+
+  it('férias tem precedência sobre atestado e folga, com a mensagem certa', () => {
+    const folga = ordem({ id: 'folga-1', tipo: 'folga', tecnicoNome: 'Carlos Jr', diasPrevistos: ['2026-09-08'] });
+    const resultado = bloqueioDoTecnico(ferias, atestados, [folga], 'Carlos Jr', ['2026-09-08']);
+    expect(resultado).toEqual({ tipo: 'ferias', motivo: 'Carlos Jr está de férias de 31/08/2026 a 08/09/2026.' });
+  });
+
+  it('sem férias, cai pro atestado', () => {
+    const resultado = bloqueioDoTecnico(ferias, atestados, [], 'Leandro Rodrigues', ['2026-09-08']);
+    expect(resultado).toEqual({ tipo: 'atestado', motivo: 'Leandro Rodrigues está de atestado médico de 07/09/2026 a 09/09/2026.' });
+  });
+
+  it('sem férias nem atestado, cai pra folga já lançada', () => {
+    const folga = ordem({ id: 'folga-1', tipo: 'folga', tecnicoNome: 'William', diasPrevistos: ['2026-09-08'] });
+    const resultado = bloqueioDoTecnico([], [], [folga], 'William', ['2026-09-08']);
+    expect(resultado).toEqual({ tipo: 'folga', motivo: 'William já está de folga em algum desses dias.' });
+  });
+
+  it('sem nenhum dos três, retorna null', () => {
+    expect(bloqueioDoTecnico([], [], [], 'William', ['2026-09-08'])).toBeNull();
+  });
+
+  it('idExcluir evita a própria folga se auto-bloquear (ex.: editando ela mesma)', () => {
+    const folga = ordem({ id: 'folga-1', tipo: 'folga', tecnicoNome: 'William', diasPrevistos: ['2026-09-08'] });
+    expect(bloqueioDoTecnico([], [], [folga], 'William', ['2026-09-08'], 'folga-1')).toBeNull();
+  });
+});
+
+describe('ordemDuplicada', () => {
+  it('encontra a mesma OS já lançada pro mesmo técnico, mesmo com número digitado diferente', () => {
+    const existente = ordem({ id: 'os-1', tipo: 'ordem', tecnicoNome: 'William', numeroOs: '045203', diasPrevistos: ['2026-09-08'] });
+    expect(ordemDuplicada([existente], '45203', 'William', ['2026-09-08'])).toEqual(existente);
+  });
+
+  it('número vazio nunca é duplicata (evita bloquear lançamento sem OS)', () => {
+    const existente = ordem({ id: 'os-1', tipo: 'ordem', tecnicoNome: 'William', numeroOs: '045203', diasPrevistos: ['2026-09-08'] });
+    expect(ordemDuplicada([existente], '', 'William', ['2026-09-08'])).toBeNull();
+  });
+
+  it('idExcluir evita a própria OS se auto-bloquear ao ser editada', () => {
+    const existente = ordem({ id: 'os-1', tipo: 'ordem', tecnicoNome: 'William', numeroOs: '045203', diasPrevistos: ['2026-09-08'] });
+    expect(ordemDuplicada([existente], '45203', 'William', ['2026-09-08'], 'os-1')).toBeNull();
+  });
+});
+
+describe('tecnicosPorArea', () => {
+  const equipesApoio: EquipeApoioItem[] = [{ id: 'e1', nome: 'SERVPLEX' }];
+  const colaboradores: Colaborador[] = [
+    colaborador({ nome: 'Carlos Jr', matricula: '000001', area: 'ELÉTRICA' }),
+    colaborador({ nome: 'Leandro Rodrigues', matricula: '000002', area: 'MECÂNICA' }),
+  ];
+
+  it('Apoio retorna as equipes cadastradas, sem matrícula', () => {
+    expect(tecnicosPorArea('APOIO', colaboradores, equipesApoio, '2026-09-07'))
+      .toEqual([{ nome: 'SERVPLEX', matricula: null }]);
+  });
+
+  it('Elétrica filtra pelo texto da área (tolerando acento) e ordena por nome', () => {
+    expect(tecnicosPorArea('ELETRICA', colaboradores, equipesApoio, '2026-09-07'))
+      .toEqual([{ nome: 'Carlos Jr', matricula: '000001' }]);
+  });
+
+  it('técnico com corte de inatividade some das semanas a partir do corte, mas continua aparecendo antes dele', () => {
+    const comInativo = [...colaboradores, colaborador({ nome: 'Alexandre Gomes', matricula: '000003', area: 'MECÂNICA' })];
+    expect(tecnicosPorArea('MECANICA', comInativo, equipesApoio, '2026-09-01').map(t => t.nome))
+      .toEqual(['Alexandre Gomes', 'Leandro Rodrigues']);
+    expect(tecnicosPorArea('MECANICA', comInativo, equipesApoio, '2026-09-14').map(t => t.nome))
+      .toEqual(['Leandro Rodrigues']);
+  });
+});
+
+describe('todosTecnicos', () => {
+  it('junta Elétrica e Mecânica, cada um com sua área marcada, e deixa Apoio de fora', () => {
+    const equipesApoio: EquipeApoioItem[] = [{ id: 'e1', nome: 'SERVPLEX' }];
+    const colaboradores: Colaborador[] = [
+      colaborador({ nome: 'Carlos Jr', matricula: '000001', area: 'ELÉTRICA' }),
+      colaborador({ nome: 'Leandro Rodrigues', matricula: '000002', area: 'MECÂNICA' }),
+    ];
+    expect(todosTecnicos(colaboradores, equipesApoio, '2026-09-07')).toEqual([
+      { nome: 'Carlos Jr', matricula: '000001', area: 'ELETRICA' },
+      { nome: 'Leandro Rodrigues', matricula: '000002', area: 'MECANICA' },
+    ]);
   });
 });

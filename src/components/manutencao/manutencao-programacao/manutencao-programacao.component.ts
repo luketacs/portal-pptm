@@ -16,8 +16,10 @@ import {
 } from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, TURNO_LABEL, turnoNoDia } from '../../../utils/escala-apoio';
 import {
-  HORAS_TREINAMENTO_DIA_TODO, calcularCapacidadeSemana, encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo,
-  encontrarOrdemDuplicada, podeEditarSemanaFechada, recursosParaEspelho,
+  HORAS_TREINAMENTO_DIA_TODO, bloqueioDoTecnico, calcularCapacidadeSemana, conflitoLotoTitle, diaMesPadded, diasDaSemana,
+  encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo, encontrarOrdemDuplicada, formatarDataBr,
+  lotoBadgeClass, normalizarNumeroOs, normalizarTexto, ordemDuplicada, paraIso, podeEditarSemanaFechada, recursosParaEspelho,
+  tecnicosPorArea, todosTecnicos,
 } from '../../../utils/manutencao-regras';
 import {
   alinharDatasPorEquipamento, ChaveEquipeApoio, EQUIPE_APOIO_NAO_CLASSIFICADA, inferirCategoriaIndicador,
@@ -105,14 +107,6 @@ const TIPO_SERVICO_BADGE_PADRAO = 'bg-slate-50 text-slate-500';
 // LOTO (bloqueio do equipamento) tem só essas 3 opções — é o que evita duas equipes
 // baterem de frente (uma precisando do equipamento rodando, outra precisando parado).
 const LOTO_OPCOES = ['LOTO', 'SEM LOTO', 'FUNCIONANDO'];
-const LOTO_BADGE: Record<string, string> = {
-  LOTO: 'bg-red-100 text-red-700',
-  'SEM LOTO': 'bg-slate-100 text-slate-600',
-  FUNCIONANDO: 'bg-green-100 text-green-700',
-};
-const LOTO_BADGE_PADRAO = 'bg-slate-50 text-slate-400';
-
-const DIAS_SEMANA_LABEL = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB', 'DOM'];
 
 function segundaFeiraDe(d: Date): Date {
   const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -120,10 +114,6 @@ function segundaFeiraDe(d: Date): Date {
   const diff = dow === 0 ? -6 : 1 - dow;
   date.setDate(date.getDate() + diff);
   return date;
-}
-
-function paraIso(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function formatarDiaMes(d: Date): string {
@@ -139,19 +129,6 @@ function somaHoras(ordens: ManutencaoOrdem[]): number {
   return Math.round(ordens.reduce((soma, o) => soma + (o.duracaoHoras ?? 0), 0) * 100) / 100;
 }
 
-// Datas reais (não rótulos) da semana SEG–SEX a partir da segunda-feira ('YYYY-MM-DD').
-function diasDaSemana(segundaIso: string): { data: string; label: string }[] {
-  const [ano, mes, dia] = segundaIso.split('-').map(Number);
-  return DIAS_SEMANA_LABEL.map((label, i) => {
-    const d = new Date(ano, mes - 1, dia + i);
-    return { data: paraIso(d), label };
-  });
-}
-
-function normalizarTexto(v: string): string {
-  return v.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
-}
-
 // Agrupa quem trabalha pra uma mesma empresa terceirizada (ex.: "Romário (Fontebras)",
 // "Júlio (Fontebras)") junto na ordenação dos cards, em vez de espalhar pela ordem
 // alfabética pura de cada nome individual — chave = a empresa entre parênteses, se
@@ -159,13 +136,6 @@ function normalizarTexto(v: string): string {
 function chaveOrdenacaoTecnico(nome: string): string {
   const empresa = nome.match(/\(([^)]+)\)\s*$/)?.[1];
   return empresa ? empresa.toUpperCase() : nome;
-}
-
-// Mesma normalização usada em api/sigma-ordens-proxy.js — precisa bater pra achar a
-// chave certa no resultado (o SIGMA usa número de OS com 6 dígitos e zero à esquerda).
-function normalizarNumeroOs(v: string): string {
-  const s = v.trim();
-  return /^\d+$/.test(s) ? s.padStart(6, '0') : s.toUpperCase();
 }
 
 // Domingo da semana que começa em `segundaIso` — usado por statusExecucao()/
@@ -205,7 +175,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   }
 
   lotoBadgeClass(loto: string): string {
-    return LOTO_BADGE[loto.toUpperCase()] ?? LOTO_BADGE_PADRAO;
+    return lotoBadgeClass(loto);
   }
 
   tipoServicoBadgeClass(tipoServico: string): string {
@@ -224,7 +194,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // do quadro inteiro, ver quadroLotoCalc). O detalhe completo fica no painel de
   // clique (ver toggleLotoDetalhe), não faz sentido duplicar tudo aqui também.
   conflitoLotoTitle(itens: { status: string; descricao: string; tecnicos: string[] }[]): string {
-    return `Conflito: ${itens.map(i => `${i.status} (${i.tecnicos.join(', ')})`).join(' vs. ')} — clique pra ver detalhes`;
+    return conflitoLotoTitle(itens);
   }
 
   // Painel de detalhe da célula do quadro de LOTO, aberto por clique (não só hover —
@@ -285,8 +255,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   }
 
   diaMesPadded(dataIso: string): string {
-    const [, mes, dia] = dataIso.split('-');
-    return `${dia}/${mes}`;
+    return diaMesPadded(dataIso);
   }
 
   exportandoSemana = signal(false);
@@ -527,13 +496,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   private bloqueioDoTecnico(
     nome: string, dias: string[], idExcluir?: string | null,
   ): { tipo: 'ferias' | 'atestado' | 'folga'; motivo: string } | null {
-    const ferias = this.feriasNoIntervalo(nome, dias);
-    if (ferias) return { tipo: 'ferias', motivo: `${nome} está de férias de ${this.formatarDataBr(ferias.dataInicio)} a ${this.formatarDataBr(ferias.dataFim)}.` };
-    const atestado = this.atestadoNoIntervalo(nome, dias);
-    if (atestado) return { tipo: 'atestado', motivo: `${nome} está de atestado médico de ${this.formatarDataBr(atestado.dataInicio)} a ${this.formatarDataBr(atestado.dataFim)}.` };
-    const folga = this.folgaNoIntervalo(nome, dias, idExcluir);
-    if (folga) return { tipo: 'folga', motivo: `${nome} já está de folga em algum desses dias.` };
-    return null;
+    return bloqueioDoTecnico(
+      this.manutencaoService.ferias(), this.manutencaoService.atestados(), this.manutencaoService.ordens(), nome, dias, idExcluir,
+    );
   }
 
   // Mesma OS já lançada pro mesmo técnico em algum dos dias informados — evita
@@ -542,10 +507,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // (mesma lógica da consulta ao SIGMA), não o texto digitado, pra "45203" e "045203"
   // baterem como a mesma OS. `idExcluir` evita a OS se auto-bloquear ao ser editada.
   private ordemDuplicada(numeroOs: string, tecnicoNome: string, diasIso: string[], idExcluir?: string | null): ManutencaoOrdem | null {
-    if (!numeroOs.trim()) return null;
-    return encontrarOrdemDuplicada(
-      this.manutencaoService.ordens(), normalizarNumeroOs(numeroOs), tecnicoNome, diasIso, normalizarNumeroOs, idExcluir,
-    );
+    return ordemDuplicada(this.manutencaoService.ordens(), numeroOs, tecnicoNome, diasIso, idExcluir);
   }
 
   // Agrupa pela matrícula do colaborador (matriculaDaOrdem: prioriza tecnico_matricula
@@ -2246,34 +2208,14 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // manutencao-indicadores-semanais.component.ts — reportado: tirar do cadastro direto,
   // como foi feito antes com Alexandre Gomes, ver commit 32ee905, virou 9 ordens da
   // Mecânica da semana 37 marcadas "Não Executadas" à toa).
-  private readonly INATIVO_A_PARTIR_DE: Record<string, string> = {
-    'ALEXANDRE GOMES': '2026-09-14',
-    'JOAQUIM NETO': '2026-08-24',
-  };
-
   private tecnicosPorArea(area: ManutencaoArea): { nome: string; matricula: string | null }[] {
-    if (area === 'APOIO') {
-      return this.equipesApoio().map(e => ({ nome: e.nome, matricula: null }));
-    }
-    const termo = area === 'ELETRICA' ? 'ELETR' : 'MECAN';
-    const semana = this.semanaFiltro();
-    return this.apontamentosService.colaboradores()
-      .filter(c => normalizarTexto(c.area).includes(termo))
-      .filter(c => {
-        const corte = this.INATIVO_A_PARTIR_DE[normalizarTexto(c.nome)];
-        return !corte || semana < corte;
-      })
-      .map(c => ({ nome: c.nome, matricula: c.matricula }))
-      .sort((a, b) => a.nome.localeCompare(b.nome));
+    return tecnicosPorArea(area, this.apontamentosService.colaboradores(), this.equipesApoio(), this.semanaFiltro());
   }
 
   // Todos os técnicos das duas áreas (Elétrica + Mecânica) — usado no lançamento de
   // feriado, que vale pra equipe toda. Apoio fica de fora (folga é um conceito por
   // pessoa, e lá quem aparece é empresa/equipe).
-  todosTecnicos = computed(() => [
-    ...this.tecnicosPorArea('ELETRICA').map(c => ({ nome: c.nome, matricula: c.matricula, area: 'ELETRICA' as ManutencaoArea })),
-    ...this.tecnicosPorArea('MECANICA').map(c => ({ nome: c.nome, matricula: c.matricula, area: 'MECANICA' as ManutencaoArea })),
-  ]);
+  todosTecnicos = computed(() => todosTecnicos(this.apontamentosService.colaboradores(), this.equipesApoio(), this.semanaFiltro()));
 
   // ── Feriado (folga em lote pra toda a equipe) ─────────────────────────
   feriadoAberto = signal(false);
@@ -2714,8 +2656,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   });
 
   formatarDataBr(dataIso: string): string {
-    const [ano, mes, dia] = dataIso.split('-');
-    return `${dia}/${mes}/${ano}`;
+    return formatarDataBr(dataIso);
   }
 
   canConfirmarForm(): boolean {
