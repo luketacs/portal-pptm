@@ -35,9 +35,9 @@ import { GerenciarRecursosModalComponent } from './gerenciar-recursos-modal/gere
 import { GerenciarApoioModalComponent } from './gerenciar-apoio-modal/gerenciar-apoio-modal.component';
 import { ModalFeriadoComponent } from './modal-feriado/modal-feriado.component';
 import { ModalReprogramarComponent } from './modal-reprogramar/modal-reprogramar.component';
+import { AfastamentoModalComponent } from './afastamento-modal/afastamento-modal.component';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
-type TipoAfastamento = 'ferias' | 'atestado';
 
 const AREA_LABEL: Record<ManutencaoArea, string> = {
   ELETRICA: 'Elétrica',
@@ -149,7 +149,7 @@ function domingoDaSemana(segundaIso: string): string {
   standalone: true,
   imports: [
     CommonModule, FormsModule, EscalaTurnoTabelaComponent, FichaImpressaoComponent, QuadroLotoTabelaComponent, GerenciarRecursosModalComponent,
-    GerenciarApoioModalComponent, ModalFeriadoComponent, ModalReprogramarComponent,
+    GerenciarApoioModalComponent, ModalFeriadoComponent, ModalReprogramarComponent, AfastamentoModalComponent,
   ],
   templateUrl: './manutencao-programacao.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -698,118 +698,6 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       }));
   }
   escalaDaSemana = computed(() => this.escalaDaSemanaCalc(this.diasDaSemanaAtual()));
-
-  // ── Férias/Atestado médico (Admin): período por técnico, pra avisar/bloquear
-  // lançamento de atividade nesse período. Só faz sentido pra Elétrica/Mecânica.
-  // Os dois usam exatamente o mesmo fluxo (área -> técnico -> período) — um único
-  // modal parametrizado por `tipo`, em vez de duas cópias quase idênticas.
-  readonly ferias = this.manutencaoService.ferias;
-  readonly atestados = this.manutencaoService.atestados;
-
-  afastamentoModal = signal<{
-    tipo: TipoAfastamento;
-    area: ManutencaoArea;
-    tecnicoNome: string;
-    tecnicoMatricula: string;
-    dataInicio: string;
-    dataFim: string;
-  } | null>(null);
-
-  tecnicosParaAfastamento = computed(() => {
-    const modal = this.afastamentoModal();
-    return modal ? this.tecnicosPorArea(modal.area) : [];
-  });
-
-  itensAfastamento(tipo: TipoAfastamento): (FeriasTecnico | AtestadoTecnico)[] {
-    return tipo === 'ferias' ? this.ferias() : this.atestados();
-  }
-
-  abrirAfastamento(tipo: TipoAfastamento): void {
-    this.afastamentoModal.set({
-      tipo,
-      area: this.areaFixa === 'MECANICA' ? 'MECANICA' : 'ELETRICA',
-      tecnicoNome: '',
-      tecnicoMatricula: '',
-      dataInicio: '',
-      dataFim: '',
-    });
-  }
-
-  fecharAfastamento(): void {
-    this.afastamentoModal.set(null);
-  }
-
-  onAfastamentoAreaSelected(area: ManutencaoArea): void {
-    this.afastamentoModal.update(m => m && ({ ...m, area, tecnicoNome: '', tecnicoMatricula: '' }));
-  }
-
-  onAfastamentoTecnicoSelected(nome: string): void {
-    const modal = this.afastamentoModal();
-    if (!modal) return;
-    const colaborador = this.tecnicosPorArea(modal.area).find(c => c.nome === nome);
-    this.afastamentoModal.set({ ...modal, tecnicoNome: nome, tecnicoMatricula: colaborador?.matricula ?? '' });
-  }
-
-  setAfastamentoDataInicio(valor: string): void {
-    this.afastamentoModal.update(m => m && ({ ...m, dataInicio: valor }));
-  }
-
-  setAfastamentoDataFim(valor: string): void {
-    this.afastamentoModal.update(m => m && ({ ...m, dataFim: valor }));
-  }
-
-  canConfirmarAfastamento(): boolean {
-    const modal = this.afastamentoModal();
-    return !!modal && !this.isProcessando() && !!modal.tecnicoNome.trim()
-      && !!modal.dataInicio && !!modal.dataFim && modal.dataFim >= modal.dataInicio;
-  }
-
-  async confirmarAfastamento(): Promise<void> {
-    const modal = this.afastamentoModal();
-    if (!modal || !this.canConfirmarAfastamento()) return;
-    const label = modal.tipo === 'ferias' ? 'férias' : 'atestado médico';
-    this.isProcessando.set(true);
-    try {
-      const payload = {
-        tecnicoNome: modal.tecnicoNome,
-        tecnicoMatricula: modal.tecnicoMatricula || null,
-        area: modal.area,
-        dataInicio: modal.dataInicio,
-        dataFim: modal.dataFim,
-      };
-      if (modal.tipo === 'ferias') {
-        await this.manutencaoService.criarFerias(payload);
-        this.notificationService.showSuccess('Férias cadastradas.');
-      } else {
-        await this.manutencaoService.criarAtestado(payload);
-        this.notificationService.showSuccess('Atestado médico cadastrado.');
-      }
-      this.afastamentoModal.set({ ...modal, tecnicoNome: '', tecnicoMatricula: '', dataInicio: '', dataFim: '' });
-    } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : `Erro ao cadastrar ${label}.`);
-    } finally {
-      this.isProcessando.set(false);
-    }
-  }
-
-  async removerAfastamento(tipo: TipoAfastamento, item: FeriasTecnico | AtestadoTecnico): Promise<void> {
-    const label = tipo === 'ferias' ? 'férias' : 'atestado médico';
-    if (this.isProcessando() || !(await this.confirmDialogService.confirm(`Remover ${label} de "${item.tecnicoNome}"?`))) return;
-    this.isProcessando.set(true);
-    try {
-      if (tipo === 'ferias') {
-        await this.manutencaoService.excluirFerias(item.id);
-        this.notificationService.showSuccess('Férias removidas.');
-      } else {
-        await this.manutencaoService.excluirAtestado(item.id);
-        this.notificationService.showSuccess('Atestado médico removido.');
-      }
-    } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : `Erro ao remover ${label}.`);
-    } finally {
-      this.isProcessando.set(false);
-    }
-  }
 
   // Backlog do SIGMA (OS abertas da área, ainda não lançadas aqui) — só faz sentido
   // nas telas de área única, porque o campo de área do SIGMA é por OS, não por semana.

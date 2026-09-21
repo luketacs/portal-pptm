@@ -98,11 +98,11 @@
                   class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
                   Feriado
                 </button>
-                <button (click)="abrirAfastamento('ferias'); menuAcoesAberto.set(false)"
+                <button (click)="afastamentoModal.abrir('ferias'); menuAcoesAberto.set(false)"
                   class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
                   Férias
                 </button>
-                <button (click)="abrirAfastamento('atestado'); menuAcoesAberto.set(false)"
+                <button (click)="afastamentoModal.abrir('atestado'); menuAcoesAberto.set(false)"
                   class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
                   Atestado médico
                 </button>
@@ -1688,73 +1688,7 @@
 }
 
 <!-- Modal: Férias (cadastro de período de férias por técnico) -->
-@if (afastamentoModal(); as modal) {
-  <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" (click)="fecharAfastamento()">
-    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md max-h-[85vh] overflow-y-auto" (click)="$event.stopPropagation()">
-      <h3 class="text-lg font-bold text-gray-800 mb-1">{{ modal.tipo === 'ferias' ? 'Férias' : 'Atestado médico' }}</h3>
-      <p class="text-sm text-gray-500 mb-4">Enquanto o período estiver ativo, não é possível lançar OS/folga/treinamento pro técnico nesses dias.</p>
-
-      @if (!areaFixa) {
-        <label class="block text-sm font-medium text-slate-700 mb-1">Área</label>
-        <select [ngModel]="modal.area" (ngModelChange)="onAfastamentoAreaSelected($event)"
-          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-4">
-          <option value="ELETRICA">Elétrica</option>
-          <option value="MECANICA">Mecânica</option>
-        </select>
-      }
-
-      <label class="block text-sm font-medium text-slate-700 mb-1">Técnico <span class="text-red-500">*</span></label>
-      <select [ngModel]="modal.tecnicoNome" (ngModelChange)="onAfastamentoTecnicoSelected($event)"
-        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-4">
-        <option value="">Selecione...</option>
-        @for (t of tecnicosParaAfastamento(); track t.matricula) {
-          <option [value]="t.nome">{{ t.nome }}</option>
-        }
-      </select>
-
-      <div class="grid grid-cols-2 gap-3 mb-4">
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Início <span class="text-red-500">*</span></label>
-          <input type="date" [ngModel]="modal.dataInicio" (ngModelChange)="setAfastamentoDataInicio($event)"
-            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Fim <span class="text-red-500">*</span></label>
-          <input type="date" [ngModel]="modal.dataFim" (ngModelChange)="setAfastamentoDataFim($event)"
-            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-      </div>
-
-      <div class="flex justify-end gap-3 mb-4">
-        <button (click)="confirmarAfastamento()" [disabled]="!canConfirmarAfastamento()"
-          class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
-          {{ modal.tipo === 'ferias' ? 'Cadastrar férias' : 'Cadastrar atestado' }}
-        </button>
-      </div>
-
-      <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Períodos cadastrados</p>
-      <div class="space-y-1 max-h-56 overflow-y-auto">
-        @for (item of itensAfastamento(modal.tipo); track item.id) {
-          <div class="flex items-center justify-between gap-2 text-sm bg-slate-50 rounded-lg px-3 py-1.5">
-            <span class="text-gray-700">
-              <span class="font-semibold">{{ item.tecnicoNome }}</span>
-              <span class="text-gray-400"> · {{ formatarDataBr(item.dataInicio) }} a {{ formatarDataBr(item.dataFim) }}</span>
-            </span>
-            <button (click)="removerAfastamento(modal.tipo, item)" [disabled]="isProcessando()" title="Remover"
-              class="text-gray-400 hover:text-red-600 transition disabled:opacity-50 flex-shrink-0">✕</button>
-          </div>
-        }
-        @if (itensAfastamento(modal.tipo).length === 0) {
-          <p class="text-sm text-gray-400">{{ modal.tipo === 'ferias' ? 'Nenhum período de férias cadastrado.' : 'Nenhum atestado médico cadastrado.' }}</p>
-        }
-      </div>
-
-      <div class="flex justify-end mt-4">
-        <button (click)="fecharAfastamento()" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Fechar</button>
-      </div>
-    </div>
-  </div>
-}
+<app-afastamento-modal #afastamentoModal [areaFixa]="areaFixa" [semanaFiltro]="semanaFiltro()" />
 
 <!-- Menu ⋯ de ações por linha (+ Apoio/Editar/Excluir) — um elemento global só,
      posicionado com `fixed` a partir do clique, pra não ficar cortado pelo
