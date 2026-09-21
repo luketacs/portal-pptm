@@ -12,7 +12,7 @@ import { ExcelExportService, ProgramacaoSemanalGrupo, ProgramacaoSemanalLinha } 
 import { AlmoxarifadoService, Movimentacao, Solicitacao } from '../../../services/almoxarifado.service';
 import {
   AtestadoTecnico, AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem,
-  ManutencaoTipo, OperadorEscalaApoio, PlanoManutencao, RecursoEspecialItem, SigmaBacklogItem,
+  ManutencaoTipo, OperadorEscalaApoio, PlanoManutencao, SigmaBacklogItem,
 } from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, turnoNoDia } from '../../../utils/escala-apoio';
 import {
@@ -31,6 +31,7 @@ import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } fro
 import { EscalaTurnoTabelaComponent } from './escala-turno-tabela/escala-turno-tabela.component';
 import { FichaImpressaoComponent } from './ficha-impressao/ficha-impressao.component';
 import { QuadroLotoTabelaComponent } from './quadro-loto-tabela/quadro-loto-tabela.component';
+import { GerenciarRecursosModalComponent } from './gerenciar-recursos-modal/gerenciar-recursos-modal.component';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 type TipoAfastamento = 'ferias' | 'atestado';
@@ -143,7 +144,9 @@ function domingoDaSemana(segundaIso: string): string {
 @Component({
   selector: 'app-manutencao-programacao',
   standalone: true,
-  imports: [CommonModule, FormsModule, EscalaTurnoTabelaComponent, FichaImpressaoComponent, QuadroLotoTabelaComponent],
+  imports: [
+    CommonModule, FormsModule, EscalaTurnoTabelaComponent, FichaImpressaoComponent, QuadroLotoTabelaComponent, GerenciarRecursosModalComponent,
+  ],
   templateUrl: './manutencao-programacao.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -860,43 +863,6 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       this.notificationService.showSuccess('Operador removido da escala.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover operador.');
-    } finally {
-      this.isProcessando.set(false);
-    }
-  }
-
-  // ── Gerenciar Recursos (Admin): cadastro dos "recursos especiais" (Munck/
-  // Guindaste/Andaime/Fontebras...) que sugerem no campo Recursos e espelham
-  // automaticamente uma OS pro Apoio — evita precisar de deploy pra cadastrar uma
-  // empresa/pessoa nova (ver recursosEquipamentoOpcoes/recursoParaEmpresaApoio).
-  gerenciarRecursosAberto = signal(false);
-  recursosEspeciais = this.manutencaoService.recursosEspeciais;
-  novoRecursoOpcao = signal('');
-  novoRecursoEmpresa = signal('');
-
-  async adicionarRecursoEspecial(): Promise<void> {
-    if (this.isProcessando()) return;
-    this.isProcessando.set(true);
-    try {
-      await this.manutencaoService.criarRecursoEspecial(this.novoRecursoOpcao(), this.novoRecursoEmpresa());
-      this.novoRecursoOpcao.set('');
-      this.novoRecursoEmpresa.set('');
-      this.notificationService.showSuccess('Recurso adicionado.');
-    } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao adicionar recurso.');
-    } finally {
-      this.isProcessando.set(false);
-    }
-  }
-
-  async removerRecursoEspecial(item: RecursoEspecialItem): Promise<void> {
-    if (this.isProcessando() || !(await this.confirmDialogService.confirm(`Remover "${item.opcao}" do cadastro? Lançamentos já feitos com esse recurso não são afetados.`))) return;
-    this.isProcessando.set(true);
-    try {
-      await this.manutencaoService.excluirRecursoEspecial(item.id);
-      this.notificationService.showSuccess('Recurso removido.');
-    } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao remover recurso.');
     } finally {
       this.isProcessando.set(false);
     }
