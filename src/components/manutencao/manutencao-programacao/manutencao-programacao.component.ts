@@ -37,6 +37,7 @@ import { ModalFeriadoComponent } from './modal-feriado/modal-feriado.component';
 import { ModalReprogramarComponent } from './modal-reprogramar/modal-reprogramar.component';
 import { AfastamentoModalComponent } from './afastamento-modal/afastamento-modal.component';
 import { ModalReuniaoLoteComponent } from './modal-reuniao-lote/modal-reuniao-lote.component';
+import { ModalApoioComponent } from './modal-apoio/modal-apoio.component';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 
@@ -151,6 +152,7 @@ function domingoDaSemana(segundaIso: string): string {
   imports: [
     CommonModule, FormsModule, EscalaTurnoTabelaComponent, FichaImpressaoComponent, QuadroLotoTabelaComponent, GerenciarRecursosModalComponent,
     GerenciarApoioModalComponent, ModalFeriadoComponent, ModalReprogramarComponent, AfastamentoModalComponent, ModalReuniaoLoteComponent,
+    ModalApoioComponent,
   ],
   templateUrl: './manutencao-programacao.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -2058,131 +2060,6 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   async fecharFormComConfirmacao(): Promise<void> {
     if (await this.confirmDialogService.confirm('Tem certeza que deseja sair? O que foi preenchido nesse lançamento será perdido.')) {
       this.fecharForm();
-    }
-  }
-
-  // ── Adicionar apoio (duplica a OS pra um segundo técnico) ─────────────────
-  // Cada técnico (principal e apoio) fica com seu próprio lançamento, editável
-  // separadamente (dias, duração, status) — assim a OS aparece na agenda e na
-  // capacidade dos dois, sem um único registro compartilhado entre eles.
-  apoioAberto = signal(false);
-  apoioOrigem = signal<ManutencaoOrdem | null>(null);
-  apoioTecnicoNome = signal('');
-  apoioTecnicoMatricula = signal('');
-  // Começa vazio — o usuário marca só o(s) dia(s) em que realmente precisa do apoio
-  // (ex.: OS de segunda a terça, apoio só na terça). Começar com tudo marcado gerava
-  // engano: quem só clicava no dia que precisava (sem notar que os outros já vinham
-  // marcados) acabava confirmando o apoio nos dias errados também.
-  apoioDiasSelecionados = signal<string[]>([]);
-
-  tecnicosParaApoio = computed(() => {
-    const origem = this.apoioOrigem();
-    if (!origem) return [];
-    return this.tecnicosPorArea(origem.area).filter(t => t.nome !== origem.tecnicoNome);
-  });
-
-  // Dias selecionáveis pro apoio — só os dias em que a OS de origem já está prevista
-  // (não faz sentido apoiar num dia em que a atividade nem vai rodar).
-  apoioDiasDisponiveis = computed(() => {
-    const origem = this.apoioOrigem();
-    if (!origem) return [];
-    return this.diasDaSemanaAtual().filter(d => origem.diasPrevistos.includes(d.data));
-  });
-
-  abrirApoio(o: ManutencaoOrdem): void {
-    this.apoioOrigem.set(o);
-    this.apoioTecnicoNome.set('');
-    this.apoioTecnicoMatricula.set('');
-    // Só pré-marca sozinho quando não há escolha real (1 dia só); com 2+ dias, começa
-    // vazio pra obrigar a escolha consciente (ver comentário em apoioDiasSelecionados).
-    this.apoioDiasSelecionados.set(o.diasPrevistos.length === 1 ? [...o.diasPrevistos] : []);
-    this.apoioAberto.set(true);
-  }
-
-  fecharApoio(): void {
-    this.apoioAberto.set(false);
-    this.apoioOrigem.set(null);
-  }
-
-  toggleApoioDia(dataIso: string): void {
-    const atual = this.apoioDiasSelecionados();
-    this.apoioDiasSelecionados.set(
-      atual.includes(dataIso) ? atual.filter(d => d !== dataIso) : [...atual, dataIso].sort(),
-    );
-  }
-
-  onApoioTecnicoSelected(nome: string): void {
-    this.apoioTecnicoNome.set(nome);
-    const colaborador = this.tecnicosParaApoio().find(c => c.nome === nome);
-    this.apoioTecnicoMatricula.set(colaborador?.matricula ?? '');
-  }
-
-  // Mesmo bloqueio de férias/folga do formulário principal, aplicado ao técnico de
-  // apoio só nos dias efetivamente selecionados pro apoio (não a OS de origem inteira
-  // — não faz sentido bloquear por um dia em que o apoio nem foi marcado).
-  apoioTecnicoBloqueio = computed<{ motivo: string } | null>(() => {
-    const origem = this.apoioOrigem();
-    const nome = this.apoioTecnicoNome().trim();
-    const dias = this.apoioDiasSelecionados();
-    if (!origem || !nome || dias.length === 0) return null;
-    const bloqueio = this.bloqueioDoTecnico(nome, dias);
-    if (bloqueio) return bloqueio;
-    if (origem.numeroOs && this.ordemDuplicada(origem.numeroOs, nome, dias)) {
-      return { motivo: `${nome} já tem a OS ${origem.numeroOs} lançada em algum desses dias.` };
-    }
-    return null;
-  });
-
-  canConfirmarApoio(): boolean {
-    return !this.isProcessando() && !!this.apoioOrigem() && !!this.apoioTecnicoNome().trim()
-      && this.apoioDiasSelecionados().length > 0 && !this.apoioTecnicoBloqueio();
-  }
-
-  async confirmarApoio(): Promise<void> {
-    const origem = this.apoioOrigem();
-    if (!this.canConfirmarApoio() || !origem) return;
-    this.isProcessando.set(true);
-    // Da perspectiva do técnico de apoio, "Recursos" é quem mais está no serviço — o
-    // mandante da OS original e os outros recursos já listados, nunca ele mesmo.
-    const apoioTecnico = this.apoioTecnicoNome();
-    const recursosDoApoio = [
-      ...(origem.recursos ? origem.recursos.split(',').map(s => s.trim()).filter(Boolean) : []),
-      origem.tecnicoNome,
-    ].filter(r => r.toUpperCase() !== apoioTecnico.toUpperCase()).join(', ');
-    try {
-      await this.manutencaoService.criarOrdem({
-        tipo: 'ordem',
-        area: origem.area,
-        // Copia a classificação da OS de origem — sem isso, todo apoio de uma OS de
-        // Apoio nascia com categoriaIndicador em branco (categoria_indicador só é
-        // auto-preenchida pelo service pra Mecânica/Elétrica, nunca pra Apoio) e caía
-        // em "Não classificado" no indicador, mesmo a OS original estando classificada.
-        categoriaIndicador: origem.categoriaIndicador ?? undefined,
-        semanaInicio: origem.semanaInicio,
-        numeroOs: origem.numeroOs ?? undefined,
-        semOs: origem.semOs,
-        descricao: origem.descricao,
-        equipamento: origem.equipamento ?? undefined,
-        recursos: recursosDoApoio || undefined,
-        loto: origem.loto ?? undefined,
-        areaAtuacao: origem.areaAtuacao ?? undefined,
-        // Não copia a duração da OS de origem — o apoio pode estar em menos dias (ou um
-        // esforço diferente) do que a atividade inteira; copiar a mesma duração inflava
-        // o HH do apoio pro valor da atividade toda. Fica em branco pro técnico
-        // preencher o esforço real dele (editável depois em "Editar").
-        tipoServico: origem.tipoServico ?? undefined,
-        tecnicoNome: this.apoioTecnicoNome(),
-        tecnicoMatricula: this.apoioTecnicoMatricula() || undefined,
-        diasPrevistos: this.apoioDiasSelecionados(),
-        status: 'PEND',
-        observacoes: origem.observacoes ?? undefined,
-      });
-      this.notificationService.showSuccess(`OS adicionada também para ${this.apoioTecnicoNome()}.`);
-      this.fecharApoio();
-    } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao adicionar apoio.');
-    } finally {
-      this.isProcessando.set(false);
     }
   }
 
