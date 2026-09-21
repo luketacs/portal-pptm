@@ -1,0 +1,37 @@
+<div class="overflow-x-auto">
+  <table class="min-w-full text-sm">
+    <thead>
+      <tr class="text-left text-xs text-gray-500 uppercase">
+        <th class="py-1 pr-3">Equipamento</th>
+        @for (dia of dias; track dia.data) {
+          <th class="py-1 px-1 text-center">{{ dia.label }}</th>
+        }
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+      @for (linha of quadroLoto; track linha.equipamento) {
+        @if (linha.separadorAntes) {
+          <tr>
+            <td [attr.colspan]="dias.length + 1" class="pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide border-t border-slate-200">Sem conflito</td>
+          </tr>
+        }
+        <tr [class.bg-orange-50]="linha.temConflito">
+          <td class="py-1 pr-3 font-semibold text-gray-700">{{ linha.equipamento }}</td>
+          @for (cel of linha.dias; track cel.data) {
+            <td class="py-1 px-1 text-center">
+              @if (cel.conflito) {
+                <button type="button" (click)="onCelulaClick(linha.equipamento, cel.data, cel.itens, $event)"
+                  class="inline-block w-5 h-5 leading-5 rounded bg-orange-100 text-orange-700 font-bold text-xs hover:ring-2 hover:ring-orange-300" [title]="conflitoLotoTitle(cel.itens)">⚠</button>
+              } @else if (cel.itens.length > 0) {
+                <button type="button" (click)="onCelulaClick(linha.equipamento, cel.data, cel.itens, $event)"
+                  class="inline-block w-5 h-5 rounded hover:ring-2 hover:ring-offset-1" [class]="lotoBadgeClass(cel.itens[0].status)" [title]="cel.itens[0].status + ': ' + cel.itens[0].descricao + ' (' + cel.itens[0].tecnicos.join(', ') + ')'"></button>
+              } @else {
+                <span class="inline-block w-5 h-5 rounded bg-gray-50"></span>
+              }
+            </td>
+          }
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>

@@ -30,6 +30,7 @@ import {
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
 import { EscalaTurnoTabelaComponent } from './escala-turno-tabela/escala-turno-tabela.component';
 import { FichaImpressaoComponent } from './ficha-impressao/ficha-impressao.component';
+import { QuadroLotoTabelaComponent } from './quadro-loto-tabela/quadro-loto-tabela.component';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
 type TipoAfastamento = 'ferias' | 'atestado';
@@ -142,7 +143,7 @@ function domingoDaSemana(segundaIso: string): string {
 @Component({
   selector: 'app-manutencao-programacao',
   standalone: true,
-  imports: [CommonModule, FormsModule, EscalaTurnoTabelaComponent, FichaImpressaoComponent],
+  imports: [CommonModule, FormsModule, EscalaTurnoTabelaComponent, FichaImpressaoComponent, QuadroLotoTabelaComponent],
   templateUrl: './manutencao-programacao.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
