@@ -301,9 +301,24 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     [...new Set(this.ordensTipo().map(o => o.numeroOs).filter((n): n is string => !!n?.trim()))],
   );
 
-  atualizar(): void {
-    const numeros = this.numerosOsVisiveis();
-    if (numeros.length > 0) this.buscarExecucaoSigma(numeros);
+  private atualizandoDados = false;
+  async atualizar(): Promise<void> {
+    if (this.atualizandoDados) return;
+    this.atualizandoDados = true;
+    try {
+      await Promise.all([
+        this.manutencaoService.load(), this.manutencaoService.loadFerias(),
+        this.manutencaoService.loadAtestados(), this.historicoService.load(true),
+        this.manuaisService.load(),
+      ]);
+      const numeros = this.numerosOsVisiveis();
+      if (numeros.length > 0) await this.buscarExecucaoSigma(numeros);
+      this.errorMessage.set('');
+    } catch {
+      this.errorMessage.set('Não foi possível atualizar os indicadores. Tente novamente.');
+    } finally {
+      this.atualizandoDados = false;
+    }
   }
 
   private async buscarExecucaoSigma(numeros: string[]): Promise<void> {
@@ -396,6 +411,9 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       const dias = diasDaSemana(semanaIso);
       const ordensDaSemanaTodas = ordensTodas.filter(o => o.semanaInicio === semanaIso);
       for (const colaborador of tecnicos) {
+        const nome = normalizarTexto(colaborador.nome);
+        const corte = this.INATIVO_A_PARTIR_DE[nome];
+        if (this.NOMES_EXCLUIDOS_HORAS.has(nome) || (corte && semanaIso >= corte)) continue;
         const ordensDoTecnico = this.ordensDoColaborador(ordensDaSemanaTodas, colaborador);
         const r = calcularHhTecnico({
           dias,

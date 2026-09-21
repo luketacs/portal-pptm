@@ -112,7 +112,7 @@ export class AuditComponent implements OnInit {
       }
       if (this.dateFrom()) query = query.gte('created_at', this.dateFrom());
       if (this.dateTo()) {
-        const to = new Date(this.dateTo());
+        const to = new Date(this.dateTo() + 'T00:00:00');
         to.setHours(23, 59, 59, 999);
         query = query.lte('created_at', to.toISOString());
       }

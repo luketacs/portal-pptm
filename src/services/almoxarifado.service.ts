@@ -1,3 +1,4 @@
+import { fetchAllRows } from '../utils/supabase-pagination';
 import { Injectable } from '@angular/core';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
@@ -87,18 +88,9 @@ export class AlmoxarifadoService {
   private async fetchAllPages<T>(
     fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
   ): Promise<T[]> {
-    const PAGE_SIZE = 1000;
-    let all: T[] = [];
-    let from = 0;
-    while (true) {
-      const { data, error } = await fetchPage(from, from + PAGE_SIZE - 1);
-      if (error) throw new Error(error.message);
-      const page = data ?? [];
-      all = all.concat(page);
-      if (page.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
-    }
-    return all;
+    const { data, error } = await fetchAllRows(fetchPage);
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   async getMovimentacoes(): Promise<Movimentacao[]> {
@@ -106,7 +98,7 @@ export class AlmoxarifadoService {
       this.supabaseService.client
         .from('almox_movimentacoes')
         .select('*')
-        .order('data_operacao', { ascending: false })
+        .order('data_operacao', { ascending: false }).order('id')
         .range(from, to)
     );
   }
@@ -117,7 +109,7 @@ export class AlmoxarifadoService {
         .from('almox_solicitacoes')
         .select('*')
         .eq('status', 'aberta')   // apenas abertas — exclui 'encerrada' e 'atendida'
-        .order('sa_numero')
+        .order('sa_numero').order('id')
         .range(from, to)
     );
   }
@@ -127,7 +119,7 @@ export class AlmoxarifadoService {
       this.supabaseService.client
         .from('almox_saldo_real')
         .select('*')
-        .order('produto_codigo')
+        .order('produto_codigo').order('id')
         .range(from, to)
     );
   }
@@ -173,9 +165,7 @@ export class AlmoxarifadoService {
   agruparMovimentacoes(movs: Movimentacao[]): MaterialAgrupado[] {
     const map = new Map<string, MaterialAgrupado>();
 
-    // O arquivo é percorrido em ordem — o Python faz o mesmo:
-    // m["custo_medio"] = row[5] or 0  → sempre sobrescreve (último valor vence)
-    // m["saldo_qtd"]   = row[6]       → idem
+    // Custo e saldo vêm da movimentação mais recente, independente da ordem do arquivo.
     for (const m of movs) {
       const key = m.produto_codigo;
       if (!map.has(key)) {
@@ -197,13 +187,11 @@ export class AlmoxarifadoService {
       ag.qtd_entrada_total += m.qtd_entrada ?? 0;
       ag.qtd_saida_total   += m.qtd_saida ?? 0;
 
-      // Sempre sobrescreve custo_medio e saldo_qtd — igual ao Python (último vence)
-      ag.custo_medio = m.custo_medio ?? ag.custo_medio;
-      ag.saldo_qtd   = m.saldo_qtd   ?? ag.saldo_qtd;
-
       // Última data de movimentação = máxima entre todas as linhas do material
       if (m.data_operacao && (!ag.ultima_movimentacao || m.data_operacao > ag.ultima_movimentacao)) {
         ag.ultima_movimentacao = m.data_operacao;
+        ag.custo_medio = m.custo_medio ?? ag.custo_medio;
+        ag.saldo_qtd = m.saldo_qtd ?? ag.saldo_qtd;
       }
     }
 

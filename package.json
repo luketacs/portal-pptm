@@ -8,7 +8,11 @@
     "build": "ng build",
     "preview": "ng serve --configuration=production",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+    "test:api": "node --test tests/api.test.mjs",
+    "test:database": "node --test tests/database.test.mjs",
+    "test:all": "npm run typecheck && npm test -- --runInBand && node --test tests/*.test.mjs",
+    "typecheck": "tsc --project tsconfig.spec.json --noEmit"
   },
   "dependencies": {
     "@angular/build": "^21.1.2",
@@ -32,11 +36,13 @@
     "xlsx-js-style": "^1.2.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@types/d3": "^7.4.3",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.19.7",
     "autoprefixer": "^10.4.21",
     "jest": "^30.3.0",
+    "jest-environment-jsdom": "^30.5.2",
     "postcss": "^8.5.3",
     "ts-jest": "^29.4.9",
     "typescript": "^5.9.3"

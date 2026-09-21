@@ -57,6 +57,7 @@ export interface ManutencaoOrdem {
   // Preenchido só quando a OS nasceu do painel "Preventivas da semana" — liga essa OS
   // ao plano preventivo que ela cumpre (ver PlanoManutencao). null pra grande maioria.
   planoPreventivoId: string | null;
+  cicloDataPrevista?: string | null;
   // Checklist copiado do plano preventivo no momento da programação (ver
   // PlanoManutencao.atividades) — null pra OS que não nasceu de um plano.
   checklist: AtividadeChecklist[] | null;
@@ -88,6 +89,7 @@ export interface CreateManutencaoOrdemRequest {
   reuniaoHorario?: string;
   reuniaoLocal?: string;
   planoPreventivoId?: string;
+  cicloDataPrevista?: string | null;
   checklist?: AtividadeChecklist[];
 }
 
@@ -303,6 +305,7 @@ export interface EditarManutencaoOrdemRequest {
   reuniaoHorario: string | null;
   reuniaoLocal: string | null;
   planoPreventivoId: string | null;
+  cicloDataPrevista?: string | null;
   checklist: AtividadeChecklist[] | null;
 }
 

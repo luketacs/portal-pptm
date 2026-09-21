@@ -49,7 +49,7 @@ export class AlmoxSaidasComponent implements OnInit {
   saidasFiltradas = computed(() => {
     const todas = this._todasMovs();
     const lista = this.modoFiltro() === 'mes'
-      ? todas.filter(m => (m.data_operacao ?? '').startsWith(this.mesEspecifico()))
+      ? todas.filter(m => (m.qtd_saida ?? 0) > 0 && (m.data_operacao ?? '').startsWith(this.mesEspecifico()))
       : this.almoxService.filtrarSaidasPorPeriodo(todas, this.periodoSelecionado());
     return lista.sort((a, b) => (a.data_operacao ?? '') < (b.data_operacao ?? '') ? -1 : 1);
   });

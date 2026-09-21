@@ -1,17 +1,11 @@
-// Endpoint público (sem login) pro Acompanhamento de Indicadores de Manutenção —
-// pensado pra ficar aberto num monitor do setor por horas. Só leitura: devolve os
-// mesmos dados brutos que a tela autenticada já carrega (ManutencaoProgramacaoService.
-// load()/loadFerias(), ManutencaoIndicadoresHistoricoService.load(), mais o cache do
-// SIGMA), sem agregar nada aqui — quem faz a conta (calcularIndicadoresSemana,
-// hhPorEquipamento, calcularHhTecnico etc.) é o componente público, reimportando as
-// MESMAS funções puras de src/utils/ que a tela autenticada usa, pra não duplicar
-// lógica de negócio em dois lugares (e arriscar divergir). O RLS de
-// manutencao_programacao/manutencao_ferias/manutencao_indicadores_historico continua
-// exigindo sessão (auth.uid() IS NOT NULL) — quem decide o que sai daqui é esta
-// function, com a service_role key (só no servidor, nunca chega no cliente), mesmo
-// padrão de api/kanban-atividades-publico.js e api/fundo-fixo-public-request.js.
+// Painel público: atividades e indicadores; afastamentos individuais ficam no servidor.
+import { createRequire } from 'node:module';
+import { fetchAllRows } from './_pagination-shared.js';
+import { resumirDisponibilidade } from './_indicadores-hh-shared.js';
 import { createClient } from '@supabase/supabase-js';
 import { ALLOWED_ORIGINS, normalizarNumeroOs, obterCache } from './_sigma-shared.js';
+
+const colaboradores = createRequire(import.meta.url)('../public/matriculas.json');
 
 // Mesmo mapeamento snake_case -> camelCase de ManutencaoProgramacaoService.mapRow()
 // (src/services/manutencao-programacao.service.ts) — troca de nome de campo, não
@@ -94,24 +88,13 @@ export default async function handler(req, res) {
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-    const [
-      { data: ordensRows, error: erroOrdens },
-      { data: feriasRows, error: erroFerias },
-      { data: atestadosRows, error: erroAtestados },
-      { data: historicoRows, error: erroHistorico },
-      { data: manuaisRows, error: erroManuais },
-    ] = await Promise.all([
-      supabase.from('manutencao_programacao').select('*').order('semana_inicio', { ascending: false }),
-      supabase.from('manutencao_ferias').select('id, tecnico_nome, tecnico_matricula, area, data_inicio, data_fim').order('data_inicio'),
-      supabase.from('manutencao_atestados').select('id, tecnico_nome, tecnico_matricula, area, data_inicio, data_fim').order('data_inicio'),
-      supabase.from('manutencao_indicadores_historico').select('*').order('semana_inicio'),
-      supabase.from('manutencao_indicadores_manuais').select('ano, chave, valor'),
+    const [ordensRows, feriasRows, atestadosRows, historicoRows, manuaisRows] = await Promise.all([
+      fetchAllRows((from, to) => supabase.from('manutencao_programacao').select('*').order('semana_inicio', { ascending: false }).order('id').range(from, to)),
+      fetchAllRows((from, to) => supabase.from('manutencao_ferias').select('id, tecnico_nome, tecnico_matricula, area, data_inicio, data_fim').order('id').range(from, to)),
+      fetchAllRows((from, to) => supabase.from('manutencao_atestados').select('id, tecnico_nome, tecnico_matricula, area, data_inicio, data_fim').order('id').range(from, to)),
+      fetchAllRows((from, to) => supabase.from('manutencao_indicadores_historico').select('*').order('semana_inicio').order('id').range(from, to)),
+      fetchAllRows((from, to) => supabase.from('manutencao_indicadores_manuais').select('ano, chave, valor').order('ano').order('chave').range(from, to)),
     ]);
-    if (erroOrdens) return res.status(500).json({ success: false, error: erroOrdens.message });
-    if (erroFerias) return res.status(500).json({ success: false, error: erroFerias.message });
-    if (erroAtestados) return res.status(500).json({ success: false, error: erroAtestados.message });
-    if (erroHistorico) return res.status(500).json({ success: false, error: erroHistorico.message });
-    if (erroManuais) return res.status(500).json({ success: false, error: erroManuais.message });
 
     const ordens = ordensRows.map(mapOrdem);
 
@@ -156,12 +139,14 @@ export default async function handler(req, res) {
       console.error('[indicadores-manutencao-publico] Presença indisponível:', presencaError.message);
     }
 
+    const anos = [new Date().getFullYear(), new Date().getFullYear() + 1, ...ordens.map(o => Number(o.semanaInicio.slice(0, 4))), ...historicoRows.map(r => Number(r.semana_inicio.slice(0, 4)))];
+    const disponibilidade = resumirDisponibilidade(ordens, [...feriasRows.map(mapFerias), ...atestadosRows.map(mapAtestado)], colaboradores, anos);
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({
       success: true,
       atualizadoEm: Date.now(),
-      ordens,
-      ferias: feriasRows.map(mapFerias),
-      atestados: atestadosRows.map(mapAtestado),
+      ordens: ordens.filter(o => o.tipo === 'ordem'),
+      disponibilidade,
       historico: historicoRows.map(mapHistorico),
       manuais: manuaisRows.map(mapManual),
       sigmaPorOs,

@@ -1,3 +1,4 @@
+import { fetchAllRows } from '../utils/supabase-pagination';
 import { Injectable, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
@@ -43,9 +44,9 @@ export class ManutencaoIndicadoresManuaisService {
   async load(): Promise<void> {
     this.isLoading.set(true);
     try {
-      const { data, error } = await this.supabaseService.client
+      const { data, error } = await fetchAllRows((from, to) => this.supabaseService.client
         .from('manutencao_indicadores_manuais')
-        .select('*');
+        .select('*').order('id').range(from, to));
       if (error) throw new Error(error.message);
       this._itens.set((data ?? []).map(mapRow));
     } finally {

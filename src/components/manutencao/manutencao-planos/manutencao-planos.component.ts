@@ -11,9 +11,9 @@ import {
   AtividadeChecklist, CicloManutencao, ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem, PeriodicidadeUnidade,
   PlanoManutencao,
 } from '../../../models/manutencao-programacao.model';
-import { calcularProximaData, dataLimiteComTolerancia } from '../../../utils/manutencao-preventivas';
+import { calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva } from '../../../utils/manutencao-preventivas';
 import {
-  DiaGradeMensal, gerarGradeMensal, planosAtrasados, planosComProximaExecucao, proximaExecucaoPlano,
+  agendaDosPlanos, DiaGradeMensal, gerarGradeMensal, planosAtrasados,
 } from '../../../utils/manutencao-planos';
 
 const AREA_LABEL: Record<ManutencaoArea, string> = {
@@ -110,6 +110,8 @@ export class ManutencaoPlanosComponent implements OnInit {
         this.manutencaoPlanosService.load(),
         this.manutencaoProgramacaoService.load(),
         this.manutencaoProgramacaoService.loadEquipamentos(),
+        this.manutencaoProgramacaoService.loadParadaAtual(),
+        this.manutencaoProgramacaoService.loadSemanasFechadas(),
       ]);
     } catch {
       this.errorMessage.set('Erro ao carregar os planos de manutenção.');
@@ -137,7 +139,9 @@ export class ManutencaoPlanosComponent implements OnInit {
   // Cada plano ativo já com a próxima execução (derivada do último ciclo) e a
   // "última execução" (o próprio último ciclo, se existir) — insumo da tabela e dos KPIs.
   private planosComProximaTodos = computed(() =>
-    planosComProximaExecucao(this.manutencaoPlanosService.planos(), this.ultimoCicloPorPlano(), false));
+    agendaDosPlanos(this.manutencaoPlanosService.planos(), this.ultimoCicloPorPlano(),
+      this.manutencaoProgramacaoService.paradaAtual() !== null, this.hojeInicioSemanaIso,
+      this.manutencaoProgramacaoService.semanasFechadas()));
 
   private ultimoCicloPorPlano = computed(() => {
     const planos = this.manutencaoPlanosService.planos();
@@ -145,7 +149,7 @@ export class ManutencaoPlanosComponent implements OnInit {
   });
 
   private planosAtrasadosTodos = computed(() =>
-    planosAtrasados(this.planosComProximaTodos(), this.hojeInicioSemanaIso, false));
+    planosAtrasados(this.planosComProximaTodos(), this.hojeInicioSemanaIso, this.manutencaoProgramacaoService.paradaAtual() !== null));
 
   private planosAtrasadosIds = computed(() => new Set(this.planosAtrasadosTodos().map(p => p.id)));
 
@@ -651,12 +655,13 @@ export class ManutencaoPlanosComponent implements OnInit {
   previsoesFuturas = computed(() => {
     const plano = this.historicoAberto();
     if (!plano) return [];
-    const ultimoCiclo = this.manutencaoPlanosService.ultimoCicloDoPlano(plano.id);
-    let data = proximaExecucaoPlano(plano.dataInicial, plano.periodicidadeValor, plano.periodicidadeUnidade, ultimoCiclo);
+    let data = this.planosComExecucaoPorId().get(plano.id)?.proximaData;
+    if (!data) return [];
+    const periodo = periodicidadeEfetiva(plano.periodicidadeValor, plano.periodicidadeUnidade, this.manutencaoProgramacaoService.paradaAtual() !== null);
     const previsoes: { data: string; semana: number }[] = [];
     for (let i = 0; i < this.QTD_PREVISOES_FUTURAS; i++) {
       previsoes.push({ data, semana: this.numeroSemanaISO(data) });
-      data = calcularProximaData(data, plano.periodicidadeValor, plano.periodicidadeUnidade)!;
+      data = calcularProximaData(data, periodo.valor, periodo.unidade)!;
     }
     return previsoes;
   });

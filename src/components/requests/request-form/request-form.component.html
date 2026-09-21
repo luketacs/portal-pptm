@@ -164,7 +164,7 @@
     <!-- Barra de Ações Flutuante -->
     <div class="sticky bottom-0 bg-white/80 backdrop-blur-sm border-t border-gray-200 p-4 mt-8 flex justify-end items-center gap-4">
       <a routerLink="/requests" class="bg-gray-100 text-gray-800 font-bold py-3 px-8 rounded-lg hover:bg-gray-200 transition duration-150 ease-in-out shadow-md">Cancelar</a>
-      <button type="submit" [disabled]="requestForm.invalid || isSubmitting()" class="bg-green-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition duration-150 ease-in-out shadow-lg flex items-center">
+      <button type="submit" [disabled]="requestForm.invalid || !materialsReady() || isSubmitting()" class="bg-green-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition duration-150 ease-in-out shadow-lg flex items-center">
         @if (!isSubmitting()) {
           <span>Enviar Solicitação(ões)</span>
         } @else {

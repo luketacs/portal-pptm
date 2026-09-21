@@ -45,7 +45,31 @@ const STATUS_CLASSES: Record<string, string> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MyMaterialsComponent implements OnInit {
-  rows = signal<MyMaterialRow[]>([]);
+  private myMaterials = signal<Material[]>([]);
+  rows = computed<MyMaterialRow[]>(() => {
+    const allRequests = this.requestService.requests();
+      return this.myMaterials().map(material => {
+        const code = (material.codigo ?? '').trim().toUpperCase();
+        const relatedRequests = code
+          ? allRequests.filter(r => r.materialCode.trim().toUpperCase() === code)
+          : [];
+
+        const sorted = [...relatedRequests].sort(
+          (a, b) => b.requestDate.getTime() - a.requestDate.getTime()
+        );
+
+        const hasOpenRequest = sorted.some(r => OPEN_STATUSES.includes(r.status));
+
+        return {
+          material,
+          requests: sorted,
+          latestRequest: sorted[0] ?? null,
+          hasOpenRequest,
+          hasAnyRequest: sorted.length > 0,
+        };
+      });
+
+  });
   isLoading = signal(true);
   errorMessage = signal('');
   searchTerm = signal('');
@@ -72,11 +96,11 @@ export class MyMaterialsComponent implements OnInit {
         if (!text.includes(term)) return false;
       }
       if (from) {
-        const f = new Date(from); f.setHours(0, 0, 0, 0);
+        const f = new Date(from + 'T00:00:00'); f.setHours(0, 0, 0, 0);
         if (new Date(m.created_at ?? '') < f) return false;
       }
       if (to) {
-        const t = new Date(to); t.setHours(23, 59, 59, 999);
+        const t = new Date(to + 'T00:00:00'); t.setHours(23, 59, 59, 999);
         if (new Date(m.created_at ?? '') > t) return false;
       }
       return true;
@@ -129,31 +153,7 @@ export class MyMaterialsComponent implements OnInit {
       // Filtra apenas materiais do usuário logado
       const myMaterials = materials.filter(m => m.created_by === userId);
 
-      // Cruza com as solicitações já carregadas em memória
-      const allRequests = this.requestService.requests();
-
-      const rows: MyMaterialRow[] = myMaterials.map(material => {
-        const code = (material.codigo ?? '').trim().toUpperCase();
-        const relatedRequests = code
-          ? allRequests.filter(r => r.materialCode.trim().toUpperCase() === code)
-          : [];
-
-        const sorted = [...relatedRequests].sort(
-          (a, b) => b.requestDate.getTime() - a.requestDate.getTime()
-        );
-
-        const hasOpenRequest = sorted.some(r => OPEN_STATUSES.includes(r.status));
-
-        return {
-          material,
-          requests: sorted,
-          latestRequest: sorted[0] ?? null,
-          hasOpenRequest,
-          hasAnyRequest: sorted.length > 0,
-        };
-      });
-
-      this.rows.set(rows);
+      this.myMaterials.set(myMaterials);
     } catch {
       this.errorMessage.set('Erro inesperado ao carregar materiais.');
     } finally {

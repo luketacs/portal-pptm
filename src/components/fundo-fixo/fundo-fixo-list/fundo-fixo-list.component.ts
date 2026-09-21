@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@angular/core';
-import JSZip from 'jszip';
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -856,6 +855,7 @@ export class FundoFixoListComponent implements OnInit {
     const comNota = itens.flatMap(s => s.notasFiscaisUrls.map((url, idx) => ({ s, url, idx })));
     if (comNota.length === 0) return;
 
+    const { default: JSZip } = await import('jszip');
     const zip = new JSZip();
     const resultados = await Promise.allSettled(
       comNota.map(async ({ s, url, idx }, i) => {

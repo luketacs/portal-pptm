@@ -8,7 +8,7 @@
 // público, sem necessidade de login).
 //
 // As CONTAS em si (calcularIndicadoresSemana, hhPorEquipamento/hhPorAtividade,
-// calcularHhTecnico, ordemExecutadaAgrupada, calcularLinhaTempo) são as MESMAS funções
+// ordemExecutadaAgrupada, calcularLinhaTempo) são as MESMAS funções
 // puras de src/utils/ que a tela autenticada (manutencao-indicadores-semanais.
 // component.ts) usa — nada de lógica de negócio duplicada/reescrita aqui, só a "cola"
 // de sinais que monta os mesmos cards/gráficos a partir de dados buscados por fetch()
@@ -20,7 +20,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, WritableSignal, computed, effect, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AtestadoTecnico, CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, FeriasTecnico, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
+import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
   META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, STATUS_GERAL_COR, StatusGeralSemana,
@@ -28,8 +28,7 @@ import {
 } from '../../../utils/manutencao-indicadores';
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
-import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
-import { encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
+import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
   paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem,
@@ -109,11 +108,7 @@ const ICONES: Record<string, string> = {
 const CUTOFF_DISPONIBILIDADE = '2026-06-01';
 const DISP_PADRAO = 6.5;
 
-function disponibilidadeNoDia(colaborador: Colaborador, dataIso: string): number {
-  return dataIso >= CUTOFF_DISPONIBILIDADE
-    ? (colaborador.disponibilidade_pos_corte ?? colaborador.disponibilidade)
-    : colaborador.disponibilidade;
-}
+
 
 // Mesma normalização de ApontamentosService.normalizar() — diferente de normalizarTexto
 // (utils/manutencao-indicadores-periodo.ts), que não colapsa espaço/trim; aqui precisa
@@ -258,8 +253,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
 
   // ── Dados brutos (fetch público, sem Bearer token) ──────────────────────────
   private ordensRaw = signal<ManutencaoOrdem[]>([]);
-  private feriasRaw = signal<FeriasTecnico[]>([]);
-  private atestadosRaw = signal<AtestadoTecnico[]>([]);
+  private disponibilidadeRaw = signal<Record<string, { disponivel: number; indisponivel: number; porTecnico: Record<string, number>; exames: number; folgas: number }>>({});
   private historicoRaw = signal<HistoricoItemPublico[]>([]);
   private manuaisRaw = signal<IndicadorManualPublico[]>([]);
   private sigmaPorOsRaw = signal<Record<string, ConsultaSigmaResultado>>({});
@@ -302,8 +296,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
       const body = await resp.json().catch(() => null);
       if (!resp.ok || !body?.success) throw new Error(body?.error || 'Falha ao carregar os indicadores.');
       this.ordensRaw.set((body.ordens as OrdemPublicaRaw[]).map(paraManutencaoOrdem));
-      this.feriasRaw.set(body.ferias as FeriasTecnico[]);
-      this.atestadosRaw.set(body.atestados as AtestadoTecnico[]);
+      this.disponibilidadeRaw.set(body.disponibilidade ?? {});
       this.historicoRaw.set(body.historico as HistoricoItemPublico[]);
       this.manuaisRaw.set(body.manuais as IndicadorManualPublico[]);
       this.sigmaPorOsRaw.set(body.sigmaPorOs as Record<string, ConsultaSigmaResultado>);
@@ -433,19 +426,8 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   kpiPreventivas = computed<KpiExecucao>(() =>
     calcularKpiExecucao(this.ordemExecutadaAgrupadaLocal(this.ordensDaSemanaParaFechamento().filter(o => o.tipoServico?.trim().toUpperCase() === 'PREVENTIVA')).map(status => ({ status }))));
 
-  qtdExames = computed(() => {
-    const semanas = this.semanasDoPeriodoSet();
-    return this.ordensRaw().filter(o => semanas.has(o.semanaInicio) && o.tipo === 'exame_medico').length;
-  });
-  // Em DIAS, não em lançamentos — um lançamento de folga cobre 1+ dias (diasPrevistos),
-  // então contar linhas subestimava o total (pedido do usuário: "14 dias folgas", não
-  // "2 folgas" quando essas 2 linhas somam 14 dias).
-  qtdFolgas = computed(() => {
-    const semanas = this.semanasDoPeriodoSet();
-    return this.ordensRaw()
-      .filter(o => semanas.has(o.semanaInicio) && o.tipo === 'folga')
-      .reduce((soma, o) => soma + o.diasPrevistos.length, 0);
-  });
+  qtdExames = computed(() => [...this.semanasDoPeriodoSet()].reduce((n, semana) => n + (this.disponibilidadeRaw()[semana]?.exames ?? 0), 0));
+  qtdFolgas = computed(() => [...this.semanasDoPeriodoSet()].reduce((n, semana) => n + (this.disponibilidadeRaw()[semana]?.folgas ?? 0), 0));
 
   private hhPorEquipamentoTodos = computed<HhEquipamento[]>(() => hhPorEquipamento(this.ordensDaSemana()));
   hhPorEquipamentoTop10 = computed(() => this.hhPorEquipamentoTodos().slice(0, 10));
@@ -462,32 +444,13 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     }));
 
   hhTotais = computed(() => {
-    const ferias = this.feriasRaw();
-    const atestados = this.atestadosRaw();
-    const ordensTodas = this.ordensRaw();
-    const tecnicos = this.tecnicosParaHh();
-    let bruto = 0;
-    let liquido = 0;
-    for (const semanaIso of this.semanasDoPeriodoSet()) {
-      const dias = diasDaSemana(semanaIso);
-      const ordensDaSemanaTodas = ordensTodas.filter(o => o.semanaInicio === semanaIso);
-      for (const colaborador of tecnicos) {
-        const ordensDoTecnico = this.ordensDoColaborador(ordensDaSemanaTodas, colaborador);
-        const r = calcularHhTecnico({
-          dias,
-          disponibilidadePorDia: new Map(dias.map(d => [d.data, disponibilidadeNoDia(colaborador, d.data)])),
-          diasFolga: new Set(ordensDoTecnico.filter(o => o.tipo === 'folga').flatMap(o => o.diasPrevistos)),
-          feriasIntervalo: encontrarFeriasNoIntervalo(ferias, colaborador.nome, dias.map(d => d.data)),
-          atestadoIntervalo: encontrarAtestadoNoIntervalo(atestados, colaborador.nome, dias.map(d => d.data)),
-        });
-        bruto += r.bruto;
-        liquido += r.liquido;
-      }
+    const total = { disponivel: 0, indisponivel: 0 };
+    for (const semana of this.semanasDoPeriodoSet()) {
+      const item = this.disponibilidadeRaw()[semana];
+      total.disponivel += item?.disponivel ?? 0;
+      total.indisponivel += item?.indisponivel ?? 0;
     }
-    return {
-      disponivel: Math.round(liquido * 100) / 100,
-      indisponivel: Math.round((bruto - liquido) * 100) / 100,
-    };
+    return { disponivel: Math.round(total.disponivel * 100) / 100, indisponivel: Math.round(total.indisponivel * 100) / 100 };
   });
 
   // Vazio hoje — ver o mesmo mapa/comentário em manutencao-indicadores-semanais.
@@ -520,13 +483,10 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
       && this.tecnicoRelevanteNoPeriodo(normalizarTexto(c.nome))));
 
   private calcularHorasPorTecnico(tecnicos: Colaborador[]): HorasTecnicoItem[] {
-    const ferias = this.feriasRaw();
-    const atestados = this.atestadosRaw();
     const ordensTodas = this.ordensRaw();
     const sigmaPorOs = this.sigmaPorOs();
     const resultado: HorasTecnicoItem[] = tecnicos.map(c => ({ colaborador: c, horasProgramadas: 0, horasApontadas: 0, horasDisponiveis: 0, eficiencia: 0 }));
     for (const semanaIso of this.semanasDoPeriodoSet()) {
-      const dias = diasDaSemana(semanaIso);
       const ordensDaSemanaTodas = ordensTodas.filter(o => o.semanaInicio === semanaIso);
       for (const item of resultado) {
         // Semana >= corte de inatividade não soma pro período (ver INATIVO_A_PARTIR_DE).
@@ -538,14 +498,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
           item.horasProgramadas += o.duracaoHoras ?? 0;
         }
         item.horasApontadas += horasApontadasDoColaborador(ordensDoTecnicoTipoOrdem, sigmaPorOs, item.colaborador.matricula);
-        const r = calcularHhTecnico({
-          dias,
-          disponibilidadePorDia: new Map(dias.map(d => [d.data, disponibilidadeNoDia(item.colaborador, d.data)])),
-          diasFolga: new Set(ordensDoTecnico.filter(o => o.tipo === 'folga').flatMap(o => o.diasPrevistos)),
-          feriasIntervalo: encontrarFeriasNoIntervalo(ferias, item.colaborador.nome, dias.map(d => d.data)),
-          atestadoIntervalo: encontrarAtestadoNoIntervalo(atestados, item.colaborador.nome, dias.map(d => d.data)),
-        });
-        item.horasDisponiveis += r.liquido;
+        item.horasDisponiveis += this.disponibilidadeRaw()[semanaIso]?.porTecnico[item.colaborador.matricula] ?? 0;
       }
     }
     for (const item of resultado) {

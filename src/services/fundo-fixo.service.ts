@@ -1,3 +1,4 @@
+import { fetchAllRows } from '../utils/supabase-pagination';
 import { Injectable, computed, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
@@ -134,14 +135,14 @@ export class FundoFixoService {
     this.isLoading.set(true);
     try {
       const [solicitacoesRes, saquesRes] = await Promise.all([
-        this.supabaseService.client
+        fetchAllRows((from, to) => this.supabaseService.client
           .from('fundo_fixo_solicitacoes')
           .select('*')
-          .order('data_solicitacao', { ascending: false }),
-        this.supabaseService.client
+          .order('data_solicitacao', { ascending: false }).order('id').range(from, to)),
+        fetchAllRows((from, to) => this.supabaseService.client
           .from('fundo_fixo_saques')
           .select('*')
-          .order('data_saque', { ascending: false }),
+          .order('data_saque', { ascending: false }).order('id').range(from, to)),
       ]);
       if (solicitacoesRes.error) throw new Error(solicitacoesRes.error.message);
       if (saquesRes.error) throw new Error(saquesRes.error.message);
@@ -163,6 +164,7 @@ export class FundoFixoService {
   async excluir(id: string): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
+    if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
     const item = this.getById(id);
     const { data, error } = await this.supabaseService.client
@@ -192,6 +194,7 @@ export class FundoFixoService {
   async registrarSaque(req: CreateFundoFixoSaque): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
+    if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
     const dataSaque = req.dataSaque || new Date().toISOString().slice(0, 10);
     const payload = {
@@ -226,6 +229,7 @@ export class FundoFixoService {
   async atualizarTaxaSaque(id: string, taxa: number): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
+    if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
     const { error } = await this.supabaseService.client
       .from('fundo_fixo_saques')
@@ -249,6 +253,7 @@ export class FundoFixoService {
   async excluirSaque(id: string): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
+    if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
     const { data, error } = await this.supabaseService.client
       .from('fundo_fixo_saques')
@@ -323,6 +328,7 @@ export class FundoFixoService {
   async atribuirComprador(id: string, compradorId: string, compradorNome: string): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
+    if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
     const { error } = await this.supabaseService.client
       .from('fundo_fixo_solicitacoes')
@@ -349,6 +355,7 @@ export class FundoFixoService {
   async vincularSolicitante(id: string, solicitanteId: string, solicitanteNome: string): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
+    if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
     const { error } = await this.supabaseService.client
       .from('fundo_fixo_solicitacoes')
@@ -378,6 +385,7 @@ export class FundoFixoService {
   }): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
+    if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
     const { error } = await this.supabaseService.client
       .from('fundo_fixo_solicitacoes')
@@ -407,6 +415,7 @@ export class FundoFixoService {
   async aprovar(id: string, gestorAprovador: string): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
+    if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
     const { error } = await this.supabaseService.client
       .from('fundo_fixo_solicitacoes')
@@ -437,6 +446,7 @@ export class FundoFixoService {
   async recusar(id: string, motivo: string): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
+    if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
     const { error } = await this.supabaseService.client
       .from('fundo_fixo_solicitacoes')
@@ -548,6 +558,7 @@ export class FundoFixoService {
   async moverParaProximoMes(id: string): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
+    if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
     const item = this.getById(id);
     if (!item) throw new Error('Solicitação não encontrada.');
@@ -579,6 +590,7 @@ export class FundoFixoService {
   async atualizarFormaPagamento(id: string, formaPagamento: FundoFixoFormaPagamento): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
+    if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
     const { error } = await this.supabaseService.client
       .from('fundo_fixo_solicitacoes')
@@ -605,6 +617,7 @@ export class FundoFixoService {
   async marcarReembolsado(id: string): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
+    if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
     const { error } = await this.supabaseService.client
       .from('fundo_fixo_solicitacoes')

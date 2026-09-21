@@ -1,8 +1,8 @@
 import {
   ChangeDetectionStrategy, Component, computed, signal,
-  ElementRef, effect, viewChild, OnDestroy, EffectRef, OnInit,
+  ElementRef, effect, viewChild, OnDestroy, EffectRef, OnInit, inject, Injector,
 } from '@angular/core';
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { MaterialService } from '../../../services/material.service';
 import { RequestService } from '../../../services/request.service';
@@ -14,12 +14,14 @@ import * as d3 from 'd3';
 @Component({
   selector: 'app-materials-dashboard',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, RouterLink],
+  imports: [CommonModule, RouterLink],
   templateUrl: './materials-dashboard.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MaterialsDashboardComponent implements OnInit, OnDestroy {
+  private readonly injector = inject(Injector);
   private effectRef?: EffectRef;
+  private destroyed = false;
   private readonly statusColorScheme = ['#22c55e', '#fbbf24'];
   private readonly unitColorScheme   = ['#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe', '#eff6ff', '#1e40af'];
 
@@ -50,16 +52,16 @@ export class MaterialsDashboardComponent implements OnInit, OnDestroy {
     ];
   });
 
-  // Tempo médio de liberação (created_at → updated_at para materiais liberados)
+  // Tempo médio de liberação (created_at → released_at para materiais liberados)
   avgReleaseTime = computed(() => {
     const liberados = this.materials().filter(
-      m => m.status === 'liberado' && m.created_at && m.updated_at
+      m => m.status === 'liberado' && m.created_at && m.released_at
     );
     if (!liberados.length) return null;
 
     const durations = liberados.map(m => {
       const created = new Date(m.created_at!).getTime();
-      const updated = new Date(m.updated_at!).getTime();
+      const updated = new Date(m.released_at!).getTime();
       return updated - created;
     }).filter(d => d > 0);
 
@@ -110,6 +112,7 @@ export class MaterialsDashboardComponent implements OnInit, OnDestroy {
 
   async ngOnInit(): Promise<void> {
     const { data } = await this.materialService.getAllMaterials();
+    if (this.destroyed) return;
     this.materials.set(data ?? []);
     this.isLoading.set(false);
 
@@ -134,10 +137,11 @@ export class MaterialsDashboardComponent implements OnInit, OnDestroy {
       if (creatorEl) {
         drawVerticalBarChart(creatorEl, this.creatorChartData(), { height: 220, colorScheme: this.unitColorScheme });
       }
-    });
+    }, { injector: this.injector });
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.effectRef?.destroy();
     [this.statusChartContainer(), this.unitChartContainer(), this.creatorChartContainer()]
       .forEach(el => { if (el) d3.select(el.nativeElement).select('svg').remove(); });

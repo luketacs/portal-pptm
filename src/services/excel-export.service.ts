@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import * as XLSX from 'xlsx-js-style';
 import type { CellStyle, WorkSheet, WorkBook } from 'xlsx-js-style';
-import * as ExcelJS from 'exceljs';
+import type * as ExcelJS from 'exceljs';
 import type { MaterialComSAs, Movimentacao, SaldoReal } from './almoxarifado.service';
 
 export interface FechamentoFundoFixoLinha {
@@ -940,6 +940,7 @@ export class ExcelExportService {
     const NC = 14;
     // Convenção fixa de nome (aba, título e arquivo): "Programação {Área} Semana {N}".
     const tituloPlanilha = `Programação ${params.areaLabel} Semana ${params.numeroSemana}`;
+    const { default: ExcelJS } = await import('exceljs');
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Portal PPTM';
     wb.created = new Date();
@@ -1069,6 +1070,7 @@ export class ExcelExportService {
     ];
     const NC = colunas.length;
 
+    const { default: ExcelJS } = await import('exceljs');
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Portal PPTM';
     wb.created = new Date();

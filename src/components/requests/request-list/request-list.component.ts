@@ -215,12 +215,12 @@ export class RequestListComponent implements OnInit, OnDestroy {
     const fromDate = this.dateFrom();
     const toDate = this.dateTo();
     if (fromDate) {
-      const from = new Date(fromDate);
+      const from = new Date(fromDate + 'T00:00:00');
       from.setHours(0, 0, 0, 0);
       requestsToShow = requestsToShow.filter(r => r.requestDate >= from);
     }
     if (toDate) {
-      const to = new Date(toDate);
+      const to = new Date(toDate + 'T00:00:00');
       to.setHours(23, 59, 59, 999);
       requestsToShow = requestsToShow.filter(r => r.requestDate <= to);
     }
@@ -614,7 +614,7 @@ export class RequestListComponent implements OnInit, OnDestroy {
     }
   }
 
-  getStockBalance(requestId: string) {
+  getStockBalance(requestId: string): { loading: boolean; estoques: StockInfo[] | null; error: string | null } | null {
     return this.stockBalanceMap()[requestId] || null;
   }
 

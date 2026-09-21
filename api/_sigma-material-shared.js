@@ -30,11 +30,20 @@ export function extrairJsonObjects(text) {
   const results = [];
   let depth = 0;
   let start = -1;
+  let quoted = false;
+  let escaped = false;
   for (let i = 0; i < text.length; i++) {
+    if (depth > 0 && quoted) {
+      if (escaped) escaped = false;
+      else if (text[i] === '\\') escaped = true;
+      else if (text[i] === '"') quoted = false;
+      continue;
+    }
+    if (depth > 0 && text[i] === '"') { quoted = true; continue; }
     if (text[i] === '{') {
       if (depth === 0) start = i;
       depth++;
-    } else if (text[i] === '}') {
+    } else if (text[i] === '}' && depth > 0) {
       depth--;
       if (depth === 0 && start !== -1) {
         try { results.push(JSON.parse(text.substring(start, i + 1))); } catch {}

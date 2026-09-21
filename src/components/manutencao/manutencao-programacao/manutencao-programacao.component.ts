@@ -22,9 +22,9 @@ import {
   tecnicosPorArea, todosTecnicos,
 } from '../../../utils/manutencao-regras';
 import {
-  alinharDatasPorEquipamento, ChaveEquipeApoio, EQUIPE_APOIO_NAO_CLASSIFICADA, inferirCategoriaIndicador,
+  agendaDosPlanos, ChaveEquipeApoio, EQUIPE_APOIO_NAO_CLASSIFICADA, inferirCategoriaIndicador,
   inferirCategoriaIndicadorPorTecnico, limitarPorEquipeApoio, LimitePorEquipeApoio, PlanoComProximaData,
-  planosAtrasados, planosComProximaExecucao, planosComProximaExecucaoFixa, proximaExecucaoPlano,
+  planosAtrasados,
   resumoPorEquipeApoio, sugestoesDaSemana,
 } from '../../../utils/manutencao-planos';
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
@@ -967,14 +967,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Diferente de regrasNovasValemNaSemana (baseada na semana EM EXIBIÇÃO — certa pra
   // regras só de exibição, tipo ordenação/corte por lote, sem efeito colateral) — o
   // alinhamento por equipamento (alinharDatasPorEquipamento) grava a data alinhada de
-  // forma PERMANENTE no ciclo do plano (ver registrarCicloSeVinculoMudou, que lê
+  // forma PERMANENTE no ciclo do plano (ver cicloDataPrevista, que lê
   // formPlanoPreventivoDataPrevista, preenchido a partir do próprio proximaData da
   // sugestão clicada), e preventivasAtrasadas precisa ficar independente da semana
   // filtrada (ver comentário de planosAtrasados em manutencao-planos.ts). Por isso
   // compara contra o HOJE real, não contra semanaFiltro(): antes do corte nada muda;
   // da semana 39 em diante (sempre, não só quando 39 estiver selecionada no filtro)
   // passa a valer alinharDatasPorEquipamento/limitarPorEquipeApoio abaixo.
-  private regrasNovasValemHoje = computed(() => this.hojeInicioSemanaIso >= this.PRIMEIRA_SEMANA_REGRAS_NOVAS);
 
   private loteePreventivasPorSemana = computed(() =>
     this.regrasNovasValemNaSemana() ? this.LOTE_PREVENTIVAS_POR_SEMANA_NOVO : this.LOTE_PREVENTIVAS_POR_SEMANA_ANTIGO);
@@ -1015,59 +1014,14 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // pico (11) — rede de segurança, não limite de rotina.
   private readonly LIMITE_PREVENTIVAS_ELETRICA = 25;
 
-  // Planos da área, cada um já com a próxima execução calculada a partir do ciclo mais
-  // recente (ver planosComProximaExecucao em utils/manutencao-planos.ts) — substitui o
-  // antigo planosPreventivosDaArea+planosJaProgramados: não precisa mais de uma lista de
-  // exclusão separada, porque a próxima data já avança sozinha a cada ciclo registrado
-  // (não fica presa depois da primeira programação, como o sistema antigo ficava).
-  // A partir da semana 39 (ver regrasNovasValemHoje), planos do MESMO equipamento
-  // vencendo no mesmo mês são alinhados pra sair juntos (alinharDatasPorEquipamento) —
-  // roda aqui, antes de qualquer filtro de semana/corte, pra garantir que o MESMO
-  // objeto usado no @for da tabela e passado pra programarDaPreventiva já carregue a
-  // data alinhada.
-  //
-  // Apoio, Mecânica e Elétrica usam agenda TIME-BASED (planosComProximaExecucaoFixa/
-  // proximaDataFixa), não completion-based — pedido explícito do usuário: "não existe
-  // backlog, estamos começando do zero", igual o modelo de plano cíclico do SAP PM.
-  // Mecânica/Elétrica entraram pro mesmo modelo depois de auditar os dados (só uma
-  // fração pequena dos planos ativos já tinha ciclo registrado, o resto dependia
-  // direto da data_inicial crua da importação em lote — dezenas de planos vencendo
-  // juntos na mesma semana em cada área). Diferente do resto das regras "novas" desta
-  // função, essa troca de MODELO não fica atrás do gate de regrasNovasValemHoje: é uma
-  // correção definitiva de como essas áreas sempre deviam ter funcionado, não uma
-  // regra de exibição por semana — vale imediatamente.
-  private readonly AREAS_TIME_BASED: readonly ManutencaoArea[] = ['APOIO', 'MECANICA', 'ELETRICA'];
-
-  // Referência usada pra calcular a próxima data (time-based) — normalmente é o hoje
-  // real, mas se a semana de hoje já estiver FECHADA (Admin fechou a programação
-  // dela), a sugestão não pode "nascer presa" numa semana onde não dá mais pra criar/
-  // editar lançamento nenhum. Pedido do usuário: se a parada da planta for encerrada
-  // no meio de uma semana já fechada, os planos que cairiam nela devem passar a
-  // aparecer a partir da PRÓXIMA semana aberta, não citando uma semana morta. Avança
-  // semana a semana (raro passar de 1 iteração, mas cobre o caso de mais de uma
-  // semana seguida fechada) até achar a primeira aberta. Só entra na conta de
-  // "próxima data" — planosAtrasados continua usando o hoje real puro, porque fechar
-  // semana não muda se algo está de fato atrasado.
-  private referenciaProximaDataTimeBased = computed(() => {
-    let candidata = this.hojeInicioSemanaIso;
-    while (this.manutencaoService.semanaEstaFechada(candidata)) {
-      const proxima = new Date(candidata + 'T00:00:00');
-      proxima.setDate(proxima.getDate() + 7);
-      candidata = paraIso(proxima);
-    }
-    return candidata;
+  // Agenda compartilhada com o cadastro: cadência fixa, parada e primeira semana aberta.
+  private agendaPlanos = computed<PlanoComProximaData[]>(() => {
+    const planos = this.manutencaoPlanosService.planos();
+    const ultimoCicloPorPlano = new Map(planos.map(p => [p.id, this.manutencaoPlanosService.ultimoCicloDoPlano(p.id)]));
+    return agendaDosPlanos(planos, ultimoCicloPorPlano, this.plantaParadaAtiva(),
+      this.hojeInicioSemanaIso, this.manutencaoService.semanasFechadas());
   });
-
-  private planosComProximaDaArea = computed<PlanoComProximaData[]>(() => {
-    const area = this.areaFixa;
-    if (!area) return [];
-    const planosDaArea = this.manutencaoPlanosService.planos().filter(p => p.area === area);
-    const ultimoCicloPorPlano = new Map(planosDaArea.map(p => [p.id, this.manutencaoPlanosService.ultimoCicloDoPlano(p.id)]));
-    const comProxima = this.AREAS_TIME_BASED.includes(area)
-      ? planosComProximaExecucaoFixa(planosDaArea, this.plantaParadaAtiva(), this.referenciaProximaDataTimeBased(), ultimoCicloPorPlano)
-      : planosComProximaExecucao(planosDaArea, ultimoCicloPorPlano, this.plantaParadaAtiva());
-    return this.regrasNovasValemHoje() ? alinharDatasPorEquipamento(comProxima) : comProxima;
-  });
+  private planosComProximaDaArea = computed(() => this.agendaPlanos().filter(p => p.area === this.areaFixa));
 
   // Parada da planta (Admin-only, ver "Gerenciar" no menu) — enquanto ativa, ciclo
   // curto (dias/semanas) é tratado como mensal no cálculo abaixo (ver
@@ -1265,7 +1219,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formChecklist.set(plano.atividades);
     // Se o número da OS já foi reservado com antecedência (ver salvarNumeroOsReservado
     // abaixo), vem pré-preenchido — some do plano quando a OS for confirmada (ver
-    // registrarCicloSeVinculoMudou).
+    // cicloDataPrevista).
     if (plano.numeroOsReservado) this.formNumeroOs.set(plano.numeroOsReservado);
     // Plano com LOTO padrão (ex.: teste que precisa do equipamento rodando) já vem
     // com o campo preenchido — evita esquecer de marcar manualmente toda vez.
@@ -1521,7 +1475,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   private formPlanoPreventivoIdOriginal = signal<string | null>(null);
   // Data prevista (ciclo) que essa programação está cumprindo — capturada no momento em
   // que o vínculo é feito (ver programarDaPreventiva/vincularPlano), não recalculada na
-  // hora de salvar: é ela que vira a chave do ciclo em registrarCicloSeVinculoMudou.
+  // hora de salvar: é ela que vira a chave do ciclo em cicloDataPrevista.
   private formPlanoPreventivoDataPrevista = signal<string | null>(null);
   // Checklist copiado do plano no momento do vínculo (ver PlanoManutencao.atividades) —
   // vai junto na OS (ver ManutencaoOrdem.checklist).
@@ -1563,10 +1517,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   vincularPlano(plano: PlanoManutencao): void {
     this.formPlanoPreventivoId.set(plano.id);
-    this.formPlanoPreventivoDataPrevista.set(proximaExecucaoPlano(
-      plano.dataInicial, plano.periodicidadeValor, plano.periodicidadeUnidade,
-      this.manutencaoPlanosService.ultimoCicloDoPlano(plano.id),
-    ));
+    this.formPlanoPreventivoDataPrevista.set(this.agendaPlanos().find(p => p.id === plano.id)?.proximaData ?? null);
     this.formChecklist.set(plano.atividades);
     this.formVincularPlanoTexto.set('');
     if (this.formArea() === 'APOIO' && !this.formCategoriaIndicador()) {
@@ -2199,6 +2150,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           reuniaoHorario: ehReuniao ? (this.formReuniaoHorario().trim() || null) : null,
           reuniaoLocal: ehReuniao ? (this.formReuniaoLocal().trim() || null) : null,
           planoPreventivoId: ehOrdem ? this.formPlanoPreventivoId() : null,
+          cicloDataPrevista: ehOrdem && this.formPlanoPreventivoId() !== this.formPlanoPreventivoIdOriginal()
+            ? this.formPlanoPreventivoDataPrevista() : undefined,
           checklist: ehOrdem ? this.formChecklist() : null,
         });
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} atualizada.`);
@@ -2209,9 +2162,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         // Vínculo com plano preventivo mudou nessa edição (ex.: vinculado manualmente
         // via vincularPlano numa OS que não veio da lista sugerida da semana) — registra
         // o ciclo só agora, não em toda reabertura sem mudança nenhuma.
-        await this.registrarCicloSeVinculoMudou(ehOrdem, idEdicao);
+        await this.manutencaoPlanosService.load();
       } else {
-        const novoId = await this.manutencaoService.criarOrdem({
+        await this.manutencaoService.criarOrdem({
           tipo,
           area: this.formArea(),
           categoriaIndicador: this.categoriaIndicadorParaEnviar() ?? undefined,
@@ -2234,6 +2187,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           reuniaoHorario: ehReuniao ? (this.formReuniaoHorario().trim() || undefined) : undefined,
           reuniaoLocal: ehReuniao ? (this.formReuniaoLocal().trim() || undefined) : undefined,
           planoPreventivoId: ehOrdem ? (this.formPlanoPreventivoId() ?? undefined) : undefined,
+          cicloDataPrevista: this.formPlanoPreventivoDataPrevista(),
           checklist: ehOrdem ? this.formChecklist() : undefined,
         });
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} adicionada à programação.`);
@@ -2244,40 +2198,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         // Preventiva vinculada a um plano (lista da semana OU vincularPlano manual) —
         // registra o ciclo assim que a OS é criada, sem esperar confirmação de
         // apontamento no SIGMA.
-        await this.registrarCicloSeVinculoMudou(ehOrdem, novoId);
+        await this.manutencaoPlanosService.load();
       }
       this.fecharForm();
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao salvar OS.');
     } finally {
       this.isProcessando.set(false);
-    }
-  }
-
-  // Registra o ciclo do plano vinculado (ver formPlanoPreventivoId) só quando o vínculo
-  // é novo/mudou nessa sessão do formulário — cobre tanto criar uma OS a partir da
-  // lista sugerida (programarDaPreventiva) quanto vincular manualmente uma preventiva
-  // que ficou de fora dela (ver vincularPlano). Best-effort: falha aqui não desfaz a OS
-  // já criada/editada, só avisa.
-  private async registrarCicloSeVinculoMudou(ehOrdem: boolean, ordemId: string): Promise<void> {
-    const planoId = this.formPlanoPreventivoId();
-    if (!ehOrdem || !planoId || planoId === this.formPlanoPreventivoIdOriginal()) return;
-    const dataPrevista = this.formPlanoPreventivoDataPrevista() ?? [...this.formDiasSelecionados()].sort()[0];
-    // Reportado: 2 ordens da Mecânica (TC06) ficaram com plano_preventivo_id preenchido
-    // mas SEM NENHUM ciclo registrado — o plano continuava "pendente" pra sempre, sem
-    // nenhum aviso na tela. Esse branch (plano vinculado, mas sem data pra registrar o
-    // ciclo — nem formPlanoPreventivoDataPrevista nem nenhum dia selecionado) retornava
-    // em silêncio antes; agora avisa, porque é um estado anômalo (o vínculo existe, só
-    // falta a data) que a pessoa precisa saber pra corrigir na hora, não descobrir
-    // semanas depois que o plano nunca saiu da lista.
-    if (!dataPrevista) {
-      this.notificationService.showError('OS salva e vinculada ao plano preventivo, mas sem data pra registrar o ciclo — o plano pode continuar aparecendo como pendente. Avise o suporte.');
-      return;
-    }
-    try {
-      await this.manutencaoPlanosService.registrarCiclo(planoId, dataPrevista, ordemId);
-    } catch (err: unknown) {
-      this.notificationService.showError(err instanceof Error ? err.message : 'OS salva, mas não deu pra atualizar o plano preventivo.');
     }
   }
 

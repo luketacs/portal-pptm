@@ -307,3 +307,23 @@ describe('horasApontadasDoColaborador', () => {
     expect(horasApontadasDoColaborador([ordem()], {}, '20006136')).toBe(0);
   });
 });
+
+
+describe('a mesma OS em semanas distintas', () => {
+  const ordens = [ordem(), ordem({ id: 'o2', semanaInicio: '2026-09-14' })];
+  const sigma = { '045203': { os: null, apontamentos: [
+    { data: '2026-09-08', status: 'EXEC', executante: '20006136', horas: 2 },
+  ] } };
+  it('mantém duas ocorrências: uma executada e outra pendente', () => {
+    const grupos = ordemExecutadaAgrupada(ordens, sigma, matricula => matricula ? { matricula } : null);
+    expect(grupos).toEqual(['executada', 'nao-executada']);
+    expect(calcularKpiExecucao(grupos.map(status => ({ status })))).toEqual({ programadas: 2, executadas: 1, percentual: 50 });
+  });
+  it('soma apontamentos das duas semanas sem duplicar linhas da mesma semana', () => {
+    const duasSemanas = { '045203': { os: null, apontamentos: [
+      ...sigma['045203'].apontamentos,
+      { data: '2026-09-15', status: 'EXEC', executante: '20006136', horas: 3 },
+    ] } };
+    expect(horasApontadasDoColaborador([...ordens, ordem({ id: 'copia' })], duasSemanas, '20006136')).toBe(5);
+  });
+});

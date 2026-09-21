@@ -24,8 +24,15 @@
                 "input": "src"
               }
             ],
-            "styles": ["src/index.css"],
-            "allowedCommonJsDependencies": ["xlsx", "xlsx-js-style"],
+            "styles": [
+              "src/index.css"
+            ],
+            "allowedCommonJsDependencies": [
+              "xlsx",
+              "xlsx-js-style",
+              "exceljs",
+              "jszip"
+            ],
             "budgets": [
               {
                 "type": "initial",
@@ -47,8 +54,14 @@
                   "with": "src/environments/environment.prod.ts"
                 }
               ]
+            },
+            "development": {
+              "optimization": false,
+              "sourceMap": true,
+              "extractLicenses": false
             }
-          }
+          },
+          "defaultConfiguration": "production"
         },
         "serve": {
           "builder": "@angular/build:dev-server",
@@ -56,6 +69,15 @@
             "buildTarget": "app:build",
             "port": 4200,
             "proxyConfig": "proxy.conf.json"
+          },
+          "defaultConfiguration": "development",
+          "configurations": {
+            "development": {
+              "buildTarget": "app:build:development"
+            },
+            "production": {
+              "buildTarget": "app:build:production"
+            }
           }
         }
       }

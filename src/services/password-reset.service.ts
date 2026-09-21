@@ -10,6 +10,26 @@ export class PasswordResetService {
 
   constructor(private supabase: SupabaseService) {}
 
+  async hasRecoverySession(): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const result = await Promise.race([
+        this.supabase.client.auth.getSession(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Tempo limite de recuperação.')), 12000);
+        }),
+      ]);
+      // O SDK publica PASSWORD_RECOVERY no próximo turno após concluir a troca PKCE.
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+      return !result.error && !!result.data.session
+        && this.supabase.recoveryUserId === result.data.session.user.id;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /**
    * Solicita reset de senha enviando e-mail com link.
    */
@@ -64,6 +84,9 @@ export class PasswordResetService {
    */
   async confirmPasswordReset(newPassword: string): Promise<{ success: boolean; message: string; error?: string }> {
     try {
+      if (!(await this.hasRecoverySession())) {
+        return { success: false, message: 'Link inválido ou expirado. Solicite um novo link.' };
+      }
       const { data: { session }, error: sessionError } = await this.supabase.client.auth.getSession();
 
       if (sessionError || !session) {
@@ -86,6 +109,13 @@ export class PasswordResetService {
         };
       }
 
+      const { data: profile, error: profileError } = await this.supabase.client
+        .from('profiles').update({ must_change_password: false }).eq('id', session.user.id).select('id').single();
+      if (profileError || !profile) {
+        return { success: false, message: 'Senha alterada, mas não foi possível concluir a atualização do perfil.' };
+      }
+      await this.supabase.client.auth.signOut({ scope: 'local' });
+      this.supabase.recoveryUserId = null;
       return {
         success: true,
         message: 'Senha atualizada com sucesso.',
@@ -97,15 +127,6 @@ export class PasswordResetService {
         error: err.message,
       };
     }
-  }
-
-  /**
-   * Verifica se há token de reset na URL.
-   */
-  getResetTokenFromUrl(): boolean {
-    const params = new URLSearchParams(window.location.hash.substring(1));
-    const type = params.get('type');
-    return type === 'recovery';
   }
 
   /**

@@ -9,6 +9,7 @@
 // A coluna `status` da tabela é sempre 'PEND' pra qualquer OS criada pelo Portal — quem
 // sabe o andamento de verdade é o SIGMA (ver _sigma-shared.js), por isso a consulta ao
 // cache de OS/apontamentos do SIGMA pra decidir a coluna do Kanban e o % de cumprimento.
+import { fetchAllRows } from './_pagination-shared.js';
 import { createClient } from '@supabase/supabase-js';
 import { createRequire } from 'node:module';
 import { ALLOWED_ORIGINS, normalizarNumeroOs, obterCache } from './_sigma-shared.js';
@@ -137,13 +138,12 @@ export default async function handler(req, res) {
     // quinta, em vez de sumir do quadro assim que o dia dela passa.
     const diasAcumulados = diasDeSegundaAteHoje(segunda, hoje);
 
-    const { data, error } = await supabase
+    const data = await fetchAllRows((from, to) => supabase
       .from('manutencao_programacao')
       .select('numero_os, descricao, equipamento, tecnico_nome, tecnico_matricula, area, duracao_horas, loto, dias_previstos, checklist')
-      .eq('tipo', 'ordem')
-      .in('area', ['ELETRICA', 'MECANICA'])
-      .overlaps('dias_previstos', diasAcumulados);
-    if (error) return res.status(500).json({ success: false, error: error.message });
+      .eq('tipo', 'ordem').eq('semana_inicio', segunda)
+      .in('area', ['ELETRICA', 'MECANICA']).overlaps('dias_previstos', diasAcumulados)
+      .order('id').range(from, to));
 
     let osPorNumero = new Map();
     let apontamentosPorOs = new Map();
@@ -188,10 +188,10 @@ export default async function handler(req, res) {
       // apontamento batendo pra todo mundo: "Em execução" enquanto o dia programado
       // inclui HOJE, senão volta pra "Pendente".
       const apontamentosDaOs = chaveOs ? apontamentosPorOs.get(chaveOs) : null;
-      let algumDiaEHoje = false;
+      const algumDiaEHoje = linhas.some(linha =>
+        (linha.dias_previstos?.length ? linha.dias_previstos : diasUteisSemana).includes(hoje));
       const todosApontaram = linhas.every(linha => {
         const diasPrevistos = linha.dias_previstos && linha.dias_previstos.length > 0 ? linha.dias_previstos : diasUteisSemana;
-        if (diasPrevistos.includes(hoje)) algumDiaEHoje = true;
         const matricula = matriculaDaLinha(linha);
         if (!matricula || !apontamentosDaOs) return false;
         return apontamentosDaOs.some(a => a.executante === matricula && diasPrevistos.includes(a.data));
@@ -230,27 +230,17 @@ export default async function handler(req, res) {
       equipamentosCorretivas: [],
     };
     try {
-      const [
-        { data: ordensDaSemana, error: erroOrdens },
-        { data: planosPreventivos, error: erroPlanos },
-        { data: programadosComPlano, error: erroProgramados },
-        { data: paradaRows, error: erroParada },
-      ] = await Promise.all([
-        supabase.from('manutencao_programacao')
+      const [ordensDaSemana, planosPreventivos, ciclos, paradaRows] = await Promise.all([
+        fetchAllRows((from, to) => supabase.from('manutencao_programacao')
           .select('numero_os, area, tecnico_nome, tecnico_matricula, duracao_horas, tipo_servico, equipamento, dias_previstos, plano_preventivo_id')
-          .eq('tipo', 'ordem').in('area', ['ELETRICA', 'MECANICA']).eq('semana_inicio', segunda),
-        supabase.from('manutencao_planos_preventivos')
-          .select('id, periodicidade_valor, periodicidade_unidade, ultima_execucao')
-          .in('area', ['ELETRICA', 'MECANICA']).eq('ativo', true),
-        supabase.from('manutencao_programacao')
-          .select('plano_preventivo_id')
-          .in('area', ['ELETRICA', 'MECANICA']).not('plano_preventivo_id', 'is', null),
-        supabase.from('manutencao_parada_planta').select('id').is('data_fim', null).limit(1),
+          .eq('tipo', 'ordem').in('area', ['ELETRICA', 'MECANICA']).eq('semana_inicio', segunda).order('id').range(from, to)),
+        fetchAllRows((from, to) => supabase.from('manutencao_planos')
+          .select('id, periodicidade_valor, periodicidade_unidade, data_inicial')
+          .in('area', ['ELETRICA', 'MECANICA']).eq('ativo', true).order('id').range(from, to)),
+        fetchAllRows((from, to) => supabase.from('manutencao_ciclos')
+          .select('plano_id, data_prevista, ordem_id').not('ordem_id', 'is', null).order('id').range(from, to)),
+        fetchAllRows((from, to) => supabase.from('manutencao_parada_planta').select('id').is('data_fim', null).order('id').range(from, to)),
       ]);
-      if (erroOrdens) throw new Error(erroOrdens.message);
-      if (erroPlanos) throw new Error(erroPlanos.message);
-      if (erroProgramados) throw new Error(erroProgramados.message);
-      if (erroParada) throw new Error(erroParada.message);
 
       // % Cumprimento da programação da semana — mesmo critério da coluna "Concluída"
       // do quadro (ver acima): agrupa por número de OS (apoio não conta a mesma OS 2x)
@@ -283,18 +273,20 @@ export default async function handler(req, res) {
 
       // % Atendimento aos planos da semana — mesma lógica de preventivasGauge: planos
       // vencendo dentro da semana (segunda a sexta) que ainda não foram programados
-      // (em NENHUMA semana, não só essa) vs. os que já viraram OS essa semana.
-      const jaProgramadosSet = new Set((programadosComPlano ?? []).map(r => r.plano_preventivo_id));
-      const plantaParadaAtiva = (paradaRows ?? []).length > 0;
+      // nesta semana vs. os que já viraram OS nessa ocorrência do plano.
+      const plantaParadaAtiva = paradaRows.length > 0;
+      const programadasPlanosSet = new Set(ordensDaSemana.filter(o => o.plano_preventivo_id).map(o => o.plano_preventivo_id));
       let pendentesPlanos = 0;
       for (const p of planosPreventivos) {
-        if (jaProgramadosSet.has(p.id)) continue;
+        if (programadasPlanosSet.has(p.id)) continue;
+        const ultima = ciclos.filter(c => c.plano_id === p.id).map(c => c.data_prevista).sort().at(-1) ?? null;
         const efetiva = periodicidadeEfetiva(p.periodicidade_valor, p.periodicidade_unidade, plantaParadaAtiva);
-        const proximaData = calcularProximaData(p.ultima_execucao, efetiva.valor, efetiva.unidade);
-        const vencendo = proximaData === null || (proximaData >= segunda && proximaData <= sexta);
-        if (vencendo) pendentesPlanos++;
+        let proximaData = p.data_inicial;
+        for (let i = 0; i < 2000 && (proximaData < segunda || (ultima && proximaData <= ultima)); i++) {
+          proximaData = calcularProximaData(proximaData, efetiva.valor, efetiva.unidade);
+        }
+        if (proximaData >= segunda && proximaData <= sexta) pendentesPlanos++;
       }
-      const programadasPlanosSet = new Set(ordensDaSemana.filter(o => o.plano_preventivo_id).map(o => o.plano_preventivo_id));
       const programadasPlanos = programadasPlanosSet.size;
       const totalPlanos = pendentesPlanos + programadasPlanos;
       indicadores.atendimentoPlanos = {

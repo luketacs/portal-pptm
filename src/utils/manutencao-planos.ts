@@ -53,6 +53,25 @@ export interface PlanoComProximaData extends PlanoManutencao {
   proximaData: string;
 }
 
+/** Agenda única para cadastro e programação: calendário fixo, parada e semanas fechadas. */
+export function agendaDosPlanos(
+  planos: PlanoManutencao[], ultimoCicloPorPlano: Map<string, string | null>,
+  plantaParada: boolean, hojeInicioSemana: string, semanasFechadas: ReadonlyMap<string, unknown>,
+): PlanoComProximaData[] {
+  let referencia = hojeInicioSemana;
+  while (semanasFechadas.has(referencia)) {
+    const data = new Date(referencia + 'T00:00:00');
+    data.setDate(data.getDate() + 7);
+    referencia = paraIsoLocal(data);
+  }
+  return (['ELETRICA', 'MECANICA', 'APOIO'] as const).flatMap(area => {
+    const agenda = planosComProximaExecucaoFixa(
+      planos.filter(p => p.area === area), plantaParada, referencia, ultimoCicloPorPlano,
+    );
+    return hojeInicioSemana >= '2026-09-21' ? alinharDatasPorEquipamento(agenda) : agenda;
+  });
+}
+
 // Anexa a próxima execução calculada a cada plano ativo — insumo de sugestoesDaSemana e
 // atrasadas, abaixo. `ultimoCicloPorPlano` vem de ManutencaoPlanosService.ultimoCicloDoPlano
 // (um lookup por plano, calculado uma vez fora daqui pra não repetir o scan do ledger de

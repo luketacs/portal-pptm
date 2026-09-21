@@ -1,6 +1,6 @@
 import { PlanoManutencao } from '../models/manutencao-programacao.model';
 import {
-  alinharDatasPorEquipamento, EQUIPE_APOIO_NAO_CLASSIFICADA, gerarGradeMensal, inferirCategoriaIndicador,
+  agendaDosPlanos, alinharDatasPorEquipamento, EQUIPE_APOIO_NAO_CLASSIFICADA, gerarGradeMensal, inferirCategoriaIndicador,
   inferirCategoriaIndicadorPorTecnico, limitarPorEquipeApoio, planosAtrasados, planosComProximaExecucao,
   planosComProximaExecucaoFixa, proximaExecucaoPlano, resumoPorEquipeApoio, sugestoesDaSemana,
 } from './manutencao-planos';
@@ -465,5 +465,15 @@ describe('inferirCategoriaIndicadorPorTecnico', () => {
 
   it('nome de equipe/técnico não reconhecido fica null', () => {
     expect(inferirCategoriaIndicadorPorTecnico('TOP ANDAIMES')).toBe(null);
+  });
+});
+
+
+describe('agenda compartilhada entre planos e programação', () => {
+  it('pula semanas fechadas sem deslocar a âncora do plano', () => {
+    const cadastro = plano({ dataInicial: '2026-09-21', periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)' });
+    const agenda = agendaDosPlanos([cadastro], new Map(), false, '2026-09-21', new Map([['2026-09-21', true]]));
+    expect(agenda[0].proximaData).toBe('2026-09-28');
+    expect(cadastro.dataInicial).toBe('2026-09-21');
   });
 });

@@ -2,8 +2,8 @@
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators, FormArray, FormGroup } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { Subscription, of } from 'rxjs';
-import { debounceTime, distinctUntilChanged, switchMap, tap, catchError } from 'rxjs/operators';
+import { Subscription, of, timer } from 'rxjs';
+import { distinctUntilChanged, switchMap, tap, catchError } from 'rxjs/operators';
 import { RequestService } from '../../../services/request.service';
 import { AuthService } from '../../../services/auth.service';
 import { UserService } from '../../../services/user.service';
@@ -159,7 +159,6 @@ export class RequestFormComponent implements OnInit, OnDestroy {
     if (!materialCodeControl) return;
 
     const subscription = materialCodeControl.valueChanges.pipe(
-      debounceTime(500),
       distinctUntilChanged(),
       tap(() => {
         this.itemStates.update(states => {
@@ -175,11 +174,10 @@ export class RequestFormComponent implements OnInit, OnDestroy {
         itemGroup.get('descriptionDetailed')?.reset({ value: '', disabled: true });
         itemGroup.get('unit')?.reset({ value: 'un', disabled: true });
       }),
-      switchMap(code =>
-        this.materialService.getMaterialByCode(code).pipe(
-          catchError(() => of({ success: false, data: null, error: 'Erro ao consultar material.' }))
-        )
-      )
+      switchMap(code => timer(500).pipe(
+        switchMap(() => this.materialService.getMaterialByCode(code)),
+        catchError(() => of({ success: false, data: null, error: 'Erro ao consultar material.' }))
+      ))
     ).subscribe(response => {
       this.itemStates.update(states => {
         if (states[index]) states[index].isLoading = false;
@@ -271,6 +269,14 @@ export class RequestFormComponent implements OnInit, OnDestroy {
     this.itemSubscriptions[index] = subscription;
   }
 
+  materialsReady(): boolean {
+    return this.items().controls.every((item, index) => {
+      const state = this.itemStates()[index];
+      return !!state && !state.isLoading && !state.apiError
+        && !!String(item.get('description')?.value ?? '').trim();
+    });
+  }
+
   // --- Form Submission ---
   async onSubmit(): Promise<void> {
     // Correção: prevenir double submit.
@@ -279,7 +285,7 @@ export class RequestFormComponent implements OnInit, OnDestroy {
       return;
     }
     
-    if (this.requestForm.invalid) {
+    if (this.requestForm.invalid || !this.materialsReady()) {
       this.requestForm.markAllAsTouched();
       this.notificationService.showError('Formulário inválido. Por favor, verifique todos os campos obrigatórios.');
       return;

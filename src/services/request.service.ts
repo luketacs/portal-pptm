@@ -153,6 +153,7 @@ export class RequestService {
     };
 
     const newRequestData = {
+      id: crypto.randomUUID(),
       requester_id: requester.id,
       material_code: request.materialCode,
       description: request.description,
@@ -180,6 +181,12 @@ export class RequestService {
     await withRetry(
       async () => {
         const { error } = await this.supabaseRestRequest('POST', 'purchase_requests', [newRequestData]);
+        if (error?.code === '23505') {
+          const existing = await this.supabaseRestService.get<Array<{ id: string }>>(
+            `purchase_requests?id=eq.${newRequestData.id}&select=id`
+          );
+          if (!existing.error && existing.data?.some(row => row.id === newRequestData.id)) return;
+        }
         if (error) throw error;
       },
       { maxAttempts: this.MAX_RETRIES, retryIf: e => this.isNetworkError(e) }

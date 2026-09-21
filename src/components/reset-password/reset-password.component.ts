@@ -36,7 +36,10 @@ import { PasswordResetService } from '../../services/password-reset.service';
           </div>
         }
 
-        @if (!isValidToken()) {
+        @if (validating()) {
+          <p class="text-center py-6" role="status">Validando link de recuperação...</p>
+        }
+        @if (!validating() && !isValidToken()) {
           <div class="text-center py-6">
             <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4">
               <svg class="h-8 w-8 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -129,16 +132,17 @@ export class ResetPasswordComponent implements OnInit {
   message = signal('');
   messageType = signal<'success' | 'error'>('success');
   validToken = signal(false);
+  validating = signal(true);
 
   constructor(
     private passwordResetService: PasswordResetService,
     private router: Router
   ) {}
 
-  ngOnInit() {
-    if (this.passwordResetService.getResetTokenFromUrl()) {
-      this.validToken.set(true);
-    } else {
+  async ngOnInit(): Promise<void> {
+    this.validToken.set(await this.passwordResetService.hasRecoverySession());
+    this.validating.set(false);
+    if (!this.validToken()) {
       this.showMessage('Link inválido ou expirado.', 'error');
     }
   }
@@ -154,7 +158,8 @@ export class ResetPasswordComponent implements OnInit {
   }
 
   async onSubmit() {
-    if (!this.isFormValid()) {
+    if (this.loading()) return;
+    if (!this.validToken() || !this.isFormValid()) {
       this.showMessage('Verifique os campos e tente novamente.', 'error');
       return;
     }

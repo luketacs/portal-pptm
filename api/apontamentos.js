@@ -1,3 +1,4 @@
+import { fetchAllRows } from './_pagination-shared.js';
 // Serverless: lê apontamentos do Supabase (importados via upload)
 import { createClient } from '@supabase/supabase-js';
 
@@ -14,6 +15,7 @@ export default async function handler(req, res) {
 
   const authHeader = req.headers.authorization || '';
   const token = authHeader.replace('Bearer ', '').trim();
+  if (!token) return res.status(401).json({ error: 'Autenticação obrigatória.' });
 
   try {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -23,26 +25,8 @@ export default async function handler(req, res) {
       if (error || !user) return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    // Paginação: Supabase limita 1000 linhas por query por padrão
-    // Buscamos página a página até trazer todos os registros
-    const PAGE = 1000;
-    let allData = [];
-    let page = 0;
-    while (true) {
-      const { data: pageData, error: pageErr } = await supabase
-        .from('apontamentos')
-        .select('*')
-        .not('data', 'is', null)
-        .order('data', { ascending: true })
-        .range(page * PAGE, (page + 1) * PAGE - 1);
-
-      if (pageErr) throw new Error(pageErr.message);
-      if (!pageData || pageData.length === 0) break;
-      allData = allData.concat(pageData);
-      if (pageData.length < PAGE) break;
-      page++;
-    }
-    const data = allData;
+    const data = await fetchAllRows((from, to) => supabase.from('apontamentos')
+      .select('*').not('data', 'is', null).order('data').order('id').range(from, to));
 
     // Última importação
     const { data: ultImp } = await supabase

@@ -6,6 +6,7 @@ import { supabaseConfig } from '../supabase.config';
   providedIn: 'root',
 })
 export class SupabaseService {
+  recoveryUserId: string | null = null;
   public readonly client: SupabaseClient;
   private readonly AUTH_STORAGE_KEY = 'portal-pptm-auth';
   private readonly LEGACY_AUTH_STORAGE_KEY = 'gestor-compras-auth';
@@ -32,6 +33,12 @@ export class SupabaseService {
           storageKey: this.AUTH_STORAGE_KEY,
           flowType: 'pkce'
         }
+      });
+      // Registrado antes da inicialização assíncrona consumir o código PKCE da URL.
+      // O evento confirmado pelo SDK distingue recuperação de um login comum.
+      this.client.auth.onAuthStateChange((event, session) => {
+        if (event === 'PASSWORD_RECOVERY') this.recoveryUserId = session?.user.id ?? null;
+        if (event === 'SIGNED_OUT') this.recoveryUserId = null;
       });
     }
   }

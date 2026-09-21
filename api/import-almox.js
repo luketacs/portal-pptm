@@ -7,7 +7,6 @@ import XLSX from 'xlsx';
 import { resolverUsuarioAutenticado } from './_auth-shared.js';
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://portalpptm.com').split(',');
-const BATCH_SIZE = 500;
 
 // ── Mapeamento de colunas (índice 0) ──────────────────────────────────────
 // Movimentações - 2026.xlsx  (sheet "1-Movimentação dos produtos")
@@ -50,7 +49,6 @@ export default async function handler(req, res) {
     const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
 
     let rows = [];
-    let tabela = '';
 
     if (tipo === 'movimentacoes') {
       const sheetName = workbook.SheetNames[0];
@@ -74,7 +72,6 @@ export default async function handler(req, res) {
           referencia:     String(r[MOV_COLS.referencia] || '').trim() || null,
         }));
 
-      tabela = 'almox_movimentacoes';
 
     } else if (tipo === 'solicitacoes') {
       const sheetName = workbook.SheetNames[0];
@@ -103,7 +100,6 @@ export default async function handler(req, res) {
           };
         });
 
-      tabela = 'almox_solicitacoes';
 
     } else if (tipo === 'status_sas') {
       // Relatório Ary — atualiza status das SAs encerradas
@@ -132,41 +128,12 @@ export default async function handler(req, res) {
           return { sa_numero, produto_codigo };
         });
 
-      // Passo 1: Reseta apenas as 'encerradas' de volta para 'aberta'
-      // NÃO toca as 'atendidas' (qtd_atendida >= qtd_solicitada — já foram atendidas)
-      const { error: resetError } = await supabase
-        .from('almox_solicitacoes')
-        .update({ status: 'aberta' })
-        .eq('status', 'encerrada');
-      if (resetError) throw new Error(`Erro ao resetar SAs encerradas: ${resetError.message}`);
-
-      // Passo 2: Marca como encerradas apenas os pares confirmados
-      let encerradasOk = 0;
-      if (encerradas.length > 0) {
-        const resultados = await Promise.all(
-          encerradas.map(e =>
-            supabase
-              .from('almox_solicitacoes')
-              .update({ status: 'encerrada' })
-              .eq('sa_numero', e.sa_numero)
-              .eq('produto_codigo', e.produto_codigo)
-          )
-        );
-        const falhas = resultados.filter(r => r.error);
-        encerradasOk = resultados.length - falhas.length;
-        if (falhas.length > 0) {
-          console.error(`[import-almox] ${falhas.length} SA(s) falharam ao encerrar:`, falhas.map(f => f.error.message));
-        }
-      }
-
-      await supabase.from('almox_importacoes').insert({
-        tipo: 'status_sas',
-        nome_arquivo: fileName || 'relatorio_ary.xlsx',
-        total_registros: encerradasOk, // pares (sa+produto) efetivamente encerrados
-        importado_por: user.id,
+      if (Object.keys(pares).length === 0) throw new Error('Arquivo sem SAs válidas. Dados preservados.');
+      const { data: encerradasOk, error } = await supabase.rpc('importar_almox_atomico', {
+        p_tipo: tipo, p_registros: encerradas, p_nome_arquivo: fileName || 'relatorio_ary.xlsx', p_usuario: user.id,
       });
-
-      return res.status(200).json({ success: true, tipo: 'status_sas', encerradas: encerradasOk, tentativas: encerradas.length });
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ success: true, tipo, encerradas: encerradasOk, tentativas: encerradas.length });
 
     } else if (tipo === 'saldo') {
       // Conferência de saldo real — relatório de posição de estoque do ERP
@@ -209,27 +176,13 @@ export default async function handler(req, res) {
         custo_medio:    a.saldo_qtd !== 0 ? a.valor_total / a.saldo_qtd : 0,
       }));
 
-      tabela = 'almox_saldo_real';
     }
 
-    // Substituição completa: apaga e reinsere
-    const { error: deleteError } = await supabase.from(tabela).delete().gte('created_at', '1900-01-01');
-    if (deleteError) throw new Error(`Erro ao limpar dados anteriores de ${tabela}: ${deleteError.message}`);
-
-    let inserted = 0;
-    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-      const chunk = rows.slice(i, i + BATCH_SIZE);
-      const { error: insertError } = await supabase.from(tabela).insert(chunk);
-      if (insertError) throw new Error(`Erro ao inserir lote ${i}: ${insertError.message}`);
-      inserted += chunk.length;
-    }
-
-    await supabase.from('almox_importacoes').insert({
-      tipo,
-      nome_arquivo: fileName || `${tipo}.xlsx`,
-      total_registros: inserted,
-      importado_por: user.id,
+    if (rows.length === 0) throw new Error('Arquivo sem registros válidos. Dados anteriores preservados.');
+    const { data: inserted, error } = await supabase.rpc('importar_almox_atomico', {
+      p_tipo: tipo, p_registros: rows, p_nome_arquivo: fileName || `${tipo}.xlsx`, p_usuario: user.id,
     });
+    if (error) throw new Error(error.message);
 
     return res.status(200).json({ success: true, tipo, inseridos: inserted });
 

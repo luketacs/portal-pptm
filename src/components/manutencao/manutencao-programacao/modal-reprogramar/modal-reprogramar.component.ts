@@ -52,22 +52,8 @@ export class ModalReprogramarComponent {
     this.isProcessando.set(true);
     try {
       const novosDias = diasDaSemana(novaSemana).filter(d => d.label !== 'SAB' && d.label !== 'DOM').map(d => d.data);
-      await this.manutencaoService.reprogramarOrdem(ordem.id, novaSemana, novosDias);
-
-      // "Recalcular" muda a data_prevista do ciclo pra essa reprogramação — sem isso
-      // (o default), o ciclo mantém a data original e a cadência do plano continua a
-      // mesma, exatamente o comportamento pedido: uma reprogramação pontual não deve
-      // empurrar as próximas execuções já previstas.
-      if (this.recalcular() && ordem.planoPreventivoId) {
-        const ciclo = this.manutencaoPlanosService.ciclos().find(c => c.ordemId === ordem.id);
-        if (ciclo) {
-          try {
-            await this.manutencaoPlanosService.recalcularCiclo(ciclo.id, novaSemana);
-          } catch (err: unknown) {
-            this.notificationService.showError(err instanceof Error ? err.message : 'Reprogramado, mas não deu pra recalcular a próxima data do plano.');
-          }
-        }
-      }
+      await this.manutencaoService.reprogramarOrdem(ordem.id, novaSemana, novosDias, this.recalcular());
+      await this.manutencaoPlanosService.load();
 
       this.notificationService.showSuccess('Ordem reprogramada.');
       this.fechar();

@@ -406,27 +406,12 @@ export class ApontamentosService {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
 
-    const { recordsFiltrados, porMes, dataLimite } = await this.parsearArquivoSigma(file);
-
-    const sb = this.supabaseService.client;
-
-    // Deleta todos os registros do período antes de reinserir (garante dados limpos)
-    const { error: deleteError } = await sb.from('apontamentos').delete().gte('data', dataLimite);
-    if (deleteError) throw new Error(`Erro ao limpar dados anteriores: ${deleteError.message}`);
-
-    const BATCH = 500;
-    let inserted = 0;
-    for (let i = 0; i < recordsFiltrados.length; i += BATCH) {
-      const { error } = await sb.from('apontamentos').insert(recordsFiltrados.slice(i, i + BATCH));
-      if (error) throw new Error(`Erro ao salvar: ${error.message}`);
-      inserted += Math.min(BATCH, recordsFiltrados.length - i);
-    }
-
-    await sb.from('apontamentos_importacoes').insert({
-      nome_arquivo:    file.name,
-      total_registros: inserted,
-      importado_por:   user.id,
+    if (user.role !== 'Admin') throw new Error('Apenas administradores podem importar apontamentos.');
+    const { recordsFiltrados, porMes } = await this.parsearArquivoSigma(file);
+    const { data: inserted, error } = await this.supabaseService.client.rpc('importar_apontamentos_atomico', {
+      p_registros: recordsFiltrados, p_nome_arquivo: file.name,
     });
+    if (error) throw new Error(`Erro ao importar (dados anteriores preservados): ${error.message}`);
 
     return { inseridos: inserted, porMes };
   }

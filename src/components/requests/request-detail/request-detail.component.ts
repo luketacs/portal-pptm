@@ -510,7 +510,7 @@ export class RequestDetailComponent implements OnDestroy {
   async approveRD(): Promise<void> {
     const req = this.request();
     const user = this.currentUser();
-    if (!req || !user || !this.isAdmin()) return;
+    if (!req || !user || !this.isAdmin() || this.isApprovingRD()) return;
     
     // Validar se o valor aprovado foi preenchido.
     const editableData = this.editableRequest();
@@ -521,15 +521,9 @@ export class RequestDetailComponent implements OnDestroy {
 
     this.isApprovingRD.set(true);
     try {
-      const updatePromise = Promise.all([
-        this.requestService.updateRequest(req.id, { approvedValue: editableData.approvedValue }, user),
-        this.requestService.updateRequestStatus(req.id, 'Aprovado em RD', user)
-      ]);
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Operação demorou muito. Tente novamente.')), 15000)
-      );
-      
-      await Promise.race([updatePromise, timeoutPromise]);
+      // O status valida o valor persistido e acrescenta ao histórico atualizado.
+      await this.requestService.updateRequest(req.id, { approvedValue: editableData.approvedValue }, user);
+      await this.requestService.updateRequestStatus(req.id, 'Aprovado em RD', user);
       this.notificationService.showSuccess('Solicitação aprovada em RD.');
       this.refreshRequest();
     } catch (error: any) {

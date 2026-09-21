@@ -2,7 +2,7 @@
 import { UserProfile } from '../models/user.model';
 import { SupabaseService } from './supabase.service';
 import { AuditLogService } from './audit-log.service';
-import type { AuthError, Session, SupabaseClient } from '@supabase/supabase-js';
+import type { Session, SupabaseClient } from '@supabase/supabase-js';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -26,7 +26,11 @@ export class AuthService {
     this.supabase = supabaseService.client;
     
     // Guardar subscription para cleanup posterior
-    this.authSubscription = this.supabase.auth.onAuthStateChange(async (event, session) => {
+    this.authSubscription = this.supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        this.currentUser.set(null);
+        return;
+      }
       // Only allow this reactive listener to run AFTER the initial, imperative setup is complete.
       if (!this.isInitialized) {
         return;
@@ -43,9 +47,7 @@ export class AuthService {
       console.log('[AuthService] Auth state change:', event);
       
       // This listener is the single source of truth for auth state changes during the app's lifetime.
-      if (event === 'SIGNED_OUT') {
-        this.currentUser.set(null);
-      } else if (event === 'TOKEN_REFRESHED') {
+      if (event === 'TOKEN_REFRESHED') {
         // TOKEN_REFRESHED: não precisa recarregar perfil, apenas o token foi renovado
         // O perfil do usuário não mudou, então mantemos o currentUser como está
         console.log('[AuthService] Token renovado, mantendo perfil atual');
@@ -57,7 +59,7 @@ export class AuthService {
           if (current?.id === session.user.id) {
             return;
           }
-          await this.loadUserProfile(session.user.id, 0, true);
+          setTimeout(() => void this.loadUserProfile(session.user.id, 0, true), 0);
         }
       } else if (event === 'USER_UPDATED') {
         // USER_UPDATED: disparado por updateUser (ex: troca de senha).
@@ -65,7 +67,7 @@ export class AuthService {
         console.log('[AuthService] USER_UPDATED event, mantendo perfil atual');
       } else if (session?.user) {
         // Outros eventos com usuário: manter estado atual em caso de falha transitória.
-        await this.loadUserProfile(session.user.id, 0, true);
+        setTimeout(() => void this.loadUserProfile(session.user.id, 0, true), 0);
       } else {
         this.currentUser.set(null);
       }
@@ -185,33 +187,29 @@ export class AuthService {
     }
   }
 
-  private async getSessionWithTimeout(): Promise<Session | null> {
-    const sessionResult = await Promise.race([
-      this.supabase.auth.getSession(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Session check timeout')), this.SESSION_TIMEOUT_MS)
-      ),
-    ]);
-
-    const { data: { session }, error } = sessionResult as { data: { session: Session | null }; error: AuthError | null };
-    if (error) {
-      throw error;
+  private async withAuthTimeout<T>(operation: PromiseLike<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        Promise.resolve(operation),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Authentication timeout')), this.SESSION_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
     }
+  }
+
+  private async getSessionWithTimeout(): Promise<Session | null> {
+    const { data: { session }, error } = await this.withAuthTimeout(this.supabase.auth.getSession());
+    if (error) throw error;
     return session;
   }
 
   private async refreshSessionWithTimeout(): Promise<Session | null> {
-    const refreshResult = await Promise.race([
-      this.supabase.auth.refreshSession(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Session refresh timeout')), this.SESSION_TIMEOUT_MS)
-      ),
-    ]);
-
-    const { data: { session }, error } = refreshResult as { data: { session: Session | null }; error: AuthError | null };
-    if (error) {
-      throw error;
-    }
+    const { data: { session }, error } = await this.withAuthTimeout(this.supabase.auth.refreshSession());
+    if (error) throw error;
     return session;
   }
 
@@ -243,8 +241,8 @@ export class AuthService {
    */
   async initializeApp(): Promise<void> {
     try {
-      // 1. Get current session - without timeout to avoid race conditions
-      const { data: { session } } = await this.supabase.auth.getSession();
+      // Uma chamada presa não pode impedir o bootstrap da aplicação.
+      const session = await this.getSessionWithTimeout();
 
       if (session?.user) {
         try {
@@ -257,7 +255,7 @@ export class AuthService {
           } else {
             // Sessão expirada, fazer logout
             console.warn('[AuthService] Session expired, logging out');
-            await this.supabase.auth.signOut();
+            await this.withAuthTimeout(this.supabase.auth.signOut({ scope: 'local' }));
             this.currentUser.set(null);
           }
         } catch (profileError) {
@@ -325,7 +323,7 @@ export class AuthService {
 
         if (profileError || !profile) {
           console.log('[AuthService] Profile not found or error:', profileError);
-          await this.supabase.auth.signOut();
+          await this.withAuthTimeout(this.supabase.auth.signOut({ scope: 'local' }));
           return {
             success: false,
             error: this.getLoginProfileErrorMessage(profileError)
@@ -335,7 +333,7 @@ export class AuthService {
         // Verificar se o email do perfil corresponde ao email usado no login
         if (profile.email.toLowerCase() !== email.toLowerCase()) {
           console.log('[AuthService] Email mismatch');
-          await this.supabase.auth.signOut();
+          await this.withAuthTimeout(this.supabase.auth.signOut({ scope: 'local' }));
           return { success: false, error: 'E-mail desatualizado. Entre em contato com o administrador para atualizar seu cadastro.' };
         }
 
@@ -454,7 +452,7 @@ export class AuthService {
       }, 10000);
 
       // Fazer o signOut
-      await this.supabase.auth.signOut();
+      await this.withAuthTimeout(this.supabase.auth.signOut());
 
       // Limpar o localStorage manualmente como backup
       localStorage.removeItem(this.AUTH_STORAGE_KEY);
@@ -489,7 +487,7 @@ export class AuthService {
       }
       
       // Verificar se consegue obter o usuário atual
-      const { data: { user }, error } = await this.supabase.auth.getUser();
+      const { data: { user }, error } = await this.withAuthTimeout(this.supabase.auth.getUser());
       
       return !error && !!user;
     } catch (error) {
@@ -502,11 +500,12 @@ export class AuthService {
     const MAX_RETRIES = 3;
     
     try {
-      const { data, error } = await this.supabase
+      const { data, error } = await this.withAuthTimeout(this.supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .abortSignal(AbortSignal.timeout(this.SESSION_TIMEOUT_MS))
+        .single());
 
       if (error) {
         console.error('[AuthService] Erro ao carregar perfil:', error);

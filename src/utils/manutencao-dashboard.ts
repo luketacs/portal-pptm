@@ -66,7 +66,7 @@ export function ordemExecutadaAgrupada(
   const porOs = new Map<string, ManutencaoOrdem[]>();
   let semOsIdx = 0;
   for (const o of ordens) {
-    const chave = o.numeroOs?.trim() ? normalizarNumeroOs(o.numeroOs) : `__sem-os-${semOsIdx++}`;
+    const chave = o.numeroOs?.trim() ? `${o.semanaInicio}:${normalizarNumeroOs(o.numeroOs)}` : `__sem-os-${semOsIdx++}`;
     const lista = porOs.get(chave);
     if (lista) lista.push(o);
     else porOs.set(chave, [o]);
@@ -108,7 +108,7 @@ export function horasApontadasDoColaborador(
   const porOs = new Map<string, ManutencaoOrdem[]>();
   let semOsIdx = 0;
   for (const o of ordens) {
-    const chave = o.numeroOs?.trim() ? normalizarNumeroOs(o.numeroOs) : `__sem-os-${semOsIdx++}`;
+    const chave = o.numeroOs?.trim() ? `${o.semanaInicio}:${normalizarNumeroOs(o.numeroOs)}` : `__sem-os-${semOsIdx++}`;
     const lista = porOs.get(chave);
     if (lista) lista.push(o);
     else porOs.set(chave, [o]);

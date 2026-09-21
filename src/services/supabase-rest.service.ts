@@ -33,7 +33,7 @@ export class SupabaseRestService {
     return this.request<T>('GET', path, undefined, timeoutMs);
   }
 
-  async getPaged<T>(path: string, timeoutMs = this.DEFAULT_TIMEOUT_MS): Promise<PagedRestResult<T>> {
+  async getPaged<T>(path: string, timeoutMs = this.DEFAULT_TIMEOUT_MS, retryOnAuthFailure = true): Promise<PagedRestResult<T>> {
     const token = await this.authService.getValidAccessToken();
     if (!token) {
       await this.handleAuthRequired();
@@ -58,9 +58,9 @@ export class SupabaseRestService {
           ? { ...(parsedBody as Partial<RestError>), message: parsedBody['message'], status: response.status }
           : { message: response.statusText || 'Erro HTTP', status: response.status };
 
-        if ((response.status === 401 || response.status === 403)) {
+        if (response.status === 401 && retryOnAuthFailure) {
           const refresh = await this.authService.refreshSessionBeforeOperation();
-          if (refresh.success) return this.getPaged<T>(path, timeoutMs);
+          if (refresh.success) return this.getPaged<T>(path, timeoutMs, false);
           await this.handleAuthRequired();
         }
         return { data: [], total: 0, error, status: response.status };
@@ -96,10 +96,10 @@ export class SupabaseRestService {
 
     while (true) {
       const page = await this.getPaged<T>(`${basePath}${separator}limit=${pageSize}&offset=${offset}`, timeoutMs);
-      if (page.error) return { data: all, error: page.error };
+      if (page.error) return { data: [], error: page.error };
       all = all.concat(page.data);
-      if (page.data.length < pageSize) break;
-      offset += pageSize;
+      offset += page.data.length;
+      if (page.data.length === 0 || (page.total > 0 && offset >= page.total)) break;
     }
 
     return { data: all, error: null };
@@ -166,7 +166,7 @@ export class SupabaseRestService {
           error: normalizedError,
         });
 
-        if ((response.status === 401 || response.status === 403) && retryOnAuthFailure) {
+        if (response.status === 401 && retryOnAuthFailure) {
           const refresh = await this.authService.refreshSessionBeforeOperation();
           if (refresh.success) {
             return this.request<T>(method, path, body, timeoutMs, false);

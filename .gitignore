@@ -9,6 +9,8 @@ npm-debug.log*
 
 # Vercel build output
 .vercel/output/
+.vercel/node/
+.vercel/static-build/
 
 # Environment (nunca commitar chaves)
 .env
@@ -32,3 +34,17 @@ __pycache__/
 Movimentacoes/*.xlsx
 Movimentacoes/*.xml
 Movimentacoes/__pycache__/
+
+# Config/skills pessoais do Claude Code (não fazem parte do app)
+.claude/
+.agents/
+skills-lock.json
+
+# Arquivos pessoais/externos ao projeto (fora do escopo do gestor-de-compras)
+CONJUNTO LOGOS CTJL PECÉM DIAMANTE/
+ENERGIA PECÉM/
+PECEM DIAMANTE/
+CTJL/
+DD-0099-26 - MANUAL BÁSICO DE MARCA.pdf
+preventivas - organizar.xlsx
+PATHFINDER-2026-09-19/

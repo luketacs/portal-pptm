@@ -1,3 +1,4 @@
+import { fetchAllRows } from '../utils/supabase-pagination';
 import { Injectable, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
@@ -109,8 +110,8 @@ export class ManutencaoPlanosService {
     this.isLoading.set(true);
     try {
       const [planosRes, ciclosRes] = await Promise.all([
-        this.supabaseService.client.from('manutencao_planos').select('*').order('codigo'),
-        this.supabaseService.client.from('manutencao_ciclos').select('*'),
+        fetchAllRows((from, to) => this.supabaseService.client.from('manutencao_planos').select('*').order('codigo').order('id').range(from, to)),
+        fetchAllRows((from, to) => this.supabaseService.client.from('manutencao_ciclos').select('*').order('id').range(from, to)),
       ]);
       if (planosRes.error) throw new Error(planosRes.error.message);
       if (ciclosRes.error) throw new Error(ciclosRes.error.message);
@@ -298,38 +299,5 @@ export class ManutencaoPlanosService {
     await this.load();
   }
 
-  // Registra o ciclo depois que a ordem já foi criada com sucesso (ver
-  // programarDaPreventiva/criarOrdem na Programação) — não é Admin-only, pelo mesmo
-  // motivo de salvarNumeroOsReservado. UNIQUE(plano_id, data_prevista) no banco impede
-  // duas LINHAS pro mesmo ciclo — usa upsert (em vez de insert-e-ignora-conflito) pra
-  // SOBRESCREVER ordem_id quando já existe uma linha pra essa ocorrência, não descartar
-  // silenciosamente. Reportado: plano do Apoio "programado duas vezes" continuava
-  // aparecendo como pendente — a ciclo já tinha uma linha (ordem_id NULO, de uma ordem
-  // apagada depois — a FK é ON DELETE SET NULL) ocupando esse (plano_id,
-  // data_prevista); o antigo insert-e-ignora-em-conflito batia nessa linha, tratava
-  // 23505 como "já registrado, tudo bem" e nunca atualizava o ordem_id pra apontar pra
-  // OS nova — ultimoCicloDoPlano (que só conta ciclo com ordem_id real, ver esse
-  // método) nunca via a ocorrência como coberta, então proximaData nunca avançava,
-  // mesmo com a OS de verdade criada.
-  async registrarCiclo(planoId: string, dataPrevista: string, ordemId: string): Promise<void> {
-    const { error } = await this.supabaseService.client
-      .from('manutencao_ciclos')
-      .upsert({ plano_id: planoId, data_prevista: dataPrevista, ordem_id: ordemId }, { onConflict: 'plano_id,data_prevista' });
-    if (error) throw new Error(error.message);
-    await this.load();
-  }
-
-  // Usado só quando a pessoa reprograma uma ordem e marca "recalcular as próximas
-  // datas" (ver reprogramarOrdem/confirmarReprogramar na Programação) — sem isso, o
-  // default (não marcar) já funciona sozinho: o ciclo mantém a data_prevista original,
-  // então a cadência do plano não muda por causa de uma reprogramação pontual. Não é
-  // Admin-only, mesmo motivo de registrarCiclo/salvarNumeroOsReservado.
-  async recalcularCiclo(cicloId: string, novaDataPrevista: string): Promise<void> {
-    const { error } = await this.supabaseService.client
-      .from('manutencao_ciclos')
-      .update({ data_prevista: novaDataPrevista })
-      .eq('id', cicloId);
-    if (error) throw new Error(error.message);
-    await this.load();
-  }
+  // Ciclos são gravados pelo trigger da programação, na mesma transação da ordem.
 }

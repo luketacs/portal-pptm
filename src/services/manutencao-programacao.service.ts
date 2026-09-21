@@ -1,3 +1,5 @@
+import { bloqueioDoTecnico, ordemDuplicada } from '../utils/manutencao-regras';
+import { fetchAllRows } from '../utils/supabase-pagination';
 import { Injectable, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
@@ -33,6 +35,7 @@ interface ManutencaoOrdemRow {
   reuniao_horario: string | null;
   reuniao_local: string | null;
   plano_preventivo_id: string | null;
+  ciclo_data_prevista: string | null;
   checklist: AtividadeChecklist[] | null;
   criado_por_id: string | null;
   criado_por_nome: string;
@@ -70,6 +73,7 @@ function mapRow(r: ManutencaoOrdemRow): ManutencaoOrdem {
     reuniaoHorario: r.reuniao_horario,
     reuniaoLocal: r.reuniao_local,
     planoPreventivoId: r.plano_preventivo_id,
+    cicloDataPrevista: r.ciclo_data_prevista,
     checklist: r.checklist,
     criadoPorId: r.criado_por_id,
     criadoPorNome: r.criado_por_nome,
@@ -142,10 +146,10 @@ export class ManutencaoProgramacaoService {
   async load(): Promise<void> {
     this.isLoading.set(true);
     try {
-      const { data, error } = await this.supabaseService.client
+      const { data, error } = await fetchAllRows((from, to) => this.supabaseService.client
         .from('manutencao_programacao')
         .select('*')
-        .order('semana_inicio', { ascending: false });
+        .order('semana_inicio', { ascending: false }).order('id').range(from, to));
       if (error) throw new Error(error.message);
       this._ordens.set((data ?? []).map(mapRow));
     } finally {
@@ -188,6 +192,7 @@ export class ManutencaoProgramacaoService {
       reuniao_horario: req.reuniaoHorario?.trim() || null,
       reuniao_local: req.reuniaoLocal?.trim() || null,
       plano_preventivo_id: req.planoPreventivoId ?? null,
+      ciclo_data_prevista: req.cicloDataPrevista ?? null,
       checklist: req.checklist ?? null,
       criado_por_id: user.id,
       criado_por_nome: user.name,
@@ -369,6 +374,7 @@ export class ManutencaoProgramacaoService {
         reuniao_horario: updates.reuniaoHorario?.trim() || null,
         reuniao_local: updates.reuniaoLocal?.trim() || null,
         plano_preventivo_id: updates.planoPreventivoId,
+        ciclo_data_prevista: updates.cicloDataPrevista,
         checklist: updates.checklist,
       })
       .eq('id', id);
@@ -420,17 +426,29 @@ export class ManutencaoProgramacaoService {
   // semana_inicio (a tela inteira opera sobre a semana filtrada no momento). Barra as
   // DUAS semanas (origem e destino): nenhuma pode estar fechada pra reprogramação
   // valer.
-  async reprogramarOrdem(id: string, novaSemanaInicio: string, novosDiasPrevistos: string[]): Promise<void> {
+  async reprogramarOrdem(id: string, novaSemanaInicio: string, novosDiasPrevistos: string[], recalcularCiclo = false): Promise<void> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
+    await Promise.all([this.load(), this.loadFerias(), this.loadAtestados(), this.loadSemanasFechadas()]);
     const item = this.getById(id);
-    if (item) this.garantirSemanaAberta(item.semanaInicio);
+    if (!item) throw new Error('Ordem não encontrada. Atualize a programação.');
+    if (!novosDiasPrevistos.length || novosDiasPrevistos.some(d => this.semanaDoDia(d) !== novaSemanaInicio)) {
+      throw new Error('Selecione dias dentro da semana de destino.');
+    }
+    const bloqueio = bloqueioDoTecnico(this._ferias(), this._atestados(), this._ordens(), item.tecnicoNome, novosDiasPrevistos, id);
+    if (bloqueio) throw new Error(bloqueio.motivo);
+    if (ordemDuplicada(this._ordens(), item.numeroOs ?? '', item.tecnicoNome, novosDiasPrevistos, id)) {
+      throw new Error('Esta OS já está programada para o técnico nos dias selecionados.');
+    }
+    this.garantirSemanaAberta(item.semanaInicio);
     this.garantirSemanaAberta(novaSemanaInicio);
 
     const { error } = await this.supabaseService.client
       .from('manutencao_programacao')
-      .update({ semana_inicio: novaSemanaInicio, dias_previstos: novosDiasPrevistos })
-      .eq('id', id);
+      .update({ semana_inicio: novaSemanaInicio, dias_previstos: novosDiasPrevistos,
+        ...(recalcularCiclo && item.planoPreventivoId ? { ciclo_data_prevista: novaSemanaInicio } : {}),
+      })
+      .eq('id', id).select('id').single();
     if (error) throw new Error(error.message);
 
     this.auditLogService.log({
@@ -688,10 +706,10 @@ export class ManutencaoProgramacaoService {
   // ── Férias ────────────────────────────────────────────────────────────────
 
   async loadFerias(): Promise<void> {
-    const { data, error } = await this.supabaseService.client
+    const { data, error } = await fetchAllRows((from, to) => this.supabaseService.client
       .from('manutencao_ferias')
       .select('id, tecnico_nome, tecnico_matricula, area, data_inicio, data_fim')
-      .order('data_inicio');
+      .order('data_inicio').order('id').range(from, to));
     if (error) throw new Error(error.message);
     this._ferias.set((data ?? []).map(r => ({
       id: r.id,
@@ -762,10 +780,10 @@ export class ManutencaoProgramacaoService {
   // ── Atestado médico ──────────────────────────────────────────────────────────
 
   async loadAtestados(): Promise<void> {
-    const { data, error } = await this.supabaseService.client
+    const { data, error } = await fetchAllRows((from, to) => this.supabaseService.client
       .from('manutencao_atestados')
       .select('id, tecnico_nome, tecnico_matricula, area, data_inicio, data_fim')
-      .order('data_inicio');
+      .order('data_inicio').order('id').range(from, to));
     if (error) throw new Error(error.message);
     this._atestados.set((data ?? []).map(r => ({
       id: r.id,

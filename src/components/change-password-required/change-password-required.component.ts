@@ -98,14 +98,15 @@ export class ChangePasswordRequiredComponent {
       console.log('[ChangePasswordRequired] Password updated successfully');
 
       // 2. Marcar flag must_change_password no banco
-      try {
-        await this.supabaseService.client
+      {
+        const { data: profile, error: profileError } = await this.supabaseService.client
           .from('profiles')
           .update({ must_change_password: false })
-          .eq('id', currentUser.id);
+          .eq('id', currentUser.id).select('id').single();
+        if (profileError || !profile) {
+          throw new Error('A senha foi alterada, mas o perfil não foi atualizado. Entre novamente e informe a nova senha como senha atual.');
+        }
         console.log('[ChangePasswordRequired] must_change_password flag updated');
-      } catch (err) {
-        console.warn('[ChangePasswordRequired] Failed to update flag, continuing...', err);
       }
 
       // 3. Registrar no audit log

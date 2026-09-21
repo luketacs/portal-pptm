@@ -1,7 +1,7 @@
 import { Injectable, signal, effect } from '@angular/core';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
-import { Notification } from '../models/notification.model';
+import type { Notification } from '../models/notification.model';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { SupabaseRestService } from './supabase-rest.service';
 import type { NotificationRow } from '../models/database.types';
