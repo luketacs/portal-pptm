@@ -14,7 +14,15 @@
   </div>
   }
 
-  @if (!isLoading() && !isEditMode() && !duplicidadeChecada()) {
+  @if (!isEditMode() && creationDisabled) {
+  <div class="alert alert-warning app-card">
+    <div>
+      <strong>Cadastro desabilitado.</strong> {{ creationDisabledMessage }}
+    </div>
+  </div>
+  }
+
+  @if (!isLoading() && !isEditMode() && !creationDisabled && !duplicidadeChecada()) {
   <!-- Confirmação de pesquisa prévia (obrigatória antes de liberar o cadastro) -->
   <div class="app-card p-5">
     <div class="alert alert-warning app-card mb-4">
@@ -49,7 +57,7 @@
   </div>
   }
 
-  @if (!isLoading() && (isEditMode() || duplicidadeChecada())) {
+  @if (!isLoading() && (isEditMode() || (!creationDisabled && duplicidadeChecada()))) {
   <form [formGroup]="materialForm" (ngSubmit)="onSubmit()" class="material-form">
 
     <!-- Aviso de modo visualização -->

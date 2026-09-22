@@ -2,7 +2,7 @@
   <div class="list-header">
     <div class="title-section">
       <h1>Materiais Cadastrados</h1>
-      <p class="subtitle">Gerencie os materiais do sistema (Admin, Solicitante e Visualizador podem cadastrar)</p>
+      <p class="subtitle">Gerencie os materiais do sistema</p>
     </div>
     <div class="actions-section">
       <button
@@ -26,6 +26,12 @@
       }
     </div>
   </div>
+
+  @if (creationDisabled) {
+    <div class="rounded-xl border border-amber-200 bg-amber-50 px-5 py-3 mb-4 text-sm text-amber-800">
+      <strong>Cadastro desabilitado.</strong> {{ creationDisabledMessage }}
+    </div>
+  }
 
   <!-- Banner: Notificar criador após liberação -->
   @if (lastLiberated()) {

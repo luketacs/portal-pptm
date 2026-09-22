@@ -189,7 +189,6 @@ export class SidebarComponent implements OnDestroy {
       links: [
         { path: '/materials', label: 'Lista de Materiais', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
         { path: '/my-materials', label: 'Meus Materiais', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
-        { path: '/materials/new', label: 'Cadastrar Material', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
       ],
     },
     {

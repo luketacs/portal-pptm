@@ -6,7 +6,7 @@ import { MaterialService } from '../../../services/material.service';
 import { AuthService } from '../../../services/auth.service';
 import { NcmService, NcmEntry } from '../../../services/ncm.service';
 import { formatarNcmExibicao as formatarNcmExibicaoUtil } from '../../../utils/ncm-search';
-import { UnidadeMedida, Material } from '../../../models/material.model';
+import { UnidadeMedida, Material, MATERIAL_CREATION_DISABLED, MATERIAL_CREATION_DISABLED_MESSAGE } from '../../../models/material.model';
 
 const PHOTO_MAX_BYTES = 5 * 1024 * 1024;   // 5 MB
 const DS_MAX_BYTES    = 20 * 1024 * 1024;  // 20 MB
@@ -23,6 +23,8 @@ const DS_ACCEPT       = ['application/pdf'];
 export class MaterialFormComponent implements OnInit {
   materialForm!: FormGroup;
   currentUser = this.authService.currentUser;
+  readonly creationDisabled = MATERIAL_CREATION_DISABLED;
+  readonly creationDisabledMessage = MATERIAL_CREATION_DISABLED_MESSAGE;
 
   // Signals para controle de estado
   isSubmitting = signal(false);
@@ -369,6 +371,12 @@ export class MaterialFormComponent implements OnInit {
   async onSubmit(): Promise<void> {
     // Bloquear submissão se for modo apenas visualização
     if (this.isViewOnlyMode()) {
+      return;
+    }
+
+    // Cadastro de novos materiais bloqueado (migração SENIOR)
+    if (!this.isEditMode() && this.creationDisabled) {
+      this.errorMessage.set(this.creationDisabledMessage);
       return;
     }
     

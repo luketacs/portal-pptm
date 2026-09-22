@@ -5,7 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { MaterialService } from '../../../services/material.service';
 import { UserService } from '../../../services/user.service';
 import { EmailService } from '../../../services/email.service';
-import { Material } from '../../../models/material.model';
+import { Material, MATERIAL_CREATION_DISABLED, MATERIAL_CREATION_DISABLED_MESSAGE } from '../../../models/material.model';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
@@ -167,10 +167,15 @@ export class MaterialListComponent implements OnInit {
     return this.currentUser()?.role === 'Admin';
   });
 
+  readonly creationDisabled = MATERIAL_CREATION_DISABLED;
+  readonly creationDisabledMessage = MATERIAL_CREATION_DISABLED_MESSAGE;
+
   /**
    * Verifica se usuário pode criar materiais (Admin, Solicitante ou Visualizador)
+   * — sempre false enquanto o cadastro estiver bloqueado pela migração SENIOR
    */
   canCreateMaterial = computed(() => {
+    if (this.creationDisabled) return false;
     const role = this.currentUser()?.role;
     return role === 'Admin' || role === 'Solicitante' || role === 'Visualizador';
   });

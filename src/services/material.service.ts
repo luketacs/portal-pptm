@@ -2,7 +2,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Observable, from, of, timeout } from 'rxjs';
 import { catchError, map, switchMap, tap } from 'rxjs/operators';
-import { CreateMaterialRequest, Material, MaterialApiResponse, MaterialData } from '../models/material.model';
+import { CreateMaterialRequest, MATERIAL_CREATION_DISABLED, MATERIAL_CREATION_DISABLED_MESSAGE, Material, MaterialApiResponse, MaterialData } from '../models/material.model';
 import { SupabaseService } from './supabase.service';
 import { SupabaseRestService } from './supabase-rest.service';
 import { AuditLogService } from './audit-log.service';
@@ -139,6 +139,10 @@ export class MaterialService {
   }
 
   async createMaterial(material: CreateMaterialRequest, userId: string): Promise<{ data: Material | null; error: any }> {
+    if (MATERIAL_CREATION_DISABLED) {
+      return { data: null, error: { message: MATERIAL_CREATION_DISABLED_MESSAGE } };
+    }
+
     try {
       if (!material.descricao_detalhada || material.descricao_detalhada.trim() === '') {
         return { data: null, error: { message: 'Descrição detalhada é obrigatória' } };

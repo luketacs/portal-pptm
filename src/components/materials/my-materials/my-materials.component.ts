@@ -6,7 +6,7 @@ import { MaterialService } from '../../../services/material.service';
 import { RequestService } from '../../../services/request.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
-import { Material } from '../../../models/material.model';
+import { Material, MATERIAL_CREATION_DISABLED, MATERIAL_CREATION_DISABLED_MESSAGE } from '../../../models/material.model';
 import { PurchaseRequest, RequestStatus } from '../../../models/request.model';
 import { createClientPageItems, createPageNavigation } from '../../../utils/pagination';
 
@@ -45,6 +45,9 @@ const STATUS_CLASSES: Record<string, string> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MyMaterialsComponent implements OnInit {
+  readonly creationDisabled = MATERIAL_CREATION_DISABLED;
+  readonly creationDisabledMessage = MATERIAL_CREATION_DISABLED_MESSAGE;
+
   private myMaterials = signal<Material[]>([]);
   rows = computed<MyMaterialRow[]>(() => {
     const allRequests = this.requestService.requests();

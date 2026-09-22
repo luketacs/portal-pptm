@@ -55,6 +55,11 @@ export interface Material {
   released_at?: string | null;
 }
 
+/** Cadastro de novos materiais bloqueado durante a migração para o sistema SENIOR. */
+export const MATERIAL_CREATION_DISABLED = true;
+export const MATERIAL_CREATION_DISABLED_MESSAGE =
+  'O cadastro de novos materiais está desabilitado por conta da migração para o sistema SENIOR.';
+
 export interface CreateMaterialRequest {
   codigo?: string | null;
   descricao_breve: string;
