@@ -5,7 +5,11 @@ import { resumirDisponibilidade } from './_indicadores-hh-shared.js';
 import { createClient } from '@supabase/supabase-js';
 import { ALLOWED_ORIGINS, normalizarNumeroOs, obterCache } from './_sigma-shared.js';
 
-const colaboradores = createRequire(import.meta.url)('../public/matriculas.json');
+// Mesmo padrão de kanban-atividades-publico.js: o tracer da Vercel só empacota o JSON
+// quando reconhece a chamada require('...') (a forma inline createRequire(...)('...')
+// não é detectada e a function quebra com "Cannot find module").
+const require = createRequire(import.meta.url);
+const colaboradores = require('../public/matriculas.json');
 
 // Mesmo mapeamento snake_case -> camelCase de ManutencaoProgramacaoService.mapRow()
 // (src/services/manutencao-programacao.service.ts) — troca de nome de campo, não

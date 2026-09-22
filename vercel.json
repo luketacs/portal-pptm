@@ -8,7 +8,8 @@
     "api/export-requests.js": { "maxDuration": 30 },
     "api/telegram-material-bot.js": { "maxDuration": 15 },
     "api/sigma-ordens-proxy.js": { "maxDuration": 30 },
-    "api/kanban-atividades-publico.js": { "maxDuration": 30 }
+    "api/kanban-atividades-publico.js": { "maxDuration": 30, "includeFiles": "public/matriculas.json" },
+    "api/indicadores-manutencao-publico.js": { "maxDuration": 30, "includeFiles": "public/matriculas.json" }
   },
   "rewrites": [
     {
