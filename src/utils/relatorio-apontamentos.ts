@@ -255,6 +255,10 @@ function calcularHorasEntre(horaInicioDecimal: number, horaFimDecimal: number): 
   return Math.max(fim - horaInicioDecimal, 0);
 }
 
+// Desconto aplicado quando o apontamento marca "Intervalo Almoço" (era 1h; reduzido
+// pra 30min em 22/09/2026). Mesmo valor de DESCONTO_ALMOCO_HORAS em api/_sigma-shared.js.
+const DESCONTO_ALMOCO_HORAS = 0.5;
+
 // Mesma checagem "solta" do original: qualquer string contendo a letra "s" também
 // conta como almoço marcado. Inofensivo na prática porque a coluna real só usa 0/1.
 function temAlmoco(valor: unknown): boolean {
@@ -324,7 +328,7 @@ export function calcularHorasEOrdensApontadas(
 
     const horasBrutas = calcularHorasEntre(hInicio, hFim);
     const almoco = colunas.colAlmoco >= 0 ? temAlmoco(row[colunas.colAlmoco]) : false;
-    const horasApontadas = Math.max(almoco ? horasBrutas - 1 : horasBrutas, 0);
+    const horasApontadas = Math.max(almoco ? horasBrutas - DESCONTO_ALMOCO_HORAS : horasBrutas, 0);
     const ordemRaw = colunas.colOrdem >= 0 ? row[colunas.colOrdem] : 'N/A';
     const areaRaw = colunas.colArea >= 0 ? row[colunas.colArea] : undefined;
     const descricaoRaw = colunas.colDescricao >= 0 ? row[colunas.colDescricao] : undefined;

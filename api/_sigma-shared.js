@@ -27,10 +27,15 @@ export const APONT_COL = {
   horaInicial: 10, horaFinal: 11, intervaloAlmoco: 12, osProtheus: 20,
 };
 
+// Desconto aplicado quando o apontamento marca "Intervalo Almoço" (era 1h; reduzido
+// pra 30min em 22/09/2026). Mesmo valor de DESCONTO_ALMOCO_HORAS em
+// src/utils/relatorio-apontamentos.ts.
+const DESCONTO_ALMOCO_HORAS = 0.5;
+
 // Mesma lógica de src/utils/relatorio-apontamentos.ts (parseHoraDecimal/
 // calcularHorasEntre/temAlmoco) — portada pra cá porque esta function roda isolada
 // (Vercel function, sem import de código Angular). Horas REAIS apontadas (Hora Final -
-// Hora Inicial, descontando 1h de almoço quando marcado), não a duração PROGRAMADA da
+// Hora Inicial, descontando o almoço quando marcado), não a duração PROGRAMADA da
 // ordem — ver uso em manutencao-indicadores-semanais.component.ts (calcularHorasPorTecnico).
 function parseHoraDecimal(valor) {
   const v = String(valor ?? '').trim();
@@ -47,7 +52,7 @@ function calcularHorasApontamento(horaInicial, horaFinal, intervaloAlmoco) {
   if (fim < hIni) fim += 24; // cruzou a meia-noite
   const bruta = fim - hIni;
   const almoco = intervaloAlmoco === 1 || intervaloAlmoco === '1' || String(intervaloAlmoco ?? '').toLowerCase().includes('s');
-  return Math.max(almoco ? bruta - 1 : bruta, 0);
+  return Math.max(almoco ? bruta - DESCONTO_ALMOCO_HORAS : bruta, 0);
 }
 
 export const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS

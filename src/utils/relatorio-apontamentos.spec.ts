@@ -63,8 +63,8 @@ describe('calcularHorasEOrdensApontadas', () => {
     const r = calcularHorasEOrdensApontadas(rows, {
       ...PERIODO_NOV_2024, matriculas: matriculasFixture(), horasProgramadasPorMatricula: {}, horasDisponiveisPorMatricula: {},
     });
-    // 08:00 as 17:00 = 9h - 1h almoco = 8h
-    expect(r.horasGeral).toBeCloseTo(8, 2);
+    // 08:00 as 17:00 = 9h - 0,5h almoco = 8,5h
+    expect(r.horasGeral).toBeCloseTo(8.5, 2);
     expect(r.horasPorColaborador[0].funcionario).toBe('Anderson Souza');
   });
 
