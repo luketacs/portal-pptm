@@ -621,6 +621,25 @@
                       </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-200">
+                      @for (ind of grupo.indisponibilidades; track ind.tipo + ind.dataInicio) {
+                        <tr [class]="ind.tipo === 'ferias' ? 'bg-teal-50/60' : 'bg-amber-50/60'">
+                          <td class="py-1.5 pr-3 whitespace-nowrap text-center">
+                            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="ind.tipo === 'ferias' ? 'bg-teal-100 text-teal-700' : 'bg-amber-100 text-amber-700'">{{ ind.tipo === 'ferias' ? 'Férias' : 'Atestado' }}</span>
+                          </td>
+                          <td class="py-1.5 pr-3 text-gray-800">{{ ind.tipo === 'ferias' ? 'Férias' : 'Atestado médico' }} de {{ formatarDataBr(ind.dataInicio) }} a {{ formatarDataBr(ind.dataFim) }}</td>
+                          <td class="py-1.5 pr-3 text-gray-300">—</td>
+                          <td class="py-1.5 pr-3 text-gray-300">—</td>
+                          <td class="py-1.5 pr-3 text-center">
+                            <div class="flex flex-wrap justify-center gap-1">
+                              @for (d of ind.dias; track d) {
+                                <span class="text-[11px] font-bold px-1.5 py-0.5 rounded" [class]="ind.tipo === 'ferias' ? 'bg-teal-100 text-teal-800' : 'bg-amber-100 text-amber-800'">{{ d }}</span>
+                              }
+                            </div>
+                          </td>
+                          <td class="py-1.5 pr-3 text-center"><span class="text-xs font-semibold px-2 py-1 rounded-full bg-red-50 text-red-700">Indisponível</span></td>
+                          <td class="py-1.5 pr-3"></td>
+                        </tr>
+                      }
                       @for (o of grupo.ordens; track o.id) {
                         <tr [class]="linhaClasse(o.tipo)">
                           <td class="py-1.5 pr-3 whitespace-nowrap text-center">
@@ -948,6 +967,25 @@
                               </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-200">
+                              @for (ind of grupo.indisponibilidades; track ind.tipo + ind.dataInicio) {
+                                <tr [class]="ind.tipo === 'ferias' ? 'bg-teal-50/60' : 'bg-amber-50/60'">
+                                  <td class="py-1.5 pr-3 whitespace-nowrap text-center">
+                                    <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" [class]="ind.tipo === 'ferias' ? 'bg-teal-100 text-teal-700' : 'bg-amber-100 text-amber-700'">{{ ind.tipo === 'ferias' ? 'Férias' : 'Atestado' }}</span>
+                                  </td>
+                                  <td class="py-1.5 pr-3 text-gray-800">{{ ind.tipo === 'ferias' ? 'Férias' : 'Atestado médico' }} de {{ formatarDataBr(ind.dataInicio) }} a {{ formatarDataBr(ind.dataFim) }}</td>
+                                  <td class="py-1.5 pr-3 text-gray-300">—</td>
+                                  <td class="py-1.5 pr-3 text-gray-300">—</td>
+                                  <td class="py-1.5 pr-3 text-center">
+                                    <div class="flex flex-wrap justify-center gap-1">
+                                      @for (d of ind.dias; track d) {
+                                        <span class="text-[11px] font-bold px-1.5 py-0.5 rounded" [class]="ind.tipo === 'ferias' ? 'bg-teal-100 text-teal-800' : 'bg-amber-100 text-amber-800'">{{ d }}</span>
+                                      }
+                                    </div>
+                                  </td>
+                                  <td class="py-1.5 pr-3 text-center"><span class="text-xs font-semibold px-2 py-1 rounded-full bg-red-50 text-red-700">Indisponível</span></td>
+                                  <td class="py-1.5 pr-3"></td>
+                                </tr>
+                              }
                               @for (o of grupo.ordens; track o.id) {
                                 <tr [class]="linhaClasse(o.tipo)">
                                   <td class="py-1.5 pr-3 whitespace-nowrap text-center">
@@ -1408,7 +1446,7 @@
               <p class="text-[11px] text-gray-400 mb-2">Cada apoio pode ter dias diferentes entre si e da própria OS (ex.: técnico só na terça, andaime montado na segunda).</p>
               <div class="space-y-2">
                 @for (recurso of formRecursosReconhecidos(); track recurso) {
-                  <div class="rounded-lg bg-white border border-slate-200 p-2.5 shadow-sm">
+                  <div class="rounded-lg bg-white border p-2.5 shadow-sm" [class]="formApoioBloqueios()[recurso] ? 'border-red-300' : 'border-slate-200'">
                     <div class="flex items-center justify-between gap-2 mb-2">
                       <span class="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full truncate"
                         [class]="recursoReconhecido(recurso) === 'tecnico' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'">
@@ -1429,6 +1467,11 @@
                     </div>
                     @if (apoioDiasDoRecurso(recurso).length === 0) {
                       <p class="text-[11px] text-amber-600 mt-1.5">Selecione ao menos um dia pra esse apoio.</p>
+                    }
+                    @if (formApoioBloqueios()[recurso]; as bloq) {
+                      <p class="text-[11px] font-semibold text-red-700 bg-red-50 rounded-md px-2 py-1 mt-1.5">
+                        {{ bloq.motivo }} Não vai receber a cópia desta OS — escolha outro dia ou outro ajudante.
+                      </p>
                     }
                   </div>
                 }

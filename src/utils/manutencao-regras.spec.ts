@@ -4,7 +4,8 @@ import {
   HORAS_EXAME_MEDICO, HORAS_TREINAMENTO_DIA_TODO, HORAS_TREINAMENTO_MEIO_PERIODO,
   bloqueioDoTecnico, calcularCapacidadeSemana, diasDaSemana, encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo,
   encontrarFolgaNoIntervalo, encontrarOrdemDuplicada, ordemDuplicada, paraIso, podeEditarSemanaFechada, recursosParaEspelho,
-  tecnicosPorArea, todosTecnicos,
+  tecnicosPorArea, todosTecnicos, bloqueiosDoApoio, resumoGravacaoApoio,
+  indisponibilidadesNaSemana, numerosSigmaParaConsultar, avaliarGravacao,
 } from './manutencao-regras';
 
 const DIAS_SEMANA_37 = [
@@ -390,5 +391,129 @@ describe('todosTecnicos', () => {
       { nome: 'Carlos Jr', matricula: '000001', area: 'ELETRICA' },
       { nome: 'Leandro Rodrigues', matricula: '000002', area: 'MECANICA' },
     ]);
+  });
+});
+
+describe('bloqueiosDoApoio', () => {
+  const tecnicos = [{ nome: 'Carlos Jr' }, { nome: 'Eduarda Lavinia' }, { nome: 'Leandro Rodrigues' }, { nome: 'Marcelo Alves' }];
+  const ferias: FeriasTecnico[] = [{ id: 'f1', tecnicoNome: 'Eduarda Lavinia', tecnicoMatricula: null, area: 'ELETRICA', dataInicio: '2026-09-28', dataFim: '2026-10-10' }];
+  const atestados: AtestadoTecnico[] = [{ id: 'a1', tecnicoNome: 'Leandro Rodrigues', tecnicoMatricula: null, area: 'ELETRICA', dataInicio: '2026-09-22', dataFim: '2026-10-05' }];
+  const bloqueio = (nome: string, dias: string[]) => bloqueioDoTecnico(ferias, atestados, [], nome, dias);
+
+  it('aponta cada ajudante bloqueado nos dias marcados pra ele, com o tipo do bloqueio', () => {
+    const r = bloqueiosDoApoio(
+      ['Carlos Jr', 'eduarda lavinia', 'Leandro Rodrigues'],
+      { 'Carlos Jr': ['2026-10-05'], 'eduarda lavinia': ['2026-10-05'], 'Leandro Rodrigues': ['2026-10-05'] },
+      tecnicos, 'Marcelo Alves', bloqueio,
+    );
+    expect(Object.keys(r).sort()).toEqual(['Leandro Rodrigues', 'eduarda lavinia']);
+    expect(r['eduarda lavinia'].tipo).toBe('ferias');
+    expect(r['eduarda lavinia'].nome).toBe('Eduarda Lavinia');
+    expect(r['Leandro Rodrigues'].tipo).toBe('atestado');
+  });
+
+  it('não acusa bloqueio fora dos dias marcados pro ajudante', () => {
+    const r = bloqueiosDoApoio(['Leandro Rodrigues'], { 'Leandro Rodrigues': ['2026-10-06'] }, tecnicos, 'Marcelo Alves', bloqueio);
+    expect(r).toEqual({});
+  });
+
+  it('ignora o próprio mandante, recurso que não é técnico e recurso ainda sem dia marcado', () => {
+    const r = bloqueiosDoApoio(
+      ['Eduarda Lavinia', 'MUNCK', 'Leandro Rodrigues'],
+      { 'Eduarda Lavinia': ['2026-10-05'], MUNCK: ['2026-10-05'] },
+      tecnicos, 'Eduarda Lavinia', bloqueio,
+    );
+    expect(r).toEqual({});
+  });
+});
+
+describe('resumoGravacaoApoio', () => {
+  it('sem apoio nenhum, é só o sucesso da OS principal', () => {
+    const r = resumoGravacaoApoio({ principal: 'OS adicionada.', programados: [], naoProgramados: [] });
+    expect(r.tipo).toBe('success');
+    expect(r.mensagem).toBe('OS adicionada.');
+  });
+
+  it('com apoio programado, cita quem recebeu a cópia', () => {
+    const r = resumoGravacaoApoio({ principal: 'OS adicionada.', programados: ['Carlos Jr', 'Marcelo Alves'], naoProgramados: [] });
+    expect(r.tipo).toBe('success');
+    expect(r.mensagem).toContain('Carlos Jr');
+    expect(r.mensagem).toContain('Marcelo Alves');
+  });
+
+  it('ajudante que ficou de fora vira aviso que cita cada um com o motivo, e fica mais tempo na tela', () => {
+    const ok = resumoGravacaoApoio({ principal: 'OS adicionada.', programados: ['Carlos Jr'], naoProgramados: [] });
+    const r = resumoGravacaoApoio({
+      principal: 'OS adicionada.', programados: ['Carlos Jr'],
+      naoProgramados: [{ nome: 'Eduarda Lavinia', tipo: 'ferias' }, { nome: 'Leandro Rodrigues', tipo: 'atestado' }],
+    });
+    expect(r.tipo).toBe('warning');
+    expect(r.mensagem).toContain('Carlos Jr');
+    expect(r.mensagem).toMatch(/Eduarda Lavinia \(férias\)/);
+    expect(r.mensagem).toMatch(/Leandro Rodrigues \(atestado/);
+    expect(r.duracaoMs).toBeGreaterThan(ok.duracaoMs);
+  });
+
+  it('falha ao gravar o apoio vira erro, sem esconder quem também ficou de fora por bloqueio', () => {
+    const r = resumoGravacaoApoio({
+      principal: 'OS adicionada.', programados: [], erroApoio: { nomes: ['Carlos Jr'], mensagem: 'timeout' },
+      naoProgramados: [{ nome: 'Leandro Rodrigues', tipo: 'folga' }],
+    });
+    expect(r.tipo).toBe('error');
+    expect(r.mensagem).toContain('Carlos Jr');
+    expect(r.mensagem).toContain('timeout');
+    expect(r.mensagem).toMatch(/Leandro Rodrigues \(folga\)/);
+  });
+});
+
+describe('indisponibilidadesNaSemana', () => {
+  const ferias: FeriasTecnico[] = [{ id: 'f1', tecnicoNome: 'Eduarda Lavinia', tecnicoMatricula: null, area: 'ELETRICA', dataInicio: '2026-09-09', dataFim: '2026-10-10' }];
+  const atestados: AtestadoTecnico[] = [{ id: 'a1', tecnicoNome: 'Leandro Rodrigues', tecnicoMatricula: null, area: 'ELETRICA', dataInicio: '2026-09-01', dataFim: '2026-09-08' }];
+
+  it('lista o período com os dias úteis da semana que caem dentro dele', () => {
+    expect(indisponibilidadesNaSemana(ferias, atestados, 'Eduarda Lavinia', DIAS_SEMANA_37)).toEqual([
+      { tipo: 'ferias', dataInicio: '2026-09-09', dataFim: '2026-10-10', dias: ['QUA', 'QUI', 'SEX'] },
+    ]);
+    expect(indisponibilidadesNaSemana(ferias, atestados, 'Leandro Rodrigues', DIAS_SEMANA_37)).toEqual([
+      { tipo: 'atestado', dataInicio: '2026-09-01', dataFim: '2026-09-08', dias: ['SEG', 'TER'] },
+    ]);
+  });
+
+  it('técnico sem férias nem atestado na semana não tem linha', () => {
+    expect(indisponibilidadesNaSemana(ferias, atestados, 'Carlos Jr', DIAS_SEMANA_37)).toEqual([]);
+  });
+});
+
+describe('numerosSigmaParaConsultar', () => {
+  it('ao trocar de semana, consulta todas as OS visíveis', () => {
+    expect(numerosSigmaParaConsultar(['45203', '047652'], new Set(['045203', '047652']), true)).toEqual(['45203', '047652']);
+  });
+
+  it('na mesma semana, consulta só OS que ainda não têm resultado (comparando o número normalizado)', () => {
+    expect(numerosSigmaParaConsultar(['45203', '047652', '013142'], new Set(['045203', '047652']), false)).toEqual(['013142']);
+  });
+
+  it('na mesma semana, sem OS nova, não consulta nada', () => {
+    expect(numerosSigmaParaConsultar(['45203'], new Set(['045203']), false)).toEqual([]);
+  });
+});
+
+describe('avaliarGravacao', () => {
+  const base = { operacao: 'criar' as const, msDesdeAbertura: 3 * 3600_000, visivel: true, online: true };
+
+  it('gravação rápida e sem erro não gera registro', () => {
+    expect(avaliarGravacao({ ...base, ms: 900, erro: null })).toBeNull();
+  });
+
+  it('gravação lenta gera registro de lentidão com o tempo e há quanto tempo a tela estava aberta', () => {
+    const r = avaliarGravacao({ ...base, ms: 7200, erro: null });
+    expect(r?.event_type).toBe('manutencao_programacao_salvar_lento');
+    expect(r?.metadata).toMatchObject({ operacao: 'criar', ms: 7200, minutos_tela_aberta: 180 });
+  });
+
+  it('falha gera registro de falha com nome e código do erro, mesmo se foi rápida', () => {
+    const r = avaliarGravacao({ ...base, ms: 300, erro: { name: 'AbortError', message: 'signal is aborted', code: undefined } });
+    expect(r?.event_type).toBe('manutencao_programacao_salvar_falha');
+    expect(r?.metadata).toMatchObject({ erro_nome: 'AbortError', erro_mensagem: 'signal is aborted' });
   });
 });

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, effect, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, effect, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -19,7 +19,8 @@ import {
   HORAS_TREINAMENTO_DIA_TODO, bloqueioDoTecnico, calcularCapacidadeSemana, conflitoLotoTitle, diaMesPadded, diasDaSemana,
   encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo, encontrarOrdemDuplicada, formatarDataBr,
   lotoBadgeClass, normalizarNumeroOs, normalizarTexto, ordemDuplicada, paraIso, podeEditarSemanaFechada, recursosParaEspelho,
-  tecnicosPorArea, todosTecnicos,
+  tecnicosPorArea, todosTecnicos, bloqueiosDoApoio, resumoGravacaoApoio, TipoBloqueio,
+  indisponibilidadesNaSemana, numerosSigmaParaConsultar,
 } from '../../../utils/manutencao-regras';
 import {
   agendaDosPlanos, ChaveEquipeApoio, EQUIPE_APOIO_NAO_CLASSIFICADA, inferirCategoriaIndicador,
@@ -40,6 +41,13 @@ import { ModalReuniaoLoteComponent } from './modal-reuniao-lote/modal-reuniao-lo
 import { ModalApoioComponent } from './modal-apoio/modal-apoio.component';
 
 type AreaFiltro = 'todos' | ManutencaoArea;
+
+// Cópias de apoio planejadas a partir do formulário (ver planejarEspelhos) + ajudantes que
+// ficaram de fora por férias/atestado/folga nos dias marcados pra eles.
+interface PlanoEspelhos {
+  espelhos: { req: CreateManutencaoOrdemRequest; nome: string }[];
+  naoProgramados: { nome: string; tipo: TipoBloqueio }[];
+}
 
 const AREA_LABEL: Record<ManutencaoArea, string> = {
   ELETRICA: 'Elétrica',
@@ -528,7 +536,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         const saldo = capacidade !== null ? parseFloat((capacidade - totalHoras).toFixed(2)) : null;
         const ferias = this.feriasNoIntervalo(tecnico, diasIso);
         const atestado = this.atestadoNoIntervalo(tecnico, diasIso);
-        return { tecnico, ordens: ordensOrdenadas, totalHoras, capacidade, saldo, ferias, atestado };
+        // Linha "Férias"/"Atestado" no card, no formato de uma folga (BH): dias úteis da
+        // semana em que ele está indisponível.
+        const indisponibilidades = indisponibilidadesNaSemana(
+          this.manutencaoService.ferias(), this.manutencaoService.atestados(), tecnico, dias);
+        return { tecnico, ordens: ordensOrdenadas, totalHoras, capacidade, saldo, ferias, atestado, indisponibilidades };
       })
       .sort((a, b) => {
         const cmp = chaveOrdenacaoTecnico(a.tecnico).localeCompare(chaveOrdenacaoTecnico(b.tecnico));
@@ -1448,6 +1460,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // com ninguém cadastrado não mirra em nada, ver recursoReconhecido — não faz sentido
   // pedir dia pra ele).
   formRecursosReconhecidos = computed(() => this.formRecursosLista().filter(r => this.recursoReconhecido(r) !== null));
+  // Ajudante de férias/atestado/folga em algum dia marcado pra ele no apoio — aparece em
+  // vermelho no cartão "Dias de cada apoio" ANTES de salvar (ele não recebe a cópia).
+  formApoioBloqueios = computed(() => bloqueiosDoApoio(
+    this.formRecursosLista(), this.formApoioDiasPorRecurso(), this.todosTecnicos(), this.formTecnicoNome(),
+    (nome, dias) => this.bloqueioDoTecnico(nome, dias),
+  ));
   // Bloqueia salvar enquanto sobrar algum recurso reconhecido sem nenhum dia marcado.
   formRecursoSemDiasDeApoio = computed(() => this.formRecursosReconhecidos().some(r => this.apoioDiasDoRecurso(r).length === 0));
 
@@ -1673,12 +1691,18 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       this.pageTitle = `Programação ${AREA_LABEL[area]}`;
     }
 
-    // Refaz a consulta ao SIGMA sempre que a lista de OS visíveis na semana mudar
-    // (troca de semana, nova OS criada, número de OS editado etc.).
+    // Consulta ao SIGMA: semana nova (ou liga/desliga o horizonte) = todas as OS visíveis;
+    // mesma semana = só número de OS que ainda não tem resultado. Antes, cada salvar
+    // refazia a consulta da semana inteira (~3,5 s com o spinner girando) mesmo sem número
+    // novo. sigmaPorOs é lido sem rastrear, senão a resposta da consulta disparava de novo.
     effect(() => {
       const numeros = this.numerosOsVisiveis();
-      if (numeros.length === 0) return;
-      this.buscarExecucaoSigma(numeros);
+      const chaveSemana = `${this.semanaFiltro()}|${this.horizonteAtivo()}`;
+      const semanaMudou = chaveSemana !== this.ultimaChaveSemanaSigma;
+      this.ultimaChaveSemanaSigma = chaveSemana;
+      const jaConsultados = untracked(() => new Set(Object.keys(this.sigmaPorOs())));
+      const pendentes = numerosSigmaParaConsultar(numeros, jaConsultados, semanaMudou);
+      if (pendentes.length > 0) this.buscarExecucaoSigma(pendentes);
     });
   }
 
@@ -1689,7 +1713,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     if (numeros.length > 0) this.buscarExecucaoSigma(numeros);
   }
 
+  private ultimaChaveSemanaSigma: string | null = null;
+  // Contador em vez de true/false: com duas consultas ao mesmo tempo, a primeira a
+  // terminar apagava o spinner da outra.
+  private consultasSigmaEmAndamento = 0;
+
   private async buscarExecucaoSigma(numeros: string[]): Promise<void> {
+    this.consultasSigmaEmAndamento++;
     this.sigmaAtualizando.set(true);
     try {
       const resultado = await this.manutencaoService.consultarOrdensSigma(numeros);
@@ -1697,7 +1727,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     } catch {
       // Consulta best-effort — falha do SIGMA não deve travar a tela de programação.
     } finally {
-      this.sigmaAtualizando.set(false);
+      this.consultasSigmaEmAndamento--;
+      this.sigmaAtualizando.set(this.consultasSigmaEmAndamento > 0);
     }
   }
 
@@ -2131,8 +2162,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       const idEdicao = this.formIdEdicao();
       // Cópias de apoio planejadas ANTES de gravar, com o formulário ainda preenchido —
       // assim ele pode fechar logo depois da OS principal (ver planejarEspelhos).
-      const espelhos = ehOrdem ? this.planejarEspelhos() : { espelhos: [], avisos: [] };
+      const espelhos: PlanoEspelhos = ehOrdem ? this.planejarEspelhos() : { espelhos: [], naoProgramados: [] };
       const recarregarCiclos = !!this.formPlanoPreventivoId() || !!this.formPlanoPreventivoIdOriginal();
+      let principal: string;
       if (idEdicao) {
         await this.manutencaoService.editarOrdem(idEdicao, {
           tipo,
@@ -2163,7 +2195,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           checklist: ehOrdem ? this.formChecklist() : null,
         });
         this.fecharForm();
-        this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} atualizada.`);
+        principal = `${TIPO_LABEL[tipo]} atualizada.`;
       } else {
         this.idNovaOrdemPendente ??= crypto.randomUUID();
         await this.manutencaoService.criarOrdem({
@@ -2194,12 +2226,16 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         }, this.idNovaOrdemPendente);
         this.idNovaOrdemPendente = null;
         this.fecharForm();
-        this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} adicionada à programação.`);
+        principal = `${TIPO_LABEL[tipo]} adicionada à programação.`;
       }
       // Formulário já fechado: cópias de apoio numa requisição só, e o ciclo do plano
       // preventivo (gravado pelo trigger junto com a OS) atualiza a lista de sugestões
       // em segundo plano.
-      await this.gravarEspelhos(espelhos);
+      const apoio = await this.gravarEspelhos(espelhos);
+      const resumo = resumoGravacaoApoio({
+        principal, programados: apoio.programados, naoProgramados: espelhos.naoProgramados, erroApoio: apoio.erro,
+      });
+      this.notificationService.show(resumo.mensagem, resumo.tipo, resumo.duracaoMs);
       this.recarregarCiclosEmSegundoPlano(recarregarCiclos);
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao salvar OS.');
@@ -2269,9 +2305,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   //
   // Roda na criação E na edição (ex.: adicionar um ajudante só depois, reabrindo a OS)
   // — a checagem de duplicata evita criar de novo pra quem já tem essa OS nesses dias.
-  private planejarEspelhos(): { espelhos: { req: CreateManutencaoOrdemRequest; nome: string }[]; avisos: string[] } {
+  private planejarEspelhos(): PlanoEspelhos {
     const espelhos: { req: CreateManutencaoOrdemRequest; nome: string }[] = [];
-    const avisos: string[] = [];
+    const naoProgramados: { nome: string; tipo: TipoBloqueio }[] = [];
+    const bloqueios = this.formApoioBloqueios();
     const mandante = this.formTecnicoNome().trim();
     const numero = this.formNumeroOs().trim();
     const recursos = this.formRecursosLista();
@@ -2347,10 +2384,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       if (!tecnico || tecnico.nome === mandante) continue;
       const dias = this.apoioDiasDoRecurso(recurso);
       if (dias.length === 0) continue;
-      const bloqueio = this.bloqueioDoTecnico(tecnico.nome, dias);
+      const bloqueio = bloqueios[recurso];
       if (bloqueio) {
-        const motivo = bloqueio.tipo === 'ferias' ? 'férias' : bloqueio.tipo === 'atestado' ? 'atestado médico' : 'folga';
-        avisos.push(`${tecnico.nome} está de ${motivo} — não foi programado como apoio.`);
+        naoProgramados.push({ nome: tecnico.nome, tipo: bloqueio.tipo });
         continue;
       }
       // Já tem a cópia (de uma edição anterior, ou lançada à parte): silencioso — é o
@@ -2372,19 +2408,20 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         },
       });
     }
-    return { espelhos, avisos };
+    return { espelhos, naoProgramados };
   }
 
-  private async gravarEspelhos(plano: { espelhos: { req: CreateManutencaoOrdemRequest; nome: string }[]; avisos: string[] }): Promise<void> {
-    for (const aviso of plano.avisos) this.notificationService.showError(aviso);
-    if (plano.espelhos.length === 0) return;
-    const nomes = plano.espelhos.map(e => e.nome).join(', ');
+  // Grava as cópias de apoio e devolve o que aconteceu — a mensagem pro usuário sai UMA
+  // vez só, no fim do confirmarForm (ver resumoGravacaoApoio): o toast só mostra uma
+  // mensagem por vez e os avisos soltos se apagavam uns aos outros.
+  private async gravarEspelhos(plano: PlanoEspelhos): Promise<{ programados: string[]; erro: { nomes: string[]; mensagem: string } | null }> {
+    if (plano.espelhos.length === 0) return { programados: [], erro: null };
+    const nomes = plano.espelhos.map(e => e.nome);
     try {
       await this.manutencaoService.criarOrdensEmLote(plano.espelhos.map(e => e.req));
-      this.notificationService.showSuccess(`Também programado pra ${nomes}.`);
+      return { programados: nomes, erro: null };
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'erro desconhecido';
-      this.notificationService.showError(`A OS foi salva, mas o apoio pra ${nomes} não foi programado: ${msg}`);
+      return { programados: [], erro: { nomes, mensagem: err instanceof Error ? err.message : 'erro desconhecido' } };
     }
   }
 

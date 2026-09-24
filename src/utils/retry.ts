@@ -54,3 +54,19 @@ export async function withRetry<T>(
 
   throw lastError;
 }
+
+// Limite de tempo pra uma operação inteira. O AbortSignal.timeout das gravações só vale
+// pro fetch em si — antes dele, o supabase-js espera a sessão/renovação do token numa
+// fila sem limite, e se essa renovação trava (rede oscilando) o botão ficava girando pra
+// sempre. Rejeita com name 'TimeoutError' (mensagemErroGravacao já trata esse caso).
+export function comLimiteDeTempo<T>(operacao: PromiseLike<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limite = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const erro = new Error(`Tempo limite de ${Math.round(ms / 1000)} s excedido.`);
+      erro.name = 'TimeoutError';
+      reject(erro);
+    }, ms);
+  });
+  return Promise.race([Promise.resolve(operacao), limite]).finally(() => clearTimeout(timer));
+}

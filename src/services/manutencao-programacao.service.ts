@@ -4,7 +4,8 @@ import { Injectable, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
-import { podeEditarSemanaFechada } from '../utils/manutencao-regras';
+import { avaliarGravacao, podeEditarSemanaFechada } from '../utils/manutencao-regras';
+import { comLimiteDeTempo } from '../utils/retry';
 import {
   AtestadoTecnico, AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest,
   EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, ParadaPlanta,
@@ -16,7 +17,7 @@ import {
 // seguro (mesmo id, ver criarOrdem).
 export function mensagemErroGravacao(error: { message: string; name?: string; code?: string }): string {
   const msg = error.message ?? '';
-  if (error.name === 'AbortError' || /abort|timeout|timed out|Failed to fetch|NetworkError/i.test(msg)) {
+  if (error.name === 'AbortError' || error.name === 'TimeoutError' || /abort|timeout|timed out|Failed to fetch|NetworkError/i.test(msg)) {
     return 'O servidor não respondeu a tempo. Confira a lista — se a OS não aparecer, clique em Adicionar de novo (não duplica).';
   }
   // update/insert com .single() que não devolveu linha: o RLS barrou sem erro explícito
@@ -101,6 +102,9 @@ function mapRow(r: ManutencaoOrdemRow): ManutencaoOrdem {
 @Injectable({ providedIn: 'root' })
 export class ManutencaoProgramacaoService {
   private readonly TIMEOUT_GRAVACAO_MS = 20_000;
+  // Limite da gravação INTEIRA (ver comLimiteDeTempo): cobre também a espera pela sessão/
+  // renovação do token, que acontece antes do fetch e não tem limite no supabase-js.
+  private readonly LIMITE_TOTAL_GRAVACAO_MS = 25_000;
 
   private _ordens = signal<ManutencaoOrdem[]>([]);
   ordens = this._ordens.asReadonly();
@@ -195,18 +199,21 @@ export class ManutencaoProgramacaoService {
     // Timeout: sem ele, uma requisição que nunca responde deixava o botão girando pra
     // sempre. `select('*')` devolve a linha já com o que os triggers preencheram
     // (ciclo_data_prevista etc.), pra entrar direto na lista sem recarregar tudo.
-    let { data, error } = await this.supabaseService.client
-      .from('manutencao_programacao')
-      .insert(payload)
-      .select('*')
-      .abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS))
-      .single();
-    if (error && id && error.code === '23505' && error.message.includes('manutencao_programacao_pkey')) {
-      // Já gravada numa tentativa anterior — busca a linha e segue como sucesso.
-      ({ data, error } = await this.supabaseService.client
-        .from('manutencao_programacao').select('*').eq('id', id)
-        .abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS)).single());
-    }
+    const { data, error } = await this.executarGravacao('criar', async () => {
+      const inserida = await this.supabaseService.client
+        .from('manutencao_programacao')
+        .insert(payload)
+        .select('*')
+        .abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS))
+        .single();
+      if (inserida.error && id && inserida.error.code === '23505' && inserida.error.message.includes('manutencao_programacao_pkey')) {
+        // Já gravada numa tentativa anterior — busca a linha e segue como sucesso.
+        return await this.supabaseService.client
+          .from('manutencao_programacao').select('*').eq('id', id)
+          .abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS)).single();
+      }
+      return inserida;
+    });
     if (error) throw new Error(mensagemErroGravacao(error));
 
     this.logCriacao(req, user);
@@ -226,15 +233,49 @@ export class ManutencaoProgramacaoService {
     if (!user) throw new Error('Sessão expirada.');
     for (const req of reqs) this.garantirSemanaAberta(req.semanaInicio);
 
-    const { data, error } = await this.supabaseService.client
+    const { data, error } = await this.executarGravacao('apoio', () => this.supabaseService.client
       .from('manutencao_programacao')
       .insert(reqs.map(req => this.montarLinhaNova(req, user)))
       .select('*')
-      .abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS));
+      .abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS)));
     if (error) throw new Error(mensagemErroGravacao(error));
 
     for (const req of reqs) this.logCriacao(req, user);
     return this.incluirNaLista((data ?? []) as ManutencaoOrdemRow[]);
+  }
+
+  // Toda gravação da Programação passa por aqui: limite de tempo total (o botão nunca
+  // fica girando pra sempre) + telemetria na auditoria quando demora ou falha — pra achar
+  // a causa do "às vezes trava / às vezes não salva" relatado pelos usuários.
+  private async executarGravacao<R extends { error: { message: string; name?: string; code?: string } | null }>(
+    operacao: 'criar' | 'editar' | 'apoio', chamada: () => PromiseLike<R>,
+  ): Promise<R> {
+    const t0 = performance.now();
+    try {
+      const resultado = await comLimiteDeTempo(chamada(), this.LIMITE_TOTAL_GRAVACAO_MS);
+      this.registrarTelemetria(operacao, performance.now() - t0, resultado.error);
+      return resultado;
+    } catch (e: unknown) {
+      const erro = e instanceof Error ? { name: e.name, message: e.message } : { message: String(e) };
+      this.registrarTelemetria(operacao, performance.now() - t0, erro);
+      throw new Error(mensagemErroGravacao(erro));
+    }
+  }
+
+  private registrarTelemetria(
+    operacao: 'criar' | 'editar' | 'apoio', ms: number, erro: { message: string; name?: string; code?: string } | null,
+  ): void {
+    const registro = avaliarGravacao({
+      operacao, ms, erro,
+      msDesdeAbertura: performance.now(),
+      visivel: typeof document === 'undefined' || document.visibilityState === 'visible',
+      online: typeof navigator === 'undefined' || navigator.onLine !== false,
+    });
+    if (!registro) return;
+    console.warn('[ManutencaoProgramacao] telemetria de gravação:', registro);
+    const user = this.authService.currentUser();
+    if (!user) return;
+    this.auditLogService.log({ user_id: user.id, user_name: user.name, resource_type: 'manutencao_programacao', ...registro });
   }
 
   private incluirNaLista(linhas: ManutencaoOrdemRow[]): ManutencaoOrdem[] {
@@ -424,7 +465,7 @@ export class ManutencaoProgramacaoService {
     const existente = this.getById(id);
     if (existente) this.garantirSemanaAberta(existente.semanaInicio);
 
-    const { data, error } = await this.supabaseService.client
+    const { data, error } = await this.executarGravacao('editar', () => this.supabaseService.client
       .from('manutencao_programacao')
       .update({
         tipo: updates.tipo,
@@ -454,7 +495,7 @@ export class ManutencaoProgramacaoService {
       .eq('id', id)
       .select('*')
       .abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS))
-      .single();
+      .single());
     if (error) throw new Error(mensagemErroGravacao(error));
 
     this.auditLogService.log({

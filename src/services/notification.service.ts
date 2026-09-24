@@ -12,10 +12,17 @@ export interface Toast {
 })
 export class NotificationService {
   notification = signal<Toast | null>(null);
+  // Um toast por vez: cada mensagem nova cancela o timer da anterior. Sem isso, o timer
+  // de uma mensagem antiga apagava a nova antes da hora dela.
+  private timer: ReturnType<typeof setTimeout> | null = null;
 
   show(message: string, type: ToastType = 'success', duration: number = 4000): void {
+    if (this.timer) clearTimeout(this.timer);
     this.notification.set({ message, type });
-    setTimeout(() => this.notification.set(null), duration);
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.notification.set(null);
+    }, duration);
   }
 
   showSuccess(message: string, duration: number = 4000): void {

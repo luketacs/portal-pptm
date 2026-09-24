@@ -1,5 +1,5 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
-import { withRetry } from './retry';
+import { comLimiteDeTempo, withRetry } from './retry';
 
 describe('withRetry', () => {
   it('retorna resultado imediatamente quando a função tem sucesso', async () => {
@@ -79,5 +79,26 @@ describe('withRetry', () => {
       expect(result).toBe('ok');
       expect(fn).toHaveBeenCalledTimes(2);
     });
+  });
+});
+
+describe('comLimiteDeTempo', () => {
+  afterEach(() => { jest.useRealTimers(); });
+
+  it('devolve o resultado quando a operação termina antes do limite', async () => {
+    await expect(comLimiteDeTempo(Promise.resolve('ok'), 1000)).resolves.toBe('ok');
+  });
+
+  it('rejeita com TimeoutError quando a operação fica pendurada além do limite', async () => {
+    jest.useFakeTimers();
+    const pendurada = new Promise<string>(() => {});
+    const resultado = comLimiteDeTempo(pendurada, 25000);
+    const verificacao = expect(resultado).rejects.toMatchObject({ name: 'TimeoutError' });
+    await jest.advanceTimersByTimeAsync(25001);
+    await verificacao;
+  });
+
+  it('repassa o erro da própria operação', async () => {
+    await expect(comLimiteDeTempo(Promise.reject(new Error('RLS')), 1000)).rejects.toThrow('RLS');
   });
 });
