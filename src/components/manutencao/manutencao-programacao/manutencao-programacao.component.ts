@@ -2275,6 +2275,22 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const mandante = this.formTecnicoNome().trim();
     const numero = this.formNumeroOs().trim();
     const recursos = this.formRecursosLista();
+    // A pessoa/empresa já tem ESSA OS em qualquer dia da semana → não cria outra cópia.
+    // Mesmo critério de ordensVinculadas: número de OS; sem número, descrição +
+    // equipamento. Reportado: a cópia do ajudante era recriada a CADA edição da OS do
+    // responsável — sem número não havia checagem nenhuma, e com número só barrava se
+    // caísse no mesmo dia (Mauro ficou com 3x a mesma termografia na semana 40).
+    const descricao = this.descricaoParaEnvio();
+    const equipamento = this.formEquipamento().trim() || null;
+    const numeroNorm = numero ? normalizarNumeroOs(numero) : null;
+    const semana = this.semanaFiltro();
+    const idEdicao = this.formIdEdicao();
+    const jaTemEssaOs = (nome: string) => this.manutencaoService.ordens().some(x =>
+      x.id !== idEdicao && x.tipo === 'ordem' && x.semanaInicio === semana
+      && x.tecnicoNome.trim().toUpperCase() === nome.trim().toUpperCase()
+      && (numeroNorm
+        ? !!x.numeroOs?.trim() && normalizarNumeroOs(x.numeroOs) === numeroNorm
+        : !x.numeroOs?.trim() && x.descricao === descricao && (x.equipamento || null) === equipamento));
     const base = {
       tipo: 'ordem' as const,
       // Mesma categoria da OS principal (ver comentário equivalente em confirmarApoio())
@@ -2307,7 +2323,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       for (const [empresa, recursosDaEmpresa] of recursosPorEmpresa) {
         const dias = [...new Set(recursosDaEmpresa.flatMap(r => this.apoioDiasDoRecurso(r)))].sort();
         if (dias.length === 0) continue;
-        if (numero && this.ordemDuplicada(numero, empresa, dias)) continue;
+        if (jaTemEssaOs(empresa)) continue;
         espelhos.push({
           nome: `${empresa} (Apoio)`,
           req: {
@@ -2337,10 +2353,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         avisos.push(`${tecnico.nome} está de ${motivo} — não foi programado como apoio.`);
         continue;
       }
-      if (numero && this.ordemDuplicada(numero, tecnico.nome, dias)) {
-        avisos.push(`${tecnico.nome} já tem a OS ${numero} lançada nesses dias — não foi duplicada.`);
-        continue;
-      }
+      // Já tem a cópia (de uma edição anterior, ou lançada à parte): silencioso — é o
+      // caso normal ao reabrir e salvar a OS do responsável.
+      if (jaTemEssaOs(tecnico.nome)) continue;
       espelhos.push({
         nome: tecnico.nome,
         req: {
@@ -2382,10 +2397,16 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // critério já usado em ordemDuplicada/diasApoioPorRecursoExistentes). Usado em
   // excluir() pra avisar antes de deixar apoio órfão (serviço cancelado pro mandante,
   // mas ainda aparecendo pros ajudantes/empresas).
+  //
+  // Só OUTRAS pessoas: linha do MESMO técnico com a mesma OS é duplicata dele, não apoio.
+  // Reportado: ao excluir a duplicata de uma OS, a cópia certa do próprio técnico
+  // entrava na lista de "vinculadas" e era apagada junto no "Excluir também" — sumiu
+  // tudo do Carlos Jr e do Mauro na semana 40.
   private ordensVinculadas(o: ManutencaoOrdem): ManutencaoOrdem[] {
     const numero = o.numeroOs?.trim();
+    const mesmoTecnico = (x: ManutencaoOrdem) => x.tecnicoNome.trim().toUpperCase() === o.tecnicoNome.trim().toUpperCase();
     return this.manutencaoService.ordens().filter(x => {
-      if (x.id === o.id || x.tipo !== 'ordem' || x.semanaInicio !== o.semanaInicio) return false;
+      if (x.id === o.id || x.tipo !== 'ordem' || x.semanaInicio !== o.semanaInicio || mesmoTecnico(x)) return false;
       return numero
         ? !!x.numeroOs?.trim() && normalizarNumeroOs(x.numeroOs) === normalizarNumeroOs(numero)
         : !x.numeroOs?.trim() && x.descricao === o.descricao && x.equipamento === o.equipamento;
@@ -2410,9 +2431,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.isProcessando.set(false);
 
     if (vinculadas.length === 0) return;
-    const nomes = vinculadas.map(v => v.tecnicoNome).join(', ');
+    const nomes = [...new Set(vinculadas.map(v => v.tecnicoNome))].join(', ');
     const excluirTambem = await this.confirmDialogService.confirm(
-      `Essa OS também está lançada como apoio pra: ${nomes}.\n\nExcluir essas também?`,
+      `Essa OS também está lançada como apoio pra: ${nomes} (${vinculadas.length} lançamento(s)).\n\n` +
+      `Excluir também da agenda dessas pessoas? Na dúvida, escolha "Manter".`,
       { confirmLabel: 'Excluir também', cancelLabel: 'Manter', danger: true },
     );
     if (!excluirTambem) return;
