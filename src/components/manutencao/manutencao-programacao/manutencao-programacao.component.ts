@@ -11,7 +11,7 @@ import { ApontamentosService } from '../../../services/apontamentos.service';
 import { ExcelExportService, ProgramacaoSemanalGrupo, ProgramacaoSemanalLinha } from '../../../services/excel-export.service';
 import { AlmoxarifadoService, Movimentacao, Solicitacao } from '../../../services/almoxarifado.service';
 import {
-  AtestadoTecnico, AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, FeriasTecnico, ManutencaoArea, ManutencaoOrdem,
+  AtestadoTecnico, AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, CreateManutencaoOrdemRequest, FeriasTecnico, ManutencaoArea, ManutencaoOrdem,
   ManutencaoTipo, OperadorEscalaApoio, PlanoManutencao, SigmaBacklogItem,
 } from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, turnoNoDia } from '../../../utils/escala-apoio';
@@ -123,8 +123,15 @@ function formatarDataCurta(iso: string): string {
   return `${dia}/${mes}`;
 }
 
+// Tipos que já descontam da CAPACIDADE da semana (ver capacidadeSemana) — não entram de
+// novo nas horas alocadas. Reportado: treinamento de 3,5h tirava 3,5h da capacidade E
+// somava 3,5h no alocado, aparecendo "32.5h/29h" (estourado) quando o certo era 29h/29h.
+const TIPOS_QUE_DESCONTAM_CAPACIDADE: ReadonlySet<ManutencaoOrdem['tipo']> = new Set(['treinamento', 'folga', 'exame_medico']);
+
 function somaHoras(ordens: ManutencaoOrdem[]): number {
-  return Math.round(ordens.reduce((soma, o) => soma + (o.duracaoHoras ?? 0), 0) * 100) / 100;
+  return Math.round(ordens
+    .filter(o => !TIPOS_QUE_DESCONTAM_CAPACIDADE.has(o.tipo))
+    .reduce((soma, o) => soma + (o.duracaoHoras ?? 0), 0) * 100) / 100;
 }
 
 // Agrupa quem trabalha pra uma mesma empresa terceirizada (ex.: "Romário (Fontebras)",
@@ -1426,8 +1433,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   formRecursosDigitando = signal('');
   formRecursosTexto = computed(() => this.formRecursosLista().join(', '));
   // Dias em que cada Recurso reconhecido (técnico/equipamento — ver recursoReconhecido)
-  // é espelhado como apoio (ver criarApoioTecnicosSeNecessario/
-  // criarApoioEquipamentosSeNecessario) — um mapa por recurso (chave = texto exato do
+  // é espelhado como apoio (ver planejarEspelhos) — um mapa por recurso (chave = texto exato do
   // chip em formRecursosLista), não um único selecionador pra todos: é comum ter mais
   // de um apoio na mesma OS (ex.: técnico + andaime + munck) e cada um precisar de dias
   // diferentes, de propósito independentes dos "Dias previstos" da OS principal (ex.:
@@ -1573,8 +1579,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   // Diz se um chip de recurso bate (exato, sem diferenciar maiúsc./minúsc.) com um
   // técnico cadastrado ou um dos equipamentos especiais — só nesses casos a OS é
-  // espelhada automaticamente (ver criarApoioTecnicosSeNecessario/criarApoioAndaimeSe
-  // Necessario). Um nome digitado com erro de digitação não bate com nada e vira só
+  // espelhada automaticamente (ver planejarEspelhos). Um nome digitado com erro de digitação não bate com nada e vira só
   // texto solto, sem avisar — por isso o chip mostra essa diferença visualmente.
   recursoReconhecido(valor: string): 'tecnico' | 'equipamento' | null {
     const v = valor.toUpperCase();
@@ -1865,43 +1870,30 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
   }
 
+  // Tudo em paralelo — eram ~10 carregamentos em sequência (cada um esperando o anterior
+  // terminar), o que deixava a abertura da tela lenta. Nenhum depende do outro: as
+  // telas se recalculam sozinhas (signals) conforme cada um chega.
   async ngOnInit(): Promise<void> {
-    try {
-      await this.manutencaoService.load();
-      await this.apontamentosService.loadColaboradores();
-      await this.manutencaoService.loadEquipamentos();
-      if (this.areaFixa === 'APOIO') await this.carregarDadosApoio();
-      else {
-        await this.manutencaoService.loadFerias();
-        await this.manutencaoService.loadAtestados();
-      }
-    } catch {
-      this.errorMessage.set('Erro ao carregar a programação de manutenção.');
-    }
-    // Cadastros complementares (recursos especiais, planos preventivos) — cada um numa
-    // migration própria, rodada manualmente pelo usuário no Supabase. Se algum ainda
-    // não existir no banco (migration não rodada ainda), a falha fica isolada aqui e
-    // não derruba a tela inteira de Programação.
-    try {
-      await this.manutencaoService.loadRecursosEspeciais();
-    } catch (err) {
-      console.error('[ManutencaoProgramacaoComponent] Falha ao carregar recursos especiais:', err);
-    }
-    try {
-      await this.manutencaoPlanosService.load();
-    } catch (err) {
-      console.error('[ManutencaoProgramacaoComponent] Falha ao carregar planos de manutenção:', err);
-    }
-    try {
-      await this.manutencaoService.loadParadaAtual();
-    } catch (err) {
-      console.error('[ManutencaoProgramacaoComponent] Falha ao carregar status de parada da planta:', err);
-    }
-    try {
-      await this.manutencaoService.loadSemanasFechadas();
-    } catch (err) {
-      console.error('[ManutencaoProgramacaoComponent] Falha ao carregar semanas fechadas:', err);
-    }
+    const essenciais = Promise.all([
+      this.manutencaoService.load(),
+      this.apontamentosService.loadColaboradores(),
+      this.manutencaoService.loadEquipamentos(),
+      ...(this.areaFixa === 'APOIO'
+        ? [this.carregarDadosApoio()]
+        : [this.manutencaoService.loadFerias(), this.manutencaoService.loadAtestados()]),
+    ]).catch(() => this.errorMessage.set('Erro ao carregar a programação de manutenção.'));
+
+    // Cadastros complementares — cada um numa migration própria. Se algum ainda não
+    // existir no banco, a falha fica isolada e não derruba a tela de Programação.
+    const complementar = (nome: string, carga: Promise<unknown>) => carga.catch(err =>
+      console.error(`[ManutencaoProgramacaoComponent] Falha ao carregar ${nome}:`, err));
+    await Promise.all([
+      essenciais,
+      complementar('recursos especiais', this.manutencaoService.loadRecursosEspeciais()),
+      complementar('planos de manutenção', this.manutencaoPlanosService.load()),
+      complementar('status de parada da planta', this.manutencaoService.loadParadaAtual()),
+      complementar('semanas fechadas', this.manutencaoService.loadSemanasFechadas()),
+    ]);
   }
 
   // Pessoas que saíram da equipe numa semana CONHECIDA — ficam fora do seletor de
@@ -1923,7 +1915,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
 
   // ── Criar/Editar OS ────────────────────────────────────────────────────
+  // Id da OS nova, gerado na 1ª tentativa de "Adicionar" e reaproveitado se a pessoa
+  // tentar de novo depois de um erro/timeout — a 2ª tentativa não duplica (ver
+  // criarOrdem no serviço). Zera a cada formulário novo.
+  private idNovaOrdemPendente: string | null = null;
+
   abrirCriar(): void {
+    this.idNovaOrdemPendente = null;
     this.formIdEdicao.set(null);
     this.formTipo.set('ordem');
     const area = this.areaFiltro();
@@ -2131,6 +2129,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       // por dia previsto (6,5 = dia todo, 3,5 = meio período), ver capacidadeSemana().
       const ehTreinamento = tipo === 'treinamento';
       const idEdicao = this.formIdEdicao();
+      // Cópias de apoio planejadas ANTES de gravar, com o formulário ainda preenchido —
+      // assim ele pode fechar logo depois da OS principal (ver planejarEspelhos).
+      const espelhos = ehOrdem ? this.planejarEspelhos() : { espelhos: [], avisos: [] };
+      const recarregarCiclos = !!this.formPlanoPreventivoId() || !!this.formPlanoPreventivoIdOriginal();
       if (idEdicao) {
         await this.manutencaoService.editarOrdem(idEdicao, {
           tipo,
@@ -2160,16 +2162,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
             ? this.formPlanoPreventivoDataPrevista() : undefined,
           checklist: ehOrdem ? this.formChecklist() : null,
         });
+        this.fecharForm();
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} atualizada.`);
-        if (ehOrdem) {
-          await this.criarApoioEquipamentosSeNecessario();
-          await this.criarApoioTecnicosSeNecessario();
-        }
-        // Vínculo com plano preventivo mudou nessa edição (ex.: vinculado manualmente
-        // via vincularPlano numa OS que não veio da lista sugerida da semana) — registra
-        // o ciclo só agora, não em toda reabertura sem mudança nenhuma.
-        await this.manutencaoPlanosService.load();
       } else {
+        this.idNovaOrdemPendente ??= crypto.randomUUID();
         await this.manutencaoService.criarOrdem({
           tipo,
           area: this.formArea(),
@@ -2195,23 +2191,30 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           planoPreventivoId: ehOrdem ? (this.formPlanoPreventivoId() ?? undefined) : undefined,
           cicloDataPrevista: this.formPlanoPreventivoDataPrevista(),
           checklist: ehOrdem ? this.formChecklist() : undefined,
-        });
+        }, this.idNovaOrdemPendente);
+        this.idNovaOrdemPendente = null;
+        this.fecharForm();
         this.notificationService.showSuccess(`${TIPO_LABEL[tipo]} adicionada à programação.`);
-        if (ehOrdem) {
-          await this.criarApoioEquipamentosSeNecessario();
-          await this.criarApoioTecnicosSeNecessario();
-        }
-        // Preventiva vinculada a um plano (lista da semana OU vincularPlano manual) —
-        // registra o ciclo assim que a OS é criada, sem esperar confirmação de
-        // apontamento no SIGMA.
-        await this.manutencaoPlanosService.load();
       }
-      this.fecharForm();
+      // Formulário já fechado: cópias de apoio numa requisição só, e o ciclo do plano
+      // preventivo (gravado pelo trigger junto com a OS) atualiza a lista de sugestões
+      // em segundo plano.
+      await this.gravarEspelhos(espelhos);
+      this.recarregarCiclosEmSegundoPlano(recarregarCiclos);
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao salvar OS.');
     } finally {
       this.isProcessando.set(false);
     }
+  }
+
+  // Antes o formulário só fechava depois de recarregar os ~750 planos + todos os ciclos
+  // (várias páginas) — era parte do "fica carregando". Agora só recarrega quando a OS é
+  // de um plano preventivo, e sem segurar o formulário: a OS já está salva e na lista.
+  private recarregarCiclosEmSegundoPlano(necessario: boolean): void {
+    if (!necessario) return;
+    this.manutencaoPlanosService.load().catch(err =>
+      console.error('[ManutencaoProgramacao] Falha ao atualizar ciclos dos planos:', err));
   }
 
   // Cada opção de recurso "de equipamento" aponta pra uma empresa/pessoa — precisa
@@ -2255,138 +2258,118 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return resultado;
   }
 
-  // Se o recurso usado for andaime/munck/guindaste, monta automaticamente uma OS
-  // equivalente na programação do Apoio (pra empresa certa) — evita esquecer de
-  // programar o contratado responsável junto com o serviço de Elétrica/Mecânica.
-  // Roda na criação E na edição (ex.: adicionar o recurso só depois, reabrindo a OS)
-  // — a checagem de duplicata evita criar de novo toda vez que a OS for reaberta e
-  // salva sem mudar nada. Duas opções que apontam pra mesma empresa (ex.: Munck e
-  // Guindaste da Cordeiro na mesma OS) viram uma OS só pra empresa, com os dias de
-  // ambos os chips somados (ver dias abaixo).
-  private async criarApoioEquipamentosSeNecessario(): Promise<void> {
-    if (this.formArea() === 'APOIO') return;
-    const mapaEmpresa = this.recursoParaEmpresaApoio();
-    // Mais de um chip pode apontar pra mesma empresa (Munck + Guindaste da Cordeiro) —
-    // agrupa por empresa juntando os recursos, cada um com seus próprios dias marcados
-    // em "Dias de cada apoio" (ver formApoioDiasPorRecurso).
-    const recursosPorEmpresa = new Map<string, string[]>();
-    for (const r of this.formRecursosLista()) {
-      const empresa = mapaEmpresa[r.toUpperCase()];
-      if (!empresa) continue;
-      const lista = recursosPorEmpresa.get(empresa) ?? [];
-      lista.push(r);
-      recursosPorEmpresa.set(empresa, lista);
-    }
-    if (recursosPorEmpresa.size === 0) return;
-
+  // Espelhos de apoio da OS (ver planejarEspelhos): uma cópia da OS pra agenda de cada
+  // ajudante/empresa marcado em "Recursos".
+  //
+  // Separado em PLANEJAR (lê o formulário, síncrono) e GRAVAR (uma requisição só, depois
+  // que o formulário já fechou). Reportado: com 2+ pessoas na OS o formulário "carregava
+  // duas vezes, parecia bugado" — cada cópia era gravada em sequência com o formulário
+  // ainda aberto, cada uma atualizando a tela, e logo após a OS principal entrar na lista
+  // o próprio formulário acusava "OS duplicada" até fechar.
+  //
+  // Roda na criação E na edição (ex.: adicionar um ajudante só depois, reabrindo a OS)
+  // — a checagem de duplicata evita criar de novo pra quem já tem essa OS nesses dias.
+  private planejarEspelhos(): { espelhos: { req: CreateManutencaoOrdemRequest; nome: string }[]; avisos: string[] } {
+    const espelhos: { req: CreateManutencaoOrdemRequest; nome: string }[] = [];
+    const avisos: string[] = [];
     const mandante = this.formTecnicoNome().trim();
     const numero = this.formNumeroOs().trim();
-    for (const [empresa, recursosDaEmpresa] of recursosPorEmpresa) {
-      const dias = [...new Set(recursosDaEmpresa.flatMap(r => this.apoioDiasDoRecurso(r)))].sort();
-      if (dias.length === 0) continue;
-      if (numero && this.ordemDuplicada(numero, empresa, dias)) continue;
-      // Da perspectiva dessa empresa/pessoa, "Recursos" é quem mais está no serviço —
-      // o mandante e os outros recursos, nunca o próprio recurso que aponta pra ela
-      // mesma (mesma correção já feita pro espelhamento de técnico PPTM, ver
-      // criarApoioTecnicosSeNecessario).
-      const recursosDoEspelho = recursosParaEspelho(this.formRecursosLista(), r => mapaEmpresa[r.toUpperCase()] === empresa, mandante);
-      try {
-        await this.manutencaoService.criarOrdem({
-          tipo: 'ordem',
-          area: 'APOIO',
-          // Mesma categoria da OS principal (ver comentário equivalente em
-          // confirmarApoio()) — este espelho é a mesma atividade, só que na agenda da
-          // empresa de apoio, então conta pro mesmo indicador que a OS mandante.
-          categoriaIndicador: this.categoriaIndicadorParaEnviar() ?? undefined,
-          semanaInicio: this.semanaFiltro(),
-          numeroOs: numero || undefined,
-          semOs: this.formSemOs(),
-          descricao: this.descricaoParaEnvio(),
-          equipamento: this.formEquipamento().trim() || undefined,
-          recursos: recursosDoEspelho || undefined,
-          loto: this.formLoto().trim() || undefined,
-          areaAtuacao: this.formAreaAtuacao().trim() || undefined,
-          // Não copia a duração da OS principal — ver comentário equivalente em
-          // confirmarApoio(). Fica em branco pro esforço real ser preenchido depois.
-          tipoServico: this.formTipoServico().trim() || undefined,
-          tecnicoNome: empresa,
-          diasPrevistos: dias,
-          status: 'PEND',
-          observacoes: `Apoio automático (${empresa}) — vinculado à OS de ${this.areaLabel[this.formArea()]}${numero ? ' nº ' + numero : ''}.`,
+    const recursos = this.formRecursosLista();
+    const base = {
+      tipo: 'ordem' as const,
+      // Mesma categoria da OS principal (ver comentário equivalente em confirmarApoio())
+      // — o espelho é a mesma atividade, só que na agenda de outra pessoa/empresa.
+      categoriaIndicador: this.categoriaIndicadorParaEnviar() ?? undefined,
+      semanaInicio: this.semanaFiltro(),
+      numeroOs: numero || undefined,
+      semOs: this.formSemOs(),
+      descricao: this.descricaoParaEnvio(),
+      equipamento: this.formEquipamento().trim() || undefined,
+      loto: this.formLoto().trim() || undefined,
+      areaAtuacao: this.formAreaAtuacao().trim() || undefined,
+      // Não copia a duração da OS principal — ver comentário equivalente em
+      // confirmarApoio(). Fica em branco pro esforço real ser preenchido depois.
+      tipoServico: this.formTipoServico().trim() || undefined,
+      status: 'PEND',
+    };
+
+    // Andaime/munck/guindaste: OS equivalente na programação do Apoio, pra empresa
+    // certa. Dois chips da mesma empresa (Munck + Guindaste da Cordeiro) viram uma OS
+    // só, com os dias dos dois somados.
+    if (this.formArea() !== 'APOIO') {
+      const mapaEmpresa = this.recursoParaEmpresaApoio();
+      const recursosPorEmpresa = new Map<string, string[]>();
+      for (const r of recursos) {
+        const empresa = mapaEmpresa[r.toUpperCase()];
+        if (!empresa) continue;
+        recursosPorEmpresa.set(empresa, [...(recursosPorEmpresa.get(empresa) ?? []), r]);
+      }
+      for (const [empresa, recursosDaEmpresa] of recursosPorEmpresa) {
+        const dias = [...new Set(recursosDaEmpresa.flatMap(r => this.apoioDiasDoRecurso(r)))].sort();
+        if (dias.length === 0) continue;
+        if (numero && this.ordemDuplicada(numero, empresa, dias)) continue;
+        espelhos.push({
+          nome: `${empresa} (Apoio)`,
+          req: {
+            ...base,
+            area: 'APOIO',
+            // Da perspectiva da empresa, "Recursos" é quem mais está no serviço — o
+            // mandante e os outros recursos, nunca o próprio recurso que aponta pra ela.
+            recursos: recursosParaEspelho(recursos, r => mapaEmpresa[r.toUpperCase()] === empresa, mandante) || undefined,
+            tecnicoNome: empresa,
+            diasPrevistos: dias,
+            observacoes: `Apoio automático (${empresa}) — vinculado à OS de ${this.areaLabel[this.formArea()]}${numero ? ' nº ' + numero : ''}.`,
+          },
         });
-        this.notificationService.showSuccess(`Também programado pra ${empresa} (Apoio).`);
-      } catch (err: unknown) {
-        this.notificationService.showError(err instanceof Error ? err.message : `Erro ao programar apoio pra ${empresa}.`);
       }
     }
-  }
 
-  // Quando outro(s) técnico(s) são marcados em "Recursos", a OS é espelhada
-  // automaticamente pra agenda de cada um deles (mesma ideia do "+Apoio" manual, só que
-  // pra vários de uma vez) — sem isso, o ajudante nunca via a OS na própria conta, só
-  // o técnico principal (mandante). Roda na criação E na edição (ex.: adicionar um
-  // ajudante só depois, reabrindo a OS) — a checagem de duplicata dentro do loop evita
-  // criar de novo pra quem já tem essa OS nesses dias.
-  private async criarApoioTecnicosSeNecessario(): Promise<void> {
-    const mandante = this.formTecnicoNome().trim();
-    const numero = this.formNumeroOs().trim();
-    const candidatos = this.formRecursosLista()
-      .map(r => ({ recurso: r, tecnico: this.todosTecnicos().find(t => t.nome.toUpperCase() === r.toUpperCase()) }))
-      .filter((c): c is { recurso: string; tecnico: { nome: string; matricula: string | null; area: ManutencaoArea } } =>
-        !!c.tecnico && c.tecnico.nome !== mandante);
-    if (candidatos.length === 0) return;
-
-    const programados: string[] = [];
-    for (const { recurso, tecnico } of candidatos) {
+    // Outros técnicos marcados em "Recursos": cópia na agenda de cada um — sem isso o
+    // ajudante nunca via a OS na própria conta, só o mandante.
+    for (const recurso of recursos) {
+      const tecnico = this.todosTecnicos().find(t => t.nome.toUpperCase() === recurso.toUpperCase());
+      if (!tecnico || tecnico.nome === mandante) continue;
       const dias = this.apoioDiasDoRecurso(recurso);
       if (dias.length === 0) continue;
       const bloqueio = this.bloqueioDoTecnico(tecnico.nome, dias);
       if (bloqueio) {
         const motivo = bloqueio.tipo === 'ferias' ? 'férias' : bloqueio.tipo === 'atestado' ? 'atestado médico' : 'folga';
-        this.notificationService.showError(`${tecnico.nome} está de ${motivo} — não foi programado como apoio.`);
+        avisos.push(`${tecnico.nome} está de ${motivo} — não foi programado como apoio.`);
         continue;
       }
       if (numero && this.ordemDuplicada(numero, tecnico.nome, dias)) {
-        this.notificationService.showError(`${tecnico.nome} já tem a OS ${numero} lançada nesses dias — não foi duplicada.`);
+        avisos.push(`${tecnico.nome} já tem a OS ${numero} lançada nesses dias — não foi duplicada.`);
         continue;
       }
-      // Da perspectiva desse técnico, "Recursos" é quem MAIS está no serviço — o
-      // mandante e os outros ajudantes, nunca ele mesmo (senão a própria cópia dele
-      // aparecia listada como recurso de si próprio).
-      const recursosDoEspelho = recursosParaEspelho(this.formRecursosLista(), r => r.toUpperCase() === tecnico.nome.toUpperCase(), mandante);
-      try {
-        await this.manutencaoService.criarOrdem({
-          tipo: 'ordem',
+      espelhos.push({
+        nome: tecnico.nome,
+        req: {
+          ...base,
           area: tecnico.area,
-          // Mesma categoria da OS principal (ver comentário equivalente em
-          // confirmarApoio()) — este espelho é a mesma atividade, só que na agenda do
-          // ajudante, então conta pro mesmo indicador que a OS mandante.
-          categoriaIndicador: this.categoriaIndicadorParaEnviar() ?? undefined,
-          semanaInicio: this.semanaFiltro(),
-          numeroOs: numero || undefined,
-          semOs: this.formSemOs(),
-          descricao: this.descricaoParaEnvio(),
-          equipamento: this.formEquipamento().trim() || undefined,
-          recursos: recursosDoEspelho || undefined,
-          loto: this.formLoto().trim() || undefined,
-          areaAtuacao: this.formAreaAtuacao().trim() || undefined,
-          // Não copia a duração da OS principal — ver comentário equivalente em
-          // confirmarApoio(). Fica em branco pro esforço real ser preenchido depois.
-          tipoServico: this.formTipoServico().trim() || undefined,
+          // Da perspectiva do ajudante, "Recursos" é quem MAIS está no serviço — o
+          // mandante e os outros ajudantes, nunca ele mesmo.
+          recursos: recursosParaEspelho(recursos, r => r.toUpperCase() === tecnico.nome.toUpperCase(), mandante) || undefined,
           tecnicoNome: tecnico.nome,
           tecnicoMatricula: tecnico.matricula ?? undefined,
           diasPrevistos: dias,
-          status: 'PEND',
           observacoes: [this.formObservacoes().trim(), `Apoio a ${mandante}${numero ? ' na OS nº ' + numero : ''}.`]
             .filter(Boolean).join(' — '),
-        });
-        programados.push(tecnico.nome);
-      } catch (err: unknown) {
-        this.notificationService.showError(err instanceof Error ? err.message : `Erro ao programar apoio pra ${tecnico.nome}.`);
-      }
+        },
+      });
     }
-    if (programados.length > 0) {
-      this.notificationService.showSuccess(`Também programado pra ${programados.join(', ')}.`);
+    return { espelhos, avisos };
+  }
+
+  private async gravarEspelhos(plano: { espelhos: { req: CreateManutencaoOrdemRequest; nome: string }[]; avisos: string[] }): Promise<void> {
+    for (const aviso of plano.avisos) this.notificationService.showError(aviso);
+    if (plano.espelhos.length === 0) return;
+    const nomes = plano.espelhos.map(e => e.nome).join(', ');
+    try {
+      await this.manutencaoService.criarOrdensEmLote(plano.espelhos.map(e => e.req));
+      this.notificationService.showSuccess(`Também programado pra ${nomes}.`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'erro desconhecido';
+      this.notificationService.showError(`A OS foi salva, mas o apoio pra ${nomes} não foi programado: ${msg}`);
     }
   }
 

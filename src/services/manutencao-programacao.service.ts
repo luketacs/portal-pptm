@@ -11,6 +11,23 @@ import {
   RecursoEspecialItem, SigmaBacklogItem,
 } from '../models/manutencao-programacao.model';
 
+// Timeout do AbortSignal vira um erro genérico ("AbortError"/"signal is aborted") — troca
+// por uma mensagem que diz o que fazer: a OS pode ter gravado sim, e tentar de novo é
+// seguro (mesmo id, ver criarOrdem).
+export function mensagemErroGravacao(error: { message: string; name?: string; code?: string }): string {
+  const msg = error.message ?? '';
+  if (error.name === 'AbortError' || /abort|timeout|timed out|Failed to fetch|NetworkError/i.test(msg)) {
+    return 'O servidor não respondeu a tempo. Confira a lista — se a OS não aparecer, clique em Adicionar de novo (não duplica).';
+  }
+  // update/insert com .single() que não devolveu linha: o RLS barrou sem erro explícito
+  // (sem permissão, ou semana fechada pra quem não é Admin). Antes a tela seguia como se
+  // tivesse salvo.
+  if (error.code === 'PGRST116') {
+    return 'Não foi possível salvar: sem permissão pra alterar esse lançamento (ou a semana está fechada).';
+  }
+  return msg;
+}
+
 interface ManutencaoOrdemRow {
   id: string;
   tipo: string;
@@ -83,6 +100,8 @@ function mapRow(r: ManutencaoOrdemRow): ManutencaoOrdem {
 
 @Injectable({ providedIn: 'root' })
 export class ManutencaoProgramacaoService {
+  private readonly TIMEOUT_GRAVACAO_MS = 20_000;
+
   private _ordens = signal<ManutencaoOrdem[]>([]);
   ordens = this._ordens.asReadonly();
   isLoading = signal(false);
@@ -161,12 +180,89 @@ export class ManutencaoProgramacaoService {
     return this._ordens().find(o => o.id === id);
   }
 
-  async criarOrdem(req: CreateManutencaoOrdemRequest): Promise<string> {
+  // `id` (opcional): gerado pela tela na 1ª tentativa e reaproveitado se a pessoa tentar
+  // de novo (ver confirmarForm). Reportado: "às vezes trava, fica carregando, às vezes
+  // grava duas vezes" — o insert chegava ao banco, a resposta demorava/perdia, a pessoa
+  // clicava de novo e nascia uma OS duplicada. Com o mesmo id, a 2ª tentativa bate na
+  // PK e é tratada como sucesso (a OS já existe), nunca duplica.
+  async criarOrdem(req: CreateManutencaoOrdemRequest, id?: string): Promise<string> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
     this.garantirSemanaAberta(req.semanaInicio);
 
-    const payload = {
+    const payload = this.montarLinhaNova(req, user, id);
+
+    // Timeout: sem ele, uma requisição que nunca responde deixava o botão girando pra
+    // sempre. `select('*')` devolve a linha já com o que os triggers preencheram
+    // (ciclo_data_prevista etc.), pra entrar direto na lista sem recarregar tudo.
+    let { data, error } = await this.supabaseService.client
+      .from('manutencao_programacao')
+      .insert(payload)
+      .select('*')
+      .abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS))
+      .single();
+    if (error && id && error.code === '23505' && error.message.includes('manutencao_programacao_pkey')) {
+      // Já gravada numa tentativa anterior — busca a linha e segue como sucesso.
+      ({ data, error } = await this.supabaseService.client
+        .from('manutencao_programacao').select('*').eq('id', id)
+        .abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS)).single());
+    }
+    if (error) throw new Error(mensagemErroGravacao(error));
+
+    this.logCriacao(req, user);
+    // Entra direto na lista, em vez de recarregar o histórico inteiro de todas as
+    // semanas a cada OS (e de novo pra cada espelho de apoio) — era isso que deixava o
+    // "Adicionar" girando por muito tempo.
+    const [ordem] = this.incluirNaLista([data as ManutencaoOrdemRow]);
+    return ordem.id;
+  }
+
+  // Várias OS numa requisição só — usado pros espelhos de apoio (ajudantes/empresas em
+  // "Recursos"). Antes era um criarOrdem por pessoa, em sequência, cada um atualizando a
+  // tela: com 2+ pessoas o formulário "carregava duas vezes". Tudo ou nada.
+  async criarOrdensEmLote(reqs: CreateManutencaoOrdemRequest[]): Promise<ManutencaoOrdem[]> {
+    if (reqs.length === 0) return [];
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+    for (const req of reqs) this.garantirSemanaAberta(req.semanaInicio);
+
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_programacao')
+      .insert(reqs.map(req => this.montarLinhaNova(req, user)))
+      .select('*')
+      .abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS));
+    if (error) throw new Error(mensagemErroGravacao(error));
+
+    for (const req of reqs) this.logCriacao(req, user);
+    return this.incluirNaLista((data ?? []) as ManutencaoOrdemRow[]);
+  }
+
+  private incluirNaLista(linhas: ManutencaoOrdemRow[]): ManutencaoOrdem[] {
+    const novas = linhas.map(mapRow);
+    const ids = new Set(novas.map(o => o.id));
+    this._ordens.update(lista => [...novas, ...lista.filter(o => !ids.has(o.id))]);
+    return novas;
+  }
+
+  private logCriacao(req: CreateManutencaoOrdemRequest, user: { id: string; name: string }): void {
+    const acaoLabel = req.tipo === 'folga' ? 'lançou folga'
+      : req.tipo === 'treinamento' ? 'lançou treinamento'
+      : req.tipo === 'exame_medico' ? 'lançou exame médico'
+      : req.tipo === 'reuniao' ? 'lançou reunião'
+      : 'adicionou OS';
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'manutencao_programacao_criada',
+      resource_type: 'manutencao_programacao',
+      description: `${user.name} ${acaoLabel} na programação de ${AREA_LABEL_LOG[req.area]}: ${req.descricao} (${req.tecnicoNome})`,
+      metadata: { tipo: req.tipo ?? 'ordem', area: req.area, semana_inicio: req.semanaInicio, tecnico: req.tecnicoNome },
+    });
+  }
+
+  private montarLinhaNova(req: CreateManutencaoOrdemRequest, user: { id: string; name: string }, id?: string) {
+    return {
+      ...(id ? { id } : {}),
       tipo: req.tipo ?? 'ordem',
       area: req.area,
       // Mecânica/Elétrica não têm ambiguidade — categoria = área, sem depender do
@@ -197,30 +293,6 @@ export class ManutencaoProgramacaoService {
       criado_por_id: user.id,
       criado_por_nome: user.name,
     };
-
-    const { data, error } = await this.supabaseService.client
-      .from('manutencao_programacao')
-      .insert(payload)
-      .select('id')
-      .single();
-    if (error) throw new Error(error.message);
-
-    const acaoLabel = req.tipo === 'folga' ? 'lançou folga'
-      : req.tipo === 'treinamento' ? 'lançou treinamento'
-      : req.tipo === 'exame_medico' ? 'lançou exame médico'
-      : req.tipo === 'reuniao' ? 'lançou reunião'
-      : 'adicionou OS';
-    this.auditLogService.log({
-      user_id: user.id,
-      user_name: user.name,
-      event_type: 'manutencao_programacao_criada',
-      resource_type: 'manutencao_programacao',
-      description: `${user.name} ${acaoLabel} na programação de ${AREA_LABEL_LOG[req.area]}: ${req.descricao} (${req.tecnicoNome})`,
-      metadata: { tipo: req.tipo ?? 'ordem', area: req.area, semana_inicio: req.semanaInicio, tecnico: req.tecnicoNome },
-    });
-
-    await this.load();
-    return data.id as string;
   }
 
   // Lança folga (ex.: feriado) pra vários técnicos de uma vez, num único insert —
@@ -260,8 +332,9 @@ export class ManutencaoProgramacaoService {
       criado_por_nome: user.name,
     }));
 
-    const { error } = await this.supabaseService.client.from('manutencao_programacao').insert(payload);
-    if (error) throw new Error(error.message);
+    const { data, error } = await this.supabaseService.client.from('manutencao_programacao').insert(payload)
+      .select('*').abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS));
+    if (error) throw new Error(mensagemErroGravacao(error));
 
     this.auditLogService.log({
       user_id: user.id,
@@ -272,7 +345,7 @@ export class ManutencaoProgramacaoService {
       metadata: { tipo: 'folga', dias: params.diasPrevistos, tecnicos: params.tecnicos.length },
     });
 
-    await this.load();
+    this.incluirNaLista((data ?? []) as ManutencaoOrdemRow[]);
   }
 
   // Reunião pra toda a equipe (Elétrica + Mecânica) num único insert, igual folga em
@@ -318,8 +391,9 @@ export class ManutencaoProgramacaoService {
       criado_por_nome: user.name,
     }));
 
-    const { error } = await this.supabaseService.client.from('manutencao_programacao').insert(payload);
-    if (error) throw new Error(error.message);
+    const { data, error } = await this.supabaseService.client.from('manutencao_programacao').insert(payload)
+      .select('*').abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS));
+    if (error) throw new Error(mensagemErroGravacao(error));
 
     this.auditLogService.log({
       user_id: user.id,
@@ -330,7 +404,7 @@ export class ManutencaoProgramacaoService {
       metadata: { tipo: 'reuniao', dias: params.diasPrevistos, tecnicos: params.tecnicos.length, horario, local },
     });
 
-    await this.load();
+    this.incluirNaLista((data ?? []) as ManutencaoOrdemRow[]);
   }
 
   // Segunda-feira da semana de uma data 'YYYY-MM-DD' — o backend guarda tudo por
@@ -350,7 +424,7 @@ export class ManutencaoProgramacaoService {
     const existente = this.getById(id);
     if (existente) this.garantirSemanaAberta(existente.semanaInicio);
 
-    const { error } = await this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('manutencao_programacao')
       .update({
         tipo: updates.tipo,
@@ -377,8 +451,11 @@ export class ManutencaoProgramacaoService {
         ciclo_data_prevista: updates.cicloDataPrevista,
         checklist: updates.checklist,
       })
-      .eq('id', id);
-    if (error) throw new Error(error.message);
+      .eq('id', id)
+      .select('*')
+      .abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS))
+      .single();
+    if (error) throw new Error(mensagemErroGravacao(error));
 
     this.auditLogService.log({
       user_id: user.id,
@@ -389,7 +466,8 @@ export class ManutencaoProgramacaoService {
       description: `${user.name} editou "${updates.descricao}" da programação (${updates.tecnicoNome})`,
     });
 
-    await this.load();
+    // Atualiza só a linha editada, em vez de recarregar o histórico inteiro.
+    this.incluirNaLista([data as ManutencaoOrdemRow]);
   }
 
   async excluir(id: string): Promise<void> {
@@ -419,7 +497,7 @@ export class ManutencaoProgramacaoService {
       description: `${user.name} excluiu a OS "${item?.descricao ?? ''}" da programação (${item?.tecnicoNome ?? ''})`,
     });
 
-    await this.load();
+    this._ordens.update(lista => lista.filter(o => o.id !== id));
   }
 
   // Move uma ordem pra outra semana — diferente de editarOrdem, que nunca mexe em
@@ -443,13 +521,13 @@ export class ManutencaoProgramacaoService {
     this.garantirSemanaAberta(item.semanaInicio);
     this.garantirSemanaAberta(novaSemanaInicio);
 
-    const { error } = await this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('manutencao_programacao')
       .update({ semana_inicio: novaSemanaInicio, dias_previstos: novosDiasPrevistos,
         ...(recalcularCiclo && item.planoPreventivoId ? { ciclo_data_prevista: novaSemanaInicio } : {}),
       })
-      .eq('id', id).select('id').single();
-    if (error) throw new Error(error.message);
+      .eq('id', id).select('*').abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS)).single();
+    if (error) throw new Error(mensagemErroGravacao(error));
 
     this.auditLogService.log({
       user_id: user.id,
@@ -461,7 +539,7 @@ export class ManutencaoProgramacaoService {
       metadata: { semana_origem: item?.semanaInicio, semana_destino: novaSemanaInicio },
     });
 
-    await this.load();
+    this.incluirNaLista([data as ManutencaoOrdemRow]);
   }
 
   // Consulta as exportações do SIGMA (descrição da OS + apontamentos/execução) via
