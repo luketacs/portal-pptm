@@ -1,7 +1,7 @@
 import { PlanoManutencao } from '../models/manutencao-programacao.model';
 import {
   agendaDosPlanos, alinharDatasPorEquipamento, EQUIPE_APOIO_NAO_CLASSIFICADA, gerarGradeMensal, inferirCategoriaIndicador,
-  inferirCategoriaIndicadorPorTecnico, limitarPorEquipeApoio, planosAtrasados, planosComProximaExecucao,
+  inferirCategoriaIndicadorPorTecnico, janelaAlinhamentoDaArea, limitarPorEquipeApoio, planosAtrasados, planosComProximaExecucao,
   planosComProximaExecucaoFixa, proximaExecucaoPlano, resumoPorEquipeApoio, sugestoesDaSemana,
 } from './manutencao-planos';
 
@@ -264,6 +264,20 @@ describe('alinharDatasPorEquipamento', () => {
     const resultado = alinharDatasPorEquipamento([a, b]);
     expect(resultado.find(p => p.id === 'a')!.proximaData).toBe('2026-09-05');
     expect(resultado.find(p => p.id === 'b')!.proximaData).toBe('2026-09-05');
+  });
+
+  it('janela menor (Mecânica/Elétrica, 6 dias) não puxa plano de outra semana', () => {
+    const a = comProxima({ id: 'a', tagKks: 'M01' }, '2026-09-28');
+    const b = comProxima({ id: 'b', tagKks: 'M01' }, '2026-10-02');
+    const c = comProxima({ id: 'c', tagKks: 'M01' }, '2026-10-09');
+    const resultado = alinharDatasPorEquipamento([a, b, c], 6);
+    expect(resultado.map(p => p.proximaData)).toEqual(['2026-09-28', '2026-09-28', '2026-10-09']);
+  });
+
+  it('janela por área: Apoio 21 dias, Mecânica/Elétrica 6', () => {
+    expect(janelaAlinhamentoDaArea('APOIO')).toBe(21);
+    expect(janelaAlinhamentoDaArea('MECANICA')).toBe(6);
+    expect(janelaAlinhamentoDaArea('ELETRICA')).toBe(6);
   });
 
   it('plano de agenda rígida não é antecipado nem puxa os vizinhos pra sua data', () => {

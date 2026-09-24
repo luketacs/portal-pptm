@@ -68,8 +68,18 @@ export function agendaDosPlanos(
     const agenda = planosComProximaExecucaoFixa(
       planos.filter(p => p.area === area), plantaParada, referencia, ultimoCicloPorPlano,
     );
-    return hojeInicioSemana >= '2026-09-21' ? alinharDatasPorEquipamento(agenda) : agenda;
+    return hojeInicioSemana >= '2026-09-21' ? alinharDatasPorEquipamento(agenda, janelaAlinhamentoDaArea(area)) : agenda;
   });
+}
+
+// Janela do alinhamento por equipamento, por área. Apoio: 21 dias (grupos de salas
+// vizinhas, pouco volume — ver Prédio 25). Mecânica/Elétrica: só dentro da mesma semana
+// (6 dias) — reportado: com 21 dias a semana 40 da Mecânica foi de ~45 pra 75
+// preventivas, porque o alinhamento puxava pra ela tudo que era do mesmo KKS nas 3
+// semanas seguintes (muitos planos por equipamento: TC EAC13, Stacker 01...), desfazendo
+// o balanceamento da migration 058.
+export function janelaAlinhamentoDaArea(area: ManutencaoArea): number {
+  return area === 'APOIO' ? JANELA_ALINHAMENTO_DIAS : 6;
 }
 
 // Anexa a próxima execução calculada a cada plano ativo — insumo de sugestoesDaSemana e
@@ -171,7 +181,9 @@ export interface PlanoAlinhadoPorEquipamento extends PlanoComProximaData {
 // outra, só porque a virada do mês caía no meio. A janela também limita o quanto um
 // plano é antecipado (antes: até ~30 dias), casando com folgaCoberturaCiclo — que é o
 // que impede o plano antecipado de reaparecer na semana da sua data original.
-export function alinharDatasPorEquipamento(planos: PlanoComProximaData[]): PlanoAlinhadoPorEquipamento[] {
+export function alinharDatasPorEquipamento(
+  planos: PlanoComProximaData[], janelaDias: number = JANELA_ALINHAMENTO_DIAS,
+): PlanoAlinhadoPorEquipamento[] {
   const porEquipamento = new Map<string, number[]>();
   planos.forEach((p, i) => {
     // Agenda rígida (ver PlanoManutencao.agendaRigida): fica fora do alinhamento — nem é
@@ -195,7 +207,7 @@ export function alinharDatasPorEquipamento(planos: PlanoComProximaData[]): Plano
       if (data > limiteBloco) {
         // Abre bloco novo: este plano é o mais cedo dele.
         dataAlvo = data;
-        limiteBloco = somarDias(data, JANELA_ALINHAMENTO_DIAS);
+        limiteBloco = somarDias(data, janelaDias);
       } else if (data !== dataAlvo) {
         resultado[i] = { ...resultado[i], proximaData: dataAlvo, proximaDataOriginal: data };
       }
