@@ -657,7 +657,7 @@ export class ManutencaoPlanosComponent implements OnInit {
     if (!plano) return [];
     let data = this.planosComExecucaoPorId().get(plano.id)?.proximaData;
     if (!data) return [];
-    const periodo = periodicidadeEfetiva(plano.periodicidadeValor, plano.periodicidadeUnidade, this.manutencaoProgramacaoService.paradaAtual() !== null);
+    const periodo = periodicidadeEfetiva(plano.periodicidadeValor, plano.periodicidadeUnidade, this.manutencaoProgramacaoService.paradaAtual() !== null, plano.area);
     const previsoes: { data: string; semana: number }[] = [];
     for (let i = 0; i < this.QTD_PREVISOES_FUTURAS; i++) {
       previsoes.push({ data, semana: this.numeroSemanaISO(data) });

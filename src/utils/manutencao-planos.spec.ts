@@ -164,7 +164,7 @@ function comProxima(overrides: Partial<PlanoManutencao> = {}, proximaData: strin
 }
 
 describe('alinharDatasPorEquipamento', () => {
-  it('não alinha quando as próximas datas caem em meses diferentes', () => {
+  it('não alinha quando as próximas datas estão a mais de 21 dias uma da outra', () => {
     const a = comProxima({ id: 'a', tagKks: 'M01' }, '2026-08-15');
     const b = comProxima({ id: 'b', tagKks: 'M01' }, '2026-09-10');
     const resultado = alinharDatasPorEquipamento([a, b]);
@@ -184,14 +184,37 @@ describe('alinharDatasPorEquipamento', () => {
     expect(trimestralAlinhado.proximaDataOriginal).toBe('2026-09-25');
   });
 
-  it('3+ planos do mesmo KKS no mesmo mês alinham todos pra data mais cedo entre eles', () => {
+  it('3+ planos do mesmo KKS dentro da janela alinham todos pra data mais cedo entre eles', () => {
     const planos = [
       comProxima({ id: 'p1', tagKks: 'M01' }, '2026-09-12'),
       comProxima({ id: 'p2', tagKks: 'M01' }, '2026-09-03'),
-      comProxima({ id: 'p3', tagKks: 'M01' }, '2026-09-28'),
+      comProxima({ id: 'p3', tagKks: 'M01' }, '2026-09-24'),
     ];
     const resultado = alinharDatasPorEquipamento(planos);
     expect(resultado.map(p => p.proximaData)).toEqual(['2026-09-03', '2026-09-03', '2026-09-03']);
+  });
+
+  it('plano fora da janela do bloco abre um bloco novo com os seguintes', () => {
+    const planos = [
+      comProxima({ id: 'p1', tagKks: 'M01' }, '2026-09-03'),
+      comProxima({ id: 'p2', tagKks: 'M01' }, '2026-09-28'),
+      comProxima({ id: 'p3', tagKks: 'M01' }, '2026-10-10'),
+    ];
+    const resultado = alinharDatasPorEquipamento(planos);
+    expect(resultado.map(p => p.proximaData)).toEqual(['2026-09-03', '2026-09-28', '2026-09-28']);
+  });
+
+  // Reportado: Prédio 25 (grupo vizinho) saía em semanas seguidas porque a virada do
+  // mês partia o grupo no meio.
+  it('grupo vizinho com datas atravessando a virada do mês sai todo junto', () => {
+    const planos = [
+      comProxima({ id: 'a', area: 'APOIO', tagKks: '90SAA05AH616' }, '2026-09-21'),
+      comProxima({ id: 'b', area: 'APOIO', tagKks: '90SAA05AH617' }, '2026-09-28'),
+      comProxima({ id: 'c', area: 'APOIO', tagKks: '90SAA05AH618' }, '2026-10-05'),
+      comProxima({ id: 'd', area: 'APOIO', tagKks: '90SAA05AH619' }, '2026-10-12'),
+    ];
+    const resultado = alinharDatasPorEquipamento(planos);
+    expect(resultado.map(p => p.proximaData)).toEqual(['2026-09-21', '2026-09-21', '2026-09-21', '2026-09-21']);
   });
 
   it('não mistura mesmo KKS em áreas diferentes', () => {
@@ -216,12 +239,12 @@ describe('alinharDatasPorEquipamento', () => {
     expect(resultado[0]).toEqual({ ...unico, proximaDataOriginal: null });
   });
 
-  it('vira o ano corretamente: dezembro de um ano não alinha com janeiro do ano seguinte', () => {
+  it('vira o ano corretamente: fim de dezembro alinha com começo de janeiro', () => {
     const dezembro = comProxima({ id: 'dez', tagKks: 'M01' }, '2026-12-29');
     const janeiro = comProxima({ id: 'jan', tagKks: 'M01' }, '2027-01-02');
     const resultado = alinharDatasPorEquipamento([dezembro, janeiro]);
     expect(resultado.find(p => p.id === 'dez')!.proximaDataOriginal).toBe(null);
-    expect(resultado.find(p => p.id === 'jan')!.proximaDataOriginal).toBe(null);
+    expect(resultado.find(p => p.id === 'jan')!.proximaData).toBe('2026-12-29');
   });
 
   it('ignora espaço extra no KKS (trim) na hora de casar', () => {
@@ -241,6 +264,15 @@ describe('alinharDatasPorEquipamento', () => {
     const resultado = alinharDatasPorEquipamento([a, b]);
     expect(resultado.find(p => p.id === 'a')!.proximaData).toBe('2026-09-05');
     expect(resultado.find(p => p.id === 'b')!.proximaData).toBe('2026-09-05');
+  });
+
+  it('plano de agenda rígida não é antecipado nem puxa os vizinhos pra sua data', () => {
+    const rigido = comProxima({ id: 'r', tagKks: 'PTPC91', agendaRigida: true }, '2026-10-21');
+    const cedo = comProxima({ id: 'c', tagKks: 'PTPC91' }, '2026-10-15');
+    const tarde = comProxima({ id: 't', tagKks: 'PTPC91' }, '2026-10-19');
+    const resultado = alinharDatasPorEquipamento([rigido, cedo, tarde]);
+    expect(resultado.find(p => p.id === 'r')!.proximaData).toBe('2026-10-21');
+    expect(resultado.find(p => p.id === 't')!.proximaData).toBe('2026-10-15');
   });
 
   it('KKS fora de qualquer grupo confirmado não alinha com um KKS que está num grupo', () => {
@@ -272,6 +304,14 @@ describe('limitarPorEquipeApoio', () => {
     const planos = Array.from({ length: 7 }, (_, i) => planoApoio(`sp${i}`, 'SERVPLEX', '2026-09-10'));
     const resultado = limitarPorEquipeApoio(planos, {});
     expect(resultado.map(p => p.id)).toEqual(['sp0', 'sp1', 'sp2', 'sp3', 'sp4']);
+  });
+
+  it('plano de agenda rígida nunca é cortado, mesmo com a cota da equipe cheia', () => {
+    const planos = Array.from({ length: 5 }, (_, i) => planoApoio(`op${i}`, 'OPERAÇÃO', '2026-09-10'));
+    const teste = { ...planoApoio('teste', 'OPERAÇÃO', '2026-09-21'), agendaRigida: true };
+    const resultado = limitarPorEquipeApoio([...planos, teste], {});
+    expect(resultado.map(p => p.id)).toContain('teste');
+    expect(resumoPorEquipeApoio([...planos, teste], {})).toEqual([{ equipe: 'LIMP_OPERACIONAL', total: 6, mostrados: 6 }]);
   });
 
   it('equipes diferentes têm cotas independentes — uma equipe cheia não consome a cota de outra', () => {

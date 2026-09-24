@@ -29,6 +29,7 @@ interface PlanoManutencaoRow {
   numero_os_reservado: string | null;
   loto_padrao: string | null;
   equipamentos_relacionados: string | null;
+  agenda_rigida?: boolean | null;
   criado_por_id: string | null;
   criado_por_nome: string;
   created_at: string;
@@ -67,6 +68,7 @@ function mapPlanoRow(r: PlanoManutencaoRow): PlanoManutencao {
     numeroOsReservado: r.numero_os_reservado,
     lotoPadrao: r.loto_padrao,
     equipamentosRelacionados: r.equipamentos_relacionados,
+    agendaRigida: r.agenda_rigida ?? false,
     criadoPorId: r.criado_por_id,
     criadoPorNome: r.criado_por_nome,
     createdAt: new Date(r.created_at),

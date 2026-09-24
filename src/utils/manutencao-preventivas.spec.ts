@@ -72,6 +72,24 @@ describe('proximaDataFixa', () => {
   it('ultimoCicloIso null (nunca programado) equivale a não passar o argumento', () => {
     expect(proximaDataFixa('2026-09-14', 1, 'Semana(s)', '2026-09-17', null)).toBe('2026-09-21');
   });
+
+  // Reportado: P-R-6M do Prédio 25 antecipado pelo alinhamento (ciclo gravado 21/09,
+  // ocorrência real 05/10) voltava a aparecer sozinho na semana de 05/10.
+  it('ciclo antecipado pelo alinhamento (até 21 dias antes) cobre a ocorrência', () => {
+    expect(proximaDataFixa('2026-10-05', 6, 'Mes(es)', '2026-09-21', '2026-09-21')).toBe('2027-04-05');
+  });
+
+  it('ciclo mais de 21 dias antes da ocorrência não cobre ela', () => {
+    expect(proximaDataFixa('2026-10-05', 6, 'Mes(es)', '2026-09-07', '2026-09-07')).toBe('2026-10-05');
+  });
+
+  it('agenda rígida não tem folga: ciclo de 21/09 não cobre a ocorrência de 06/10', () => {
+    expect(proximaDataFixa('2026-10-06', 1, 'Mes(es)', '2026-09-21', '2026-09-21', true)).toBe('2026-10-06');
+  });
+
+  it('folga nunca engole a ocorrência seguinte de um plano mensal', () => {
+    expect(proximaDataFixa('2026-09-21', 1, 'Mes(es)', '2026-09-21', '2026-09-21')).toBe('2026-10-21');
+  });
 });
 
 describe('preventivaVencendo', () => {
@@ -94,18 +112,30 @@ describe('preventivaVencendo', () => {
 
 describe('periodicidadeEfetiva', () => {
   it('planta operando normalmente: mantém a periodicidade original', () => {
-    expect(periodicidadeEfetiva(1, 'Semana(s)', false)).toEqual({ valor: 1, unidade: 'Semana(s)' });
-    expect(periodicidadeEfetiva(6, 'Mes(es)', false)).toEqual({ valor: 6, unidade: 'Mes(es)' });
+    expect(periodicidadeEfetiva(1, 'Semana(s)', false, 'MECANICA')).toEqual({ valor: 1, unidade: 'Semana(s)' });
+    expect(periodicidadeEfetiva(6, 'Mes(es)', false, 'ELETRICA')).toEqual({ valor: 6, unidade: 'Mes(es)' });
   });
 
-  it('planta parada: ciclo curto (dias/semanas) vira mensal', () => {
-    expect(periodicidadeEfetiva(2, 'Semana(s)', true)).toEqual({ valor: 1, unidade: 'Mes(es)' });
-    expect(periodicidadeEfetiva(7, 'Dia(s)', true)).toEqual({ valor: 1, unidade: 'Mes(es)' });
+  it('planta parada: ciclo curto (dias/semanas) de Elétrica/Mecânica vira mensal', () => {
+    expect(periodicidadeEfetiva(2, 'Semana(s)', true, 'MECANICA')).toEqual({ valor: 1, unidade: 'Mes(es)' });
+    expect(periodicidadeEfetiva(1, 'Semana(s)', true, 'ELETRICA')).toEqual({ valor: 1, unidade: 'Mes(es)' });
+    expect(periodicidadeEfetiva(7, 'Dia(s)', true, 'MECANICA')).toEqual({ valor: 1, unidade: 'Mes(es)' });
+  });
+
+  it('planta parada: Apoio não é afetado — semanal continua semanal', () => {
+    expect(periodicidadeEfetiva(1, 'Semana(s)', true, 'APOIO')).toEqual({ valor: 1, unidade: 'Semana(s)' });
+    expect(periodicidadeEfetiva(7, 'Dia(s)', true, 'APOIO')).toEqual({ valor: 7, unidade: 'Dia(s)' });
+  });
+
+  it('planta parada: ciclo longo cadastrado em dias (90/180/365) não vira mensal', () => {
+    expect(periodicidadeEfetiva(180, 'Dia(s)', true, 'ELETRICA')).toEqual({ valor: 180, unidade: 'Dia(s)' });
+    expect(periodicidadeEfetiva(30, 'Dia(s)', true, 'MECANICA')).toEqual({ valor: 30, unidade: 'Dia(s)' });
+    expect(periodicidadeEfetiva(20, 'Dia(s)', true, 'MECANICA')).toEqual({ valor: 1, unidade: 'Mes(es)' });
   });
 
   it('planta parada: ciclo já mensal (ou mais longo) não muda', () => {
-    expect(periodicidadeEfetiva(3, 'Mes(es)', true)).toEqual({ valor: 3, unidade: 'Mes(es)' });
-    expect(periodicidadeEfetiva(12, 'Mes(es)', true)).toEqual({ valor: 12, unidade: 'Mes(es)' });
+    expect(periodicidadeEfetiva(3, 'Mes(es)', true, 'ELETRICA')).toEqual({ valor: 3, unidade: 'Mes(es)' });
+    expect(periodicidadeEfetiva(12, 'Mes(es)', true, 'MECANICA')).toEqual({ valor: 12, unidade: 'Mes(es)' });
   });
 });
 

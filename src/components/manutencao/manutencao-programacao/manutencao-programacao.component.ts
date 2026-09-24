@@ -1012,7 +1012,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // observada numa simulação de 30 semanas, já com as âncoras corrigidas e a parada da
   // planta considerada: ~10-11/semana, bem uniforme. Dimensionado com folga acima do
   // pico (11) — rede de segurança, não limite de rotina.
-  private readonly LIMITE_PREVENTIVAS_ELETRICA = 25;
+  // Rebalanceamento de set/2026 (migration 058): com as âncoras inválidas corrigidas
+  // (planos semanais/mensais que só começavam em 2027), a carga real da Elétrica passou
+  // a ~29-33/semana — 25 cortava trabalho legítimo toda semana.
+  private readonly LIMITE_PREVENTIVAS_ELETRICA = 40;
 
   // Agenda compartilhada com o cadastro: cadência fixa, parada e primeira semana aberta.
   private agendaPlanos = computed<PlanoComProximaData[]>(() => {
@@ -1070,9 +1073,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // são as que mais pesam esquecer (perder uma anual dói muito mais que perder uma
   // mensal). Dentro do mesmo ciclo, desempata pela mais urgente (proximaData).
   private preventivasVencendoTodas = computed(() => {
-    const diasUteis = this.diasDaSemanaAtual().filter(d => d.label !== 'SAB' && d.label !== 'DOM');
-    const inicioSemana = diasUteis[0]?.data;
-    const fimSemana = diasUteis[diasUteis.length - 1]?.data;
+    // Semana inteira (SEG-DOM), não só dias úteis: ocorrência que cai no sábado/domingo
+    // (comum em ciclo mensal/em dias, que anda o dia da semana) nunca entrava em janela
+    // nenhuma e sumia sem aviso — na semana seguinte a agenda já pulava pra próxima.
+    const dias = this.diasDaSemanaAtual();
+    const inicioSemana = dias[0]?.data;
+    const fimSemana = dias[dias.length - 1]?.data;
     if (!inicioSemana || !fimSemana) return [];
     return sugestoesDaSemana(this.planosComProximaDaArea(), inicioSemana, fimSemana, this.regrasNovasValemNaSemana());
   });

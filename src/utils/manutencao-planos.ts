@@ -1,6 +1,6 @@
 import {
-  calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva, periodicidadeEmDias,
-  preventivaVencendo, proximaDataFixa, PeriodicidadeUnidade,
+  calcularProximaData, dataLimiteComTolerancia, JANELA_ALINHAMENTO_DIAS, periodicidadeEfetiva, periodicidadeEmDias,
+  preventivaVencendo, proximaDataFixa, PeriodicidadeUnidade, somarDias,
 } from './manutencao-preventivas';
 import { CategoriaIndicador, ManutencaoArea, PlanoManutencao } from '../models/manutencao-programacao.model';
 
@@ -80,7 +80,7 @@ export function planosComProximaExecucao(
   planos: PlanoManutencao[], ultimoCicloPorPlano: Map<string, string | null>, plantaParada: boolean,
 ): PlanoComProximaData[] {
   return planos.filter(p => p.ativo).map(p => {
-    const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, plantaParada);
+    const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, plantaParada, p.area);
     const ultimoCiclo = ultimoCicloPorPlano.get(p.id) ?? null;
     const proximaData = proximaExecucaoPlano(p.dataInicial, efetiva.valor, efetiva.unidade, ultimoCiclo);
     return { ...p, proximaData };
@@ -104,9 +104,9 @@ export function planosComProximaExecucaoFixa(
   ultimoCicloPorPlano: Map<string, string | null> = new Map(),
 ): PlanoComProximaData[] {
   return planos.filter(p => p.ativo).map(p => {
-    const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, plantaParada);
+    const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, plantaParada, p.area);
     const ultimoCiclo = ultimoCicloPorPlano.get(p.id) ?? null;
-    const proximaData = proximaDataFixa(p.dataInicial, efetiva.valor, efetiva.unidade, referenciaIso, ultimoCiclo);
+    const proximaData = proximaDataFixa(p.dataInicial, efetiva.valor, efetiva.unidade, referenciaIso, ultimoCiclo, p.agendaRigida);
     return { ...p, proximaData };
   });
 }
@@ -159,19 +159,24 @@ export interface PlanoAlinhadoPorEquipamento extends PlanoComProximaData {
 }
 
 // Pedido do usuário: 2+ planos do MESMO equipamento (mesmo KKS, ver chaveEquipamento,
-// dentro da mesma área) cuja próxima execução caia no MESMO MÊS DE CALENDÁRIO não devem
-// gerar duas visitas separadas (ex.: um plano mensal e um trimestral do mesmo
-// equipamento, ambos vencendo em setembro, saem juntos). Todo o grupo passa a usar a
-// data MAIS CEDO entre eles — nunca a mais tarde, pra nenhum plano ficar mais atrasado
-// do que já estava sozinho; o de ciclo mais longo só é atendido um pouco antes do que
-// seu próprio cálculo pediria. Sem limite de distância dentro do mês (confirmado com o
-// usuário): mesmo que as datas originais estejam em pontas opostas do mês, alinha do
-// mesmo jeito — pior caso é "um pouco cedo demais", nunca atrasa. "Mesmo mês" comparado
-// como string 'YYYY-MM' — separa corretamente dezembro de um ano de janeiro do ano
-// seguinte, sem caso especial.
+// dentro da mesma área) com próxima execução próxima não devem gerar visitas separadas
+// (ex.: um plano mensal e um trimestral do mesmo equipamento saem juntos). Todo o bloco
+// passa a usar a data MAIS CEDO entre eles — nunca a mais tarde, pra nenhum plano ficar
+// mais atrasado do que já estava sozinho; o de ciclo mais longo só é atendido um pouco
+// antes do que seu próprio cálculo pediria.
+//
+// Bloco = janela móvel de JANELA_ALINHAMENTO_DIAS a partir da data mais cedo, não mais
+// "mesmo mês de calendário". Reportado: o corte por mês separava o grupo do Prédio 25
+// (datas em 21/09, 28/09, 05/10...) em visitas de semanas seguidas, uma em cima da
+// outra, só porque a virada do mês caía no meio. A janela também limita o quanto um
+// plano é antecipado (antes: até ~30 dias), casando com folgaCoberturaCiclo — que é o
+// que impede o plano antecipado de reaparecer na semana da sua data original.
 export function alinharDatasPorEquipamento(planos: PlanoComProximaData[]): PlanoAlinhadoPorEquipamento[] {
   const porEquipamento = new Map<string, number[]>();
   planos.forEach((p, i) => {
+    // Agenda rígida (ver PlanoManutencao.agendaRigida): fica fora do alinhamento — nem é
+    // antecipado, nem puxa os vizinhos pra sua data.
+    if (p.agendaRigida) return;
     const chave = chaveEquipamento(p);
     const lista = porEquipamento.get(chave);
     if (lista) lista.push(i);
@@ -182,23 +187,17 @@ export function alinharDatasPorEquipamento(planos: PlanoComProximaData[]): Plano
 
   for (const indices of porEquipamento.values()) {
     if (indices.length < 2) continue;
-    const porMes = new Map<string, number[]>();
-    for (const i of indices) {
-      const mes = planos[i].proximaData.slice(0, 7); // 'YYYY-MM'
-      const lista = porMes.get(mes);
-      if (lista) lista.push(i);
-      else porMes.set(mes, [i]);
-    }
-    for (const idxDoMes of porMes.values()) {
-      if (idxDoMes.length < 2) continue;
-      const dataAlvo = idxDoMes.reduce(
-        (min, i) => (planos[i].proximaData < min ? planos[i].proximaData : min),
-        planos[idxDoMes[0]].proximaData,
-      );
-      for (const i of idxDoMes) {
-        if (planos[i].proximaData !== dataAlvo) {
-          resultado[i] = { ...resultado[i], proximaData: dataAlvo, proximaDataOriginal: planos[i].proximaData };
-        }
+    const ordenados = [...indices].sort((a, b) => planos[a].proximaData.localeCompare(planos[b].proximaData));
+    let dataAlvo = '';
+    let limiteBloco = '';
+    for (const i of ordenados) {
+      const data = planos[i].proximaData;
+      if (data > limiteBloco) {
+        // Abre bloco novo: este plano é o mais cedo dele.
+        dataAlvo = data;
+        limiteBloco = somarDias(data, JANELA_ALINHAMENTO_DIAS);
+      } else if (data !== dataAlvo) {
+        resultado[i] = { ...resultado[i], proximaData: dataAlvo, proximaDataOriginal: data };
       }
     }
   }
@@ -272,7 +271,8 @@ export function limitarPorEquipeApoio(
     const equipe = inferirCategoriaIndicadorPorTecnico(p.responsavel ?? '') ?? EQUIPE_APOIO_NAO_CLASSIFICADA;
     const limite = limitePorEquipe[equipe] ?? LIMITE_PADRAO_EQUIPE_NAO_CONFIGURADA;
     const usados = contagemPorEquipe.get(equipe) ?? 0;
-    if (usados >= limite) continue;
+    // Agenda rígida nunca é cortada (ver PlanoManutencao.agendaRigida) — mas conta na cota.
+    if (usados >= limite && !p.agendaRigida) continue;
     contagemPorEquipe.set(equipe, usados + 1);
     resultado.push(p);
   }
@@ -293,15 +293,18 @@ export interface ResumoEquipeApoio {
 export function resumoPorEquipeApoio(
   planosOrdenados: PlanoComProximaData[], limitePorEquipe: LimitePorEquipeApoio,
 ): ResumoEquipeApoio[] {
-  const totalPorEquipe = new Map<ChaveEquipeApoio, number>();
-  for (const p of planosOrdenados) {
-    const equipe = inferirCategoriaIndicadorPorTecnico(p.responsavel ?? '') ?? EQUIPE_APOIO_NAO_CLASSIFICADA;
-    totalPorEquipe.set(equipe, (totalPorEquipe.get(equipe) ?? 0) + 1);
-  }
-  return [...totalPorEquipe.entries()]
-    .map(([equipe, total]) => ({
-      equipe, total, mostrados: Math.min(total, limitePorEquipe[equipe] ?? LIMITE_PADRAO_EQUIPE_NAO_CONFIGURADA),
-    }))
+  const contar = (planos: PlanoComProximaData[]) => {
+    const porEquipe = new Map<ChaveEquipeApoio, number>();
+    for (const p of planos) {
+      const equipe = inferirCategoriaIndicadorPorTecnico(p.responsavel ?? '') ?? EQUIPE_APOIO_NAO_CLASSIFICADA;
+      porEquipe.set(equipe, (porEquipe.get(equipe) ?? 0) + 1);
+    }
+    return porEquipe;
+  };
+  // Conta o que limitarPorEquipeApoio de fato mostra (agenda rígida pode passar do teto).
+  const mostradosPorEquipe = contar(limitarPorEquipeApoio(planosOrdenados, limitePorEquipe));
+  return [...contar(planosOrdenados).entries()]
+    .map(([equipe, total]) => ({ equipe, total, mostrados: mostradosPorEquipe.get(equipe) ?? 0 }))
     .sort((a, b) => b.total - a.total);
 }
 
@@ -317,7 +320,7 @@ export function planosAtrasados(
 ): PlanoAtrasado[] {
   return planos
     .map(p => {
-      const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, plantaParada);
+      const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, plantaParada, p.area);
       return { ...p, prazoLimite: dataLimiteComTolerancia(p.proximaData, efetiva.valor, efetiva.unidade) };
     })
     .filter((p): p is PlanoAtrasado => p.prazoLimite !== null && p.prazoLimite < hojeInicioSemanaIso)

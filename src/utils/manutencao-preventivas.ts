@@ -1,3 +1,5 @@
+import type { ManutencaoArea } from '../models/manutencao-programacao.model';
+
 // Cálculo de "próxima data" dos planos de manutenção preventiva. Não existe uma coluna
 // pra isso no banco — é sempre calculada em runtime a partir de `ultima_execucao +
 // periodicidade` (mesmo espírito de manter matemática de datas fora do SQL, ver
@@ -41,16 +43,46 @@ export function calcularProximaData(
 // muda o comportamento "sem backlog" (a sequência de âncora continua a mesma,
 // independente de quando cada execução real aconteceu) — só evita repetir uma
 // ocorrência que já foi programada.
+//
+// Folga de cobertura (ver folgaCoberturaCiclo): o alinhamento por equipamento
+// (alinharDatasPorEquipamento) ANTECIPA a data de alguns planos, e o ciclo é gravado com
+// essa data antecipada. Reportado: sem folga, um plano programado junto com o grupo na
+// semana X (ciclo = X) voltava a aparecer sozinho na semana da sua data original (X+1,
+// X+2...) — ex. P-R-6M do Prédio 25 saindo 3 semanas seguidas. Um ciclo registrado até
+// `folga` dias ANTES da ocorrência também conta como cobrindo ela.
+//
+// `agendaRigida`: plano que nunca é antecipado (ver PlanoManutencao.agendaRigida) não
+// precisa de folga — sem ela, o ciclo de uma ocorrência não engole a seguinte quando as
+// duas estão perto (ex. teste RETOMA dia 21/09 e o próximo dia 06/10).
 export function proximaDataFixa(
   dataAncora: string, valor: number, unidade: PeriodicidadeUnidade, referenciaIso: string,
-  ultimoCicloIso: string | null = null,
+  ultimoCicloIso: string | null = null, agendaRigida = false,
 ): string {
+  const folga = agendaRigida ? 0 : folgaCoberturaCiclo(valor, unidade);
+  const coberturaAte = ultimoCicloIso === null ? null : somarDias(ultimoCicloIso, folga);
   let atual = dataAncora;
   // Bound de segurança — nenhuma âncora realista fica milhares de ciclos atrás.
-  for (let i = 0; i < 2000 && (atual < referenciaIso || (ultimoCicloIso !== null && atual <= ultimoCicloIso)); i++) {
+  for (let i = 0; i < 2000 && (atual < referenciaIso || (coberturaAte !== null && atual <= coberturaAte)); i++) {
     atual = calcularProximaData(atual, valor, unidade)!;
   }
   return atual;
+}
+
+// Máximo de dias que alinharDatasPorEquipamento pode antecipar um plano — planos do
+// mesmo equipamento/grupo com datas dentro dessa janela saem juntos na data mais cedo.
+export const JANELA_ALINHAMENTO_DIAS = 21;
+
+// Quantos dias antes da ocorrência um ciclo registrado ainda cobre ela: a janela de
+// alinhamento, limitada a 3/4 do período — nunca chega na ocorrência SEGUINTE da
+// sequência (ex.: semanal = 5 dias, mensal/6M = 21 dias).
+export function folgaCoberturaCiclo(valor: number, unidade: PeriodicidadeUnidade): number {
+  return Math.min(JANELA_ALINHAMENTO_DIAS, Math.floor(periodicidadeEmDias(valor, unidade) * 3 / 4));
+}
+
+export function somarDias(iso: string, dias: number): string {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + dias);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 // Vence especificamente DENTRO da semana em exibição (inicioSemanaIso a fimSemanaIso) —
@@ -93,9 +125,17 @@ export function dataLimiteComTolerancia(
 // Enquanto a planta estiver marcada como parada (ver ParadaPlanta), todo plano de ciclo
 // curto (Dia(s)/Semana(s)) é tratado como se fosse mensal só pra esse cálculo — o
 // cadastro do plano em si não muda, volta ao normal assim que a parada é encerrada.
+//
+// Só vale pra Elétrica/Mecânica (pedido do usuário): equipamento de processo parado não
+// precisa de inspeção semanal. Apoio (refrigeração, limpeza, SPCI) atende prédio/sala,
+// que continua funcionando com a planta parada — semanal do Apoio segue semanal.
 export function periodicidadeEfetiva(
-  valor: number, unidade: PeriodicidadeUnidade, plantaParada: boolean,
+  valor: number, unidade: PeriodicidadeUnidade, plantaParada: boolean, area: ManutencaoArea,
 ): { valor: number; unidade: PeriodicidadeUnidade } {
-  if (plantaParada && unidade !== 'Mes(es)') return { valor: 1, unidade: 'Mes(es)' };
+  const afetaArea = area === 'ELETRICA' || area === 'MECANICA';
+  // Só ciclo CURTO (< 1 mês): plano cadastrado em dias mas longo (90/180/365 Dia(s),
+  // comum no import do SIGMA) virava mensal na parada — 6x mais trabalho, não menos.
+  const cicloCurto = periodicidadeEmDias(valor, unidade) < 30;
+  if (plantaParada && afetaArea && cicloCurto) return { valor: 1, unidade: 'Mes(es)' };
   return { valor, unidade };
 }

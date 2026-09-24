@@ -132,6 +132,11 @@ export interface PlanoManutencao {
   // sempre que esse plano for programado (ex.: teste que envolve vários equipamentos
   // ao mesmo tempo) — texto livre separado por vírgula, pré-preenche a Nova OS.
   equipamentosRelacionados: string | null;
+  // Plano que tem que sair exatamente na data da sua cadência (ex. teste de
+  // disponibilidade do sistema de carvão, migration 059): nunca é antecipado pelo
+  // alinhamento por equipamento nem cortado pelo limite semanal da equipe. Opcional —
+  // ausente = false.
+  agendaRigida?: boolean;
   criadoPorId: string | null;
   criadoPorNome: string;
   createdAt: Date;
@@ -195,8 +200,8 @@ export interface CicloManutencao {
 
 // Período em que a planta ficou parada (a empresa não opera 24h/dia) — enquanto
 // `dataFim` for null, a parada está em andamento. Admin-only (ver migration 029):
-// enquanto ativa, planos preventivos de ciclo curto (dias/semanas) são calculados
-// como mensais (ver periodicidadeEfetiva em manutencao-preventivas.ts).
+// enquanto ativa, planos preventivos de ciclo curto (dias/semanas) de Elétrica/Mecânica
+// são calculados como mensais (ver periodicidadeEfetiva em manutencao-preventivas.ts).
 export interface ParadaPlanta {
   id: string;
   dataInicio: string;
