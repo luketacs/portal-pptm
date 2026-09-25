@@ -230,6 +230,42 @@ export class ManutencaoPlanosService {
     await this.load();
   }
 
+  // Replica o checklist de um plano pra vários outros de uma vez (equipamentos gêmeos:
+  // Stacker 01/02, TC 05/06/07, ECA 45..50...). Cópia de verdade — cada plano fica com o
+  // seu, editar um depois não muda os outros. Uma requisição só pra todos os destinos.
+  async replicarChecklist(origemId: string, destinoIds: string[]): Promise<number> {
+    const user = this.garantirAdmin('Só Admin pode alterar o checklist dos planos.');
+    const origem = this.getById(origemId);
+    if (!origem) throw new Error('Plano de origem não encontrado.');
+    const ids = destinoIds.filter(id => id !== origemId);
+    if (ids.length === 0) return 0;
+
+    const atividades = origem.atividades.map(a => ({ texto: a.texto, subPassos: [...a.subPassos] }));
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_planos')
+      .update({ atividades, atualizado_por_id: user.id, atualizado_por_nome: user.name, atualizado_em: new Date().toISOString() })
+      .in('id', ids)
+      .select('id');
+    if (error) throw new Error(error.message);
+    const alterados = data?.length ?? 0;
+    if (alterados === 0) throw new Error('Nenhum plano foi alterado (sem permissão no banco).');
+
+    const nomes = ids.map(id => this.getById(id)).filter((p): p is PlanoManutencao => !!p)
+      .map(p => `${p.codigo} ${p.equipamento}`);
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'manutencao_plano_checklist_replicado',
+      resource_type: 'manutencao_planos',
+      resource_id: origemId,
+      description: `${user.name} replicou o checklist de "${origem.nome}" (${origem.codigo}) pra ${alterados} plano(s): ${nomes.join(', ')}`,
+      metadata: { origem: origemId, destinos: ids, passos: atividades.length },
+    });
+
+    await this.load();
+    return alterados;
+  }
+
   async ativar(id: string): Promise<void> {
     await this.definirAtivo(id, true);
   }

@@ -1,7 +1,7 @@
 import { PlanoManutencao } from '../models/manutencao-programacao.model';
 import {
   agendaDosPlanos, alinharDatasPorEquipamento, EQUIPE_APOIO_NAO_CLASSIFICADA, gerarGradeMensal, inferirCategoriaIndicador,
-  inferirCategoriaIndicadorPorTecnico, janelaAlinhamentoDaArea, limitarPorEquipeApoio, ocorrenciasNoIntervalo,
+  inferirCategoriaIndicadorPorTecnico, janelaAlinhamentoDaArea, limitarPorEquipeApoio, nomeBaseDoPlano, ocorrenciasNoIntervalo,
   semanasIsoDoAno, siglaPeriodicidade, planosAtrasados, planosComProximaExecucao,
   planosComProximaExecucaoFixa, proximaExecucaoPlano, resumoPorEquipeApoio, sugestoesDaSemana,
 } from './manutencao-planos';
@@ -307,6 +307,15 @@ describe('alinharDatasPorEquipamento', () => {
     const resultado = alinharDatasPorEquipamento([a, b]);
     expect(resultado.find(p => p.id === 'a')!.proximaDataOriginal).toBe(null);
     expect(resultado.find(p => p.id === 'b')!.proximaDataOriginal).toBe(null);
+  });
+});
+
+describe('nomeBaseDoPlano', () => {
+  it('tira a TAG do equipamento e mantém o código da tarefa', () => {
+    expect(nomeBaseDoPlano('I-E-2S MOTORES/PAINEIS ECA45')).toBe('I-E-2S MOTORES/PAINEIS');
+    expect(nomeBaseDoPlano('I-E-2S MOTORES/PAINEIS ECA46')).toBe('I-E-2S MOTORES/PAINEIS');
+    expect(nomeBaseDoPlano('P-E-6M GAVETAS C 2 STR 01')).toBe('P-E-6M GAVETAS C STR');
+    expect(nomeBaseDoPlano('  p-r-1m prev off self 91EAC01AH012 TC05 ')).toBe('P-R-1M PREV OFF SELF');
   });
 });
 

@@ -13,7 +13,7 @@ import {
 } from '../../../models/manutencao-programacao.model';
 import { calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva } from '../../../utils/manutencao-preventivas';
 import {
-  agendaDosPlanos, DiaGradeMensal, gerarGradeMensal, ocorrenciasNoIntervalo, planosAtrasados, SemanaIso,
+  agendaDosPlanos, DiaGradeMensal, gerarGradeMensal, nomeBaseDoPlano, ocorrenciasNoIntervalo, planosAtrasados, SemanaIso,
   semanasIsoDoAno, siglaPeriodicidade,
 } from '../../../utils/manutencao-planos';
 
@@ -175,6 +175,22 @@ export class ManutencaoPlanosComponent implements OnInit {
   kpiPlanosInativos = computed(() => this.manutencaoPlanosService.planos().filter(p => !p.ativo).length);
   kpiPlanosVencidos = computed(() => this.planosAtrasadosIds().size);
 
+  // Cobertura de checklist: % dos planos ATIVOS que já têm checklist cadastrado — total
+  // e por área, pra acompanhar o avanço do cadastro.
+  kpiChecklist = computed(() => {
+    const ativos = this.manutencaoPlanosService.planos().filter(p => p.ativo);
+    const pct = (lista: PlanoManutencao[]) => {
+      const com = lista.filter(p => p.atividades.length > 0).length;
+      return { com, total: lista.length, pct: lista.length ? Math.round((com / lista.length) * 100) : 0 };
+    };
+    return {
+      ...pct(ativos),
+      porArea: (['MECANICA', 'ELETRICA', 'APOIO'] as const).map(area => ({
+        area, label: AREA_LABEL[area], ...pct(ativos.filter(p => p.area === area)),
+      })),
+    };
+  });
+
   private inicioFimSemana(offsetSemanas: number): { inicio: string; fim: string } {
     const segunda = segundaFeiraDe(new Date());
     segunda.setDate(segunda.getDate() + offsetSemanas * 7);
@@ -183,15 +199,24 @@ export class ManutencaoPlanosComponent implements OnInit {
     return { inicio: paraIso(segunda), fim: paraIso(domingo) };
   }
 
-  kpiPrevistasNaSemana = computed(() => {
-    const { inicio, fim } = this.inicioFimSemana(0);
-    return this.planosComProximaTodos().filter(p => p.proximaData >= inicio && p.proximaData <= fim).length;
-  });
+  // Quantos planos ativos têm ocorrência da agenda na semana — pela sequência fixa de
+  // cada plano (mesma regra do Mapa de 52 semanas, com planta parada), não pela
+  // "próxima execução". Reportado/corrigido: contando pela próxima execução, a próxima
+  // semana perdia todo plano semanal/quinzenal cuja próxima ainda era esta semana, e a
+  // semana atual ia diminuindo à medida que as OS eram criadas (a próxima execução pula
+  // pra frente) — virava "pendentes", não "previstas".
+  private previstasNaSemana(offsetSemanas: number): number {
+    const { inicio, fim } = this.inicioFimSemana(offsetSemanas);
+    const plantaParada = this.manutencaoProgramacaoService.paradaAtual() !== null;
+    return this.manutencaoPlanosService.planos().filter(p => {
+      if (!p.ativo) return false;
+      const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, plantaParada, p.area);
+      return ocorrenciasNoIntervalo(p.dataInicial, efetiva.valor, efetiva.unidade, inicio, fim).length > 0;
+    }).length;
+  }
 
-  kpiPrevistasProximaSemana = computed(() => {
-    const { inicio, fim } = this.inicioFimSemana(1);
-    return this.planosComProximaTodos().filter(p => p.proximaData >= inicio && p.proximaData <= fim).length;
-  });
+  kpiPrevistasNaSemana = computed(() => this.previstasNaSemana(0));
+  kpiPrevistasProximaSemana = computed(() => this.previstasNaSemana(1));
 
   // "Geradas" (não "executadas" — depende da mesma lógica de apontamento SIGMA que o
   // Dashboard já usa, fica pra uma fase 2): ciclos registrados com dataPrevista dentro
@@ -206,6 +231,7 @@ export class ManutencaoPlanosComponent implements OnInit {
   filtroStatus = signal<'todos' | 'ativo' | 'inativo'>('todos');
   filtroPeriodicidade = signal<string>('todos');
   filtroResponsavel = signal<string>('todos');
+  filtroChecklist = signal<'todos' | 'com' | 'sem'>('todos');
   filtroBusca = signal('');
 
   responsaveisComPlano = computed(() => {
@@ -223,9 +249,11 @@ export class ManutencaoPlanosComponent implements OnInit {
     const status = this.filtroStatus();
     const periodicidade = this.filtroPeriodicidade();
     const responsavel = this.filtroResponsavel();
+    const checklist = this.filtroChecklist();
 
     return this.manutencaoPlanosService.planos()
       .filter(p => area === 'todos' || p.area === area)
+      .filter(p => checklist === 'todos' || (checklist === 'com' ? p.atividades.length > 0 : p.atividades.length === 0))
       .filter(p => status === 'todos' || (status === 'ativo' ? p.ativo : !p.ativo))
       .filter(p => periodicidade === 'todos' || `${p.periodicidadeValor} ${p.periodicidadeUnidade}` === periodicidade)
       .filter(p => responsavel === 'todos' || p.responsavel === responsavel)
@@ -538,6 +566,98 @@ export class ManutencaoPlanosComponent implements OnInit {
       [copia[indexFilho], copia[novoIndex]] = [copia[novoIndex], copia[indexFilho]];
       return { ...item, subPassos: copia };
     }));
+  }
+
+  // ── Replicar checklist pra vários planos ──────────────────────────────────
+  // Caminho inverso de copiarChecklistDe (que PUXA de um plano pro formulário aberto):
+  // a partir de um plano, MANDA o checklist dele pra vários outros de uma vez.
+  // Sugestão pré-marcada: planos "gêmeos" — mesmo nome sem a TAG do equipamento
+  // (nomeBaseDoPlano), mesma área e mesma periodicidade.
+  replicarOrigem = signal<PlanoManutencao | null>(null);
+  replicarBusca = signal('');
+  replicarSomenteVazios = signal(true);
+  replicarSelecionados = signal<ReadonlySet<string>>(new Set());
+
+  private ehGemeo(origem: PlanoManutencao, p: PlanoManutencao): boolean {
+    return p.area === origem.area
+      && p.periodicidadeValor === origem.periodicidadeValor && p.periodicidadeUnidade === origem.periodicidadeUnidade
+      && nomeBaseDoPlano(p.nome) === nomeBaseDoPlano(origem.nome);
+  }
+
+  replicarCandidatos = computed(() => {
+    const origem = this.replicarOrigem();
+    if (!origem) return [];
+    const termo = normalizarTexto(this.replicarBusca().trim());
+    return this.manutencaoPlanosService.planos()
+      .filter(p => p.id !== origem.id)
+      .map(p => ({ plano: p, gemeo: this.ehGemeo(origem, p) }))
+      // Sem busca: só a mesma área. Com busca: qualquer área que bater.
+      .filter(({ plano: p, gemeo }) => termo.length > 0
+        ? normalizarTexto(`${p.codigo} ${p.nome} ${p.equipamento} ${p.tagKks ?? ''}`).includes(termo)
+        : gemeo || p.area === origem.area)
+      .sort((a, b) => Number(b.gemeo) - Number(a.gemeo) || a.plano.codigo.localeCompare(b.plano.codigo));
+  });
+
+  replicarQtdSelecionados = computed(() => this.replicarSelecionados().size);
+
+  abrirReplicarChecklist(origem: PlanoManutencao): void {
+    this.replicarOrigem.set(origem);
+    this.replicarBusca.set('');
+    this.replicarSomenteVazios.set(true);
+    // Pré-marca os gêmeos que ainda não têm checklist (modo seguro).
+    this.replicarSelecionados.set(new Set(this.manutencaoPlanosService.planos()
+      .filter(p => p.id !== origem.id && this.ehGemeo(origem, p) && p.atividades.length === 0)
+      .map(p => p.id)));
+  }
+
+  fecharReplicarChecklist(): void {
+    this.replicarOrigem.set(null);
+  }
+
+  // Plano que já tem checklist só pode ser marcado no modo "Substituir".
+  replicarBloqueado(p: PlanoManutencao): boolean {
+    return this.replicarSomenteVazios() && p.atividades.length > 0;
+  }
+
+  alternarReplicar(p: PlanoManutencao): void {
+    if (this.replicarBloqueado(p)) return;
+    this.replicarSelecionados.update(atual => {
+      const novo = new Set(atual);
+      if (novo.has(p.id)) novo.delete(p.id); else novo.add(p.id);
+      return novo;
+    });
+  }
+
+  definirSomenteVazios(valor: boolean): void {
+    this.replicarSomenteVazios.set(valor);
+    // Voltando pro modo seguro: desmarca quem já tem checklist.
+    if (valor) {
+      const comChecklist = new Set(this.manutencaoPlanosService.planos().filter(p => p.atividades.length > 0).map(p => p.id));
+      this.replicarSelecionados.update(atual => new Set([...atual].filter(id => !comChecklist.has(id))));
+    }
+  }
+
+  async confirmarReplicarChecklist(): Promise<void> {
+    const origem = this.replicarOrigem();
+    const ids = [...this.replicarSelecionados()];
+    if (!origem || ids.length === 0 || this.isProcessando()) return;
+    const substituindo = this.manutencaoPlanosService.planos().filter(p => ids.includes(p.id) && p.atividades.length > 0).length;
+    const aviso = substituindo > 0 ? `\n\n${substituindo} deles já têm checklist, que será SUBSTITUÍDO.` : '';
+    const confirmou = await this.confirmDialogService.confirm(
+      `Aplicar o checklist de "${origem.nome}" (${origem.atividades.length} passo(s)) em ${ids.length} plano(s)?${aviso}`,
+      { confirmLabel: 'Aplicar', danger: substituindo > 0 },
+    );
+    if (!confirmou) return;
+    this.isProcessando.set(true);
+    try {
+      const alterados = await this.manutencaoPlanosService.replicarChecklist(origem.id, ids);
+      this.notificationService.showSuccess(`Checklist aplicado em ${alterados} plano(s).`);
+      this.fecharReplicarChecklist();
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao replicar checklist.');
+    } finally {
+      this.isProcessando.set(false);
+    }
   }
 
   async copiarChecklistDe(plano: PlanoManutencao): Promise<void> {

@@ -339,6 +339,16 @@ export function planosAtrasados(
     .sort((a, b) => a.proximaData.localeCompare(b.proximaData));
 }
 
+// Nome do plano sem a identificação do equipamento — pra achar planos "gêmeos" na hora
+// de replicar checklist ("I-E-2S MOTORES/PAINEIS ECA45" e "... ECA46" viram o mesmo
+// "I-E-2S MOTORES/PAINEIS"). Mantém o 1º termo (código da tarefa, ex. "I-E-2S", que tem
+// dígito mas não é equipamento) e tira todo termo seguinte que tenha número (TAG/KKS,
+// "TC05", "STR01", "01"...).
+export function nomeBaseDoPlano(nome: string): string {
+  const [primeiro, ...resto] = nome.trim().toUpperCase().split(/\s+/);
+  return [primeiro, ...resto.filter(t => !/\d/.test(t))].filter(Boolean).join(' ');
+}
+
 // ── Mapa de intervenções (52 semanas) ─────────────────────────────────────────
 
 export interface SemanaIso {
