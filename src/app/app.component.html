@@ -23,6 +23,7 @@
     <main class="w-full p-4 md:p-8" [class.max-w-7xl]="!isPublicWideRoute()" [class.mx-auto]="!isPublicWideRoute()">
       <router-outlet />
     </main>
+    <footer class="app-footer">Desenvolvido por Lucas Freitas</footer>
   </div>
 } @else if (currentUser() && !isPublicAuthRoute()) {
   <!-- Show dashboard for authenticated users -->
@@ -33,6 +34,7 @@
       <main class="flex-1 overflow-y-auto p-4 md:p-8 app-main">
         <router-outlet />
       </main>
+      <footer class="app-footer">Desenvolvido por Lucas Freitas</footer>
     </div>
   </div>
 } @else {

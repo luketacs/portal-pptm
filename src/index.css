@@ -50,6 +50,20 @@ input, button, textarea, select { font: inherit; }
   background: transparent;
 }
 
+/* Rodapé fixo do portal (telas logadas e links públicos). Fica fora da impressão pra
+   não aparecer nos relatórios PCM, que já têm rodapé próprio. */
+.app-footer {
+  padding: 0.75rem 1rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--color-slate-400, #94a3b8);
+  border-top: 1px solid var(--border, #e2e8f0);
+}
+
+@media print {
+  .app-footer { display: none; }
+}
+
 .app-header {
   background: rgba(248, 250, 252, 0.8);
   border-bottom: 1px solid var(--border);
