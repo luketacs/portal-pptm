@@ -9,13 +9,7 @@ import {
 } from '../../services/apontamentos.service';
 import { AuthService } from '../../services/auth.service';
 import { ActivatedRoute } from '@angular/router';
-import { drawPieChart } from '../../utils/charts';
-import * as d3 from 'd3';
-
-const STATUS_CORES: Record<string, string> = {
-  EXEC: '#22c55e', EXPA: '#3b82f6', PREP: '#f59e0b',
-  CONC: '#6366f1', INSP: '#14b8a6', SUSP: '#ef4444',
-};
+import { drawBarrasHorizontais, limparGrafico } from '../../utils/charts';
 
 const EQUIPE_LABEL: Record<EquipeTab, string> = {
   eletrica: 'Elétrica',
@@ -236,23 +230,24 @@ export class ApontamentosComponent implements OnInit, OnDestroy {
       const areaEl   = this.areaChartEl();
       if (s.totalOS === 0) return;
       if (statusEl) {
-        drawPieChart(statusEl, s.porStatus.map(x => ({ name: x.status, value: x.count })), {
-          height: 240,
-          radiusInset: 16,
-          innerRadiusRatio: 0.5,
-          labelRadiusOffset: 12,
-          minPercentForLabel: 7,
-          colorFn: d => STATUS_CORES[d.name] ?? '#94a3b8',
-          label: d => `${d.name} (${d.value})`,
-          centerLabel: 'Apontamentos',
+        drawBarrasHorizontais(statusEl, s.porStatus.map(x => ({ name: x.status, value: x.count })), {
+          ariaLabel: 'Apontamentos por status',
         });
       }
-      if (areaEl)   this.desenharBarras(areaEl,   s.porArea.map(x => ({ name: x.area, value: x.horas })));
+      if (areaEl) {
+        drawBarrasHorizontais(areaEl, s.porArea.map(x => ({ name: x.area, value: x.horas })), {
+          ariaLabel: 'Horas apontadas por área',
+          formatValue: h => `${h.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}h`,
+          max: 8,
+        });
+      }
     }, { injector: this.injector });
   }
 
   ngOnDestroy(): void {
     this.efectRef?.destroy();
+    limparGrafico(this.statusChartEl());
+    limparGrafico(this.areaChartEl());
     clearInterval(this.nowTimer);
     clearInterval(this.tvRotationTimer);
     clearInterval(this.tvRefreshTimer);
@@ -302,36 +297,4 @@ export class ApontamentosComponent implements OnInit, OnDestroy {
     return map[status?.trim().toUpperCase()] ?? 'bg-gray-100 text-gray-700';
   }
 
-  // ── D3 Charts ─────────────────────────────────────────────────────────────
-
-  private desenharBarras(ref: ElementRef, data: { name: string; value: number }[]): void {
-    const el = ref.nativeElement;
-    d3.select(el).select('svg').remove();
-    const top = data.slice(0, 8);
-    if (!top.length) return;
-
-    const margin = { top: 10, right: 55, bottom: 10, left: 140 };
-    const W = (el.offsetWidth || 400) - margin.left - margin.right;
-    const H = top.length * 32;
-
-    const svg = d3.select(el).append('svg')
-      .attr('width', W + margin.left + margin.right).attr('height', H + margin.top + margin.bottom)
-      .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-
-    const y = d3.scaleBand().range([0, H]).domain(top.map(d => d.name)).padding(0.3);
-    const x = d3.scaleLinear().range([0, W]).domain([0, (d3.max(top, d => d.value) ?? 1) * 1.05]);
-
-    svg.selectAll('.bar').data(top).enter().append('rect')
-       .attr('y', d => y(d.name) ?? 0).attr('height', y.bandwidth())
-       .attr('x', 0).attr('width', d => x(d.value)).attr('fill', '#3b82f6').attr('rx', 3);
-
-    svg.selectAll('.label').data(top).enter().append('text')
-       .attr('y', d => (y(d.name) ?? 0) + y.bandwidth() / 2).attr('x', d => x(d.value) + 5)
-       .attr('dy', '0.35em').style('font-size', '11px').style('fill', '#475569')
-       .text(d => `${d.value}h`);
-
-    svg.append('g').call(d3.axisLeft(y).tickSize(0))
-       .selectAll('text').style('font-size', '11px').style('fill', '#475569');
-    svg.select('.domain').remove();
-  }
 }

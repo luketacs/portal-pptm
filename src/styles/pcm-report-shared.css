@@ -1,7 +1,8 @@
 /* Identidade visual compartilhada dos relatórios gerenciais de PCM (Semanal e
    Mensal) — reproduz de propósito o layout/cores do relatório original (documento
    que já circula com essa marca), não a paleta padrão do Portal. Usado via @import
-   em relatorio-semanal-pcm.component.css e relatorio-mensal-pcm.component.css. */
+   em manutencao-indicadores-semanais.component.css (as telas de Relatório Semanal/
+   Mensal PCM foram removidas — o conteúdo vive nos Indicadores). */
 
 .pcm-report {
   background: white;

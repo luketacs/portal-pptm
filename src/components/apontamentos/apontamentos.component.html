@@ -233,19 +233,13 @@
     <!-- Gráficos -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div class="app-card p-6">
-        <h3 class="text-base font-semibold text-gray-700 mb-3">Distribuição por Status</h3>
+        <h3 class="text-base font-semibold text-gray-700">Apontamentos por status</h3>
+        <p class="text-xs text-gray-500 mb-3">Status da OS no SIGMA</p>
         <div #statusChart></div>
-        <div class="mt-3 flex flex-wrap gap-2 justify-center">
-          @for (item of stats().porStatus; track item.status) {
-            <span class="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full font-medium"
-              [class]="getStatusClass(item.status)">
-              {{ item.status }} ({{ item.count }})
-            </span>
-          }
-        </div>
       </div>
       <div class="app-card p-6">
-        <h3 class="text-base font-semibold text-gray-700 mb-3">Horas por Área (Top 8)</h3>
+        <h3 class="text-base font-semibold text-gray-700">Horas por área</h3>
+        <p class="text-xs text-gray-500 mb-3">As 7 com mais horas; o restante somado em "Outros"</p>
         <div #areaChart></div>
       </div>
     </div>

@@ -117,22 +117,11 @@ export const APP_ROUTES: Routes = [
     title: 'Auditoria',
   },
 
-  {
-    path: 'admin/relatorio-semanal-pcm',
-    loadComponent: () =>
-      import('../components/admin/relatorio-semanal-pcm/relatorio-semanal-pcm.component').then(m => m.RelatorioSemanalPcmComponent),
-    canActivate: [authGuard],
-    data: { roles: ['Admin'] },
-    title: 'Relatório Semanal PCM',
-  },
-  {
-    path: 'admin/relatorio-mensal-pcm',
-    loadComponent: () =>
-      import('../components/admin/relatorio-mensal-pcm/relatorio-mensal-pcm.component').then(m => m.RelatorioMensalPcmComponent),
-    canActivate: [authGuard],
-    data: { roles: ['Admin'] },
-    title: 'Relatório Mensal PCM',
-  },
+  // Relatórios Semanal/Mensal PCM removidos — o mesmo conteúdo está na tela de
+  // Indicadores (manutencao/indicadores-semanais). Os utils (src/utils/relatorio-*.ts)
+  // continuam, usados pelos Indicadores. Link antigo cai no Indicadores.
+  { path: 'admin/relatorio-semanal-pcm', redirectTo: 'manutencao/indicadores-semanais' },
+  { path: 'admin/relatorio-mensal-pcm', redirectTo: 'manutencao/indicadores-semanais' },
 
   // Apontamentos descontinuado temporariamente — rotas removidas de propósito
   // (cai no wildcard "**" → página não encontrada). Reativar: restaurar as

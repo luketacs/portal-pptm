@@ -1,7 +1,7 @@
 @if (canViewDashboard()) {
 <div class="space-y-8">
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 no-print">
-    <h1 class="text-3xl font-bold text-gray-800">Dashboard Gerencial</h1>
+    <h1 class="text-3xl font-bold text-gray-800">Dashboard de Compras</h1>
     <div class="flex items-center gap-3 flex-wrap">
       <!-- Seletor de período -->
       <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
@@ -82,50 +82,23 @@
     </div>
   </div>
 
-  <!-- Tempo Médio por Status -->
-  @if (avgTimePerStatus().length > 0) {
-  <div>
-    <div class="mb-4">
-      <h2 class="text-xl font-bold text-gray-800">Tempo Médio por Status</h2>
-      <p class="text-sm text-gray-500 mt-1">Tempo médio que as solicitações permanecem em cada etapa do fluxo</p>
-    </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-      @for (item of avgTimePerStatus(); track item.status) {
-        <div class="app-card p-6 flex items-center gap-4">
-          <div class="p-3 rounded-full" [style.background-color]="getStatusColor(item.status) + '1a'">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" [style.color]="getStatusColor(item.status)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          </div>
-          <div>
-            <p class="text-sm text-gray-500">{{ item.status }}</p>
-            <p class="text-2xl font-bold text-gray-800">{{ formatDuration(item.avgMs) }}</p>
-            <p class="text-xs text-gray-400">{{ item.count }} SC{{ item.count !== 1 ? 's' : '' }} · Máx: {{ formatDuration(item.maxMs) }}</p>
-          </div>
-        </div>
-      }
-    </div>
-  </div>
-  }
-
-  <!-- Charts (tela) -->
+  <!-- Gráficos (tela) — barras horizontais, uma cor por gráfico, valor na ponta,
+       tooltip com % do total (ver src/utils/charts.ts). -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 no-print">
     <div class="app-card p-6">
-      <h3 class="text-lg font-semibold text-gray-700 mb-4">Solicitações por Status</h3>
+      <h3 class="text-lg font-semibold text-gray-700">Solicitações por status</h3>
+      <p class="text-xs text-gray-500 mb-4">{{ totalStatusRequests() }} solicitações no período</p>
       <div #statusChart></div>
-      <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-        @for (item of statusChartData(); track item.name) {
-          <div class="flex items-center justify-between text-sm">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="w-3 h-3 rounded-full shrink-0" [style.background-color]="item.color"></span>
-              <span class="text-gray-700 truncate" [title]="item.name">{{ item.name }}</span>
-            </div>
-            <span class="text-gray-600 font-medium">{{ item.value }} ({{ item.percent }}%)</span>
-          </div>
-        }
-      </div>
     </div>
     <div class="app-card p-6">
-      <h3 class="text-lg font-semibold text-gray-700 mb-4">Solicitações por Tipo</h3>
+      <h3 class="text-lg font-semibold text-gray-700">Solicitações por tipo</h3>
+      <p class="text-xs text-gray-500 mb-4">Tipo de material</p>
       <div #typeChart></div>
+    </div>
+    <div class="app-card p-6 lg:col-span-2">
+      <h3 class="text-lg font-semibold text-gray-700">Tempo médio por etapa</h3>
+      <p class="text-xs text-gray-500 mb-4">Quanto tempo, em média, as solicitações ficam em cada etapa do fluxo — passe o mouse pra ver quantas SCs e o tempo máximo.</p>
+      <div #tempoChart></div>
     </div>
   </div>
 

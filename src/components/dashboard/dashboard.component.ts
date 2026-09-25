@@ -3,8 +3,7 @@ import { CommonModule, CurrencyPipe } from '@angular/common';
 import { RequestService } from '../../services/request.service';
 import { PurchaseRequest, RequestStatus } from '../../models/request.model';
 import { AuthService } from '../../services/auth.service';
-import { drawPieChart } from '../../utils/charts';
-import * as d3 from 'd3';
+import { drawBarrasHorizontais, limparGrafico } from '../../utils/charts';
 
 type DashboardPeriod = 'week' | 'month' | '3months' | 'year' | 'all';
 
@@ -25,7 +24,6 @@ const PERIOD_LABELS: Record<DashboardPeriod, string> = {
 })
 export class DashboardComponent implements OnDestroy {
     private effectRef?: EffectRef;
-    private readonly statusColorScheme = ['#fbbf24', '#38bdf8', '#ef4444', '#60a5fa', '#0ea5e9', '#3b82f6', '#2dd4bf', '#f43f5e', '#8b5cf6', '#14b8a6', '#22c55e'];
 
     readonly periods: DashboardPeriod[] = ['week', 'month', '3months', 'year', 'all'];
     readonly periodLabels = PERIOD_LABELS;
@@ -36,6 +34,7 @@ export class DashboardComponent implements OnDestroy {
 
     private statusChartContainer = viewChild<ElementRef>('statusChart');
     private typeChartContainer = viewChild<ElementRef>('typeChart');
+    private tempoChartContainer = viewChild<ElementRef>('tempoChart');
 
     dateRange = computed<{ from: Date; to: Date } | null>(() => {
         const period = this.selectedPeriod();
@@ -113,23 +112,35 @@ export class DashboardComponent implements OnDestroy {
             const filtered = this.filteredForPeriod();
             const statusChartEl = this.statusChartContainer();
             const typeChartEl = this.typeChartContainer();
+            const tempoChartEl = this.tempoChartContainer();
+            if (!this.canViewDashboard()) return;
 
-            if (this.canViewDashboard() && filtered.length > 0) {
-                if (statusChartEl) {
-                    const data = this.statusChartData();
-                    drawPieChart(statusChartEl, data, {
-                        height: 300,
-                        labelRadiusOffset: 16,
-                        colorScheme: this.statusColorScheme,
-                        label: d => `${d.percent}%`,
-                        tooltip: d => `${d.name}: ${d.value} (${d.percent}%)`,
-                        centerLabel: 'Solicitações',
-                    });
-                }
-                if (typeChartEl) {
-                    const data = this.aggregateBy(filtered, 'materialType');
-                    this.drawBarChart(typeChartEl, data, ['#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa']);
-                }
+            if (statusChartEl) {
+                drawBarrasHorizontais(statusChartEl, this.statusChartData(), {
+                    ariaLabel: 'Solicitações por status',
+                    max: 12,
+                });
+            }
+            if (typeChartEl) {
+                drawBarrasHorizontais(typeChartEl, this.aggregateBy(filtered, 'materialType'), {
+                    ariaLabel: 'Solicitações por tipo de material',
+                });
+            }
+            if (tempoChartEl) {
+                // Tempo médio por etapa, em horas — o comprimento compara as etapas; o
+                // rótulo mostra no formato legível (2d 4h), o tooltip traz qtd e máximo.
+                const porStatus = new Map(this.avgTimePerStatus().map(t => [t.status, t]));
+                drawBarrasHorizontais(tempoChartEl,
+                    this.avgTimePerStatus().map(t => ({ name: t.status, value: t.avgMs / 3_600_000 })), {
+                    ariaLabel: 'Tempo médio por etapa do fluxo',
+                    formatValue: h => this.formatDuration(h * 3_600_000),
+                    mostrarPercentual: false,
+                    max: 12,
+                    detalhe: d => {
+                        const t = porStatus.get(d.name);
+                        return t ? `${t.count} SC${t.count !== 1 ? 's' : ''} · máx ${this.formatDuration(t.maxMs)}` : null;
+                    },
+                });
             }
         });
     }
@@ -149,11 +160,9 @@ export class DashboardComponent implements OnDestroy {
 
     ngOnDestroy() {
         this.effectRef?.destroy();
-        // Clean up D3 chart elements from DOM
-        const statusEl = this.statusChartContainer();
-        const typeEl = this.typeChartContainer();
-        if (statusEl) d3.select(statusEl.nativeElement).select('svg').remove();
-        if (typeEl) d3.select(typeEl.nativeElement).select('svg').remove();
+        limparGrafico(this.statusChartContainer());
+        limparGrafico(this.typeChartContainer());
+        limparGrafico(this.tempoChartContainer());
     }
 
     private buildAvgTimePerStatus(requests: PurchaseRequest[]) {
@@ -244,24 +253,6 @@ export class DashboardComponent implements OnDestroy {
         return remainingDays > 0 ? `${months}m ${remainingDays}d` : `${months}m`;
     }
 
-    private readonly STATUS_COLOR_MAP: Record<string, string> = {
-        'Pendente': '#f59e0b',
-        'Aprovado no Portal': '#06b6d4',
-        'Reprovado': '#ef4444',
-        'Aprovado no MRP': '#3b82f6',
-        'SC Criada': '#0ea5e9',
-        'Em Cotação': '#6366f1',
-        'Aprovado em RD': '#14b8a6',
-        'Reprovado em RD': '#f43f5e',
-        'Pedido Criado': '#8b5cf6',
-        'Material Recebido': '#84cc16',
-        'Finalizado': '#22c55e',
-    };
-
-    getStatusColor(status: string): string {
-        return this.STATUS_COLOR_MAP[status] || '#64748b';
-    }
-
     private aggregateBy(requests: PurchaseRequest[], key: keyof PurchaseRequest) {
         const aggregation = requests.reduce((acc, req) => {
             const group = req[key] as string;
@@ -274,45 +265,9 @@ export class DashboardComponent implements OnDestroy {
     private buildStatusChartData(requests: PurchaseRequest[]) {
         const aggregated = this.aggregateBy(requests, 'status').sort((a, b) => b.value - a.value);
         const total = aggregated.reduce((sum, item) => sum + item.value, 0);
-        return aggregated.map((item, index) => ({
+        return aggregated.map(item => ({
             ...item,
             percent: total > 0 ? Math.round((item.value / total) * 100) : 0,
-            color: this.statusColorScheme[index % this.statusColorScheme.length],
         }));
-    }
-
-    private drawBarChart(elementRef: ElementRef, data: any[], colorScheme: string[]) {
-        const element = elementRef.nativeElement;
-        const margin = { top: 20, right: 20, bottom: 30, left: 40 };
-        const width = element.offsetWidth - margin.left - margin.right;
-        const height = 250 - margin.top - margin.bottom;
-
-        d3.select(element).select("svg").remove();
-        
-        const svg = d3.select(element).append("svg")
-            .attr("width", width + margin.left + margin.right)
-            .attr("height", height + margin.top + margin.bottom)
-            .append("g")
-            .attr("transform", `translate(${margin.left}, ${margin.top})`);
-
-        const x = d3.scaleBand().range([0, width]).padding(0.1);
-        const y = d3.scaleLinear().range([height, 0]);
-        const color = d3.scaleOrdinal<string>().range(colorScheme);
-        
-        x.domain(data.map(d => d.name));
-        y.domain([0, d3.max(data, (d: any) => d.value)]);
-
-        svg.selectAll(".bar")
-            .data(data)
-            .enter().append("rect")
-            .attr("class", "bar")
-            .attr("x", (d: any) => x(d.name) ?? 0)
-            .attr("width", x.bandwidth())
-            .attr("y", (d: any) => y(d.value))
-            .attr("height", (d: any) => height - y(d.value))
-            .attr("fill", (d: any) => color(d.name) as string);
-            
-        svg.append("g").attr("transform", `translate(0,${height})`).call(d3.axisBottom(x));
-        svg.append("g").call(d3.axisLeft(y));
     }
 }

@@ -8,8 +8,7 @@ import { MaterialService } from '../../../services/material.service';
 import { RequestService } from '../../../services/request.service';
 import { AuthService } from '../../../services/auth.service';
 import { Material } from '../../../models/material.model';
-import { drawPieChart, drawVerticalBarChart } from '../../../utils/charts';
-import * as d3 from 'd3';
+import { drawBarrasHorizontais, limparGrafico } from '../../../utils/charts';
 
 @Component({
   selector: 'app-materials-dashboard',
@@ -22,10 +21,7 @@ export class MaterialsDashboardComponent implements OnInit, OnDestroy {
   private readonly injector = inject(Injector);
   private effectRef?: EffectRef;
   private destroyed = false;
-  private readonly statusColorScheme = ['#22c55e', '#fbbf24'];
-  private readonly unitColorScheme   = ['#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe', '#eff6ff', '#1e40af'];
 
-  private statusChartContainer = viewChild<ElementRef>('statusChart');
   private unitChartContainer   = viewChild<ElementRef>('unitChart');
   private creatorChartContainer = viewChild<ElementRef>('creatorChart');
 
@@ -47,10 +43,14 @@ export class MaterialsDashboardComponent implements OnInit, OnDestroy {
     const pend = all.length - lib;
     const total = all.length;
     return [
-      { name: 'Liberado',  value: lib,  percent: total ? Math.round((lib  / total) * 100) : 0, color: '#22c55e' },
-      { name: 'Pendente',  value: pend, percent: total ? Math.round((pend / total) * 100) : 0, color: '#fbbf24' },
+      { name: 'Liberado',  value: lib,  percent: total ? Math.round((lib  / total) * 100) : 0 },
+      { name: 'Pendente',  value: pend, percent: total ? Math.round((pend / total) * 100) : 0 },
     ];
   });
+
+  // Só 2 estados → um medidor (% liberados), não pizza de 2 fatias (anti-padrão da
+  // skill de dataviz: "2-slice pie → a stat tile. The number is the chart").
+  percentualLiberado = computed(() => this.statusChartData()[0]?.percent ?? 0);
 
   // Tempo médio de liberação (created_at → released_at para materiais liberados)
   avgReleaseTime = computed(() => {
@@ -83,8 +83,7 @@ export class MaterialsDashboardComponent implements OnInit, OnDestroy {
     }
     return Object.entries(map)
       .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 8);
+      .sort((a, b) => b.value - a.value);
   });
 
   // Cross-reference: materiais com/sem solicitação de compra
@@ -120,22 +119,15 @@ export class MaterialsDashboardComponent implements OnInit, OnDestroy {
       const mats = this.materials();
       if (!mats.length) return;
 
-      const statusEl  = this.statusChartContainer();
       const unitEl    = this.unitChartContainer();
       const creatorEl = this.creatorChartContainer();
 
-      if (statusEl) {
-        drawPieChart(statusEl, this.statusChartData(), {
-          colorScheme: this.statusColorScheme,
-          label: d => `${d.percent}%`,
-          centerLabel: 'Materiais',
-        });
-      }
       if (unitEl) {
-        drawVerticalBarChart(unitEl, this.unitChartData(), { height: 220, colorScheme: this.unitColorScheme });
+        drawBarrasHorizontais(unitEl, this.unitChartData(), { ariaLabel: 'Materiais por unidade de medida' });
       }
       if (creatorEl) {
-        drawVerticalBarChart(creatorEl, this.creatorChartData(), { height: 220, colorScheme: this.unitColorScheme });
+        // Top 8 cadastradores; o resto vira "Outros" (antes era cortado sem aviso).
+        drawBarrasHorizontais(creatorEl, this.creatorChartData(), { ariaLabel: 'Materiais por cadastrador', max: 8 });
       }
     }, { injector: this.injector });
   }
@@ -143,8 +135,8 @@ export class MaterialsDashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroyed = true;
     this.effectRef?.destroy();
-    [this.statusChartContainer(), this.unitChartContainer(), this.creatorChartContainer()]
-      .forEach(el => { if (el) d3.select(el.nativeElement).select('svg').remove(); });
+    limparGrafico(this.unitChartContainer());
+    limparGrafico(this.creatorChartContainer());
   }
 
   private aggregateBy(items: Material[], key: keyof Material): { name: string; value: number }[] {

@@ -147,7 +147,6 @@ export class SidebarComponent implements OnDestroy {
   private routerSubscription?: Subscription;
   currentUrl = signal('/');
   expandedGroups = signal<Record<string, boolean>>({
-    dashboards: false,
     requests: false,
     materials: false,
     admin: false,
@@ -170,23 +169,17 @@ export class SidebarComponent implements OnDestroy {
     });
   }
 
+  // Cada dashboard fica dentro do seu próprio grupo (Materiais / Solic de compras), como
+  // primeiro item — antes havia um grupo "Dashboards" à parte. As rotas continuam as
+  // mesmas (/dashboard, /materials-dashboard): login e página 404 apontam pra elas.
   navGroups: NavGroup[] = [
-    {
-      id: 'dashboards',
-      label: 'Dashboards',
-      icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h8v8H3V3zm10 0h8v5h-8V3zM3 13h5v8H3v-8zm7 4h11v4H10v-4z" /></svg>',
-      roles: ['Solicitante', 'Admin', 'Visualizador'],
-      links: [
-        { path: '/dashboard', label: 'Solicitações de Compra', icon: '', roles: ['Admin', 'Visualizador'] },
-        { path: '/materials-dashboard', label: 'Materiais', icon: '', roles: ['Admin', 'Solicitante', 'Visualizador'] },
-      ],
-    },
     {
       id: 'materials',
       label: 'Materiais',
       icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>',
       roles: ['Solicitante', 'Admin', 'Visualizador'],
       links: [
+        { path: '/materials-dashboard', label: 'Dashboard', icon: '', roles: ['Admin', 'Solicitante', 'Visualizador'] },
         { path: '/materials', label: 'Lista de Materiais', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
         { path: '/my-materials', label: 'Meus Materiais', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
       ],
@@ -197,6 +190,7 @@ export class SidebarComponent implements OnDestroy {
       icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>',
       roles: ['Solicitante', 'Admin', 'Visualizador'],
       links: [
+        { path: '/dashboard', label: 'Dashboard', icon: '', roles: ['Admin', 'Visualizador'] },
         { path: '/requests/new', label: 'Nova Solicitação', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
         { path: '/requests', label: 'Minhas Solicitações', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
         { path: '/requests/in-progress', label: 'Em andamento', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
@@ -255,8 +249,6 @@ export class SidebarComponent implements OnDestroy {
       links: [
         { path: '/users', label: 'Usuários', icon: '', roles: ['Admin'] },
         { path: '/audit', label: 'Auditoria', icon: '', roles: ['Admin'] },
-        { path: '/admin/relatorio-semanal-pcm', label: 'Relatório Semanal PCM', icon: '', roles: ['Admin'] },
-        { path: '/admin/relatorio-mensal-pcm', label: 'Relatório Mensal PCM', icon: '', roles: ['Admin'] },
       ],
     },
     {

@@ -50,6 +50,56 @@ input, button, textarea, select { font: inherit; }
   background: transparent;
 }
 
+/* ── Gráficos (src/utils/charts.ts) ─────────────────────────────────────────
+   Tokens por PAPEL, não por cor — trocar a paleta é mexer só aqui. Série 1 validada
+   com o validador da skill de dataviz contra o fundo branco dos cards (#ffffff):
+   banda de luminosidade, croma e contraste ≥ 3:1 — todos PASS. */
+:root {
+  --viz-series-1: #2a78d6;
+  --viz-series-1-hover: #1c5cab;
+  --viz-text-1: #0f172a;      /* valor na ponta da barra */
+  --viz-text-2: #475569;      /* rótulo da categoria */
+  --viz-text-muted: #64748b;
+  --viz-axis: #cbd5e1;        /* linha de base (hairline) */
+  --viz-hover-wash: rgba(42, 120, 214, 0.07);
+}
+
+.viz-root { position: relative; }
+.viz-root text { font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; }
+.viz-root .viz-rotulo { fill: var(--viz-text-2); }
+.viz-root .viz-valor { fill: var(--viz-text-1); font-weight: 600; font-variant-numeric: tabular-nums; }
+.viz-root .viz-barra { fill: var(--viz-series-1); transition: fill 120ms ease; }
+.viz-root .viz-baseline { stroke: var(--viz-axis); stroke-width: 1; }
+.viz-root .viz-hit { fill: transparent; }
+.viz-root .viz-linha { cursor: default; outline: none; }
+.viz-root .viz-linha.ativo .viz-hit,
+.viz-root .viz-linha:focus-visible .viz-hit { fill: var(--viz-hover-wash); }
+.viz-root .viz-linha.ativo .viz-barra,
+.viz-root .viz-linha:focus-visible .viz-barra { fill: var(--viz-series-1-hover); }
+.viz-root .viz-vazio { font-size: 0.875rem; color: var(--viz-text-muted); padding: 1.5rem 0; text-align: center; }
+
+.viz-tooltip {
+  position: absolute;
+  pointer-events: none;
+  z-index: 20;
+  min-width: 140px;
+  max-width: 260px;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.5rem;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.18);
+  transition: opacity 100ms ease;
+}
+.viz-tooltip-titulo { font-weight: 600; margin-bottom: 0.125rem; }
+.viz-tooltip-extra { color: #cbd5e1; margin-top: 0.125rem; }
+
+@media print {
+  .viz-tooltip { display: none; }
+}
+
 /* Rodapé fixo do portal (telas logadas e links públicos). Fica fora da impressão pra
    não aparecer nos relatórios PCM, que já têm rodapé próprio. */
 .app-footer {

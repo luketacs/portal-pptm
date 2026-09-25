@@ -116,23 +116,29 @@
     <!-- Gráficos principais -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- Status -->
-      <div class="app-card p-6">
-        <h3 class="text-lg font-semibold text-gray-700 mb-4">Status dos Materiais</h3>
-        <div #statusChart></div>
-        <div class="mt-3 flex gap-6 justify-center">
-          @for (item of statusChartData(); track item.name) {
-            <div class="flex items-center gap-2 text-sm">
-              <span class="w-3 h-3 rounded-full" [style.background-color]="item.color"></span>
-              <span class="text-gray-700">{{ item.name }}</span>
-              <span class="font-semibold text-gray-800">{{ item.value }} ({{ item.percent }}%)</span>
-            </div>
-          }
+      <!-- Só 2 estados (liberado/pendente) → medidor, não pizza de 2 fatias. -->
+      <div class="app-card p-6 flex flex-col">
+        <h3 class="text-lg font-semibold text-gray-700">Status dos materiais</h3>
+        <p class="text-xs text-gray-500">Quanto do cadastro já foi liberado</p>
+        <div class="flex-1 flex flex-col justify-center py-6">
+          <p class="text-5xl font-bold text-gray-800">{{ percentualLiberado() }}%</p>
+          <p class="text-sm text-gray-500 mt-1">liberados</p>
+          <div class="h-2.5 rounded-full mt-4 overflow-hidden" style="background: #cde2fb"
+            role="meter" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="percentualLiberado()" aria-label="Materiais liberados">
+            <div class="h-full rounded-full" style="background: var(--viz-series-1)" [style.width.%]="percentualLiberado()"></div>
+          </div>
+          <div class="flex justify-between mt-3 text-sm">
+            @for (item of statusChartData(); track item.name) {
+              <span class="text-gray-600">{{ item.name }} <span class="font-semibold text-gray-800">{{ item.value }}</span></span>
+            }
+          </div>
         </div>
       </div>
 
       <!-- Por Unidade -->
       <div class="app-card p-6">
-        <h3 class="text-lg font-semibold text-gray-700 mb-4">Distribuição por Unidade de Medida</h3>
+        <h3 class="text-lg font-semibold text-gray-700">Materiais por unidade de medida</h3>
+        <p class="text-xs text-gray-500 mb-4">Passe o mouse para ver o % do total</p>
         <div #unitChart></div>
       </div>
     </div>
@@ -141,7 +147,8 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <!-- Por cadastrador -->
       <div class="app-card p-6 lg:col-span-2">
-        <h3 class="text-lg font-semibold text-gray-700 mb-4">Materiais por Cadastrador</h3>
+        <h3 class="text-lg font-semibold text-gray-700">Materiais por cadastrador</h3>
+        <p class="text-xs text-gray-500 mb-4">Os 7 que mais cadastraram; o restante somado em "Outros"</p>
         <div #creatorChart></div>
       </div>
 
