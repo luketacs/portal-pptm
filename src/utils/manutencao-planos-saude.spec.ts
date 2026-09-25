@@ -27,6 +27,10 @@ describe('ancoraFutura', () => {
   it('semanal com data inicial 3 semanas à frente: bloqueia', () => {
     expect(ancoraFutura(plano({ dataInicial: '2026-10-12', periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)' }), HOJE)).not.toBeNull();
   });
+  it('balanceamento: mensal 7 semanas à frente e trimestral 3 meses à frente: ok', () => {
+    expect(ancoraFutura(plano({ dataInicial: '2026-11-09' }), HOJE)).toBeNull();
+    expect(ancoraFutura(plano({ dataInicial: '2026-12-21', periodicidadeValor: 3 }), HOJE)).toBeNull();
+  });
   it('data inicial no passado: ok', () => {
     expect(ancoraFutura(plano({ dataInicial: '2026-01-05' }), HOJE)).toBeNull();
   });

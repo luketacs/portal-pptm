@@ -100,12 +100,17 @@ export interface PlanoParaValidar {
 
 // ── Regras individuais ─────────────────────────────────────────────────────
 
-/** Âncora > hoje + 1 período: a agenda só começa na âncora, o plano "some" até lá. */
+/**
+ * Âncora > hoje + 2 períodos: a agenda só começa na âncora, o plano "some" até lá e
+ * pula ciclo inteiro (ex. mensal com data inicial em 2027). Até 2 períodos é normal: o
+ * balanceamento (migration 058) põe a 1ª ocorrência em até 1 período a partir de
+ * 05/10/2026, mais o ajuste de dia do grupo (060/061).
+ */
 export function ancoraFutura(p: PlanoParaValidar, hojeIso: string): string | null {
   const dias = periodicidadeEmDias(p.periodicidadeValor, p.periodicidadeUnidade);
-  const limite = somarDias(hojeIso, Math.max(dias, 7));
+  const limite = somarDias(hojeIso, Math.max(2 * dias, 14));
   if (p.dataInicial <= limite) return null;
-  return `Data inicial ${dataBr(p.dataInicial)} está mais de um período à frente de hoje — o plano não aparece `
+  return `Data inicial ${dataBr(p.dataInicial)} está mais de dois períodos à frente de hoje — o plano não aparece `
     + `em nenhuma semana até lá. Para ${p.periodicidadeValor} ${p.periodicidadeUnidade}, use uma data até ${dataBr(limite)}.`;
 }
 
