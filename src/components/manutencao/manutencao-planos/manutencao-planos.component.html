@@ -137,7 +137,7 @@
   <div class="app-card p-4">
     @if (isLoading()) {
       <p class="text-sm text-gray-400 py-4 text-center">Carregando...</p>
-    } @else if (linhas().length === 0) {
+    } @else if (listaTotal() === 0) {
       <p class="text-sm text-gray-400 py-4 text-center">Nenhum plano encontrado com esses filtros.</p>
     } @else {
       <div class="overflow-x-auto">
@@ -159,7 +159,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
-            @for (linha of linhas(); track linha.plano.id) {
+            @for (linha of linhasDaPagina(); track linha.plano.id) {
               <tr [class.opacity-50]="!linha.plano.ativo">
                 <td class="py-2 pr-3 whitespace-nowrap">
                   <button type="button" (click)="abrirHistorico(linha.plano)" title="Ver histórico do plano"
@@ -213,6 +213,27 @@
             }
           </tbody>
         </table>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-slate-100 text-sm text-gray-500">
+        <div class="flex items-center gap-2">
+          <span>Mostrando {{ listaFaixa() }} de {{ listaTotal() }} planos</span>
+          <select [ngModel]="listaTamanhoPagina()" (ngModelChange)="mudarTamanhoPaginaLista($event)" aria-label="Planos por página"
+            class="rounded-lg border border-slate-300 px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+            @for (t of listaTamanhosPagina; track t) { <option [ngValue]="t">{{ t }} por página</option> }
+          </select>
+        </div>
+        <div class="flex items-center gap-1">
+          <button type="button" (click)="irParaPaginaLista(1)" [disabled]="listaPaginaAtual() === 1" title="Primeira página"
+            class="px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-40">«</button>
+          <button type="button" (click)="irParaPaginaLista(listaPaginaAtual() - 1)" [disabled]="listaPaginaAtual() === 1"
+            class="px-3 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-40">‹ Anterior</button>
+          <span class="px-3">Página {{ listaPaginaAtual() }} de {{ listaTotalPaginas() }}</span>
+          <button type="button" (click)="irParaPaginaLista(listaPaginaAtual() + 1)" [disabled]="listaPaginaAtual() === listaTotalPaginas()"
+            class="px-3 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-40">Próxima ›</button>
+          <button type="button" (click)="irParaPaginaLista(listaTotalPaginas())" [disabled]="listaPaginaAtual() === listaTotalPaginas()" title="Última página"
+            class="px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-40">»</button>
+        </div>
       </div>
     }
   </div>

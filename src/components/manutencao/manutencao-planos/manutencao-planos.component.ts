@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, effect, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ManutencaoPlanosService } from '../../../services/manutencao-planos.service';
@@ -260,23 +260,62 @@ export class ManutencaoPlanosComponent implements OnInit {
       .filter(p => termo.length === 0 || normalizarTexto(`${p.codigo} ${p.equipamento} ${p.nome} ${p.tagKks ?? ''}`).includes(termo));
   });
 
-  linhas = computed(() => {
-    const porId = this.planosComExecucaoPorId();
-    return this.planosFiltrados()
-      .map(p => {
-        const comExecucao = porId.get(p.id);
-        const ultimoCiclo = this.manutencaoPlanosService.ultimoCicloDoPlano(p.id);
-        const proximaData = comExecucao?.proximaData ?? p.dataInicial;
-        return {
-          plano: p,
-          ultimaExecucao: ultimoCiclo,
-          proximaData,
-          semanaPrevista: this.numeroSemanaISO(proximaData),
-          vencido: this.planosAtrasadosIds().has(p.id),
-        };
-      })
-      .sort((a, b) => a.plano.codigo.localeCompare(b.plano.codigo));
+  private montarLinha(p: PlanoManutencao) {
+    const comExecucao = this.planosComExecucaoPorId().get(p.id);
+    const proximaData = comExecucao?.proximaData ?? p.dataInicial;
+    return {
+      plano: p,
+      ultimaExecucao: this.manutencaoPlanosService.ultimoCicloDoPlano(p.id),
+      proximaData,
+      semanaPrevista: this.numeroSemanaISO(proximaData),
+      vencido: this.planosAtrasadosIds().has(p.id),
+    };
+  }
+
+  private planosOrdenados = computed(() =>
+    [...this.planosFiltrados()].sort((a, b) => a.codigo.localeCompare(b.codigo)));
+
+  // Todas as linhas filtradas — usado pela exportação pra Excel (leva tudo, não só a página).
+  linhas = computed(() => this.planosOrdenados().map(p => this.montarLinha(p)));
+
+  // ── Paginação da lista ────────────────────────────────────────────────────
+  // Antes a lista renderizava os ~750 planos de uma vez (e calculava última execução de
+  // cada um). Agora só a página visível é montada.
+  readonly listaTamanhosPagina = [25, 50, 100];
+  listaTamanhoPagina = signal(50);
+  listaPagina = signal(0);
+
+  listaTotal = computed(() => this.planosOrdenados().length);
+  listaTotalPaginas = computed(() => Math.max(1, Math.ceil(this.listaTotal() / this.listaTamanhoPagina())));
+  listaPaginaAtual = computed(() => Math.min(this.listaPagina(), this.listaTotalPaginas() - 1) + 1);
+
+  linhasDaPagina = computed(() => {
+    const tamanho = this.listaTamanhoPagina();
+    const inicio = (this.listaPaginaAtual() - 1) * tamanho;
+    return this.planosOrdenados().slice(inicio, inicio + tamanho).map(p => this.montarLinha(p));
   });
+
+  listaFaixa = computed(() => {
+    if (this.listaTotal() === 0) return '0';
+    const inicio = (this.listaPaginaAtual() - 1) * this.listaTamanhoPagina() + 1;
+    return `${inicio}–${Math.min(inicio + this.listaTamanhoPagina() - 1, this.listaTotal())}`;
+  });
+
+  // Mudou filtro → volta pra página 1 (só os filtros; salvar/editar um plano não mexe na página).
+  private voltarPrimeiraPaginaAoFiltrar = effect(() => {
+    this.filtroArea(); this.filtroStatus(); this.filtroPeriodicidade();
+    this.filtroResponsavel(); this.filtroChecklist(); this.filtroBusca();
+    untracked(() => this.listaPagina.set(0));
+  });
+
+  irParaPaginaLista(pagina: number): void {
+    this.listaPagina.set(Math.max(0, Math.min(pagina - 1, this.listaTotalPaginas() - 1)));
+  }
+
+  mudarTamanhoPaginaLista(tamanho: number): void {
+    this.listaTamanhoPagina.set(Number(tamanho));
+    this.listaPagina.set(0);
+  }
 
   periodicidadesCadastradas = computed(() => {
     const valores = new Set(this.manutencaoPlanosService.planos().map(p => `${p.periodicidadeValor} ${p.periodicidadeUnidade}`));
