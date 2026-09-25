@@ -719,6 +719,71 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.abrirEditar(p.plano);
   }
 
+  // Plano inativo com OS sobrando: exclui as OS (o trigger da migration 057 apaga o
+  // ciclo junto). Semana fechada recusa — essas ficam e o erro diz quais.
+  async excluirOsDePlanoInativo(p: ProblemaSaude): Promise<void> {
+    const ordens = p.ordens ?? [];
+    if (!ordens.length) return;
+    const ok = await this.confirmDialogService.confirm(
+      `Excluir ${ordens.length} OS do plano inativo ${p.plano.codigo}?\n\n` +
+      ordens.map(o => `• ${o.semanaInicio.split('-').reverse().join('/')} — ${o.tecnicoNome || 'sem técnico'}${o.numeroOs ? ` (OS ${o.numeroOs})` : ''}`).join('\n'),
+      { confirmLabel: 'Excluir OS' });
+    if (!ok) return;
+    this.isProcessando.set(true);
+    const falhas: string[] = [];
+    let excluidas = 0;
+    for (const o of ordens) {
+      try {
+        await this.manutencaoProgramacaoService.excluir(o.id);
+        excluidas++;
+      } catch (err: unknown) {
+        falhas.push(`${o.semanaInicio.split('-').reverse().join('/')}: ${err instanceof Error ? err.message : 'erro'}`);
+      }
+    }
+    await this.manutencaoPlanosService.load();
+    this.isProcessando.set(false);
+    if (falhas.length) this.notificationService.showError(`${excluidas} OS excluída(s); não foi possível excluir: ${falhas.join('; ')}`);
+    else this.notificationService.showSuccess(`${excluidas} OS excluída(s).`);
+  }
+
+  async ajustarCiclos(problemas: ProblemaSaude[]): Promise<void> {
+    const alvos = problemas.filter(p => p.ciclo);
+    if (!alvos.length) return;
+    if (alvos.length > 1) {
+      const ok = await this.confirmDialogService.confirm(
+        `Levar o ciclo de ${alvos.length} plano(s) pra data da OS?\n\n` +
+        alvos.map(p => `• ${p.plano.codigo}: ${p.ciclo!.dataAtual.split('-').reverse().join('/')} → ${p.ciclo!.dataNova.split('-').reverse().join('/')}`).join('\n'),
+        { confirmLabel: 'Ajustar todos' });
+      if (!ok) return;
+    }
+    this.isProcessando.set(true);
+    const falhas: string[] = [];
+    for (const p of alvos) {
+      try {
+        await this.manutencaoProgramacaoService.realinharCiclo(p.ciclo!.planoId, p.ciclo!.dataAtual, p.ciclo!.dataNova);
+      } catch (err: unknown) {
+        falhas.push(`${p.plano.codigo}: ${err instanceof Error ? err.message : 'erro'}`);
+      }
+    }
+    await this.manutencaoPlanosService.load();
+    this.isProcessando.set(false);
+    const ok = alvos.length - falhas.length;
+    if (falhas.length) this.notificationService.showError(`${ok} ajustado(s); falhou: ${falhas.join('; ')}`);
+    else this.notificationService.showSuccess(`Ciclo ajustado em ${ok} plano(s).`);
+  }
+
+  async reativarPlanoDoPainel(p: ProblemaSaude): Promise<void> {
+    this.isProcessando.set(true);
+    try {
+      await this.manutencaoPlanosService.ativar(p.plano.id);
+      this.notificationService.showSuccess(`${p.plano.codigo} reativado.`);
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao reativar o plano.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
+
   // ── Replicar checklist pra vários planos ──────────────────────────────────
   // Caminho inverso de copiarChecklistDe (que PUXA de um plano pro formulário aberto):
   // a partir de um plano, MANDA o checklist dele pra vários outros de uma vez.

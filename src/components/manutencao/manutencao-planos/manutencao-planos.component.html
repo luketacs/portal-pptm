@@ -469,6 +469,10 @@
                 [class]="grupo.severidade === 'erro' ? 'bg-red-100 text-red-700' : grupo.severidade === 'aviso' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'">
                 {{ grupo.severidade === 'erro' ? 'Erro' : grupo.severidade === 'aviso' ? 'Aviso' : 'Info' }}</span>
               {{ tituloProblema[grupo.tipo] }} <span class="text-gray-400 font-normal">({{ grupo.itens.length }})</span>
+              @if (grupo.tipo === 'ciclo_desalinhado' && grupo.itens.length > 1) {
+                <button type="button" (click)="ajustarCiclos(grupo.itens)" [disabled]="isProcessando()"
+                  class="ml-auto text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-50">Ajustar todos</button>
+              }
             </h3>
             <div class="border border-slate-200 rounded-lg divide-y divide-slate-100">
               @for (p of grupo.itens; track p.plano.id) {
@@ -477,7 +481,19 @@
                     <p><span class="font-mono text-xs text-slate-500">{{ p.plano.codigo }}</span> <span class="text-gray-800">{{ p.plano.nome }}</span></p>
                     <p class="text-xs text-gray-500 mt-0.5">{{ p.mensagem }}</p>
                   </div>
-                  <button type="button" (click)="corrigirProblema(p)" class="flex-shrink-0 text-xs font-semibold text-blue-600 hover:text-blue-700">Corrigir</button>
+                  @if (p.tipo === 'inativo_com_os_futura') {
+                    <div class="flex-shrink-0 flex flex-col items-end gap-1">
+                      <button type="button" (click)="excluirOsDePlanoInativo(p)" [disabled]="isProcessando()"
+                        class="text-xs font-semibold text-red-600 hover:text-red-700 disabled:opacity-50">Excluir OS</button>
+                      <button type="button" (click)="reativarPlanoDoPainel(p)" [disabled]="isProcessando()"
+                        class="text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-50">Reativar plano</button>
+                    </div>
+                  } @else if (p.tipo === 'ciclo_desalinhado' && p.ciclo) {
+                    <button type="button" (click)="ajustarCiclos([p])" [disabled]="isProcessando()"
+                      class="flex-shrink-0 text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-50">Ajustar ciclo</button>
+                  } @else {
+                    <button type="button" (click)="corrigirProblema(p)" class="flex-shrink-0 text-xs font-semibold text-blue-600 hover:text-blue-700">Corrigir</button>
+                  }
                 </div>
               }
             </div>

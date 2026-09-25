@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
 import { avaliarGravacao, podeEditarSemanaFechada } from '../utils/manutencao-regras';
 import { comLimiteDeTempo } from '../utils/retry';
+import { cicloCoerenteComOrdem } from '../utils/manutencao-planos-saude';
 import {
   AtestadoTecnico, AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest,
   EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, ParadaPlanta,
@@ -329,7 +330,7 @@ export class ManutencaoProgramacaoService {
       reuniao_horario: req.reuniaoHorario?.trim() || null,
       reuniao_local: req.reuniaoLocal?.trim() || null,
       plano_preventivo_id: req.planoPreventivoId ?? null,
-      ciclo_data_prevista: req.cicloDataPrevista ?? null,
+      ciclo_data_prevista: cicloCoerenteComOrdem(req.cicloDataPrevista, req.semanaInicio, req.diasPrevistos),
       checklist: req.checklist ?? null,
       criado_por_id: user.id,
       criado_por_nome: user.name,
@@ -489,7 +490,9 @@ export class ManutencaoProgramacaoService {
         reuniao_horario: updates.reuniaoHorario?.trim() || null,
         reuniao_local: updates.reuniaoLocal?.trim() || null,
         plano_preventivo_id: updates.planoPreventivoId,
-        ciclo_data_prevista: updates.cicloDataPrevista,
+        ciclo_data_prevista: existente
+          ? cicloCoerenteComOrdem(updates.cicloDataPrevista, existente.semanaInicio, updates.diasPrevistos)
+          : updates.cicloDataPrevista,
         checklist: updates.checklist,
       })
       .eq('id', id)
@@ -539,6 +542,37 @@ export class ManutencaoProgramacaoService {
     });
 
     this._ordens.update(lista => lista.filter(o => o.id !== id));
+  }
+
+  // Leva o ciclo de um plano pra data da ordem que o cobre (painel Saúde dos planos).
+  // Atualiza TODAS as OS do plano com aquela data de ciclo de uma vez (cópias do mesmo
+  // ciclo pra técnicos diferentes) — atualizar só uma faria o trigger da migration 057
+  // passar o ciclo antigo pra outra cópia em vez de movê-lo.
+  async realinharCiclo(planoId: string, dataAtual: string, dataNova: string): Promise<number> {
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+    if (user.role !== 'Admin') throw new Error('Só Admin pode ajustar ciclo de plano.');
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_programacao')
+      .update({ ciclo_data_prevista: dataNova })
+      .eq('plano_preventivo_id', planoId)
+      .eq('ciclo_data_prevista', dataAtual)
+      .select('*');
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) throw new Error('Nenhuma OS foi alterada (sem permissão ou já ajustada). Atualize a tela.');
+
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'manutencao_ciclo_realinhado',
+      resource_type: 'manutencao_planos',
+      resource_id: planoId,
+      description: `${user.name} ajustou o ciclo do plano de ${dataAtual} para ${dataNova} (data da OS)`,
+      metadata: { ordens: data.map(r => r.id), alteracoes: [{ campo: 'Ciclo', antes: dataAtual, depois: dataNova }] },
+    });
+
+    this.incluirNaLista(data as ManutencaoOrdemRow[]);
+    return data.length;
   }
 
   // Move uma ordem pra outra semana — diferente de editarOrdem, que nunca mexe em

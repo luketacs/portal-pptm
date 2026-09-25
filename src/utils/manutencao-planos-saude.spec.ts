@@ -1,6 +1,6 @@
 import { CicloManutencao, ManutencaoOrdem, PlanoManutencao } from '../models/manutencao-programacao.model';
 import {
-  ancoraFutura, apoioSemEquipe, diagnosticarPlanos, diferencasPlano, nomeDivergeDaPeriodicidade,
+  ancoraFutura, apoioSemEquipe, cicloCoerenteComOrdem, diagnosticarPlanos, diferencasPlano, nomeDivergeDaPeriodicidade,
   planosDuplicados, validarPlanoParaSalvar,
 } from './manutencao-planos-saude';
 
@@ -90,7 +90,36 @@ describe('diagnosticarPlanos', () => {
     const os2 = { id: 'o2', planoPreventivoId: 's', semanaInicio: '2026-09-21' } as ManutencaoOrdem;
     const ciclo = { id: 'c1', planoId: 's', dataPrevista: '2027-02-04', ordemId: 'o2' } as CicloManutencao;
     const r = diagnosticarPlanos([futuro, inativo, semKks], [ciclo], [os, os2], HOJE);
-    expect(r.map(x => x.tipo)).toEqual(['ancora_futura', 'inativo_com_os_futura', 'ciclo_desalinhado', 'sem_kks']);
+    expect(r.map(x => x.tipo)).toEqual(['ancora_futura', 'ciclo_desalinhado', 'inativo_com_os_futura', 'sem_kks']);
+    expect(r.find(x => x.tipo === 'inativo_com_os_futura')!.ordens!.map(o => o.id)).toEqual(['o1']);
+  });
+
+  it('ciclo desalinhado traz a data da OS pra ajustar; plano inativo não entra', () => {
+    const ativo = plano({ id: 'a' });
+    const inativo = plano({ id: 'i', codigo: 'PM-0002', ativo: false });
+    const os = { id: 'o1', planoPreventivoId: 'a', semanaInicio: '2026-09-28', diasPrevistos: ['2026-09-30', '2026-09-29'] } as ManutencaoOrdem;
+    const os2 = { id: 'o2', planoPreventivoId: 'i', semanaInicio: '2026-09-21', diasPrevistos: ['2026-09-21'] } as ManutencaoOrdem;
+    const r = diagnosticarPlanos([ativo, inativo], [
+      { id: 'c1', planoId: 'a', dataPrevista: '2027-09-28', ordemId: 'o1' } as CicloManutencao,
+      { id: 'c2', planoId: 'i', dataPrevista: '2027-02-21', ordemId: 'o2' } as CicloManutencao,
+    ], [os, os2], HOJE);
+    expect(r).toHaveLength(1);
+    expect(r[0].ciclo).toEqual({ planoId: 'a', dataAtual: '2027-09-28', dataNova: '2026-09-29' });
+  });
+
+  it('inativo com OS só na semana atual: não aparece (já em execução)', () => {
+    const inativo = plano({ id: 'i', ativo: false });
+    const os = { id: 'o1', planoPreventivoId: 'i', semanaInicio: HOJE } as ManutencaoOrdem;
+    expect(diagnosticarPlanos([inativo], [], [os], HOJE)).toEqual([]);
+  });
+});
+
+describe('cicloCoerenteComOrdem', () => {
+  it('dentro de 3 semanas fica; além disso vira o 1º dia da OS; sem dias, a segunda', () => {
+    expect(cicloCoerenteComOrdem('2026-10-12', '2026-09-28', ['2026-09-29'])).toBe('2026-10-12');
+    expect(cicloCoerenteComOrdem('2027-01-05', '2026-09-28', ['2026-10-01', '2026-09-30'])).toBe('2026-09-30');
+    expect(cicloCoerenteComOrdem('2027-01-05', '2026-09-28', [])).toBe('2026-09-28');
+    expect(cicloCoerenteComOrdem(null, '2026-09-28', [])).toBeNull();
   });
 });
 

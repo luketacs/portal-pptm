@@ -27,6 +27,27 @@ export interface ProblemaSaude {
   severidade: SeveridadeSaude;
   plano: PlanoManutencao;
   mensagem: string;
+  /** Só em 'inativo_com_os_futura': as OS que sobraram (pra excluir direto do painel). */
+  ordens?: ManutencaoOrdem[];
+  /** Só em 'ciclo_desalinhado': pra onde o ciclo vai ao ajustar. */
+  ciclo?: { planoId: string; dataAtual: string; dataNova: string };
+}
+
+/** Folga máxima entre a semana da OS e a data do ciclo que ela cobre — mesma janela
+ *  máxima do alinhamento por equipamento (Apoio, 21 dias). Passou disso, o ciclo não é
+ *  dessa OS: veio de uma âncora futura e esconderia o plano até lá. */
+const FOLGA_CICLO_DIAS = 21;
+
+/**
+ * O ciclo acompanha a data da ordem: se a data do ciclo está mais de 3 semanas à frente
+ * da semana da OS, vira o 1º dia previsto da OS (ou a segunda da semana). Dentro da
+ * folga, fica como está (antecipação normal do alinhamento). null = deixa o banco
+ * preencher (trigger portal_preparar_ciclo usa o 1º dia previsto).
+ */
+export function cicloCoerenteComOrdem(ciclo: string | null | undefined, semanaInicio: string, diasPrevistos: string[]): string | null {
+  if (!ciclo) return ciclo ?? null;
+  if (ciclo <= somarDias(semanaInicio, FOLGA_CICLO_DIAS)) return ciclo;
+  return [...(diasPrevistos ?? [])].sort()[0] ?? semanaInicio;
 }
 
 export const TITULO_PROBLEMA: Record<TipoProblemaSaude, string> = {
@@ -35,16 +56,16 @@ export const TITULO_PROBLEMA: Record<TipoProblemaSaude, string> = {
   duplicado: 'Plano duplicado',
   apoio_sem_equipe: 'Apoio sem equipe reconhecida',
   sem_kks: 'Sem TAG/KKS',
-  inativo_com_os_futura: 'Inativo com OS programada',
+  inativo_com_os_futura: 'Inativo com OS em semanas seguintes',
   ciclo_desalinhado: 'Ciclo gravado à frente da OS',
 };
 
 const SEVERIDADE: Record<TipoProblemaSaude, SeveridadeSaude> = {
   ancora_futura: 'erro',
-  inativo_com_os_futura: 'erro',
   ciclo_desalinhado: 'erro',
   nome_periodicidade: 'aviso',
   duplicado: 'aviso',
+  inativo_com_os_futura: 'aviso',
   apoio_sem_equipe: 'aviso',
   sem_kks: 'info',
 };
@@ -147,13 +168,21 @@ export function diagnosticarPlanos(
   planos: PlanoManutencao[], ciclos: CicloManutencao[], ordens: ManutencaoOrdem[], hojeInicioSemanaIso: string,
 ): ProblemaSaude[] {
   const problemas: ProblemaSaude[] = [];
-  const add = (tipo: TipoProblemaSaude, plano: PlanoManutencao, mensagem: string) =>
-    problemas.push({ tipo, severidade: SEVERIDADE[tipo], plano, mensagem });
+  const add = (tipo: TipoProblemaSaude, plano: PlanoManutencao, mensagem: string, extra: Partial<ProblemaSaude> = {}) =>
+    problemas.push({ tipo, severidade: SEVERIDADE[tipo], plano, mensagem, ...extra });
 
   const ordensPorId = new Map(ordens.map(o => [o.id, o]));
-  const osFuturaPorPlano = new Set(ordens
-    .filter(o => o.planoPreventivoId && o.semanaInicio >= hojeInicioSemanaIso)
-    .map(o => o.planoPreventivoId!));
+  // Só semanas SEGUINTES: a OS da semana atual já está em execução — é o caso de quem
+  // desativa uma cópia de propósito e mantém a OS já gerada (migration 059, teste de
+  // disponibilidade Elétrica/Mecânica). Aviso, não erro: plano inativo não gera mais
+  // nada, a OS que sobrou só precisa de uma decisão (manter, excluir ou reativar).
+  const osFuturaPorPlano = new Map<string, ManutencaoOrdem[]>();
+  for (const o of ordens) {
+    if (!o.planoPreventivoId || o.semanaInicio <= hojeInicioSemanaIso) continue;
+    const lista = osFuturaPorPlano.get(o.planoPreventivoId) ?? [];
+    lista.push(o);
+    osFuturaPorPlano.set(o.planoPreventivoId, lista);
+  }
   const jaMarcadoDuplicado = new Set<string>();
 
   for (const p of planos) {
@@ -173,22 +202,29 @@ export function diagnosticarPlanos(
       if (apoio) add('apoio_sem_equipe', p, apoio);
       if (!p.tagKks?.trim()) add('sem_kks', p, 'Sem TAG/KKS: não agrupa com outros planos do mesmo equipamento na programação.');
     } else if (osFuturaPorPlano.has(p.id)) {
-      add('inativo_com_os_futura', p, 'Plano inativo, mas ainda tem OS programada desta semana em diante.');
+      const os = osFuturaPorPlano.get(p.id)!.sort((a, b) => a.semanaInicio.localeCompare(b.semanaInicio));
+      const lista = os.map(o => `${o.semanaInicio.split('-').reverse().join('/')} (${o.tecnicoNome || 'sem técnico'})`).join(', ');
+      add('inativo_com_os_futura', p,
+        `Plano inativo, mas ainda tem ${os.length} OS programada(s): ${lista}. Se a desativação foi de propósito e as OS devem ficar, pode ignorar; senão exclua as OS ou reative o plano.`,
+        { ordens: os });
     }
   }
 
   // Ciclo gravado > 3 semanas depois da semana da própria OS: esconde o plano até essa
-  // data (proximaDataFixa pula tudo até o último ciclo) — ver migration 058.
+  // data (proximaDataFixa pula tudo até o último ciclo) — ver migration 058. Plano
+  // inativo não entra na agenda, então o ciclo dele não atrapalha nada.
   const planoPorId = new Map(planos.map(p => [p.id, p]));
   const cicloJaReportado = new Set<string>();
   for (const c of ciclos) {
     const ordem = c.ordemId ? ordensPorId.get(c.ordemId) : undefined;
     const plano = planoPorId.get(c.planoId);
-    if (!ordem || !plano || cicloJaReportado.has(plano.id)) continue;
-    if (c.dataPrevista > somarDias(ordem.semanaInicio, 21)) {
+    if (!ordem || !plano || !plano.ativo || cicloJaReportado.has(plano.id)) continue;
+    const coerente = cicloCoerenteComOrdem(c.dataPrevista, ordem.semanaInicio, ordem.diasPrevistos);
+    if (coerente !== c.dataPrevista) {
       add('ciclo_desalinhado', plano,
         `Ciclo gravado em ${dataBr(c.dataPrevista)} para uma OS da semana de ${dataBr(ordem.semanaInicio)} — `
-        + 'o plano fica escondido da programação até essa data.');
+        + `o plano fica escondido da programação até essa data. Ajustar leva o ciclo pra ${dataBr(coerente!)}.`,
+        { ciclo: { planoId: plano.id, dataAtual: c.dataPrevista, dataNova: coerente! } });
       cicloJaReportado.add(plano.id);
     }
   }
