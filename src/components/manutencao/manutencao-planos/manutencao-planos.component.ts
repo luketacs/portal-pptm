@@ -13,8 +13,25 @@ import {
 } from '../../../models/manutencao-programacao.model';
 import { calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva } from '../../../utils/manutencao-preventivas';
 import {
-  agendaDosPlanos, DiaGradeMensal, gerarGradeMensal, planosAtrasados,
+  agendaDosPlanos, DiaGradeMensal, gerarGradeMensal, ocorrenciasNoIntervalo, planosAtrasados, SemanaIso,
+  semanasIsoDoAno, siglaPeriodicidade,
 } from '../../../utils/manutencao-planos';
+
+// Célula do Mapa de intervenções: 'programada' = já virou OS (ciclo com ordem naquela
+// semana); 'prevista' = ocorrência da agenda, ainda sem OS (só da semana atual pra frente
+// — no passado sem OS não se afirma nada).
+type CelulaMapa = 'programada' | 'prevista';
+
+export interface LinhaMapa {
+  plano: PlanoManutencao;
+  sigla: string;
+  // Na parada da planta, ciclo curto de Elétrica/Mecânica é projetado como mensal
+  // (periodicidadeEfetiva) — marcado pra não confundir com um plano mensal de verdade.
+  efetivaDiferente: boolean;
+  celulas: Map<number, CelulaMapa>; // chave = número da semana ISO
+}
+
+const MAPA_LINHAS_POR_PAGINA = 30;
 
 const AREA_LABEL: Record<ManutencaoArea, string> = {
   ELETRICA: 'Elétrica',
@@ -694,7 +711,7 @@ export class ManutencaoPlanosComponent implements OnInit {
   // Toggle dentro da própria tela de Planos (não uma aba separada) — reaproveita os
   // mesmos filtros/dados já carregados (ver planosFiltrados()).
   visualizacao = signal<'lista' | 'calendario'>('lista');
-  calendarioModo = signal<'semana' | 'mes' | 'ano'>('semana');
+  calendarioModo = signal<'semana' | 'mes' | 'ano' | 'mapa'>('semana');
   calendarioAncora = signal<string>(paraIso(new Date()));
 
   private calendarioAnoAtual = computed(() => Number(this.calendarioAncora().split('-')[0]));
@@ -765,6 +782,7 @@ export class ManutencaoPlanosComponent implements OnInit {
   calendarioLabel = computed(() => {
     const modo = this.calendarioModo();
     if (modo === 'ano') return `${this.calendarioAnoAtual()}`;
+    if (modo === 'mapa') return `Mapa de intervenções ${this.calendarioAnoAtual()}`;
     if (modo === 'mes') return `${MESES_LABEL[this.calendarioMesAtual() - 1]} de ${this.calendarioAnoAtual()}`;
     const dias = this.calendarioDiasSemana();
     return `Semana de ${this.diaMesLabel(dias[0])} a ${this.diaMesLabel(dias[6])}`;
@@ -786,8 +804,105 @@ export class ManutencaoPlanosComponent implements OnInit {
     const modo = this.calendarioModo();
     if (modo === 'semana') d.setDate(d.getDate() + direcao * 7);
     else if (modo === 'mes') d.setMonth(d.getMonth() + direcao);
-    else d.setFullYear(d.getFullYear() + direcao);
+    else d.setFullYear(d.getFullYear() + direcao); // 'ano' e 'mapa' andam de ano em ano
     this.calendarioAncora.set(paraIso(d));
+    this.mapaPagina.set(0);
+  }
+
+  // ── Mapa de intervenções (52 semanas) ─────────────────────────────────────
+  // Uma linha por plano ativo (mesmos filtros da lista), uma coluna por semana ISO do
+  // ano: em que semana cada plano sai. Mesma agenda da Programação — sequência fixa a
+  // partir da data inicial (ver proximaDataFixa), com a regra de planta parada — mais os
+  // ciclos já programados de verdade.
+  mapaPagina = signal(0);
+  readonly mapaSemanaAtual = this.numeroSemanaISO(this.hojeInicioSemanaIso);
+  readonly mapaAnoAtual = Number(this.hojeInicioSemanaIso.slice(0, 4));
+
+  mapaSemanas = computed<SemanaIso[]>(() => semanasIsoDoAno(this.calendarioAnoAtual()));
+
+  mapaLinhas = computed<LinhaMapa[]>(() => {
+    const semanas = this.mapaSemanas();
+    if (semanas.length === 0) return [];
+    const inicioAno = semanas[0].inicio;
+    const fimAno = semanas[semanas.length - 1].fim;
+    const semanaDe = (data: string) => semanas.find(s => data >= s.inicio && data <= s.fim)?.numero ?? null;
+    const plantaParada = this.manutencaoProgramacaoService.paradaAtual() !== null;
+    const ordensPorId = new Map(this.manutencaoProgramacaoService.ordens().map(o => [o.id, o]));
+    const ciclosPorPlano = new Map<string, CicloManutencao[]>();
+    for (const c of this.manutencaoPlanosService.ciclos()) {
+      if (!c.ordemId) continue;
+      const lista = ciclosPorPlano.get(c.planoId);
+      if (lista) lista.push(c); else ciclosPorPlano.set(c.planoId, [c]);
+    }
+
+    return this.planosFiltrados()
+      .filter(p => p.ativo)
+      .map(plano => {
+        const celulas = new Map<number, CelulaMapa>();
+        // Programadas: semana do 1º dia da OS (ou da data do ciclo, se a OS não carregou).
+        for (const ciclo of ciclosPorPlano.get(plano.id) ?? []) {
+          const ordem = ordensPorId.get(ciclo.ordemId);
+          const data = ordem?.diasPrevistos.length ? [...ordem.diasPrevistos].sort()[0] : (ordem?.semanaInicio ?? ciclo.dataPrevista);
+          const semana = semanaDe(data);
+          if (semana !== null) celulas.set(semana, 'programada');
+        }
+        // Previstas: da semana atual em diante (ou o ano todo, se for um ano futuro).
+        const efetiva = periodicidadeEfetiva(plano.periodicidadeValor, plano.periodicidadeUnidade, plantaParada, plano.area);
+        const aPartirDe = this.hojeInicioSemanaIso > inicioAno ? this.hojeInicioSemanaIso : inicioAno;
+        for (const data of ocorrenciasNoIntervalo(plano.dataInicial, efetiva.valor, efetiva.unidade, aPartirDe, fimAno)) {
+          const semana = semanaDe(data);
+          if (semana !== null && !celulas.has(semana)) celulas.set(semana, 'prevista');
+        }
+        return {
+          plano,
+          sigla: siglaPeriodicidade(plano.periodicidadeValor, plano.periodicidadeUnidade),
+          efetivaDiferente: efetiva.valor !== plano.periodicidadeValor || efetiva.unidade !== plano.periodicidadeUnidade,
+          celulas,
+        };
+      })
+      .sort((a, b) => a.plano.area.localeCompare(b.plano.area)
+        || a.plano.equipamento.localeCompare(b.plano.equipamento)
+        || a.plano.codigo.localeCompare(b.plano.codigo));
+  });
+
+  mapaTotalPaginas = computed(() => Math.max(1, Math.ceil(this.mapaLinhas().length / MAPA_LINHAS_POR_PAGINA)));
+
+  mapaLinhasDaPagina = computed(() => {
+    const pagina = Math.min(this.mapaPagina(), this.mapaTotalPaginas() - 1);
+    return this.mapaLinhas().slice(pagina * MAPA_LINHAS_POR_PAGINA, (pagina + 1) * MAPA_LINHAS_POR_PAGINA);
+  });
+
+  mapaPaginaAtual = computed(() => Math.min(this.mapaPagina(), this.mapaTotalPaginas() - 1) + 1);
+
+  // Quantas intervenções caem em cada semana (todas as linhas filtradas, não só a
+  // página) — rodapé do mapa, pra enxergar semana carregada/vazia.
+  mapaTotalPorSemana = computed(() => {
+    const totais = new Map<number, number>();
+    for (const linha of this.mapaLinhas()) {
+      for (const semana of linha.celulas.keys()) totais.set(semana, (totais.get(semana) ?? 0) + 1);
+    }
+    return totais;
+  });
+
+  mudarPaginaMapa(direcao: -1 | 1): void {
+    const proxima = this.mapaPaginaAtual() - 1 + direcao;
+    this.mapaPagina.set(Math.max(0, Math.min(proxima, this.mapaTotalPaginas() - 1)));
+  }
+
+  mapaSemanaEhAtual(numero: number): boolean {
+    return this.calendarioAnoAtual() === this.mapaAnoAtual && numero === this.mapaSemanaAtual;
+  }
+
+  // Cor pela periodicidade (mesma sigla do quadradinho) — curto em tons frios, longo em
+  // quentes, pra bater o olho e ver onde caem os semestrais/anuais.
+  mapaCorSigla(sigla: string): string {
+    switch (sigla) {
+      case 'S': case 'Q': case '3S': return 'bg-sky-500';
+      case 'M': return 'bg-emerald-500';
+      case 'B': case 'T': case '4M': return 'bg-violet-500';
+      case '6M': return 'bg-amber-500';
+      default: return 'bg-rose-500'; // A, 2A
+    }
   }
 
   irParaHoje(): void {

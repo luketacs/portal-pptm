@@ -190,6 +190,9 @@
           <button type="button" (click)="calendarioModo.set('ano')"
             class="px-3 py-1 text-xs font-semibold rounded-md transition"
             [class]="calendarioModo() === 'ano' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'">Ano</button>
+          <button type="button" (click)="calendarioModo.set('mapa')"
+            class="px-3 py-1 text-xs font-semibold rounded-md transition"
+            [class]="calendarioModo() === 'mapa' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'">Mapa 52 semanas</button>
         </div>
         <div class="flex items-center gap-3">
           <button type="button" (click)="navegarCalendario(-1)" class="text-slate-500 hover:text-slate-700 p-1">
@@ -203,10 +206,12 @@
         </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-3 mb-3 text-xs text-gray-500">
-        <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>Já programada</span>
-        <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full border border-dashed border-slate-400"></span>Prevista (ainda não é ordem)</span>
-      </div>
+      @if (calendarioModo() !== 'mapa') {
+        <div class="flex flex-wrap items-center gap-3 mb-3 text-xs text-gray-500">
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>Já programada</span>
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full border border-dashed border-slate-400"></span>Prevista (ainda não é ordem)</span>
+        </div>
+      }
 
       @if (calendarioModo() === 'semana') {
         <div class="grid grid-cols-1 sm:grid-cols-7 gap-2">
@@ -263,6 +268,83 @@
             </button>
           }
         </div>
+      }
+
+      @if (calendarioModo() === 'mapa') {
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3 text-xs text-gray-500">
+          <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-sky-500"></span>Semanal / quinzenal</span>
+          <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-emerald-500"></span>Mensal</span>
+          <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-violet-500"></span>Bimestral / trimestral / 4M</span>
+          <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-amber-500"></span>Semestral</span>
+          <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-rose-500"></span>Anual / 2 anos</span>
+          <span class="text-slate-300">|</span>
+          <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-slate-500 ring-2 ring-offset-1 ring-slate-700"></span>Já programada (OS)</span>
+          <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-slate-400 opacity-60"></span>Prevista</span>
+        </div>
+
+        @if (mapaLinhas().length === 0) {
+          <p class="text-sm text-gray-400 py-8 text-center">Nenhum plano ativo com os filtros atuais.</p>
+        } @else {
+          <div class="overflow-x-auto border border-slate-200 rounded-lg">
+            <table class="text-[11px] border-collapse">
+              <thead>
+                <tr class="bg-slate-50">
+                  <th class="sticky left-0 z-10 bg-slate-50 text-left font-semibold text-slate-600 px-2 py-1.5 border-b border-r border-slate-200 min-w-[260px]">Plano / equipamento</th>
+                  @for (s of mapaSemanas(); track s.numero) {
+                    <th class="font-semibold px-0.5 py-1.5 border-b border-slate-200 text-center min-w-[26px]"
+                      [class]="mapaSemanaEhAtual(s.numero) ? 'bg-blue-100 text-blue-700' : 'text-slate-500'"
+                      [title]="'Semana ' + s.numero + ': ' + s.inicio.slice(8, 10) + '/' + s.inicio.slice(5, 7) + ' a ' + s.fim.slice(8, 10) + '/' + s.fim.slice(5, 7)">
+                      S{{ s.numero }}
+                    </th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (linha of mapaLinhasDaPagina(); track linha.plano.id) {
+                  <tr class="hover:bg-slate-50">
+                    <td class="sticky left-0 z-10 bg-white px-2 py-1 border-b border-r border-slate-200 max-w-[260px]">
+                      <button type="button" (click)="abrirHistorico(linha.plano)" class="text-left w-full" [title]="linha.plano.nome">
+                        <span class="font-semibold text-slate-700">{{ linha.plano.codigo }}</span>
+                        <span class="text-slate-600"> {{ linha.plano.nome }}</span>
+                        <span class="block text-[10px] text-slate-400 truncate">
+                          {{ linha.plano.equipamento }}@if (linha.plano.tagKks) { · {{ linha.plano.tagKks }} }
+                          · {{ linha.plano.periodicidadeValor }} {{ linha.plano.periodicidadeUnidade }}
+                          @if (linha.efetivaDiferente) { <span class="text-amber-600">(mensal na parada)</span> }
+                        </span>
+                      </button>
+                    </td>
+                    @for (s of mapaSemanas(); track s.numero) {
+                      <td class="border-b border-slate-100 text-center p-0.5" [class.bg-blue-50]="mapaSemanaEhAtual(s.numero)">
+                        @if (linha.celulas.get(s.numero); as estado) {
+                          <span class="inline-flex items-center justify-center w-5 h-5 rounded-sm text-[9px] font-bold text-white"
+                            [class]="mapaCorSigla(linha.sigla) + (estado === 'programada' ? ' ring-2 ring-offset-1 ring-slate-700' : ' opacity-60')"
+                            [title]="(estado === 'programada' ? 'Programada (OS) — ' : 'Prevista — ') + 'semana ' + s.numero">{{ linha.sigla }}</span>
+                        }
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="bg-slate-50">
+                  <td class="sticky left-0 z-10 bg-slate-50 px-2 py-1 border-t border-r border-slate-200 font-semibold text-slate-600">Intervenções na semana</td>
+                  @for (s of mapaSemanas(); track s.numero) {
+                    <td class="border-t border-slate-200 text-center font-semibold py-1"
+                      [class]="mapaSemanaEhAtual(s.numero) ? 'bg-blue-100 text-blue-700' : 'text-slate-500'">{{ mapaTotalPorSemana().get(s.numero) ?? '' }}</td>
+                  }
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="flex items-center justify-between mt-3 text-xs text-gray-500">
+            <button type="button" (click)="mudarPaginaMapa(-1)" [disabled]="mapaPaginaAtual() === 1"
+              class="px-3 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-40">‹ Anterior</button>
+            <span>Página {{ mapaPaginaAtual() }} de {{ mapaTotalPaginas() }} · {{ mapaLinhas().length }} planos</span>
+            <button type="button" (click)="mudarPaginaMapa(1)" [disabled]="mapaPaginaAtual() === mapaTotalPaginas()"
+              class="px-3 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-40">Próxima ›</button>
+          </div>
+        }
       }
     </div>
   }

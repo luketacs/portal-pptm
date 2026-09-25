@@ -339,6 +339,64 @@ export function planosAtrasados(
     .sort((a, b) => a.proximaData.localeCompare(b.proximaData));
 }
 
+// ── Mapa de intervenções (52 semanas) ─────────────────────────────────────────
+
+export interface SemanaIso {
+  numero: number; // 1..52 (ou 53)
+  inicio: string; // segunda-feira 'YYYY-MM-DD'
+  fim: string; // domingo
+}
+
+// Semanas ISO do ano (semana 1 = a que contém 4 de janeiro; SEG-DOM) — mesma numeração
+// usada no resto do portal (numeroSemanaISO). 53 semanas quando 28/12 cai na semana 53.
+export function semanasIsoDoAno(ano: number): SemanaIso[] {
+  const quatroJan = new Date(ano, 0, 4);
+  const segunda = new Date(ano, 0, 4 - ((quatroJan.getDay() + 6) % 7));
+  const semanas: SemanaIso[] = [];
+  for (let numero = 1; ; numero++) {
+    const inicio = new Date(segunda);
+    inicio.setDate(segunda.getDate() + (numero - 1) * 7);
+    const quinta = new Date(inicio);
+    quinta.setDate(inicio.getDate() + 3);
+    if (quinta.getFullYear() !== ano) break; // semana pertence ao ano da sua quinta-feira
+    const fim = new Date(inicio);
+    fim.setDate(inicio.getDate() + 6);
+    semanas.push({ numero, inicio: paraIsoLocal(inicio), fim: paraIsoLocal(fim) });
+  }
+  return semanas;
+}
+
+// Todas as datas da sequência fixa do plano (âncora, âncora+ciclo, ...) dentro de
+// [inicio, fim] — mesma agenda time-based de proximaDataFixa, só que listando o ano
+// inteiro em vez de só a próxima.
+export function ocorrenciasNoIntervalo(
+  dataAncora: string, valor: number, unidade: PeriodicidadeUnidade, inicio: string, fim: string,
+): string[] {
+  const datas: string[] = [];
+  let atual = dataAncora;
+  for (let i = 0; i < 2000 && atual <= fim; i++) {
+    if (atual >= inicio) datas.push(atual);
+    atual = calcularProximaData(atual, valor, unidade)!;
+  }
+  return datas;
+}
+
+// Sigla curta da periodicidade pra célula do mapa (cabe num quadradinho). Pela duração
+// em dias, não pelo texto do cadastro — "30 Dia(s)" e "1 Mes(es)" são os dois "M".
+export function siglaPeriodicidade(valor: number, unidade: PeriodicidadeUnidade): string {
+  const dias = periodicidadeEmDias(valor, unidade);
+  if (dias <= 10) return 'S';
+  if (dias <= 17) return 'Q';
+  if (dias <= 24) return '3S';
+  if (dias <= 45) return 'M';
+  if (dias <= 75) return 'B';
+  if (dias <= 105) return 'T';
+  if (dias <= 135) return '4M';
+  if (dias <= 200) return '6M';
+  if (dias <= 400) return 'A';
+  return '2A';
+}
+
 export interface DiaGradeMensal {
   data: string; // 'YYYY-MM-DD'
   noMes: boolean; // false = dia de preenchimento do mês anterior/seguinte, pra fechar a semana

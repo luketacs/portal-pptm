@@ -1,7 +1,8 @@
 import { PlanoManutencao } from '../models/manutencao-programacao.model';
 import {
   agendaDosPlanos, alinharDatasPorEquipamento, EQUIPE_APOIO_NAO_CLASSIFICADA, gerarGradeMensal, inferirCategoriaIndicador,
-  inferirCategoriaIndicadorPorTecnico, janelaAlinhamentoDaArea, limitarPorEquipeApoio, planosAtrasados, planosComProximaExecucao,
+  inferirCategoriaIndicadorPorTecnico, janelaAlinhamentoDaArea, limitarPorEquipeApoio, ocorrenciasNoIntervalo,
+  semanasIsoDoAno, siglaPeriodicidade, planosAtrasados, planosComProximaExecucao,
   planosComProximaExecucaoFixa, proximaExecucaoPlano, resumoPorEquipeApoio, sugestoesDaSemana,
 } from './manutencao-planos';
 
@@ -306,6 +307,50 @@ describe('alinharDatasPorEquipamento', () => {
     const resultado = alinharDatasPorEquipamento([a, b]);
     expect(resultado.find(p => p.id === 'a')!.proximaDataOriginal).toBe(null);
     expect(resultado.find(p => p.id === 'b')!.proximaDataOriginal).toBe(null);
+  });
+});
+
+describe('semanasIsoDoAno', () => {
+  it('2026: 53 semanas, S1 começa em 29/12/2025 e S40 é 28/09', () => {
+    const semanas = semanasIsoDoAno(2026);
+    expect(semanas).toHaveLength(53);
+    expect(semanas[0]).toEqual({ numero: 1, inicio: '2025-12-29', fim: '2026-01-04' });
+    expect(semanas[39]).toEqual({ numero: 40, inicio: '2026-09-28', fim: '2026-10-04' });
+  });
+
+  it('2027: 52 semanas, S1 começa em 04/01/2027', () => {
+    const semanas = semanasIsoDoAno(2027);
+    expect(semanas).toHaveLength(52);
+    expect(semanas[0].inicio).toBe('2027-01-04');
+  });
+});
+
+describe('ocorrenciasNoIntervalo', () => {
+  it('lista toda a sequência fixa dentro do intervalo', () => {
+    expect(ocorrenciasNoIntervalo('2026-09-21', 6, 'Mes(es)', '2026-01-01', '2027-12-31'))
+      .toEqual(['2026-09-21', '2027-03-21', '2027-09-21']);
+  });
+
+  it('âncora depois do intervalo não gera nada', () => {
+    expect(ocorrenciasNoIntervalo('2028-01-10', 1, 'Mes(es)', '2027-01-01', '2027-12-31')).toEqual([]);
+  });
+
+  it('semanal no ano inteiro', () => {
+    expect(ocorrenciasNoIntervalo('2026-01-05', 1, 'Semana(s)', '2026-01-01', '2026-12-31')).toHaveLength(52);
+  });
+});
+
+describe('siglaPeriodicidade', () => {
+  it('pela duração, não pelo texto do cadastro', () => {
+    expect(siglaPeriodicidade(1, 'Semana(s)')).toBe('S');
+    expect(siglaPeriodicidade(7, 'Dia(s)')).toBe('S');
+    expect(siglaPeriodicidade(2, 'Semana(s)')).toBe('Q');
+    expect(siglaPeriodicidade(30, 'Dia(s)')).toBe('M');
+    expect(siglaPeriodicidade(1, 'Mes(es)')).toBe('M');
+    expect(siglaPeriodicidade(3, 'Mes(es)')).toBe('T');
+    expect(siglaPeriodicidade(180, 'Dia(s)')).toBe('6M');
+    expect(siglaPeriodicidade(12, 'Mes(es)')).toBe('A');
+    expect(siglaPeriodicidade(24, 'Mes(es)')).toBe('2A');
   });
 });
 
