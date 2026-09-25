@@ -884,6 +884,20 @@ export class ManutencaoPlanosComponent implements OnInit {
     return totais;
   });
 
+  // Atalho de equipe no próprio mapa — mesmo filtroArea do topo da tela (os dois ficam
+  // sincronizados), só mais perto de onde se olha.
+  readonly mapaOpcoesEquipe: { valor: 'todos' | ManutencaoArea; label: string }[] = [
+    { valor: 'todos', label: 'Todas' },
+    { valor: 'MECANICA', label: 'Mecânica' },
+    { valor: 'ELETRICA', label: 'Elétrica' },
+    { valor: 'APOIO', label: 'Apoio' },
+  ];
+
+  filtrarEquipeMapa(valor: 'todos' | ManutencaoArea): void {
+    this.filtroArea.set(valor);
+    this.mapaPagina.set(0);
+  }
+
   mudarPaginaMapa(direcao: -1 | 1): void {
     const proxima = this.mapaPaginaAtual() - 1 + direcao;
     this.mapaPagina.set(Math.max(0, Math.min(proxima, this.mapaTotalPaginas() - 1)));
