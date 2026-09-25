@@ -331,7 +331,15 @@ export class ManutencaoPlanosComponent implements OnInit {
   // — pra mandar só a Mecânica, por exemplo, basta filtrar por Área antes de exportar.
   exportando = signal(false);
 
+  // O export segue a visão aberta: no Mapa de 52 semanas exporta o próprio mapa (mesma
+  // grade/cores da tela); nas demais, a lista de planos.
+  exportaMapa = computed(() => this.visualizacao() === 'calendario' && this.calendarioModo() === 'mapa');
+
   async exportarExcel(): Promise<void> {
+    if (this.visualizacao() === 'calendario' && this.calendarioModo() === 'mapa') {
+      await this.exportarMapaExcel();
+      return;
+    }
     if (this.exportando()) return;
     const linhas = this.linhas();
     if (linhas.length === 0) {
@@ -362,11 +370,49 @@ export class ManutencaoPlanosComponent implements OnInit {
           tempoEstimadoHoras: l.plano.tempoEstimadoHoras != null ? String(l.plano.tempoEstimadoHoras) : '—',
           hhEstimado: l.plano.hhEstimado != null ? String(l.plano.hhEstimado) : '—',
           observacoes: l.plano.observacoes || '—',
+          checklist: l.plano.atividades.length > 0 ? `${l.plano.atividades.length} passos` : '—',
         })),
       });
       this.notificationService.showSuccess('Planilha exportada.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao exportar.');
+    } finally {
+      this.exportando.set(false);
+    }
+  }
+
+  private async exportarMapaExcel(): Promise<void> {
+    if (this.exportando()) return;
+    const linhas = this.mapaLinhas(); // todas as linhas filtradas, não só a página
+    if (linhas.length === 0) {
+      this.notificationService.showError('Nenhum plano ativo pra exportar com esses filtros.');
+      return;
+    }
+    this.exportando.set(true);
+    try {
+      const area = this.filtroArea();
+      const tituloArea = area === 'todos' ? 'Todas as Áreas' : this.areaLabel[area];
+      const ano = this.calendarioAnoAtual();
+      await this.excelExportService.exportarMapaIntervencoes({
+        titulo: `Mapa de Intervenções ${ano} — ${tituloArea}`,
+        subtitulo: `Semanas ISO S1 a S${this.mapaSemanas().length}`,
+        semanas: this.mapaSemanas(),
+        semanaAtual: ano === this.mapaAnoAtual ? this.mapaSemanaAtual : null,
+        linhas: linhas.map(l => ({
+          codigo: l.plano.codigo,
+          nome: l.plano.nome,
+          equipamento: l.plano.equipamento,
+          tagKks: l.plano.tagKks || '—',
+          area: this.areaLabel[l.plano.area],
+          periodicidade: `${l.plano.periodicidadeValor} ${l.plano.periodicidadeUnidade}`,
+          sigla: l.sigla,
+          mensalNaParada: l.efetivaDiferente,
+          celulas: Object.fromEntries(l.celulas),
+        })),
+      });
+      this.notificationService.showSuccess('Mapa exportado.');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao exportar o mapa.');
     } finally {
       this.exportando.set(false);
     }

@@ -67,6 +67,28 @@ export interface PlanoManutencaoExportLinha {
   tempoEstimadoHoras: string;
   hhEstimado: string;
   observacoes: string;
+  checklist: string; // "5 passos" / "—"
+}
+
+// Mapa de intervenções (52 semanas) — mesma grade da tela de Planos › Calendário.
+export interface MapaIntervencoesExportLinha {
+  codigo: string;
+  nome: string;
+  equipamento: string;
+  tagKks: string;
+  area: string;
+  periodicidade: string;
+  sigla: string; // S, Q, 3S, M, B, T, 4M, 6M, A, 2A
+  mensalNaParada: boolean;
+  celulas: Record<number, 'programada' | 'prevista'>; // chave = nº da semana ISO
+}
+
+export interface MapaIntervencoesExport {
+  titulo: string;
+  subtitulo: string;
+  semanas: { numero: number; inicio: string; fim: string }[];
+  semanaAtual: number | null; // null quando o ano exportado não é o atual
+  linhas: MapaIntervencoesExportLinha[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -1067,6 +1089,7 @@ export class ExcelExportService {
       { header: 'Tempo Estimado (h)', width: 12 },
       { header: 'HH Estimado', width: 10 },
       { header: 'Observações', width: 32 },
+      { header: 'Checklist', width: 11 },
     ];
     const NC = colunas.length;
 
@@ -1124,7 +1147,7 @@ export class ExcelExportService {
         linha.codigo, linha.nome, linha.equipamento, linha.tagKks, linha.area, linha.especialidade,
         linha.descricao, linha.periodicidade, linha.responsavel, linha.dataInicial, linha.ultimaExecucao,
         linha.proximaExecucao, linha.semanaPrevista, linha.status, linha.tempoEstimadoHoras, linha.hhEstimado,
-        linha.observacoes,
+        linha.observacoes, linha.checklist,
       ];
       valores.forEach((v, i) => {
         const c = i + 1;
@@ -1145,15 +1168,251 @@ export class ExcelExportService {
 
     ws.pageSetup.margins = { left: 0.3, right: 0.3, top: 0.5, bottom: 0.4, header: 0.2, footer: 0.2 };
     ws.pageSetup.printTitlesRow = '4:4';
+    // Filtro automático no cabeçalho — quem recebe a planilha filtra por área,
+    // periodicidade, status etc. sem precisar voltar no Portal.
+    ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(row - 1, 4), column: NC } };
 
+    await this.baixarWorkbook(wb, params.titulo);
+  }
+
+  private async baixarWorkbook(wb: ExcelJS.Workbook, titulo: string): Promise<void> {
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${params.titulo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_')}.xlsx`;
+    a.download = `${titulo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9_\-]+/g, '_').replace(/_+/g, '_')}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  // ── Mapa de intervenções (52 semanas) ─────────────────────────────────────
+  // Mesma grade da tela Planos › Calendário › Mapa 52 semanas: uma linha por plano,
+  // uma coluna por semana ISO, sigla da periodicidade na semana em que o plano sai.
+  // Cor = periodicidade (mesma legenda da tela); forte = já programada (OS), clara =
+  // prevista. Faixa de meses em cima, semana atual destacada, total por semana no fim.
+
+  // Mesmas cores da tela (Tailwind sky/emerald/violet/amber/rose-500).
+  private corDaSigla(sigla: string): string {
+    switch (sigla) {
+      case 'S': case 'Q': case '3S': return '0EA5E9';
+      case 'M': return '10B981';
+      case 'B': case 'T': case '4M': return '8B5CF6';
+      case '6M': return 'F59E0B';
+      default: return 'F43F5E';
+    }
+  }
+
+  // Tom claro da mesma cor (mistura com branco) — "prevista".
+  private clarear(hex: string, fracaoBranco = 0.6): string {
+    const canal = (i: number) => {
+      const v = parseInt(hex.slice(i, i + 2), 16);
+      return Math.round(v + (255 - v) * fracaoBranco).toString(16).padStart(2, '0');
+    };
+    return `${canal(0)}${canal(2)}${canal(4)}`.toUpperCase();
+  }
+
+  async exportarMapaIntervencoes(params: MapaIntervencoesExport): Promise<void> {
+    const fixas: { header: string; width: number }[] = [
+      { header: 'Código', width: 10 },
+      { header: 'Plano', width: 40 },
+      { header: 'Equipamento', width: 24 },
+      { header: 'TAG/KKS', width: 15 },
+      { header: 'Área', width: 10 },
+      { header: 'Periodicidade', width: 13 },
+    ];
+    const NF = fixas.length;
+    const NC = NF + params.semanas.length + 1; // + coluna "Total" no fim
+    const colSemana = (i: number) => NF + 1 + i;
+    const colTotal = NC;
+    const MESES = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+
+    const { default: ExcelJS } = await import('exceljs');
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Portal PPTM';
+    wb.created = new Date();
+    const ws = wb.addWorksheet('Mapa 52 semanas', {
+      pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+      views: [{ state: 'frozen', xSplit: NF, ySplit: 5, showGridLines: false }],
+    });
+    ws.columns = [
+      ...fixas.map(c => ({ width: c.width })),
+      ...params.semanas.map(() => ({ width: 4.3 })),
+      { width: 7 },
+    ];
+
+    // Letterhead — mesmo padrão dos outros exports (logo, título azul, régua).
+    const logoBuffer = await this.carregarLogoBuffer();
+    if (logoBuffer) {
+      const logoId = wb.addImage({ buffer: logoBuffer, extension: 'png' });
+      ws.addImage(logoId, { tl: { col: 0.15, row: 0.12 }, ext: { width: 210, height: 63 } });
+    }
+    ws.getRow(1).height = 28;
+    ws.getRow(2).height = 18;
+    ws.getRow(3).height = 6;
+    ws.mergeCells(1, 3, 1, NC);
+    Object.assign(ws.getCell(1, 3), {
+      value: params.titulo,
+      font: { bold: true, size: 16, color: { argb: this.PROG_AZUL_TEXTO } },
+      alignment: { horizontal: 'left', vertical: 'middle' },
+    });
+    ws.mergeCells(2, 3, 2, NC);
+    Object.assign(ws.getCell(2, 3), {
+      value: `${params.subtitulo} — ${params.linhas.length} plano(s) — gerado em ${this.nowStr()}`,
+      font: { size: 10, color: { argb: 'FF555555' } },
+      alignment: { horizontal: 'left', vertical: 'middle' },
+    });
+    for (let c = 1; c <= NC; c++) ws.getCell(2, c).border = { bottom: { style: 'thin', color: { argb: 'FFB9C1FD' } } };
+
+    const estiloHeader = (cel: ExcelJS.Cell, atual = false) => {
+      cel.font = { bold: true, size: 8, color: { argb: atual ? this.PROG_AZUL_TEXTO : 'FFFFFFFF' } };
+      cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: atual ? 'FFFDE68A' : this.PROG_AZUL } };
+      cel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cel.border = { left: { style: 'thin', color: { argb: 'FFFFFFFF' } } };
+    };
+
+    // Linha 4: faixa de meses (mês da quinta-feira da semana, regra ISO).
+    const rowMes = 4;
+    ws.getRow(rowMes).height = 16;
+    let inicioBloco = 0;
+    const mesDa = (i: number) => {
+      const [a, m, d] = params.semanas[i].inicio.split('-').map(Number);
+      return new Date(a, m - 1, d + 3).getMonth();
+    };
+    for (let i = 1; i <= params.semanas.length; i++) {
+      if (i === params.semanas.length || mesDa(i) !== mesDa(inicioBloco)) {
+        if (i - 1 > inicioBloco) ws.mergeCells(rowMes, colSemana(inicioBloco), rowMes, colSemana(i - 1));
+        const cel = ws.getCell(rowMes, colSemana(inicioBloco));
+        cel.value = MESES[mesDa(inicioBloco)];
+        cel.font = { bold: true, size: 8, color: { argb: this.PROG_AZUL_TEXTO } };
+        cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL_CLARO } };
+        cel.alignment = { horizontal: 'center', vertical: 'middle' };
+        cel.border = { left: { style: 'thin', color: { argb: 'FFB9C1FD' } }, right: { style: 'thin', color: { argb: 'FFB9C1FD' } } };
+        inicioBloco = i;
+      }
+    }
+
+    // Linha 5: cabeçalho de colunas (fixas + S1..S52 + Total).
+    const rowHeader = 5;
+    ws.getRow(rowHeader).height = 22;
+    fixas.forEach((c, i) => { const cel = ws.getCell(rowHeader, i + 1); cel.value = c.header; estiloHeader(cel); });
+    params.semanas.forEach((s, i) => {
+      const cel = ws.getCell(rowHeader, colSemana(i));
+      cel.value = `S${s.numero}`;
+      estiloHeader(cel, s.numero === params.semanaAtual);
+      cel.note = `Semana ${s.numero}: ${s.inicio.split('-').reverse().join('/')} a ${s.fim.split('-').reverse().join('/')}`;
+    });
+    estiloHeader(ws.getCell(rowHeader, colTotal));
+    ws.getCell(rowHeader, colTotal).value = 'Total';
+
+    // Linhas dos planos.
+    let row = rowHeader + 1;
+    const totalPorSemana = new Map<number, number>();
+    for (const linha of params.linhas) {
+      const fixasValores = [linha.codigo, linha.nome, linha.equipamento, linha.tagKks, linha.area,
+        linha.mensalNaParada ? `${linha.periodicidade} (mensal na parada)` : linha.periodicidade];
+      fixasValores.forEach((v, i) => {
+        const cel = ws.getCell(row, i + 1);
+        cel.value = v;
+        cel.font = { size: 8, bold: i === 0 };
+        cel.alignment = { vertical: 'middle', wrapText: i === 1 || i === 5 };
+        cel.border = this.bordaFina();
+      });
+      const cor = this.corDaSigla(linha.sigla);
+      let totalLinha = 0;
+      params.semanas.forEach((s, i) => {
+        const cel = ws.getCell(row, colSemana(i));
+        cel.border = { top: { style: 'hair', color: { argb: 'FFE2E8F0' } }, bottom: { style: 'hair', color: { argb: 'FFE2E8F0' } },
+          left: { style: 'hair', color: { argb: 'FFE2E8F0' } }, right: { style: 'hair', color: { argb: 'FFE2E8F0' } } };
+        cel.alignment = { horizontal: 'center', vertical: 'middle' };
+        const estado = linha.celulas[s.numero];
+        if (!estado) {
+          if (s.numero === params.semanaAtual) cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9E7' } };
+          return;
+        }
+        totalLinha++;
+        totalPorSemana.set(s.numero, (totalPorSemana.get(s.numero) ?? 0) + 1);
+        cel.value = linha.sigla;
+        const programada = estado === 'programada';
+        cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${programada ? cor : this.clarear(cor)}` } };
+        cel.font = { size: 7, bold: true, color: { argb: programada ? 'FFFFFFFF' : 'FF334155' } };
+      });
+      const celTotal = ws.getCell(row, colTotal);
+      celTotal.value = totalLinha;
+      celTotal.font = { size: 8, bold: true };
+      celTotal.alignment = { horizontal: 'center', vertical: 'middle' };
+      celTotal.border = this.bordaFina();
+      ws.getRow(row).height = Math.max(15, this.estimarLinhas(linha.nome, 40) * 12);
+      row++;
+    }
+
+    // Rodapé: intervenções por semana (carga) — mesma linha de total da tela.
+    const rowTotal = row;
+    ws.getRow(rowTotal).height = 18;
+    ws.mergeCells(rowTotal, 1, rowTotal, NF);
+    Object.assign(ws.getCell(rowTotal, 1), {
+      value: 'Intervenções na semana',
+      font: { bold: true, size: 9, color: { argb: this.PROG_AZUL_TEXTO } },
+      alignment: { horizontal: 'right', vertical: 'middle' },
+    });
+    let totalGeral = 0;
+    params.semanas.forEach((s, i) => {
+      const n = totalPorSemana.get(s.numero) ?? 0;
+      totalGeral += n;
+      const cel = ws.getCell(rowTotal, colSemana(i));
+      cel.value = n || null;
+      cel.font = { bold: true, size: 8, color: { argb: this.PROG_AZUL_TEXTO } };
+      cel.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+    ws.getCell(rowTotal, colTotal).value = totalGeral;
+    ws.getCell(rowTotal, colTotal).font = { bold: true, size: 9, color: { argb: this.PROG_AZUL_TEXTO } };
+    ws.getCell(rowTotal, colTotal).alignment = { horizontal: 'center', vertical: 'middle' };
+    for (let c = 1; c <= NC; c++) {
+      const cel = ws.getCell(rowTotal, c);
+      cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL_CLARO } };
+      cel.border = { top: { style: 'thin', color: { argb: this.PROG_AZUL } } };
+    }
+
+    // Legenda.
+    let rowLeg = rowTotal + 2;
+    ws.getCell(rowLeg, 1).value = 'Legenda';
+    ws.getCell(rowLeg, 1).font = { bold: true, size: 9 };
+    const legenda: [string, string][] = [
+      ['S', 'Semanal / quinzenal (S, Q, 3S)'], ['M', 'Mensal'], ['T', 'Bimestral / trimestral / 4M (B, T, 4M)'],
+      ['6M', 'Semestral'], ['A', 'Anual / 2 anos (A, 2A)'],
+    ];
+    for (const [sigla, texto] of legenda) {
+      rowLeg++;
+      const cor = this.corDaSigla(sigla);
+      const cel = ws.getCell(rowLeg, 1);
+      cel.value = sigla;
+      cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${cor}` } };
+      cel.font = { bold: true, size: 8, color: { argb: 'FFFFFFFF' } };
+      cel.alignment = { horizontal: 'center' };
+      ws.getCell(rowLeg, 2).value = texto;
+      ws.getCell(rowLeg, 2).font = { size: 8 };
+    }
+    rowLeg++;
+    Object.assign(ws.getCell(rowLeg, 1), { value: 'M', font: { bold: true, size: 8, color: { argb: 'FFFFFFFF' } },
+      fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${this.corDaSigla('M')}` } }, alignment: { horizontal: 'center' } });
+    Object.assign(ws.getCell(rowLeg, 2), { value: 'Cor forte = já programada (virou OS)', font: { size: 8 } });
+    rowLeg++;
+    Object.assign(ws.getCell(rowLeg, 1), { value: 'M', font: { bold: true, size: 8, color: { argb: 'FF334155' } },
+      fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${this.clarear(this.corDaSigla('M'))}` } }, alignment: { horizontal: 'center' } });
+    Object.assign(ws.getCell(rowLeg, 2), { value: 'Cor clara = prevista (agenda do plano, ainda sem OS)', font: { size: 8 } });
+    if (params.semanaAtual !== null) {
+      rowLeg++;
+      Object.assign(ws.getCell(rowLeg, 1), { value: `S${params.semanaAtual}`, font: { bold: true, size: 8, color: { argb: this.PROG_AZUL_TEXTO } },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDE68A' } }, alignment: { horizontal: 'center' } });
+      Object.assign(ws.getCell(rowLeg, 2), { value: 'Semana atual', font: { size: 8 } });
+    }
+
+    ws.autoFilter = { from: { row: rowHeader, column: 1 }, to: { row: Math.max(rowTotal - 1, rowHeader), column: NF } };
+    ws.pageSetup.margins = { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 };
+    ws.pageSetup.printTitlesRow = `${rowMes}:${rowHeader}`;
+    ws.pageSetup.printTitlesColumn = 'A:B';
+
+    await this.baixarWorkbook(wb, params.titulo);
   }
 
 }
