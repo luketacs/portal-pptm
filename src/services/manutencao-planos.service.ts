@@ -7,6 +7,7 @@ import {
   AtividadeChecklist, CicloManutencao, CreatePlanoManutencaoRequest, EditarPlanoManutencaoRequest,
   ManutencaoArea, PeriodicidadeUnidade, PlanoManutencao,
 } from '../models/manutencao-programacao.model';
+import { AlteracaoCampo, diferencasPlano } from '../utils/manutencao-planos-saude';
 
 interface PlanoManutencaoRow {
   id: string;
@@ -36,6 +37,14 @@ interface PlanoManutencaoRow {
   atualizado_por_id: string | null;
   atualizado_por_nome: string | null;
   atualizado_em: string;
+}
+
+export interface AlteracaoCadastroPlano {
+  quando: Date;
+  quem: string;
+  evento: string;
+  descricao: string;
+  alteracoes: AlteracaoCampo[];
 }
 
 interface CicloManutencaoRow {
@@ -190,6 +199,8 @@ export class ManutencaoPlanosService {
 
   async editar(id: string, req: EditarPlanoManutencaoRequest): Promise<void> {
     const user = this.garantirAdmin('Só Admin pode editar plano de manutenção.');
+    // Versão antes de salvar — vira o "antes → depois" do histórico de alterações.
+    const anterior = this.getById(id);
 
     const { error } = await this.supabaseService.client
       .from('manutencao_planos')
@@ -218,16 +229,47 @@ export class ManutencaoPlanosService {
       .eq('id', id);
     if (error) throw new Error(error.message);
 
+    const alteracoes = anterior ? diferencasPlano(anterior, req) : [];
+    const resumo = alteracoes.length > 0 ? `: ${alteracoes.map(a => a.campo).join(', ')}` : '';
     this.auditLogService.log({
       user_id: user.id,
       user_name: user.name,
       event_type: 'manutencao_plano_editado',
       resource_type: 'manutencao_planos',
       resource_id: id,
-      description: `${user.name} editou o plano de manutenção "${req.nome}" (${req.equipamento})`,
+      description: `${user.name} editou o plano de manutenção "${req.nome}" (${req.equipamento})${resumo}`,
+      metadata: { codigo: anterior?.codigo ?? null, alteracoes },
     });
 
     await this.load();
+  }
+
+  // Histórico de alterações do cadastro de um plano (quem, quando, campo antes → depois),
+  // lido do audit_logs — só Admin lê essa tabela (RLS, migration 005). Edições feitas
+  // antes do diff existir aparecem sem a lista de campos. Inclui as replicações de
+  // checklist em que o plano foi DESTINO (o log fica com resource_id da origem).
+  async historicoAlteracoes(planoId: string): Promise<AlteracaoCadastroPlano[]> {
+    const campos = 'id, created_at, user_name, event_type, description, metadata';
+    const [proprios, replicados] = await Promise.all([
+      this.supabaseService.client.from('audit_logs').select(campos)
+        .eq('resource_type', 'manutencao_planos').eq('resource_id', planoId)
+        .order('created_at', { ascending: false }).limit(200),
+      this.supabaseService.client.from('audit_logs').select(campos)
+        .eq('event_type', 'manutencao_plano_checklist_replicado').contains('metadata', { destinos: [planoId] })
+        .order('created_at', { ascending: false }).limit(50),
+    ]);
+    if (proprios.error) throw new Error(proprios.error.message);
+    if (replicados.error) throw new Error(replicados.error.message);
+    const porId = new Map([...(proprios.data ?? []), ...(replicados.data ?? [])].map(r => [r.id, r]));
+    return [...porId.values()]
+      .map(r => ({
+        quando: new Date(r.created_at),
+        quem: r.user_name,
+        evento: r.event_type,
+        descricao: r.description,
+        alteracoes: ((r.metadata as { alteracoes?: AlteracaoCampo[] } | null)?.alteracoes) ?? [],
+      }))
+      .sort((a, b) => b.quando.getTime() - a.quando.getTime());
   }
 
   // Replica o checklist de um plano pra vários outros de uma vez (equipamentos gêmeos:

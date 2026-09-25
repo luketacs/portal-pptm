@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, effect, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ManutencaoPlanosService } from '../../../services/manutencao-planos.service';
+import { AlteracaoCadastroPlano, ManutencaoPlanosService } from '../../../services/manutencao-planos.service';
 import { ManutencaoProgramacaoService } from '../../../services/manutencao-programacao.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
@@ -11,7 +11,10 @@ import {
   AtividadeChecklist, CicloManutencao, ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem, PeriodicidadeUnidade,
   PlanoManutencao,
 } from '../../../models/manutencao-programacao.model';
-import { calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva } from '../../../utils/manutencao-preventivas';
+import { calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva, proximaDataFixa } from '../../../utils/manutencao-preventivas';
+import {
+  diagnosticarPlanos, ProblemaSaude, SeveridadeSaude, TipoProblemaSaude, TITULO_PROBLEMA, validarPlanoParaSalvar,
+} from '../../../utils/manutencao-planos-saude';
 import {
   agendaDosPlanos, DiaGradeMensal, gerarGradeMensal, nomeBaseDoPlano, ocorrenciasNoIntervalo, planosAtrasados, SemanaIso,
   semanasIsoDoAno, siglaPeriodicidade,
@@ -680,6 +683,42 @@ export class ManutencaoPlanosComponent implements OnInit {
     }));
   }
 
+  // ── Saúde dos planos ──────────────────────────────────────────────────────
+  // Varre o cadastro inteiro atrás do que já quebrou a agenda antes (âncora no futuro,
+  // periodicidade x nome, duplicado, Apoio sem equipe, inativo com OS, ciclo à frente da
+  // OS...) — checklist diário durante a revisão de planos. Regras em
+  // manutencao-planos-saude.ts (testadas).
+  saudeAberta = signal(false);
+  saudeFiltroSeveridade = signal<'todos' | SeveridadeSaude>('todos');
+  readonly tituloProblema = TITULO_PROBLEMA;
+
+  problemasSaude = computed<ProblemaSaude[]>(() => diagnosticarPlanos(
+    this.manutencaoPlanosService.planos(), this.manutencaoPlanosService.ciclos(),
+    this.manutencaoProgramacaoService.ordens(), this.hojeInicioSemanaIso));
+
+  saudeContagem = computed(() => {
+    const c = { erro: 0, aviso: 0, info: 0 };
+    for (const p of this.problemasSaude()) c[p.severidade]++;
+    return c;
+  });
+
+  // Agrupado por tipo, na ordem de gravidade, respeitando o filtro de severidade.
+  saudeGrupos = computed(() => {
+    const filtro = this.saudeFiltroSeveridade();
+    const grupos = new Map<TipoProblemaSaude, ProblemaSaude[]>();
+    for (const p of this.problemasSaude()) {
+      if (filtro !== 'todos' && p.severidade !== filtro) continue;
+      const lista = grupos.get(p.tipo);
+      if (lista) lista.push(p); else grupos.set(p.tipo, [p]);
+    }
+    return [...grupos.entries()].map(([tipo, itens]) => ({ tipo, severidade: itens[0].severidade, itens }));
+  });
+
+  corrigirProblema(p: ProblemaSaude): void {
+    this.saudeAberta.set(false);
+    this.abrirEditar(p.plano);
+  }
+
   // ── Replicar checklist pra vários planos ──────────────────────────────────
   // Caminho inverso de copiarChecklistDe (que PUXA de um plano pro formulário aberto):
   // a partir de um plano, MANDA o checklist dele pra vários outros de uma vez.
@@ -811,9 +850,52 @@ export class ManutencaoPlanosComponent implements OnInit {
     !this.isProcessando() && this.formNome().trim().length > 0 && this.formEquipamento().trim().length > 0
     && this.formPeriodicidadeValor() > 0 && !!this.formDataInicial());
 
+  // Travas e avisos da revisão de planos (ver manutencao-planos-saude.ts): bloqueio
+  // impede salvar; aviso pede confirmação. Também mostra se a próxima execução muda.
+  private async validarAntesDeSalvar(): Promise<boolean> {
+    const idEdicao = this.formIdEdicao();
+    const valores = {
+      id: idEdicao,
+      nome: this.formNome().trim(),
+      tagKks: this.formTagKks().trim() || null,
+      area: this.formArea(),
+      periodicidadeValor: this.formPeriodicidadeValor(),
+      periodicidadeUnidade: this.formPeriodicidadeUnidade(),
+      dataInicial: this.formDataInicial(),
+      responsavel: this.formResponsavel().trim() || null,
+      ativo: this.formAtivo(),
+    };
+    const { bloqueios, avisos } = validarPlanoParaSalvar(valores, this.manutencaoPlanosService.planos(), this.hojeInicioSemanaIso);
+    if (bloqueios.length) {
+      this.notificationService.showError(`Não foi salvo: ${bloqueios.join(' ')}`);
+      return false;
+    }
+
+    // Próxima execução antes x depois (só na edição de plano ativo) — mudar data
+    // inicial/periodicidade no meio da revisão pode puxar ou empurrar o plano de semana.
+    const original = idEdicao ? this.manutencaoPlanosService.getById(idEdicao) : undefined;
+    if (original?.ativo && valores.ativo) {
+      const antes = this.planosComExecucaoPorId().get(original.id)?.proximaData ?? null;
+      const plantaParada = this.manutencaoProgramacaoService.paradaAtual() !== null;
+      const efetiva = periodicidadeEfetiva(valores.periodicidadeValor, valores.periodicidadeUnidade, plantaParada, valores.area);
+      const depois = proximaDataFixa(valores.dataInicial, efetiva.valor, efetiva.unidade, this.hojeInicioSemanaIso,
+        this.manutencaoPlanosService.ultimoCicloDoPlano(original.id), original.agendaRigida);
+      if (antes && antes !== depois) {
+        avisos.push(`A próxima execução muda de ${this.formatarDataBr(antes)} (S${this.numeroSemanaISO(antes)}) `
+          + `para ${this.formatarDataBr(depois)} (S${this.numeroSemanaISO(depois)}).`);
+      }
+    }
+    if (!avisos.length) return true;
+    return this.confirmDialogService.confirm(
+      `Confira antes de salvar:\n\n• ${avisos.join('\n\n• ')}\n\nSalvar assim mesmo?`,
+      { confirmLabel: 'Salvar assim mesmo' },
+    );
+  }
+
   async confirmarForm(): Promise<void> {
     if (!this.podeConfirmar()) return;
     this.incluirTextosPendentes();
+    if (!(await this.validarAntesDeSalvar())) return;
     this.isProcessando.set(true);
     try {
       const atividades = this.formAtividadesLista()
@@ -927,9 +1009,30 @@ export class ManutencaoPlanosComponent implements OnInit {
     return previsoes;
   });
 
+  // Alterações do cadastro (quem mudou o quê) — só Admin lê o audit_logs.
+  historicoCadastro = signal<AlteracaoCadastroPlano[]>([]);
+  historicoCadastroCarregando = signal(false);
+  historicoCadastroErro = signal<string | null>(null);
+
+  private async carregarHistoricoCadastro(planoId: string): Promise<void> {
+    this.historicoCadastro.set([]);
+    this.historicoCadastroErro.set(null);
+    if (!this.isAdmin()) return;
+    this.historicoCadastroCarregando.set(true);
+    try {
+      const linhas = await this.manutencaoPlanosService.historicoAlteracoes(planoId);
+      if (this.historicoAberto()?.id === planoId) this.historicoCadastro.set(linhas);
+    } catch (e) {
+      this.historicoCadastroErro.set(e instanceof Error ? e.message : 'Falha ao carregar alterações.');
+    } finally {
+      this.historicoCadastroCarregando.set(false);
+    }
+  }
+
   async abrirHistorico(plano: PlanoManutencao): Promise<void> {
     this.historicoAberto.set(plano);
     this.historicoSigma.set({});
+    void this.carregarHistoricoCadastro(plano.id);
     const ordensPorId = new Map(this.manutencaoProgramacaoService.ordens().map(o => [o.id, o]));
     const numerosOs = this.manutencaoPlanosService.ciclos()
       .filter(c => c.planoId === plano.id)
