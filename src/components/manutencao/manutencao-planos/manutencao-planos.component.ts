@@ -834,6 +834,23 @@ export class ManutencaoPlanosComponent implements OnInit {
       const lista = ciclosPorPlano.get(c.planoId);
       if (lista) lista.push(c); else ciclosPorPlano.set(c.planoId, [c]);
     }
+    // OS de preventiva sem ciclo — vinculada ao plano (planoPreventivoId) ou lançada "na
+    // mão" com a descrição igual ao nome do plano, na mesma área. Reportado: semanas
+    // passadas vazias no mapa, porque só entrava o que tinha ciclo (OS criada pela lista
+    // de "Preventivas da semana"); as lançadas à parte não apareciam.
+    const ordensPorPlanoId = new Map<string, ManutencaoOrdem[]>();
+    const ordensPorNome = new Map<string, ManutencaoOrdem[]>();
+    for (const o of this.manutencaoProgramacaoService.ordens()) {
+      if (o.tipo !== 'ordem') continue;
+      if (o.planoPreventivoId) {
+        const lista = ordensPorPlanoId.get(o.planoPreventivoId);
+        if (lista) lista.push(o); else ordensPorPlanoId.set(o.planoPreventivoId, [o]);
+      }
+      const chave = `${o.area}|${normalizarTexto(o.descricao.trim())}`;
+      const lista = ordensPorNome.get(chave);
+      if (lista) lista.push(o); else ordensPorNome.set(chave, [o]);
+    }
+    const dataDaOrdem = (o: ManutencaoOrdem) => o.diasPrevistos.length ? [...o.diasPrevistos].sort()[0] : o.semanaInicio;
 
     return this.planosFiltrados()
       .filter(p => p.ativo)
@@ -844,6 +861,14 @@ export class ManutencaoPlanosComponent implements OnInit {
           const ordem = ordensPorId.get(ciclo.ordemId);
           const data = ordem?.diasPrevistos.length ? [...ordem.diasPrevistos].sort()[0] : (ordem?.semanaInicio ?? ciclo.dataPrevista);
           const semana = semanaDe(data);
+          if (semana !== null) celulas.set(semana, 'programada');
+        }
+        const semCiclo = [
+          ...(ordensPorPlanoId.get(plano.id) ?? []),
+          ...(ordensPorNome.get(`${plano.area}|${normalizarTexto(plano.nome.trim())}`) ?? []),
+        ];
+        for (const ordem of semCiclo) {
+          const semana = semanaDe(dataDaOrdem(ordem));
           if (semana !== null) celulas.set(semana, 'programada');
         }
         // Previstas: da semana atual em diante (ou o ano todo, se for um ano futuro).
