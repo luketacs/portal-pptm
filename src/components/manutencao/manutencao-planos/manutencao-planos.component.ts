@@ -475,6 +475,7 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formArea.set('ELETRICA');
     this.formEspecialidade.set('');
     this.formAtividadesLista.set([]);
+    this.formSubPassoDigitando.set(new Map());
     this.formAtividadeDigitando.set('');
     this.formCopiarChecklistTexto.set('');
     this.formPeriodicidadePreset.set('Mensal');
@@ -500,6 +501,7 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formArea.set(plano.area);
     this.formEspecialidade.set(plano.especialidade ?? '');
     this.formAtividadesLista.set([...plano.atividades]);
+    this.formSubPassoDigitando.set(new Map());
     this.formAtividadeDigitando.set('');
     this.formCopiarChecklistTexto.set('');
     const preset = PERIODICIDADE_PRESETS.find(p => p.valor === plano.periodicidadeValor && p.unidade === plano.periodicidadeUnidade);
@@ -531,6 +533,8 @@ export class ManutencaoPlanosComponent implements OnInit {
 
   removerAtividade(index: number): void {
     this.formAtividadesLista.update(lista => lista.filter((_, i) => i !== index));
+    // Índices dos passos mudaram — sub-passo digitado e não adicionado fica órfão.
+    this.formSubPassoDigitando.set(new Map());
   }
 
   atualizarTextoAtividade(index: number, texto: string): void {
@@ -542,9 +546,32 @@ export class ManutencaoPlanosComponent implements OnInit {
   // anormal". Mesma interação de reordenar/remover do passo principal, um nível abaixo.
   adicionarSubPasso(indexPai: number, texto: string): void {
     const t = texto.trim();
+    this.definirSubPassoDigitando(indexPai, '');
     if (!t) return;
     this.formAtividadesLista.update(lista => lista.map((item, i) =>
       i === indexPai ? { ...item, subPassos: [...item.subPassos, t] } : item));
+  }
+
+  // Texto digitado no campo "Sub-passo" de cada passo, ainda sem Enter/"+". Reportado:
+  // o usuário digitava os sub-passos e ia direto em Salvar — o campo não era controlado,
+  // o texto era descartado sem aviso e os sub-passos "sumiam". Agora fica guardado aqui
+  // e é incluído no salvar (ver incluirTextosPendentes). Chave = índice do passo pai.
+  formSubPassoDigitando = signal<ReadonlyMap<number, string>>(new Map());
+
+  definirSubPassoDigitando(indexPai: number, texto: string): void {
+    this.formSubPassoDigitando.update(atual => {
+      const novo = new Map(atual);
+      if (texto) novo.set(indexPai, texto); else novo.delete(indexPai);
+      return novo;
+    });
+  }
+
+  // Tudo que ficou digitado sem Enter/"+" (nova atividade e sub-passos) entra no
+  // checklist antes de salvar — mesma correção já feita no campo Recursos da Programação.
+  private incluirTextosPendentes(): void {
+    for (const [indexPai, texto] of this.formSubPassoDigitando()) this.adicionarSubPasso(indexPai, texto);
+    this.formSubPassoDigitando.set(new Map());
+    if (this.formAtividadeDigitando().trim()) this.adicionarAtividade(this.formAtividadeDigitando());
   }
 
   removerSubPasso(indexPai: number, indexFilho: number): void {
@@ -670,6 +697,7 @@ export class ManutencaoPlanosComponent implements OnInit {
     // Cópia de verdade (deep clone) — editar o checklist copiado não pode alterar o
     // plano de origem, e vice-versa.
     this.formAtividadesLista.set(plano.atividades.map(a => ({ texto: a.texto, subPassos: [...a.subPassos] })));
+    this.formSubPassoDigitando.set(new Map());
     this.formCopiarChecklistTexto.set('');
     this.notificationService.showSuccess(`Checklist copiado de "${plano.nome}".`);
   }
@@ -682,6 +710,16 @@ export class ManutencaoPlanosComponent implements OnInit {
       [copia[index], copia[novoIndex]] = [copia[novoIndex], copia[index]];
       return copia;
     });
+    // O texto digitado acompanha o passo que trocou de posição.
+    this.formSubPassoDigitando.update(atual => {
+      const novoIndex = index + direcao;
+      const novo = new Map(atual);
+      const a = atual.get(index), b = atual.get(novoIndex);
+      novo.delete(index); novo.delete(novoIndex);
+      if (a) novo.set(novoIndex, a);
+      if (b) novo.set(index, b);
+      return novo;
+    });
   }
 
   podeConfirmar = computed(() =>
@@ -690,6 +728,7 @@ export class ManutencaoPlanosComponent implements OnInit {
 
   async confirmarForm(): Promise<void> {
     if (!this.podeConfirmar()) return;
+    this.incluirTextosPendentes();
     this.isProcessando.set(true);
     try {
       const atividades = this.formAtividadesLista()

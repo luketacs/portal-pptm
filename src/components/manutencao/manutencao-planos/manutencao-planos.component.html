@@ -560,10 +560,11 @@
                       </div>
                     }
                     <div class="flex gap-1.5">
-                      <input #subInput type="text" placeholder="Sub-passo (se aplicável) — Enter pra adicionar"
-                        (keydown.enter)="$event.preventDefault(); adicionarSubPasso(i, subInput.value); subInput.value = ''"
+                      <input type="text" placeholder="Sub-passo (se aplicável) — Enter pra adicionar"
+                        [ngModel]="formSubPassoDigitando().get(i) ?? ''" (ngModelChange)="definirSubPassoDigitando(i, $event)"
+                        (keydown.enter)="$event.preventDefault(); adicionarSubPasso(i, formSubPassoDigitando().get(i) ?? '')"
                         class="flex-1 rounded-lg border border-dashed border-slate-300 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                      <button type="button" (click)="adicionarSubPasso(i, subInput.value); subInput.value = ''" title="Adicionar sub-passo"
+                      <button type="button" (click)="adicionarSubPasso(i, formSubPassoDigitando().get(i) ?? '')" title="Adicionar sub-passo"
                         class="px-2 rounded-lg border border-dashed border-slate-300 text-slate-500 hover:bg-slate-50 text-xs font-semibold">+</button>
                     </div>
                   </div>
