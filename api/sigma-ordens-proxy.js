@@ -69,8 +69,12 @@ export default async function handler(req, res) {
       }
       const executantes = new Set(String(req.query?.executantes || '').split(',').map(s => s.trim()).filter(Boolean));
       const dados = await obterCache();
-      const apontamentos = dados.apontamentosLista.filter(a => a.data >= de && a.data <= ate
-        && (executantes.size === 0 || executantes.has(a.executante)));
+      const apontamentos = dados.apontamentosLista
+        .filter(a => a.data >= de && a.data <= ate && (executantes.size === 0 || executantes.has(a.executante)))
+        .map(a => {
+          const os = dados.osPorNumero.get(a.numeroOs);
+          return { ...a, descricao: os?.descricao ?? '', equipamento: os?.equipamento ?? '' };
+        });
       return res.status(200).json({ success: true, apontamentos, atualizadoEm: dados.ts });
     }
 

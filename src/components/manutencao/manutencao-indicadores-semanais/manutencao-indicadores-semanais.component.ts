@@ -17,7 +17,7 @@ import {
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
-import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
+import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularHhTecnico, calcularKpiExecucao, extratoHorasColaborador, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
 import { encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
@@ -572,6 +572,41 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     // primeiro) — essa tabela é de consulta/referência, não um ranking de desempenho,
     // então alfabética facilita achar um técnico específico de cara.
     return resultado.sort((a, b) => a.colaborador.nome.localeCompare(b.colaborador.nome, 'pt-BR'));
+  }
+
+  // ── Extrato de horas do técnico ──
+  // Clique no card do técnico: cada apontamento do SIGMA no período, dia a dia, marcando
+  // se a OS estava na programação dele — responde "por que aparecem X horas" sem
+  // precisar consultar o SIGMA à mão. Totais batem com o card (mesma regra).
+  extratoMatricula = signal<string | null>(null);
+
+  tecnicosDoExtrato = computed(() => [...this.rankingHorasApontadasEletrica(), ...this.rankingHorasApontadasMecanica()]
+    .sort((a, b) => a.colaborador.nome.localeCompare(b.colaborador.nome, 'pt-BR')));
+
+  extratoItem = computed(() => {
+    const matricula = this.extratoMatricula();
+    return matricula ? this.tecnicosDoExtrato().find(i => String(i.colaborador.matricula).trim() === matricula) ?? null : null;
+  });
+
+  extrato = computed<ExtratoHoras | null>(() => {
+    const item = this.extratoItem();
+    if (!item) return null;
+    const semanas = [...this.semanasDoPeriodoSet()].sort();
+    const ordens = this.ordensDoColaborador(this.manutencaoService.ordens().filter(o => semanas.includes(o.semanaInicio)), item.colaborador);
+    return extratoHorasColaborador(ordens, this.apontamentosPeriodo().lista, String(item.colaborador.matricula).trim(), semanas);
+  });
+
+  abrirExtrato(item: HorasTecnicoItem): void {
+    this.extratoMatricula.set(String(item.colaborador.matricula).trim());
+  }
+
+  fecharExtrato(): void {
+    this.extratoMatricula.set(null);
+  }
+
+  diaSemanaCurto(iso: string): string {
+    const [a, m, d] = iso.split('-').map(Number);
+    return ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][new Date(a, m - 1, d).getDay()] + ` ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
   }
 
   rankingHorasApontadasEletrica = computed<HorasTecnicoItem[]>(() => this.calcularHorasPorTecnico(this.tecnicosEletrica()));

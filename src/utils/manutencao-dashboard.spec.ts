@@ -1,4 +1,4 @@
-import { calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada } from './manutencao-dashboard';
+import { calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, extratoHorasColaborador, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada } from './manutencao-dashboard';
 import { ConsultaSigmaResultado, ManutencaoOrdem } from '../models/manutencao-programacao.model';
 
 const DIAS_SEMANA_37 = [
@@ -347,6 +347,23 @@ describe('horasForaDaProgramacao', () => {
   it('ignora outra matrícula e apontamento de outra semana', () => {
     const lista = [apont('047666', '2026-09-09', 7, '11111111'), apont('047666', '2026-09-14', 7)];
     expect(horasForaDaProgramacao([], lista, '20006136', '2026-09-07')).toBe(0);
+  });
+
+  it('extrato dia a dia bate com apontada + fora da programação', () => {
+    const programada = ordem({ numeroOs: '45203' });
+    const lista = [
+      apont('047666', '2026-09-09', 7),
+      apont('045203', '2026-09-08', 7),
+      apont('045203', '2026-09-09', 1),
+      apont('045203', '2026-09-14', 5), // outra semana: fora do período
+    ];
+    const ex = extratoHorasColaborador([programada], lista, '20006136', ['2026-09-07']);
+    expect(ex.dias.map(d => [d.data, d.horas])).toEqual([['2026-09-08', 7], ['2026-09-09', 8]]);
+    expect(ex.dias[1].linhas.map(l => l.programada)).toEqual([false, true]);
+    expect(ex.horasProgramadas).toBe(horasApontadasDoColaborador([programada], {
+      '045203': { os: null, apontamentos: lista.filter(a => a.numeroOs === '045203') },
+    }, '20006136'));
+    expect(ex.horasFora).toBe(horasForaDaProgramacao([programada], lista, '20006136', '2026-09-07'));
   });
 
   it('OS programada pra pessoa em OUTRA semana conta como fora nesta', () => {

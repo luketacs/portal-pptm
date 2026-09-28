@@ -232,6 +232,11 @@ export interface SigmaApontamento {
 // programadas), pra achar hora apontada em OS fora da programação do técnico.
 export interface SigmaApontamentoPeriodo extends SigmaApontamento {
   numeroOs: string;
+  horaInicial?: string; // 'HH:MM'
+  horaFinal?: string;
+  almoco?: boolean;
+  descricao?: string;  // da OS no SIGMA
+  equipamento?: string;
 }
 
 export interface ConsultaSigmaResultado {

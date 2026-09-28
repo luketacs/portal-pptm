@@ -201,8 +201,12 @@
           <h3 class="pcm-horas-tecnico-subtitulo">Elétrica</h3>
           <div class="pcm-horas-tecnico-grid pcm-somente-tela">
             @for (item of rankingHorasApontadasEletrica(); track item.colaborador.matricula) {
-              <div class="pcm-horas-tecnico-card">
-                <div class="text-sm font-semibold text-gray-700 truncate mb-1.5" [title]="item.colaborador.nome">{{ item.colaborador.nome }}</div>
+              <div class="pcm-horas-tecnico-card pcm-horas-tecnico-card--clicavel" role="button" tabindex="0"
+                (click)="abrirExtrato(item)" (keydown.enter)="abrirExtrato(item)" title="Ver extrato de horas dia a dia">
+                <div class="flex items-center justify-between gap-2 mb-1.5">
+                  <span class="text-sm font-semibold text-gray-700 truncate">{{ item.colaborador.nome }}</span>
+                  <span class="text-[11px] font-semibold text-blue-600 flex-shrink-0">Extrato ›</span>
+                </div>
                 <div class="space-y-1">
                   <div class="flex items-center gap-2 text-xs">
                     <span class="w-20 text-gray-500 flex-shrink-0">Apontada</span>
@@ -262,8 +266,12 @@
           <h3 class="pcm-horas-tecnico-subtitulo">Mecânica</h3>
           <div class="pcm-horas-tecnico-grid pcm-somente-tela">
             @for (item of rankingHorasApontadasMecanica(); track item.colaborador.matricula) {
-              <div class="pcm-horas-tecnico-card">
-                <div class="text-sm font-semibold text-gray-700 truncate mb-1.5" [title]="item.colaborador.nome">{{ item.colaborador.nome }}</div>
+              <div class="pcm-horas-tecnico-card pcm-horas-tecnico-card--clicavel" role="button" tabindex="0"
+                (click)="abrirExtrato(item)" (keydown.enter)="abrirExtrato(item)" title="Ver extrato de horas dia a dia">
+                <div class="flex items-center justify-between gap-2 mb-1.5">
+                  <span class="text-sm font-semibold text-gray-700 truncate">{{ item.colaborador.nome }}</span>
+                  <span class="text-[11px] font-semibold text-blue-600 flex-shrink-0">Extrato ›</span>
+                </div>
                 <div class="space-y-1">
                   <div class="flex items-center gap-2 text-xs">
                     <span class="w-20 text-gray-500 flex-shrink-0">Apontada</span>
@@ -542,3 +550,108 @@
     </section>
   </div>
 </div>
+
+@if (extratoItem(); as item) {
+  <div class="no-print fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" (click)="fecharExtrato()">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-4xl max-h-[90vh] flex flex-col" (click)="$event.stopPropagation()">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-bold text-gray-800">Extrato de horas</h2>
+          <p class="text-sm text-gray-500 mt-0.5">{{ periodoLabel() }} · apontamentos do SIGMA</p>
+        </div>
+        <button type="button" (click)="fecharExtrato()" class="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Fechar">×</button>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3 mt-3">
+        <select class="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+          [ngModel]="extratoMatricula()" (ngModelChange)="extratoMatricula.set($event)" aria-label="Técnico">
+          @for (t of tecnicosDoExtrato(); track t.colaborador.matricula) {
+            <option [value]="'' + t.colaborador.matricula">{{ t.colaborador.nome }} ({{ t.colaborador.matricula }})</option>
+          }
+        </select>
+      </div>
+
+      @if (extrato(); as ex) {
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-4">
+          <div class="rounded-lg border border-slate-200 px-3 py-2">
+            <p class="text-[11px] text-gray-500 uppercase font-semibold">Total no SIGMA</p>
+            <p class="text-lg font-bold text-gray-800">{{ +(ex.horasProgramadas + ex.horasFora).toFixed(2) }}h</p>
+          </div>
+          <div class="rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+            <p class="text-[11px] text-green-700 uppercase font-semibold">Apontada (programada)</p>
+            <p class="text-lg font-bold text-green-800">{{ +ex.horasProgramadas.toFixed(2) }}h</p>
+          </div>
+          <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+            <p class="text-[11px] text-amber-700 uppercase font-semibold">Fora da prog.</p>
+            <p class="text-lg font-bold text-amber-800">{{ +ex.horasFora.toFixed(2) }}h</p>
+          </div>
+          <div class="rounded-lg border border-slate-200 px-3 py-2">
+            <p class="text-[11px] text-gray-500 uppercase font-semibold">Programada</p>
+            <p class="text-lg font-bold text-gray-800">{{ item.horasProgramadas }}h</p>
+          </div>
+          <div class="rounded-lg border border-slate-200 px-3 py-2">
+            <p class="text-[11px] text-gray-500 uppercase font-semibold">Disponível</p>
+            <p class="text-lg font-bold text-gray-800">{{ item.horasDisponiveis }}h</p>
+          </div>
+        </div>
+
+        <div class="mt-4 overflow-y-auto flex-1 border border-slate-200 rounded-lg">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-50 text-xs text-gray-500 uppercase sticky top-0">
+              <tr>
+                <th class="text-left px-3 py-2">Dia</th>
+                <th class="text-left px-3 py-2">Horário</th>
+                <th class="text-right px-3 py-2">Horas</th>
+                <th class="text-left px-3 py-2">OS</th>
+                <th class="text-left px-3 py-2">Serviço</th>
+                <th class="text-left px-3 py-2">Situação</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (dia of ex.dias; track dia.data) {
+                @for (l of dia.linhas; track $index; let primeira = $first) {
+                  <tr class="border-t border-slate-100">
+                    <td class="px-3 py-2 whitespace-nowrap font-semibold text-gray-700">{{ primeira ? diaSemanaCurto(dia.data) : '' }}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">
+                      {{ l.apontamento.horaInicial || '—' }}–{{ l.apontamento.horaFinal || '—' }}
+                      @if (l.apontamento.almoco) { <span class="text-[10px] text-gray-400" title="Desconta 30 min de almoço">−almoço</span> }
+                    </td>
+                    <td class="px-3 py-2 text-right font-semibold text-gray-800 whitespace-nowrap">
+                      {{ l.apontamento.horas === null ? 'sem hora' : (+l.apontamento.horas.toFixed(2)) + 'h' }}
+                    </td>
+                    <td class="px-3 py-2 font-mono text-xs text-gray-600">{{ l.apontamento.numeroOs }}</td>
+                    <td class="px-3 py-2 text-gray-700">
+                      <span class="block truncate max-w-xs" [title]="l.apontamento.descricao || ''">{{ l.apontamento.descricao || '—' }}</span>
+                      @if (l.apontamento.equipamento) { <span class="block text-[11px] text-gray-400">{{ l.apontamento.equipamento }}</span> }
+                    </td>
+                    <td class="px-3 py-2 whitespace-nowrap">
+                      @if (l.programada) {
+                        <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">Programada</span>
+                      } @else {
+                        <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Fora da prog.</span>
+                      }
+                    </td>
+                  </tr>
+                }
+                <tr class="bg-slate-50 text-xs">
+                  <td class="px-3 py-1.5 text-gray-500" colspan="2">Total do dia</td>
+                  <td class="px-3 py-1.5 text-right font-bold text-gray-700">{{ +dia.horas.toFixed(2) }}h</td>
+                  <td colspan="3"></td>
+                </tr>
+              } @empty {
+                <tr><td colspan="6" class="px-3 py-8 text-center text-gray-400">Nenhum apontamento no SIGMA nesse período.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <p class="text-xs text-gray-400 mt-2">
+          Horas = hora final − hora inicial, menos 30 min quando o almoço está marcado.
+          "Fora da prog." = OS que não estava na programação do técnico na semana — não entra na eficiência.
+          @if (ex.semHorario > 0) { {{ ex.semHorario }} apontamento(s) sem hora de início/fim contam 0h. }
+          Dados do SIGMA atualizam a cada ~10 min.
+        </p>
+      }
+    </div>
+  </div>
+}

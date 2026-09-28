@@ -171,6 +171,12 @@ export async function carregarDados() {
       // almoço) — null quando a linha não tem hora início/fim válida. Ver
       // calcularHorasPorTecnico no Acompanhamento de Indicadores Semanais.
       horas: calcularHorasApontamento(row[APONT_COL.horaInicial], row[APONT_COL.horaFinal], row[APONT_COL.intervaloAlmoco]),
+      // Horário cru + almoço — só pro extrato de horas dos Indicadores (consulta por
+      // período); o cálculo de horas acima já usa os três.
+      horaInicial: (row[APONT_COL.horaInicial] || '').trim().slice(0, 5),
+      horaFinal: (row[APONT_COL.horaFinal] || '').trim().slice(0, 5),
+      almoco: String(row[APONT_COL.intervaloAlmoco] ?? '').trim() === '1'
+        || String(row[APONT_COL.intervaloAlmoco] ?? '').toLowerCase().includes('s'),
     });
     apontamentosPorOs.set(numeroOs, lista);
   }

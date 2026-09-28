@@ -154,6 +154,64 @@ export function horasForaDaProgramacao(
   return total;
 }
 
+export interface LinhaExtratoHoras {
+  apontamento: SigmaApontamentoPeriodo;
+  /** OS estava na programação da pessoa na semana do apontamento. */
+  programada: boolean;
+}
+
+export interface DiaExtratoHoras {
+  data: string;
+  linhas: LinhaExtratoHoras[];
+  horas: number;
+}
+
+export interface ExtratoHoras {
+  dias: DiaExtratoHoras[];
+  horasProgramadas: number; // apontadas em OS programadas (= "Apontada" do card)
+  horasFora: number;        // apontadas fora da programação (= "Fora da prog.")
+  semHorario: number;       // apontamentos sem hora início/fim válida (contam 0h)
+}
+
+/**
+ * Extrato dia a dia de uma matrícula no período — mesma regra de horasApontadasDoColaborador
+ * + horasForaDaProgramacao (OS programada = está na programação da pessoa NA SEMANA do
+ * apontamento), então os totais batem com o card dos Indicadores.
+ */
+export function extratoHorasColaborador(
+  ordensDoTecnico: ManutencaoOrdem[],
+  apontamentosPeriodo: SigmaApontamentoPeriodo[],
+  matricula: string,
+  semanas: string[],
+): ExtratoHoras {
+  const programadasPorSemana = new Map<string, Set<string>>();
+  for (const s of semanas) {
+    programadasPorSemana.set(s, new Set(ordensDoTecnico
+      .filter(o => o.tipo === 'ordem' && o.semanaInicio === s && o.numeroOs?.trim())
+      .map(o => normalizarNumeroOs(o.numeroOs!))));
+  }
+  const semanaDoDia = (data: string) => semanas.find(s => data >= s && data <= domingoDaSemana(s));
+  const porDia = new Map<string, DiaExtratoHoras>();
+  const extrato: ExtratoHoras = { dias: [], horasProgramadas: 0, horasFora: 0, semHorario: 0 };
+  const lista = apontamentosPeriodo
+    .filter(a => a.executante === matricula)
+    .sort((a, b) => (a.data + (a.horaInicial ?? '')).localeCompare(b.data + (b.horaInicial ?? '')));
+  for (const a of lista) {
+    const semana = semanaDoDia(a.data);
+    if (!semana) continue;
+    const programada = programadasPorSemana.get(semana)!.has(normalizarNumeroOs(a.numeroOs));
+    const horas = a.horas ?? 0;
+    if (a.horas === null) extrato.semHorario++;
+    if (programada) extrato.horasProgramadas += horas; else extrato.horasFora += horas;
+    const dia = porDia.get(a.data) ?? { data: a.data, linhas: [], horas: 0 };
+    dia.linhas.push({ apontamento: a, programada });
+    dia.horas += horas;
+    porDia.set(a.data, dia);
+  }
+  extrato.dias = [...porDia.values()];
+  return extrato;
+}
+
 export interface KpiExecucao {
   programadas: number;
   executadas: number;
