@@ -228,6 +228,7 @@
    uma na escala da própria Hora Disponível (100%) do técnico. */
 .pcm-hh-barra-fill--apontada { background: linear-gradient(90deg, #4ade80 0%, #16a34a 100%); }
 .pcm-hh-barra-fill--programada { background: linear-gradient(90deg, #60a5fa 0%, #2563eb 100%); }
+.pcm-hh-barra-fill--fora { background: linear-gradient(90deg, #fbbf24 0%, #d97706 100%); }
 .pcm-hh-barra-fill--disponivel { background: #cbd5e1; }
 
 .pcm-horas-tecnico-grid {
@@ -321,6 +322,7 @@
   .pcm-hh-barra-fill { background: #2563eb; }
   .pcm-hh-barra-fill--apontada { background: #16a34a; }
   .pcm-hh-barra-fill--programada { background: #2563eb; }
+  .pcm-hh-barra-fill--fora { background: #d97706; }
   .pcm-hh-barra-fill--disponivel { background: #cbd5e1; }
 
   .pcm-horas-tecnico-card {

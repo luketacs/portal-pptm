@@ -2,7 +2,7 @@
 // depender de Angular/Supabase (mesmo padrão de manutencao-regras.ts). Também usadas
 // pelo Acompanhamento de Indicadores Semanais (mesma fonte de "executada").
 import { calcularCapacidadeSemana, DiaSemana } from './manutencao-regras';
-import { ConsultaSigmaResultado, ManutencaoOrdem } from '../models/manutencao-programacao.model';
+import { ConsultaSigmaResultado, ManutencaoOrdem, SigmaApontamentoPeriodo } from '../models/manutencao-programacao.model';
 
 function normalizarNumeroOs(v: string): string {
   const s = v.trim();
@@ -125,6 +125,31 @@ export function horasApontadasDoColaborador(
       if (a.data < linhas[0].semanaInicio || a.data > domingo) continue;
       total += a.horas ?? 0;
     }
+  }
+  return total;
+}
+
+/**
+ * Horas que a matrícula apontou na semana em OS que NÃO estão na programação dela
+ * naquela semana — complemento exato de horasApontadasDoColaborador (que só soma OS
+ * programadas pra pessoa). Não entra na eficiência (apontada ÷ programada); serve pra
+ * mostrar o total real trabalhado e quem está atendendo fora do programado.
+ */
+export function horasForaDaProgramacao(
+  ordensDoTecnicoNaSemana: ManutencaoOrdem[],
+  apontamentosPeriodo: SigmaApontamentoPeriodo[],
+  matricula: string,
+  semanaInicio: string,
+): number {
+  const programadas = new Set(ordensDoTecnicoNaSemana
+    .filter(o => o.semanaInicio === semanaInicio && o.numeroOs?.trim())
+    .map(o => normalizarNumeroOs(o.numeroOs!)));
+  const domingo = domingoDaSemana(semanaInicio);
+  let total = 0;
+  for (const a of apontamentosPeriodo) {
+    if (a.executante !== matricula || a.data < semanaInicio || a.data > domingo) continue;
+    if (programadas.has(normalizarNumeroOs(a.numeroOs))) continue;
+    total += a.horas ?? 0;
   }
   return total;
 }

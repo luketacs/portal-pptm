@@ -211,6 +211,15 @@
                     </div>
                     <span class="w-12 text-right text-gray-600 font-semibold flex-shrink-0">{{ item.horasApontadas }}h</span>
                   </div>
+                  @if (item.horasForaProgramacao > 0) {
+                    <div class="flex items-center gap-2 text-xs" title="Apontado no SIGMA em OS que não estava na programação do técnico nesta semana — não entra na eficiência">
+                      <span class="w-20 text-gray-500 flex-shrink-0">Fora da prog.</span>
+                      <div class="flex-1 bg-slate-100 rounded-full h-3 pcm-hh-barra-fundo">
+                        <div class="h-3 rounded-full pcm-hh-barra-fill pcm-hh-barra-fill--fora" [style.width.%]="percentualBarraHoras(item.horasForaProgramacao, item.horasDisponiveis)"></div>
+                      </div>
+                      <span class="w-12 text-right text-gray-600 font-semibold flex-shrink-0">{{ item.horasForaProgramacao }}h</span>
+                    </div>
+                  }
                   <div class="flex items-center gap-2 text-xs">
                     <span class="w-20 text-gray-500 flex-shrink-0">Programada</span>
                     <div class="flex-1 bg-slate-100 rounded-full h-3 pcm-hh-barra-fundo">
@@ -234,12 +243,13 @@
             }
           </div>
           <table class="pcm-somente-impressao pcm-table">
-            <thead><tr><th>Técnico</th><th>Apontada</th><th>Programada</th><th>Disponível</th><th>Eficiência</th></tr></thead>
+            <thead><tr><th>Técnico</th><th>Apontada</th><th>Fora da prog.</th><th>Programada</th><th>Disponível</th><th>Eficiência</th></tr></thead>
             <tbody>
               @for (item of rankingHorasApontadasEletrica(); track item.colaborador.matricula; let i = $index) {
                 <tr [class]="i % 2 === 0 ? 'pcm-even-row' : 'pcm-odd-row'">
                   <td class="pcm-area-name">{{ item.colaborador.nome }}</td>
                   <td>{{ item.horasApontadas }}h</td>
+                  <td>{{ item.horasForaProgramacao }}h</td>
                   <td>{{ item.horasProgramadas }}h</td>
                   <td>{{ item.horasDisponiveis }}h</td>
                   <td><strong class="pcm-percentage">{{ item.eficiencia }}%</strong></td>
@@ -262,6 +272,15 @@
                     </div>
                     <span class="w-12 text-right text-gray-600 font-semibold flex-shrink-0">{{ item.horasApontadas }}h</span>
                   </div>
+                  @if (item.horasForaProgramacao > 0) {
+                    <div class="flex items-center gap-2 text-xs" title="Apontado no SIGMA em OS que não estava na programação do técnico nesta semana — não entra na eficiência">
+                      <span class="w-20 text-gray-500 flex-shrink-0">Fora da prog.</span>
+                      <div class="flex-1 bg-slate-100 rounded-full h-3 pcm-hh-barra-fundo">
+                        <div class="h-3 rounded-full pcm-hh-barra-fill pcm-hh-barra-fill--fora" [style.width.%]="percentualBarraHoras(item.horasForaProgramacao, item.horasDisponiveis)"></div>
+                      </div>
+                      <span class="w-12 text-right text-gray-600 font-semibold flex-shrink-0">{{ item.horasForaProgramacao }}h</span>
+                    </div>
+                  }
                   <div class="flex items-center gap-2 text-xs">
                     <span class="w-20 text-gray-500 flex-shrink-0">Programada</span>
                     <div class="flex-1 bg-slate-100 rounded-full h-3 pcm-hh-barra-fundo">
@@ -285,12 +304,13 @@
             }
           </div>
           <table class="pcm-somente-impressao pcm-table">
-            <thead><tr><th>Técnico</th><th>Apontada</th><th>Programada</th><th>Disponível</th><th>Eficiência</th></tr></thead>
+            <thead><tr><th>Técnico</th><th>Apontada</th><th>Fora da prog.</th><th>Programada</th><th>Disponível</th><th>Eficiência</th></tr></thead>
             <tbody>
               @for (item of rankingHorasApontadasMecanica(); track item.colaborador.matricula; let i = $index) {
                 <tr [class]="i % 2 === 0 ? 'pcm-even-row' : 'pcm-odd-row'">
                   <td class="pcm-area-name">{{ item.colaborador.nome }}</td>
                   <td>{{ item.horasApontadas }}h</td>
+                  <td>{{ item.horasForaProgramacao }}h</td>
                   <td>{{ item.horasProgramadas }}h</td>
                   <td>{{ item.horasDisponiveis }}h</td>
                   <td><strong class="pcm-percentage">{{ item.eficiencia }}%</strong></td>
@@ -299,7 +319,7 @@
             </tbody>
           </table>
         }
-        <p class="text-xs text-gray-400 mt-2 pcm-somente-tela">Horas Programadas/Eficiência só calculadas pra Elétrica/Mecânica — mesma restrição do HH acima. Barras na escala da própria Hora Disponível do técnico.</p>
+        <p class="text-xs text-gray-400 mt-2 pcm-somente-tela">Horas Programadas/Eficiência só calculadas pra Elétrica/Mecânica — mesma restrição do HH acima. Barras na escala da própria Hora Disponível do técnico. "Fora da prog." = apontado no SIGMA em OS que não estava na programação do técnico na semana (não entra na eficiência).</p>
       }
     </section>
 

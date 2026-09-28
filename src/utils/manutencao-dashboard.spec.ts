@@ -1,4 +1,4 @@
-import { calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, ordemExecutadaAgrupada } from './manutencao-dashboard';
+import { calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada } from './manutencao-dashboard';
 import { ConsultaSigmaResultado, ManutencaoOrdem } from '../models/manutencao-programacao.model';
 
 const DIAS_SEMANA_37 = [
@@ -325,5 +325,32 @@ describe('a mesma OS em semanas distintas', () => {
       { data: '2026-09-15', status: 'EXEC', executante: '20006136', horas: 3 },
     ] } };
     expect(horasApontadasDoColaborador([...ordens, ordem({ id: 'copia' })], duasSemanas, '20006136')).toBe(5);
+  });
+});
+
+// Reportado: Anderson Souza apontou 35h na S39, Indicadores mostravam 28h — os 7h da
+// OS 047666 não estavam na programação dele. Essas horas aparecem à parte.
+describe('horasForaDaProgramacao', () => {
+  const apont = (numeroOs: string, data: string, horas: number, executante = '20006136') =>
+    ({ numeroOs, data, horas, executante, status: 'EXPA' });
+
+  it('soma só OS que não estão na programação da pessoa naquela semana', () => {
+    const programada = ordem({ numeroOs: '45203' });
+    const lista = [
+      apont('045203', '2026-09-08', 7),   // programada: fica de fora (já é "apontada")
+      apont('47666', '2026-09-09', 7),    // fora da programação
+      apont('047700', '2026-09-10', 2.5), // fora da programação
+    ];
+    expect(horasForaDaProgramacao([programada], lista, '20006136', '2026-09-07')).toBe(9.5);
+  });
+
+  it('ignora outra matrícula e apontamento de outra semana', () => {
+    const lista = [apont('047666', '2026-09-09', 7, '11111111'), apont('047666', '2026-09-14', 7)];
+    expect(horasForaDaProgramacao([], lista, '20006136', '2026-09-07')).toBe(0);
+  });
+
+  it('OS programada pra pessoa em OUTRA semana conta como fora nesta', () => {
+    const outraSemana = ordem({ numeroOs: '47666', semanaInicio: '2026-08-31' });
+    expect(horasForaDaProgramacao([outraSemana], [apont('047666', '2026-09-09', 7)], '20006136', '2026-09-07')).toBe(7);
   });
 });

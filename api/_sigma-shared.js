@@ -175,7 +175,16 @@ export async function carregarDados() {
     apontamentosPorOs.set(numeroOs, lista);
   }
 
-  return { ts: Date.now(), osPorNumero, apontamentosPorOs, backlogPorArea };
+  // Mesma lista, achatada com o número da OS e ordenada por data — consulta por período
+  // (apontamentos_de/ate no sigma-ordens-proxy.js), pra achar hora em OS que não está na
+  // programação do técnico.
+  const apontamentosLista = [];
+  for (const [numeroOs, lista] of apontamentosPorOs) {
+    for (const a of lista) apontamentosLista.push({ numeroOs, ...a });
+  }
+  apontamentosLista.sort((a, b) => a.data.localeCompare(b.data));
+
+  return { ts: Date.now(), osPorNumero, apontamentosPorOs, apontamentosLista, backlogPorArea };
 }
 
 export async function obterCache() {

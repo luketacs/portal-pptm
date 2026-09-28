@@ -54,6 +54,26 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, backlog, atualizadoEm: dados.ts });
     }
 
+    // Apontamentos de um período, de qualquer OS (?apontamentos_de=YYYY-MM-DD&
+    // apontamentos_ate=YYYY-MM-DD[&executantes=mat1,mat2]) — Indicadores: horas
+    // apontadas fora da programação. Período limitado a 45 dias (um mês cabe).
+    const de = String(req.query?.apontamentos_de || '').trim();
+    const ate = String(req.query?.apontamentos_ate || '').trim();
+    if (de || ate) {
+      const dataOk = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
+      if (!dataOk(de) || !dataOk(ate) || de > ate) {
+        return res.status(200).json({ success: false, error: 'Período inválido.' });
+      }
+      if ((Date.parse(ate) - Date.parse(de)) / 86400000 > 45) {
+        return res.status(200).json({ success: false, error: 'Período máximo de 45 dias.' });
+      }
+      const executantes = new Set(String(req.query?.executantes || '').split(',').map(s => s.trim()).filter(Boolean));
+      const dados = await obterCache();
+      const apontamentos = dados.apontamentosLista.filter(a => a.data >= de && a.data <= ate
+        && (executantes.size === 0 || executantes.has(a.executante)));
+      return res.status(200).json({ success: true, apontamentos, atualizadoEm: dados.ts });
+    }
+
     const rawNumeros = String(req.query?.numeros_os || '').trim();
     if (!rawNumeros) {
       return res.status(200).json({ success: false, error: 'numeros_os não informado.' });

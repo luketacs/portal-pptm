@@ -228,6 +228,12 @@ export interface SigmaApontamento {
   horas: number | null;
 }
 
+// Apontamento do SIGMA com a OS junto — consulta por período (todas as OS, não só as
+// programadas), pra achar hora apontada em OS fora da programação do técnico.
+export interface SigmaApontamentoPeriodo extends SigmaApontamento {
+  numeroOs: string;
+}
+
 export interface ConsultaSigmaResultado {
   os: SigmaOrdemInfo | null;
   apontamentos: SigmaApontamento[];

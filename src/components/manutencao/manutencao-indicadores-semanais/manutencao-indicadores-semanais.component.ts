@@ -8,7 +8,7 @@ import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { ManutencaoIndicadoresHistoricoService } from '../../../services/manutencao-indicadores-historico.service';
 import { ManutencaoIndicadoresManuaisService } from '../../../services/manutencao-indicadores-manuais.service';
-import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, ImportarIndicadorHistoricoItem, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
+import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, ImportarIndicadorHistoricoItem, ManutencaoOrdem, SigmaApontamentoPeriodo } from '../../../models/manutencao-programacao.model';
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
   META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, STATUS_GERAL_COR, StatusGeralSemana,
@@ -17,7 +17,7 @@ import {
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
-import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
+import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
 import { encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
@@ -65,6 +65,8 @@ interface HorasTecnicoItem {
   colaborador: Colaborador;
   horasProgramadas: number;
   horasApontadas: number;
+  /** Apontado em OS que não estava na programação da pessoa (fora da eficiência). */
+  horasForaProgramacao: number;
   horasDisponiveis: number;
   eficiencia: number;
 }
@@ -111,6 +113,14 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       const numeros = this.numerosOsVisiveis();
       if (numeros.length === 0) return;
       this.buscarExecucaoSigma(numeros);
+    });
+
+    // Apontamentos do período inteiro (qualquer OS) — refaz ao trocar semana/mês ou
+    // quando o cadastro de técnicos carrega. Base de "fora da programação".
+    effect(() => {
+      const periodo = this.periodoApontamentos();
+      if (!periodo) return;
+      untracked(() => this.buscarApontamentosPeriodo(periodo));
     });
 
     // Contador animado (0 -> valor) só nos dois números mais destacados da tela — dá a
@@ -313,6 +323,8 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       ]);
       const numeros = this.numerosOsVisiveis();
       if (numeros.length > 0) await this.buscarExecucaoSigma(numeros);
+      const periodo = this.periodoApontamentos();
+      if (periodo) await this.buscarApontamentosPeriodo(periodo);
       this.errorMessage.set('');
     } catch {
       this.errorMessage.set('Não foi possível atualizar os indicadores. Tente novamente.');
@@ -335,6 +347,30 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       // Consulta best-effort — falha do SIGMA não deve travar a tela.
     } finally {
       this.sigmaAtualizando.set(false);
+    }
+  }
+
+  // ── Apontamentos fora da programação ──
+  // Horas que o técnico apontou no SIGMA em OS que não estão na programação dele na
+  // semana (reportado: Anderson Souza com 35h no SIGMA e 28h aqui na S39 — a OS 047666
+  // não estava programada pra ele). Fica à parte: não entra na eficiência.
+  private apontamentosPeriodo = signal<{ chave: string; lista: SigmaApontamentoPeriodo[] }>({ chave: '', lista: [] });
+
+  private periodoApontamentos = computed(() => {
+    const semanas = [...this.semanasDoPeriodoSet()].sort();
+    const matriculas = [...this.tecnicosEletrica(), ...this.tecnicosMecanica()].map(c => String(c.matricula).trim());
+    if (!semanas.length || !matriculas.length) return null;
+    const ate = diasDaSemana(semanas[semanas.length - 1]).at(-1)!.data;
+    return { de: semanas[0], ate, matriculas, chave: `${semanas[0]}|${ate}` };
+  });
+
+  private async buscarApontamentosPeriodo(p: { de: string; ate: string; matriculas: string[]; chave: string }): Promise<void> {
+    try {
+      const lista = await this.manutencaoService.consultarApontamentosSigmaPeriodo(p.de, p.ate, p.matriculas);
+      // Resposta atrasada de um período que já não está na tela é descartada.
+      if (this.periodoApontamentos()?.chave === p.chave) this.apontamentosPeriodo.set({ chave: p.chave, lista });
+    } catch {
+      // Best-effort, igual buscarExecucaoSigma: sem isso a coluna só fica zerada.
     }
   }
 
@@ -496,7 +532,8 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     const atestados = this.manutencaoService.atestados();
     const ordensTodas = this.manutencaoService.ordens();
     const sigmaPorOs = this.sigmaPorOs();
-    const resultado: HorasTecnicoItem[] = tecnicos.map(c => ({ colaborador: c, horasProgramadas: 0, horasApontadas: 0, horasDisponiveis: 0, eficiencia: 0 }));
+    const apontamentosPeriodo = this.apontamentosPeriodo().lista;
+    const resultado: HorasTecnicoItem[] = tecnicos.map(c => ({ colaborador: c, horasProgramadas: 0, horasApontadas: 0, horasForaProgramacao: 0, horasDisponiveis: 0, eficiencia: 0 }));
     for (const semanaIso of this.semanasDoPeriodoSet()) {
       const dias = diasDaSemana(semanaIso);
       const ordensDaSemanaTodas = ordensTodas.filter(o => o.semanaInicio === semanaIso);
@@ -513,6 +550,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
           item.horasProgramadas += o.duracaoHoras ?? 0;
         }
         item.horasApontadas += horasApontadasDoColaborador(ordensDoTecnicoTipoOrdem, sigmaPorOs, item.colaborador.matricula);
+        item.horasForaProgramacao += horasForaDaProgramacao(ordensDoTecnicoTipoOrdem, apontamentosPeriodo, String(item.colaborador.matricula).trim(), semanaIso);
         const r = calcularHhTecnico({
           dias,
           disponibilidadePorDia: new Map(dias.map(d => [d.data, this.apontamentosService.disponibilidadeNoDia(item.colaborador, d.data)])),
@@ -526,6 +564,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     for (const item of resultado) {
       item.horasProgramadas = Math.round(item.horasProgramadas * 100) / 100;
       item.horasApontadas = Math.round(item.horasApontadas * 100) / 100;
+      item.horasForaProgramacao = Math.round(item.horasForaProgramacao * 100) / 100;
       item.horasDisponiveis = Math.round(item.horasDisponiveis * 100) / 100;
       item.eficiencia = item.horasProgramadas > 0 ? Math.round((item.horasApontadas / item.horasProgramadas) * 1000) / 10 : 0;
     }
