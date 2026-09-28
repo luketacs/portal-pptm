@@ -329,6 +329,34 @@
         }
         <p class="text-xs text-gray-400 mt-2 pcm-somente-tela">Horas Programadas/Eficiência só calculadas pra Elétrica/Mecânica — mesma restrição do HH acima. Barras na escala da própria Hora Disponível do técnico. "Fora da prog." = apontado no SIGMA em OS que não estava na programação do técnico na semana (não entra na eficiência).</p>
       }
+
+      @if (totalSobrepostos() > 0) {
+        <div class="pcm-somente-tela mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
+          <h3 class="text-sm font-bold text-red-800">⚠ Apontamentos com horário sobreposto ({{ totalSobrepostos() }})</h3>
+          <p class="text-xs text-red-700 mt-0.5">Mesma pessoa, mesmo dia, dois lançamentos no mesmo horário — o trecho em comum conta duas vezes nas horas acima. Peça a correção no SIGMA; depois de corrigido, some daqui sozinho (até ~15 min).</p>
+          <div class="mt-3 space-y-3">
+            @for (g of sobrepostosPorTecnico(); track g.item.colaborador.matricula) {
+              <div>
+                <button type="button" (click)="abrirExtrato(g.item)" class="text-sm font-semibold text-gray-800 hover:text-blue-700">
+                  {{ g.item.colaborador.nome }} <span class="text-xs font-normal text-blue-600">ver extrato ›</span>
+                </button>
+                <ul class="mt-1 space-y-0.5">
+                  @for (p of g.pares; track $index) {
+                    <li class="text-xs text-gray-700">
+                      <span class="font-semibold">{{ diaSemanaCurto(p.data) }}</span> ·
+                      {{ p.a.horaInicial }}–{{ p.a.horaFinal }} OS {{ p.a.numeroOs }}
+                      <span class="text-gray-400">×</span>
+                      {{ p.b.horaInicial }}–{{ p.b.horaFinal }} OS {{ p.b.numeroOs }}
+                      @if (p.a.numeroOs === p.b.numeroOs) { <span class="font-semibold text-red-700">(mesma OS — duplicado?)</span> }
+                      <span class="text-red-700">· {{ formatarMinutos(p.minutosEmComum) }} em dobro</span>
+                    </li>
+                  }
+                </ul>
+              </div>
+            }
+          </div>
+        </div>
+      }
     </section>
 
     <section class="pcm-section">
@@ -595,6 +623,13 @@
           </div>
         </div>
 
+        @if (ex.sobreposicoes.length > 0) {
+          <div class="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+            <strong>⚠ {{ ex.sobreposicoes.length }} caso(s) de horário sobreposto</strong> — o trecho em comum está sendo contado duas vezes.
+            Peça pro técnico corrigir no SIGMA (apagar o lançamento errado e lançar certo); o aviso some sozinho em até ~15 min.
+          </div>
+        }
+
         <div class="mt-4 overflow-y-auto flex-1 border border-slate-200 rounded-lg">
           <table class="w-full text-sm">
             <thead class="bg-slate-50 text-xs text-gray-500 uppercase sticky top-0">
@@ -610,7 +645,7 @@
             <tbody>
               @for (dia of ex.dias; track dia.data) {
                 @for (l of dia.linhas; track $index; let primeira = $first) {
-                  <tr class="border-t border-slate-100">
+                  <tr class="border-t border-slate-100" [class.bg-red-50]="l.sobrepostaCom.length > 0">
                     <td class="px-3 py-2 whitespace-nowrap font-semibold text-gray-700">{{ primeira ? diaSemanaCurto(dia.data) : '' }}</td>
                     <td class="px-3 py-2 whitespace-nowrap text-gray-600">
                       {{ l.apontamento.horaInicial || '—' }}–{{ l.apontamento.horaFinal || '—' }}
@@ -629,6 +664,11 @@
                         <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">Programada</span>
                       } @else {
                         <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Fora da prog.</span>
+                      }
+                      @for (o of l.sobrepostaCom; track $index) {
+                        <span class="block mt-1 text-[11px] font-semibold text-red-700">
+                          ⚠ sobrepõe OS {{ o.numeroOs }} ({{ o.horaInicial }}–{{ o.horaFinal }})
+                        </span>
                       }
                     </td>
                   </tr>

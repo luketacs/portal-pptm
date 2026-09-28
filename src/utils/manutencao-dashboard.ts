@@ -154,10 +154,64 @@ export function horasForaDaProgramacao(
   return total;
 }
 
+// ── Apontamentos sobrepostos ──
+// Mesma pessoa, mesmo dia, dois apontamentos com horário que se cruza — as horas do
+// trecho em comum entram duas vezes na soma (ex.: lançamento duplicado na mesma OS, ou
+// OS longa aberta o dia todo com outra OS curta no meio). O portal não decide qual está
+// certo: só aponta, pra pessoa corrigir no SIGMA (apagou/relançou, o aviso some sozinho).
+
+function minutos(hhmm: string | undefined): number | null {
+  const m = /^(\d{1,2}):(\d{2})/.exec(hhmm ?? '');
+  return m ? +m[1] * 60 + +m[2] : null;
+}
+
+function intervalo(a: SigmaApontamentoPeriodo): [number, number] | null {
+  const ini = minutos(a.horaInicial);
+  let fim = minutos(a.horaFinal);
+  if (ini === null || fim === null) return null;
+  if (fim < ini) fim += 24 * 60; // cruzou a meia-noite
+  return fim > ini ? [ini, fim] : null;
+}
+
+export interface SobreposicaoApontamento {
+  executante: string;
+  data: string;
+  a: SigmaApontamentoPeriodo;
+  b: SigmaApontamentoPeriodo;
+  minutosEmComum: number;
+}
+
+/** Todos os pares sobrepostos (mesma matrícula + dia + horário que se cruza). */
+export function apontamentosSobrepostos(apontamentos: SigmaApontamentoPeriodo[]): SobreposicaoApontamento[] {
+  const porPessoaDia = new Map<string, SigmaApontamentoPeriodo[]>();
+  for (const a of apontamentos) {
+    if (!intervalo(a)) continue;
+    const chave = `${a.executante}|${a.data}`;
+    const lista = porPessoaDia.get(chave) ?? [];
+    lista.push(a);
+    porPessoaDia.set(chave, lista);
+  }
+  const pares: SobreposicaoApontamento[] = [];
+  for (const lista of porPessoaDia.values()) {
+    lista.sort((x, y) => intervalo(x)![0] - intervalo(y)![0]);
+    for (let i = 0; i < lista.length; i++) {
+      for (let j = i + 1; j < lista.length; j++) {
+        const [ai, af] = intervalo(lista[i])!;
+        const [bi, bf] = intervalo(lista[j])!;
+        const comum = Math.min(af, bf) - Math.max(ai, bi);
+        if (comum > 0) pares.push({ executante: lista[i].executante, data: lista[i].data, a: lista[i], b: lista[j], minutosEmComum: comum });
+      }
+    }
+  }
+  return pares.sort((x, y) => x.data.localeCompare(y.data) || x.executante.localeCompare(y.executante));
+}
+
 export interface LinhaExtratoHoras {
   apontamento: SigmaApontamentoPeriodo;
   /** OS estava na programação da pessoa na semana do apontamento. */
   programada: boolean;
+  /** Outros apontamentos da pessoa no mesmo dia com horário que se cruza com este. */
+  sobrepostaCom: SigmaApontamentoPeriodo[];
 }
 
 export interface DiaExtratoHoras {
@@ -171,6 +225,7 @@ export interface ExtratoHoras {
   horasProgramadas: number; // apontadas em OS programadas (= "Apontada" do card)
   horasFora: number;        // apontadas fora da programação (= "Fora da prog.")
   semHorario: number;       // apontamentos sem hora início/fim válida (contam 0h)
+  sobreposicoes: SobreposicaoApontamento[];
 }
 
 /**
@@ -192,19 +247,23 @@ export function extratoHorasColaborador(
   }
   const semanaDoDia = (data: string) => semanas.find(s => data >= s && data <= domingoDaSemana(s));
   const porDia = new Map<string, DiaExtratoHoras>();
-  const extrato: ExtratoHoras = { dias: [], horasProgramadas: 0, horasFora: 0, semHorario: 0 };
   const lista = apontamentosPeriodo
-    .filter(a => a.executante === matricula)
+    .filter(a => a.executante === matricula && !!semanaDoDia(a.data))
     .sort((a, b) => (a.data + (a.horaInicial ?? '')).localeCompare(b.data + (b.horaInicial ?? '')));
+  const extrato: ExtratoHoras = { dias: [], horasProgramadas: 0, horasFora: 0, semHorario: 0, sobreposicoes: apontamentosSobrepostos(lista) };
+  const sobrepostas = new Map<SigmaApontamentoPeriodo, SigmaApontamentoPeriodo[]>();
+  for (const s of extrato.sobreposicoes) {
+    sobrepostas.set(s.a, [...(sobrepostas.get(s.a) ?? []), s.b]);
+    sobrepostas.set(s.b, [...(sobrepostas.get(s.b) ?? []), s.a]);
+  }
   for (const a of lista) {
-    const semana = semanaDoDia(a.data);
-    if (!semana) continue;
+    const semana = semanaDoDia(a.data)!;
     const programada = programadasPorSemana.get(semana)!.has(normalizarNumeroOs(a.numeroOs));
     const horas = a.horas ?? 0;
     if (a.horas === null) extrato.semHorario++;
     if (programada) extrato.horasProgramadas += horas; else extrato.horasFora += horas;
     const dia = porDia.get(a.data) ?? { data: a.data, linhas: [], horas: 0 };
-    dia.linhas.push({ apontamento: a, programada });
+    dia.linhas.push({ apontamento: a, programada, sobrepostaCom: sobrepostas.get(a) ?? [] });
     dia.horas += horas;
     porDia.set(a.data, dia);
   }

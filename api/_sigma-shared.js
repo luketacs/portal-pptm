@@ -161,6 +161,8 @@ export async function carregarDados() {
     if (!data) continue;
     const lista = apontamentosPorOs.get(numeroOs) ?? [];
     lista.push({
+      // ID do apontamento no SIGMA — identifica a linha no extrato/aviso de sobreposição.
+      id: (row[0] || '').trim(),
       data,
       status: (row[APONT_COL.statusOperacao] || '').trim(),
       // Matrícula de quem apontou (coluna "Executante" do export) — precisa pra saber

@@ -1,4 +1,4 @@
-import { calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, extratoHorasColaborador, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada } from './manutencao-dashboard';
+import { apontamentosSobrepostos, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, extratoHorasColaborador, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada } from './manutencao-dashboard';
 import { ConsultaSigmaResultado, ManutencaoOrdem } from '../models/manutencao-programacao.model';
 
 const DIAS_SEMANA_37 = [
@@ -364,6 +364,22 @@ describe('horasForaDaProgramacao', () => {
       '045203': { os: null, apontamentos: lista.filter(a => a.numeroOs === '045203') },
     }, '20006136'));
     expect(ex.horasFora).toBe(horasForaDaProgramacao([programada], lista, '20006136', '2026-09-07'));
+  });
+
+  it('marca apontamentos com horário sobreposto (mesma pessoa, mesmo dia)', () => {
+    const h = (numeroOs: string, data: string, horaInicial: string, horaFinal: string, executante = '20006136') =>
+      ({ numeroOs, data, horaInicial, horaFinal, executante, status: 'EXEC', horas: 1 });
+    const dup1 = h('047614', '2026-09-08', '09:00', '15:30');
+    const dup2 = h('047614', '2026-09-08', '08:30', '15:30');   // duplicado na mesma OS
+    const encosta = h('047700', '2026-09-08', '15:30', '16:00'); // só encosta: não sobrepõe
+    const outraPessoa = h('047614', '2026-09-08', '09:00', '15:30', '999');
+    const outroDia = h('047614', '2026-09-09', '09:00', '15:30');
+    const pares = apontamentosSobrepostos([dup1, dup2, encosta, outraPessoa, outroDia]);
+    expect(pares).toHaveLength(1);
+    expect(pares[0].minutosEmComum).toBe(390);
+
+    const ex = extratoHorasColaborador([], [dup1, dup2, encosta], '20006136', ['2026-09-07']);
+    expect(ex.dias[0].linhas.map(l => l.sobrepostaCom.length)).toEqual([1, 1, 0]);
   });
 
   it('OS programada pra pessoa em OUTRA semana conta como fora nesta', () => {

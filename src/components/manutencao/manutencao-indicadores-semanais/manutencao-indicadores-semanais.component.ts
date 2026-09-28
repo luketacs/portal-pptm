@@ -17,7 +17,7 @@ import {
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
-import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularHhTecnico, calcularKpiExecucao, extratoHorasColaborador, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
+import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApontamento, StatusExecucaoGrupo, apontamentosSobrepostos, calcularHhTecnico, calcularKpiExecucao, extratoHorasColaborador, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
 import { encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
@@ -595,6 +595,28 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     const ordens = this.ordensDoColaborador(this.manutencaoService.ordens().filter(o => semanas.includes(o.semanaInicio)), item.colaborador);
     return extratoHorasColaborador(ordens, this.apontamentosPeriodo().lista, String(item.colaborador.matricula).trim(), semanas);
   });
+
+  // Apontamentos sobrepostos no período (mesma pessoa/dia, horário que se cruza) —
+  // horas contadas em dobro. Agrupado por técnico, pra pedir correção no SIGMA.
+  sobrepostosPorTecnico = computed(() => {
+    const porMatricula = new Map(this.tecnicosDoExtrato().map(i => [String(i.colaborador.matricula).trim(), i]));
+    const grupos = new Map<string, { item: HorasTecnicoItem; pares: SobreposicaoApontamento[] }>();
+    for (const par of apontamentosSobrepostos(this.apontamentosPeriodo().lista)) {
+      const item = porMatricula.get(par.executante);
+      if (!item) continue;
+      const g = grupos.get(par.executante) ?? { item, pares: [] };
+      g.pares.push(par);
+      grupos.set(par.executante, g);
+    }
+    return [...grupos.values()].sort((a, b) => a.item.colaborador.nome.localeCompare(b.item.colaborador.nome, 'pt-BR'));
+  });
+
+  totalSobrepostos = computed(() => this.sobrepostosPorTecnico().reduce((s, g) => s + g.pares.length, 0));
+
+  formatarMinutos(min: number): string {
+    const h = Math.floor(min / 60), m = min % 60;
+    return h > 0 ? `${h}h${m ? String(m).padStart(2, '0') : ''}` : `${m}min`;
+  }
 
   abrirExtrato(item: HorasTecnicoItem): void {
     this.extratoMatricula.set(String(item.colaborador.matricula).trim());
