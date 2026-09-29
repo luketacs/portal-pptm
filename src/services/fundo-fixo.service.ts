@@ -14,7 +14,9 @@ export const FUNDO_FIXO_LIMITE_POR_COMPRA = 500;
 export const FUNDO_FIXO_SETORES: FundoFixoSetor[] = ['Manutenção', 'Operação', 'Infraestrutura', 'Outros'];
 // Gestores responsáveis fora do portal — só informativo (aparece em listas/relatórios).
 // A aprovação de fato no sistema é feita só pelo Admin, por enquanto.
-export const FUNDO_FIXO_GESTORES: string[] = ['Charles Rabelo', 'João Nunes'];
+// A partir de set/2026: Italo Rosse no lugar de Charles Rabelo (registros antigos
+// continuam com o nome gravado; setembro em diante corrigido na migration 066).
+export const FUNDO_FIXO_GESTORES: string[] = ['Italo Rosse', 'João Nunes'];
 
 interface FundoFixoRow {
   id: string;
