@@ -1,4 +1,4 @@
-import { calcularSaldoCaixa, calcularTotalComprometidoMes, proximoMes, valorPagoNaForma } from './fundo-fixo-calc';
+import { calcularSaldoCaixa, calcularSaldoCaixaFimDoMes, calcularSaldoCaixaMesAnterior, calcularTotalComprometidoMes, proximoMes, valorPagoNaForma } from './fundo-fixo-calc';
 import { FundoFixoSaque, FundoFixoSolicitacao } from '../models/fundo-fixo.model';
 
 function saque(overrides: Partial<FundoFixoSaque> = {}): FundoFixoSaque {
@@ -132,6 +132,43 @@ describe('calcularSaldoCaixa', () => {
       formaPagamentoSecundaria: 'dinheiro_caixa', valorFinalSecundario: 150,
     })];
     expect(calcularSaldoCaixa(saques, solicitacoes)).toBe(850);
+  });
+});
+
+describe('calcularSaldoCaixaMesAnterior', () => {
+  it('só conta saques e compras em dinheiro de meses anteriores', () => {
+    const saques = [
+      saque({ valor: 1000, mesReferencia: '2026-08' }),
+      saque({ id: 's2', valor: 500, mesReferencia: '2026-09' }), // saque do próprio mês: fica de fora
+    ];
+    const solicitacoes = [
+      solicitacao({ status: 'comprado', formaPagamento: 'dinheiro_caixa', valorFinal: 300, mesReferencia: '2026-08' }),
+      solicitacao({ id: 'r2', status: 'comprado', formaPagamento: 'reembolso', valorFinal: 200, mesReferencia: '2026-09' }),
+      solicitacao({ id: 'r3', status: 'comprado', formaPagamento: 'cartao', valorFinal: 999, mesReferencia: '2026-08' }),
+    ];
+    expect(calcularSaldoCaixaMesAnterior(saques, solicitacoes, '2026-09')).toBe(700);
+  });
+
+  it('saldo inicial registrado no próprio mês entra (dinheiro que já estava no caixa)', () => {
+    const saques = [saque({ valor: 250, tipo: 'ajuste_inicial', mesReferencia: '2026-09' })];
+    expect(calcularSaldoCaixaMesAnterior(saques, [], '2026-09')).toBe(250);
+  });
+});
+
+describe('calcularSaldoCaixaFimDoMes', () => {
+  it('fecha a conta: saldo anterior + sacado no mês − reembolsos do mês; ignora o mês seguinte', () => {
+    const saques = [
+      saque({ valor: 1000, mesReferencia: '2026-08' }),
+      saque({ id: 's2', valor: 500, mesReferencia: '2026-09' }),
+      saque({ id: 's3', valor: 800, mesReferencia: '2026-10' }), // depois do fechamento
+    ];
+    const solicitacoes = [
+      solicitacao({ status: 'comprado', formaPagamento: 'dinheiro_caixa', valorFinal: 300, mesReferencia: '2026-08' }),
+      solicitacao({ id: 'r2', status: 'comprado', formaPagamento: 'reembolso', valorFinal: 200, mesReferencia: '2026-09' }),
+      solicitacao({ id: 'r3', status: 'comprado', formaPagamento: 'dinheiro_caixa', valorFinal: 50, mesReferencia: '2026-10' }),
+    ];
+    const anterior = calcularSaldoCaixaMesAnterior(saques, solicitacoes, '2026-09'); // 700
+    expect(calcularSaldoCaixaFimDoMes(saques, solicitacoes, '2026-09')).toBe(anterior + 500 - 200);
   });
 });
 

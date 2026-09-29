@@ -9,7 +9,7 @@ import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { UserService } from '../../../services/user.service';
 import { ExcelExportService, FechamentoFundoFixoLinha } from '../../../services/excel-export.service';
 import { FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSetor, FundoFixoSolicitacao, FundoFixoStatus } from '../../../models/fundo-fixo.model';
-import { proximoMes, valorPagoNaForma } from '../../../utils/fundo-fixo-calc';
+import { calcularSaldoCaixaFimDoMes, calcularSaldoCaixaMesAnterior, proximoMes, valorPagoNaForma } from '../../../utils/fundo-fixo-calc';
 import { createClientPageItems, createPageNavigation } from '../../../utils/pagination';
 
 type StatusFiltro = 'todos' | FundoFixoStatus;
@@ -846,7 +846,10 @@ export class FundoFixoListComponent implements OnInit {
         })),
         limiteMensal: this.limiteMensal,
         totalSacadoMes: this.totalSacadoMes(),
-        saldoCaixaAtual: this.saldoCaixa(),
+        saldoCaixaMesAnterior: calcularSaldoCaixaMesAnterior(
+          this.fundoFixoService.saques(), this.fundoFixoService.solicitacoes(), this.mesFiltro()),
+        saldoCaixaFimMes: calcularSaldoCaixaFimDoMes(
+          this.fundoFixoService.saques(), this.fundoFixoService.solicitacoes(), this.mesFiltro()),
       });
 
       await this.baixarNotasFiscaisZip([...cartao, ...reembolsos], mesLabel);

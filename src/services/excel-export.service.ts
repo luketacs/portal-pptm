@@ -634,7 +634,10 @@ export class ExcelExportService {
     reembolsos: FechamentoFundoFixoLinha[];
     limiteMensal: number;
     totalSacadoMes: number;
-    saldoCaixaAtual: number;
+    /** Dinheiro que sobrou no caixa no fim do mês anterior (ver calcularSaldoCaixaMesAnterior). */
+    saldoCaixaMesAnterior: number;
+    /** Dinheiro no caixa no fim do mês fechado (ver calcularSaldoCaixaFimDoMes). */
+    saldoCaixaFimMes: number;
   }): void {
     const NC = 8;
     const ws: WorkSheet = {};
@@ -660,11 +663,16 @@ export class ExcelExportService {
 
     const reembolsosResult = this.tabelaFechamento(ws, row, NC, 'REEMBOLSOS', params.reembolsos);
     row = reembolsosResult.proximaLinha;
-    this.n(ws, row, 5, params.totalSacadoMes, this.sReferenciaVerde(), '"R$"\\ #,##0.00');
-    for (let c = 0; c < NC; c++) if (c !== 5) this.s(ws, row, c, '', this.sData());
+    this.n(ws, row, 5, params.saldoCaixaMesAnterior, this.sReferenciaVerde(), '"R$"\\ #,##0.00');
+    this.s(ws, row, 6, 'Saldo do mês anterior', this.sData('left'));
+    for (let c = 0; c < NC; c++) if (c !== 5 && c !== 6) this.s(ws, row, c, '', this.sData());
     row++;
-    this.n(ws, row, 5, params.saldoCaixaAtual, this.sCaixaAmarelo(), '"R$"\\ #,##0.00');
-    this.s(ws, row, 6, 'Valor em caixa', this.sData('left'));
+    this.n(ws, row, 5, params.totalSacadoMes, this.sReferenciaVerde(), '"R$"\\ #,##0.00');
+    this.s(ws, row, 6, 'Sacado no mês', this.sData('left'));
+    for (let c = 0; c < NC; c++) if (c !== 5 && c !== 6) this.s(ws, row, c, '', this.sData());
+    row++;
+    this.n(ws, row, 5, params.saldoCaixaFimMes, this.sCaixaAmarelo(), '"R$"\\ #,##0.00');
+    this.s(ws, row, 6, 'Valor em caixa no fim do mês', this.sData('left'));
     for (let c = 0; c < NC; c++) if (c !== 5 && c !== 6) this.s(ws, row, c, '', this.sData());
     row++;
 

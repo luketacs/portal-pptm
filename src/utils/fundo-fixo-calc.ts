@@ -22,6 +22,29 @@ export function calcularSaldoCaixa(saques: FundoFixoSaque[], solicitacoes: Fundo
   return totalSacado - totalUsadoEmCaixa;
 }
 
+// Dinheiro que sobrou no caixa ao fim do mês ANTERIOR a `mes` ('YYYY-MM') — mesmo
+// cálculo de calcularSaldoCaixa, só com os lançamentos de meses anteriores (pelo mês de
+// referência). Usado na planilha de fechamento (parte de reembolsos): o caixa do mês
+// começa com esse saldo. O "saldo inicial" (dinheiro que já existia antes do portal)
+// registrado no próprio mês também entra aqui — é dinheiro que já estava no caixa.
+export function calcularSaldoCaixaMesAnterior(saques: FundoFixoSaque[], solicitacoes: FundoFixoSolicitacao[], mes: string): number {
+  return calcularSaldoCaixa(
+    saques.filter(s => s.mesReferencia < mes || (s.tipo === 'ajuste_inicial' && s.mesReferencia === mes)),
+    solicitacoes.filter(s => s.mesReferencia < mes),
+  );
+}
+
+// Dinheiro no caixa ao FIM de `mes` — tudo até esse mês (inclusive). Na planilha de
+// fechamento fecha a conta: saldo do mês anterior + sacado no mês − reembolsos do mês.
+// Diferente de calcularSaldoCaixa (saldo de hoje), não muda se o mês for fechado depois
+// de já ter saque/compra em dinheiro no mês seguinte.
+export function calcularSaldoCaixaFimDoMes(saques: FundoFixoSaque[], solicitacoes: FundoFixoSolicitacao[], mes: string): number {
+  return calcularSaldoCaixa(
+    saques.filter(s => s.mesReferencia <= mes),
+    solicitacoes.filter(s => s.mesReferencia <= mes),
+  );
+}
+
 // Total do mês que deve bater com a fatura do cartão: pendentes/aprovados contam pelo
 // valor estimado (previsão), compras já feitas no cartão contam pelo valor final (só a
 // parte paga no cartão, se a compra foi dividida), e saques (+ taxa) contam no mês em
