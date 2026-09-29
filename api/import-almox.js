@@ -9,8 +9,16 @@ import { resolverUsuarioAutenticado } from './_auth-shared.js';
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://portalpptm.com').split(',');
 
 // ── Mapeamento de colunas (índice 0) ──────────────────────────────────────
-// Movimentações - 2026.xlsx  (sheet "1-Movimentação dos produtos")
-const MOV_COLS = { codigo: 0, descricao: 1, unidade: 2, grupo: 4, custo_medio: 5, saldo_qtd: 6, data: 10, documento: 14, entrada: 16, saida: 22, referencia: 30 };
+// Movimentações - 2026.xlsx / MATR900 (sheet "Movimentação dos produtos")
+// custo_medio (5) = custo médio ATUAL do produto (mesmo valor em toda linha dele) — NÃO
+// serve pra valorar movimento antigo (produto que zerou tem 0). Valor do movimento vem
+// de entrada_custo (18) / saida_custo (24) / custo_movimento (20). tipo (13) = C.F:
+// RE0 requisição, DE0 devolução, RE4/DE4 transferência, 1556/2556/2407 nota fiscal.
+const MOV_COLS = {
+  codigo: 0, descricao: 1, unidade: 2, grupo: 4, custo_medio: 5, saldo_qtd: 6, data: 10, tipo: 13, documento: 14,
+  entrada: 16, entrada_custo: 18, custo_movimento: 20, saida: 22, saida_custo: 24, referencia: 30,
+};
+const numeroOuNull = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
 // Solicitacoes.xlsx (sheet "Listagem do Browse")
 const SA_COLS  = { sa_numero: 0, codigo: 2, qtd_solicitada: 5, ordem_produto: 7, qtd_atendida: 11, recebedor: 12 };
 // Relatorio Ary.xlsx
@@ -70,6 +78,10 @@ export default async function handler(req, res) {
           qtd_entrada:    parseFloat(r[MOV_COLS.entrada]) || 0,
           qtd_saida:      parseFloat(r[MOV_COLS.saida]) || 0,
           referencia:     String(r[MOV_COLS.referencia] || '').trim() || null,
+          tipo_movimento:      String(r[MOV_COLS.tipo] ?? '').trim() || null,
+          custo_movimento:     numeroOuNull(r[MOV_COLS.custo_movimento]),
+          entrada_custo_total: numeroOuNull(r[MOV_COLS.entrada_custo]),
+          saida_custo_total:   numeroOuNull(r[MOV_COLS.saida_custo]),
         }));
 
 

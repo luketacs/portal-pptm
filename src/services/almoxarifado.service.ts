@@ -16,6 +16,40 @@ export interface Movimentacao {
   qtd_entrada: number;
   qtd_saida: number;
   referencia: string | null;
+  // Custo do PRÓPRIO movimento (MATR900, migration 065). Nulos em dados importados
+  // antes disso — aí cai no cálculo antigo (qtd × custo_medio), ver valorSaidaMov.
+  tipo_movimento?: string | null;
+  custo_movimento?: number | null;
+  entrada_custo_total?: number | null;
+  saida_custo_total?: number | null;
+}
+
+// custo_medio é o custo médio ATUAL do produto (igual em todas as linhas dele) — produto
+// que zerou o estoque tem 0, e a saída antiga valia R$ 0. O valor certo é o custo total
+// do movimento que vem no próprio relatório.
+export function valorSaidaMov(m: Movimentacao): number {
+  return m.saida_custo_total ?? (m.qtd_saida ?? 0) * (m.custo_medio ?? 0);
+}
+
+export function valorEntradaMov(m: Movimentacao): number {
+  return m.entrada_custo_total ?? (m.qtd_entrada ?? 0) * (m.custo_medio ?? 0);
+}
+
+/** Custo unitário do movimento (fallback: custo médio atual do produto). */
+export function custoUnitarioMov(m: Movimentacao): number {
+  return m.custo_movimento ?? m.custo_medio ?? 0;
+}
+
+/** C.F do Protheus em texto: RE0 → Requisição, DE4 → Transferência (entrada)... */
+export function rotuloTipoMovimento(tipo: string | null | undefined): string {
+  const t = (tipo ?? '').trim().toUpperCase();
+  if (!t) return '—';
+  if (t.startsWith('RE4')) return 'Transferência (saída)';
+  if (t.startsWith('DE4')) return 'Transferência (entrada)';
+  if (t.startsWith('RE')) return 'Requisição';
+  if (t.startsWith('DE')) return 'Devolução';
+  if (/^\d+$/.test(t)) return 'Nota fiscal';
+  return t;
 }
 
 export interface Solicitacao {

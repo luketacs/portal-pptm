@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, effect, signal, untracked } from '@angular/core';
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AlmoxarifadoService, Movimentacao, UltimaImportacao } from '../../../services/almoxarifado.service';
+import { AlmoxarifadoService, Movimentacao, UltimaImportacao, custoUnitarioMov, rotuloTipoMovimento, valorSaidaMov } from '../../../services/almoxarifado.service';
 import { ExcelExportService } from '../../../services/excel-export.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
@@ -70,7 +70,7 @@ export class AlmoxSaidasComponent implements OnInit {
       total:      saidas.length,
       distintos:  codigos.size,
       qtdTotal:   saidas.reduce((s, e) => s + (e.qtd_saida ?? 0), 0),
-      valorTotal: saidas.reduce((s, e) => s + (e.qtd_saida ?? 0) * (e.custo_medio ?? 0), 0),
+      valorTotal: saidas.reduce((s, e) => s + valorSaidaMov(e), 0),
     };
   });
 
@@ -109,7 +109,8 @@ export class AlmoxSaidasComponent implements OnInit {
     for (const m of this._todasMovs()) {
       const mes = (m.data_operacao ?? '').slice(0, 7);
       if (!mes) continue;
-      mapa[mes] = (mapa[mes] ?? 0) + (m.qtd_saida ?? 0) * (m.custo_medio ?? 0);
+      if ((m.qtd_saida ?? 0) <= 0) continue;
+      mapa[mes] = (mapa[mes] ?? 0) + valorSaidaMov(m);
     }
     return mapa;
   });
@@ -230,7 +231,16 @@ export class AlmoxSaidasComponent implements OnInit {
     }).format(new Date(iso));
   }
 
+  // Valor/custo do PRÓPRIO movimento (MATR900 "SAIDAS CUSTO TOTAL") — ver valorSaidaMov.
   valorSaida(m: Movimentacao): number {
-    return (m.qtd_saida ?? 0) * (m.custo_medio ?? 0);
+    return valorSaidaMov(m);
+  }
+
+  custoUnitario(m: Movimentacao): number {
+    return custoUnitarioMov(m);
+  }
+
+  tipoMovimento(m: Movimentacao): string {
+    return rotuloTipoMovimento(m.tipo_movimento);
   }
 }

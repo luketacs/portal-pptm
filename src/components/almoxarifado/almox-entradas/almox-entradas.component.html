@@ -120,7 +120,7 @@
               <th class="px-3 py-3 text-center font-semibold">UM</th>
               <th class="px-3 py-3 text-center font-semibold">Grupo</th>
               <th class="px-3 py-3 text-right font-semibold">Qtd. Entrada</th>
-              <th class="px-3 py-3 text-right font-semibold">Custo Médio</th>
+              <th class="px-3 py-3 text-right font-semibold" title="Custo unitário do próprio movimento (relatório MATR900)">Custo Unit.</th>
               <th class="px-3 py-3 text-right font-semibold">Valor Total</th>
               <th class="px-3 py-3 text-left font-semibold">Referência</th>
             </tr>
@@ -135,9 +135,12 @@
                 <td class="px-3 py-2 text-center text-gray-600">{{ m.unidade }}</td>
                 <td class="px-3 py-2 text-center text-gray-600">{{ m.grupo }}</td>
                 <td class="px-3 py-2 text-right font-semibold">{{ m.qtd_entrada | number:'1.2-2' }}</td>
-                <td class="px-3 py-2 text-right text-gray-600">{{ m.custo_medio | currency:'BRL' }}</td>
+                <td class="px-3 py-2 text-right text-gray-600">{{ custoUnitario(m) | currency:'BRL' }}</td>
                 <td class="px-3 py-2 text-right font-semibold text-indigo-700">{{ valorEntrada(m) | currency:'BRL' }}</td>
-                <td class="px-3 py-2 text-gray-500 text-xs font-mono">{{ m.referencia }}</td>
+                <td class="px-3 py-2 text-gray-500 text-xs">
+                  <span class="font-mono">{{ m.referencia }}</span>
+                  @if (m.tipo_movimento) { <span class="block text-[11px] text-gray-400">{{ tipoMovimento(m) }} · {{ m.tipo_movimento }}</span> }
+                </td>
               </tr>
             }
             <!-- Total -->

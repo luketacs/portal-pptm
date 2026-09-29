@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx-js-style';
 import type { CellStyle, WorkSheet, WorkBook } from 'xlsx-js-style';
 import type * as ExcelJS from 'exceljs';
 import type { MaterialComSAs, Movimentacao, SaldoReal } from './almoxarifado.service';
+import { custoUnitarioMov, valorEntradaMov, valorSaidaMov } from './almoxarifado.service';
 
 export interface FechamentoFundoFixoLinha {
   fornecedor: string;
@@ -423,7 +424,7 @@ export class ExcelExportService {
       ['UM',               'center'],
       ['Grupo',            'center'],
       ['Qtd. Entrada',     'right' ],
-      ['Custo Médio (R$)', 'right' ],
+      ['Custo Unit. (R$)', 'right' ],
       ['Valor Total (R$)', 'right' ],
       ['Referência',       'left'  ],
     ];
@@ -435,7 +436,7 @@ export class ExcelExportService {
     // Dados
     dados.forEach((m, i) => {
       const even  = i % 2 === 1;
-      const valor = (m.qtd_entrada ?? 0) * (m.custo_medio ?? 0);
+      const valor = valorEntradaMov(m);
       this.n(ws, row, 0, i + 1,            this.sData('center', even), '#,##0');
       this.s(ws, row, 1, this.formatDate(m.data_operacao), this.sData('center', even));
       this.s(ws, row, 2, m.produto_codigo, this.sData('left', even));
@@ -443,7 +444,7 @@ export class ExcelExportService {
       this.s(ws, row, 4, m.unidade,        this.sData('center', even));
       this.s(ws, row, 5, m.grupo,          this.sData('center', even));
       this.n(ws, row, 6, m.qtd_entrada ?? 0, this.sData('right', even), '#,##0.00');
-      this.n(ws, row, 7, m.custo_medio ?? 0, this.sData('right', even), '"R$"\\ #,##0.00');
+      this.n(ws, row, 7, custoUnitarioMov(m), this.sData('right', even), '"R$"\\ #,##0.00');
       this.n(ws, row, 8, valor,            this.sData('right', even), '"R$"\\ #,##0.00');
       this.s(ws, row, 9, m.referencia,     this.sData('left', even));
       row++;
@@ -512,7 +513,7 @@ export class ExcelExportService {
       ['UM',               'center'],
       ['Grupo',            'center'],
       ['Qtd. Saída',       'right' ],
-      ['Custo Médio (R$)', 'right' ],
+      ['Custo Unit. (R$)', 'right' ],
       ['Valor Total (R$)', 'right' ],
       ['Referência',       'left'  ],
     ];
@@ -524,7 +525,7 @@ export class ExcelExportService {
     // Dados
     dados.forEach((m, i) => {
       const even  = i % 2 === 1;
-      const valor = (m.qtd_saida ?? 0) * (m.custo_medio ?? 0);
+      const valor = valorSaidaMov(m);
       this.n(ws, row, 0, i + 1,            this.sData('center', even), '#,##0');
       this.s(ws, row, 1, this.formatDate(m.data_operacao), this.sData('center', even));
       this.s(ws, row, 2, m.produto_codigo, this.sData('left', even));
@@ -532,7 +533,7 @@ export class ExcelExportService {
       this.s(ws, row, 4, m.unidade,        this.sData('center', even));
       this.s(ws, row, 5, m.grupo,          this.sData('center', even));
       this.n(ws, row, 6, m.qtd_saida ?? 0, this.sData('right', even), '#,##0.00');
-      this.n(ws, row, 7, m.custo_medio ?? 0, this.sData('right', even), '"R$"\\ #,##0.00');
+      this.n(ws, row, 7, custoUnitarioMov(m), this.sData('right', even), '"R$"\\ #,##0.00');
       this.n(ws, row, 8, valor,            this.sData('right', even), '"R$"\\ #,##0.00');
       this.s(ws, row, 9, m.referencia,     this.sData('left', even));
       row++;

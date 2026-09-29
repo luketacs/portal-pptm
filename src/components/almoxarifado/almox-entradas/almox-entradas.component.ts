@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, effect, signal, untracked } from '@angular/core';
 import { CommonModule, CurrencyPipe } from '@angular/common';
-import { AlmoxarifadoService, Movimentacao, UltimaImportacao } from '../../../services/almoxarifado.service';
+import { AlmoxarifadoService, Movimentacao, UltimaImportacao, custoUnitarioMov, rotuloTipoMovimento, valorEntradaMov } from '../../../services/almoxarifado.service';
 import { ExcelExportService } from '../../../services/excel-export.service';
 import { createClientPageItems, createPageNavigation } from '../../../utils/pagination';
 
@@ -52,7 +52,7 @@ export class AlmoxEntradasComponent implements OnInit {
       total:      entradas.length,
       distintos:  codigos.size,
       qtdTotal:   entradas.reduce((s, e) => s + (e.qtd_entrada ?? 0), 0),
-      valorTotal: entradas.reduce((s, e) => s + (e.qtd_entrada ?? 0) * (e.custo_medio ?? 0), 0),
+      valorTotal: entradas.reduce((s, e) => s + valorEntradaMov(e), 0),
     };
   });
 
@@ -121,7 +121,16 @@ export class AlmoxEntradasComponent implements OnInit {
     }).format(new Date(iso));
   }
 
+  // Valor/custo do PRÓPRIO movimento (MATR900 "ENTRADAS CUSTO TOTAL") — ver valorEntradaMov.
   valorEntrada(m: Movimentacao): number {
-    return (m.qtd_entrada ?? 0) * (m.custo_medio ?? 0);
+    return valorEntradaMov(m);
+  }
+
+  custoUnitario(m: Movimentacao): number {
+    return custoUnitarioMov(m);
+  }
+
+  tipoMovimento(m: Movimentacao): string {
+    return rotuloTipoMovimento(m.tipo_movimento);
   }
 }
