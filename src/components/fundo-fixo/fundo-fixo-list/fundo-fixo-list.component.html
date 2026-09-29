@@ -738,7 +738,17 @@
         <p class="text-xs text-gray-400 mb-4">Limite por compra: {{ limitePorCompra | currency:'BRL' }}.</p>
       }
 
-      <label class="block text-sm font-medium text-slate-700 mb-1">Nota(s) fiscal(is) <span class="text-red-500">*</span></label>
+      <label class="block text-sm font-medium text-slate-700 mb-1">Nota(s) fiscal(is) / recibo <span class="text-red-500">*</span></label>
+      @if (alvo.orcamentoUrl) {
+        <label class="flex items-start gap-2 mb-2 text-sm text-slate-700 cursor-pointer bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+          <input type="checkbox" class="rounded mt-0.5" [ngModel]="comprarUsarOrcamento()" (ngModelChange)="comprarUsarOrcamento.set($event)" />
+          <span>
+            Usar o orçamento/recibo já anexado na solicitação como comprovante
+            <a [href]="alvo.orcamentoUrl" target="_blank" rel="noopener" class="text-blue-600 hover:underline text-xs ml-1" (click)="$event.stopPropagation()">ver arquivo</a>
+            <span class="block text-xs text-gray-500">Ex.: reembolso, em que a pessoa já anexou o recibo ao pedir. Pode anexar outros arquivos junto, se precisar.</span>
+          </span>
+        </label>
+      }
       @if (comprarNotasFiscais().length > 0) {
         <ul class="mb-2 space-y-1">
           @for (f of comprarNotasFiscais(); track f.name + '-' + $index; let i = $index) {
@@ -774,6 +784,16 @@
       <h3 class="text-lg font-bold text-gray-800 mb-1">Anexar nota fiscal</h3>
       <p class="text-sm text-gray-500 mb-4">{{ alvo.material }} — {{ alvo.notasFiscaisUrls.length }} nota(s) já anexada(s)</p>
 
+      @if (podeReaproveitarOrcamento(alvo)) {
+        <label class="flex items-start gap-2 mb-3 text-sm text-slate-700 cursor-pointer bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+          <input type="checkbox" class="rounded mt-0.5" [ngModel]="adicionarUsarOrcamento()" (ngModelChange)="adicionarUsarOrcamento.set($event)" />
+          <span>
+            Usar o orçamento/recibo já anexado na solicitação como nota
+            <a [href]="alvo.orcamentoUrl" target="_blank" rel="noopener" class="text-blue-600 hover:underline text-xs ml-1" (click)="$event.stopPropagation()">ver arquivo</a>
+          </span>
+        </label>
+      }
+
       @if (adicionarNotasNovas().length > 0) {
         <ul class="mb-2 space-y-1">
           @for (f of adicionarNotasNovas(); track f.name + '-' + $index; let i = $index) {
@@ -793,7 +813,7 @@
 
       <div class="flex justify-end gap-3">
         <button (click)="fecharAdicionarNota()" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Cancelar</button>
-        <button (click)="confirmarAdicionarNota()" [disabled]="adicionarNotasNovas().length === 0 || isProcessando()"
+        <button (click)="confirmarAdicionarNota()" [disabled]="(adicionarNotasNovas().length === 0 && !adicionarUsarOrcamento()) || isProcessando()"
           class="bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
           Anexar
         </button>

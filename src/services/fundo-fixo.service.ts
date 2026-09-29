@@ -479,12 +479,18 @@ export class FundoFixoService {
     // cartão, parte em dinheiro) — valorFinal é a parte de formaPagamento, isso aqui é a
     // outra parte.
     pagamentoSecundario?: { formaPagamento: FundoFixoFormaPagamento; valorFinal: number } | null,
+    // Reembolso: quem pediu já anexou o recibo como "orçamento" na solicitação — true
+    // reaproveita esse mesmo arquivo como comprovante, sem precisar subir de novo.
+    usarOrcamentoComoNota = false,
   ): Promise<void> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
 
-    const notasFiscaisUrls = await Promise.all(notasFiscais.map(f => this.uploadAnexo(f, 'notas-fiscais')));
-    if (notasFiscaisUrls.some(url => !url)) throw new Error('Falha ao enviar uma ou mais notas fiscais. Tente novamente.');
+    const reaproveitadas = this.urlsOrcamentoReaproveitado(id, usarOrcamentoComoNota);
+    const enviadas = await Promise.all(notasFiscais.map(f => this.uploadAnexo(f, 'notas-fiscais')));
+    if (enviadas.some(url => !url)) throw new Error('Falha ao enviar uma ou mais notas fiscais. Tente novamente.');
+    const notasFiscaisUrls = [...reaproveitadas, ...(enviadas as string[])];
+    if (notasFiscaisUrls.length === 0) throw new Error('Anexe a nota fiscal ou use o orçamento/recibo já anexado.');
 
     const payload: Record<string, unknown> = {
       status: 'comprado',
@@ -514,7 +520,8 @@ export class FundoFixoService {
       event_type: 'fundo_fixo_comprado',
       resource_type: 'fundo_fixo',
       resource_id: id,
-      description: `${user.name} registrou compra via Fundo Fixo: ${item?.material ?? ''} (${descricaoValor})`,
+      description: `${user.name} registrou compra via Fundo Fixo: ${item?.material ?? ''} (${descricaoValor})`
+        + (reaproveitadas.length ? ' — orçamento/recibo da solicitação usado como comprovante' : ''),
     });
 
     await this.load();
@@ -522,17 +529,20 @@ export class FundoFixoService {
 
   // Anexa nota(s) fiscal(is) extra a uma compra que já foi registrada (ex.: a compra
   // saiu em mais de uma nota, ou uma nota ficou de fora na hora de registrar a compra).
-  async adicionarNotasFiscais(id: string, notasFiscais: File[]): Promise<void> {
+  async adicionarNotasFiscais(id: string, notasFiscais: File[], usarOrcamentoComoNota = false): Promise<void> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
 
     const item = this.getById(id);
     if (!item) throw new Error('Solicitação não encontrada.');
 
+    const reaproveitadas = this.urlsOrcamentoReaproveitado(id, usarOrcamentoComoNota);
     const novasUrls = await Promise.all(notasFiscais.map(f => this.uploadAnexo(f, 'notas-fiscais')));
     if (novasUrls.some(url => !url)) throw new Error('Falha ao enviar uma ou mais notas fiscais. Tente novamente.');
+    const novas = [...reaproveitadas, ...(novasUrls as string[])];
+    if (novas.length === 0) throw new Error('Nenhum arquivo pra anexar.');
 
-    const urlsFinal = [...item.notasFiscaisUrls, ...(novasUrls as string[])];
+    const urlsFinal = [...item.notasFiscaisUrls, ...novas];
 
     const { error } = await this.supabaseService.client
       .from('fundo_fixo_solicitacoes')
@@ -546,10 +556,21 @@ export class FundoFixoService {
       event_type: 'fundo_fixo_nota_adicionada',
       resource_type: 'fundo_fixo',
       resource_id: id,
-      description: `${user.name} anexou ${notasFiscais.length} nota(s) fiscal(is) adicional(is) a: ${item.material}`,
+      description: `${user.name} anexou ${novas.length} nota(s) fiscal(is) adicional(is) a: ${item.material}`
+        + (reaproveitadas.length ? ' (orçamento/recibo da solicitação reaproveitado)' : ''),
     });
 
     await this.load();
+  }
+
+  // Orçamento/recibo anexado na solicitação, pra entrar como nota fiscal sem novo upload
+  // (mesmo arquivo, mesma URL — não duplica no storage). Vazio se não pediu, se não há
+  // orçamento, ou se ele já está entre as notas.
+  private urlsOrcamentoReaproveitado(id: string, usar: boolean): string[] {
+    if (!usar) return [];
+    const item = this.getById(id);
+    if (!item?.orcamentoUrl) throw new Error('Essa solicitação não tem orçamento/recibo anexado.');
+    return item.notasFiscaisUrls.includes(item.orcamentoUrl) ? [] : [item.orcamentoUrl];
   }
 
   // Não vai dar tempo de entrar na fatura do cartão deste mês — seja porque a compra já foi

@@ -90,6 +90,10 @@ export class FundoFixoListComponent implements OnInit {
   formaPagamentoAlvo = signal<FundoFixoSolicitacao | null>(null);
   formaPagamentoEscolhida = signal<FundoFixoFormaPagamento>('cartao');
   comprarNotasFiscais = signal<File[]>([]);
+  // Reembolso: o recibo já foi anexado como "orçamento" na solicitação — reaproveita o
+  // mesmo arquivo como comprovante, sem subir de novo (vale pros dois modais de nota).
+  comprarUsarOrcamento = signal(false);
+  adicionarUsarOrcamento = signal(false);
   // Pagamento dividido entre cartão e dinheiro do caixa (ex.: parte no cartão, parte em
   // dinheiro) — comprarValorFinal vira a parte de comprarFormaPagamento, e essa aqui é a
   // parte da outra forma (a única outra opção existente, já que só há duas no seletor).
@@ -342,6 +346,7 @@ export class FundoFixoListComponent implements OnInit {
     this.comprarFornecedor.set(s.fornecedor ?? '');
     this.comprarFormaPagamento.set('cartao');
     this.comprarNotasFiscais.set([]);
+    this.comprarUsarOrcamento.set(false);
     this.comprarPagamentoDividido.set(false);
     this.comprarValorSecundario.set(null);
   }
@@ -375,7 +380,8 @@ export class FundoFixoListComponent implements OnInit {
 
   canConfirmarCompra(): boolean {
     const valorPrincipal = this.comprarValorFinal() ?? 0;
-    if (this.comprarNotasFiscais().length === 0 || this.isProcessando() || valorPrincipal <= 0) return false;
+    const temComprovante = this.comprarNotasFiscais().length > 0 || this.comprarUsarOrcamento();
+    if (!temComprovante || this.isProcessando() || valorPrincipal <= 0) return false;
     if (this.comprarPagamentoDividido() && (this.comprarValorSecundario() ?? 0) <= 0) return false;
     return this.comprarValorTotal() <= this.limitePorCompra;
   }
@@ -383,7 +389,7 @@ export class FundoFixoListComponent implements OnInit {
   async confirmarCompra(): Promise<void> {
     const alvo = this.comprarAlvo();
     const notas = this.comprarNotasFiscais();
-    if (!alvo || notas.length === 0 || !this.canConfirmarCompra()) return;
+    if (!alvo || !this.canConfirmarCompra()) return;
     this.isProcessando.set(true);
     try {
       const pagamentoSecundario = this.comprarPagamentoDividido()
@@ -391,7 +397,7 @@ export class FundoFixoListComponent implements OnInit {
         : null;
       await this.fundoFixoService.marcarComprado(
         alvo.id, notas, this.comprarValorFinal() ?? alvo.valorEstimado, this.comprarFormaPagamento(), this.comprarFornecedor(),
-        pagamentoSecundario,
+        pagamentoSecundario, this.comprarUsarOrcamento() && !!alvo.orcamentoUrl,
       );
       this.notificationService.showSuccess('Compra registrada com sucesso!');
       this.fecharComprar();
@@ -406,6 +412,13 @@ export class FundoFixoListComponent implements OnInit {
   abrirAdicionarNota(s: FundoFixoSolicitacao): void {
     this.adicionarNotaAlvo.set(s);
     this.adicionarNotasNovas.set([]);
+    this.adicionarUsarOrcamento.set(false);
+  }
+
+  // Orçamento/recibo da solicitação ainda não está entre as notas — só aí faz sentido
+  // oferecer "usar como nota" no modal de anexar mais notas.
+  podeReaproveitarOrcamento(s: FundoFixoSolicitacao): boolean {
+    return !!s.orcamentoUrl && !s.notasFiscaisUrls.includes(s.orcamentoUrl);
   }
 
   fecharAdicionarNota(): void {
@@ -428,10 +441,12 @@ export class FundoFixoListComponent implements OnInit {
   async confirmarAdicionarNota(): Promise<void> {
     const alvo = this.adicionarNotaAlvo();
     const notas = this.adicionarNotasNovas();
-    if (!alvo || notas.length === 0 || this.isProcessando()) return;
+    if (!alvo) return;
+    const usarOrcamento = this.adicionarUsarOrcamento() && this.podeReaproveitarOrcamento(alvo);
+    if ((notas.length === 0 && !usarOrcamento) || this.isProcessando()) return;
     this.isProcessando.set(true);
     try {
-      await this.fundoFixoService.adicionarNotasFiscais(alvo.id, notas);
+      await this.fundoFixoService.adicionarNotasFiscais(alvo.id, notas, usarOrcamento);
       this.notificationService.showSuccess('Nota(s) fiscal(is) anexada(s) com sucesso!');
       this.fecharAdicionarNota();
     } catch (err: unknown) {
