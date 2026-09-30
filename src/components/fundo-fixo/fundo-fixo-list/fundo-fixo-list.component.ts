@@ -144,6 +144,9 @@ export class FundoFixoListComponent implements OnInit {
   editarLinksProduto = signal<string[]>(['']);
   editarValorEstimado = signal<number | null>(null);
   editarObservacoes = signal('');
+  // Compra já registrada: valor PAGO (e a outra parte, se o pagamento foi dividido).
+  editarValorFinal = signal<number | null>(null);
+  editarValorFinalSecundario = signal<number | null>(null);
 
   isLoading = this.fundoFixoService.isLoading;
   currentUser = this.authService.currentUser;
@@ -670,7 +673,14 @@ export class FundoFixoListComponent implements OnInit {
     this.editarLinksProduto.set(links.length > 0 ? links : ['']);
     this.editarValorEstimado.set(s.valorEstimado);
     this.editarObservacoes.set(s.observacoes ?? '');
+    this.editarValorFinal.set(s.valorFinal ?? s.valorEstimado);
+    this.editarValorFinalSecundario.set(s.valorFinalSecundario ?? null);
   }
+
+  editarValorPagoTotal = computed(() => {
+    const alvo = this.editarAlvo();
+    return (this.editarValorFinal() ?? 0) + (alvo?.formaPagamentoSecundaria ? (this.editarValorFinalSecundario() ?? 0) : 0);
+  });
 
   fecharEditar(): void {
     this.editarAlvo.set(null);
@@ -693,6 +703,12 @@ export class FundoFixoListComponent implements OnInit {
 
   canConfirmarEditar(): boolean {
     const valor = this.editarValorEstimado() ?? 0;
+    const alvo = this.editarAlvo();
+    if (alvo?.status === 'comprado') {
+      if ((this.editarValorFinal() ?? 0) <= 0) return false;
+      if (alvo.formaPagamentoSecundaria && (this.editarValorFinalSecundario() ?? 0) <= 0) return false;
+      if (this.editarValorPagoTotal() > this.limitePorCompra) return false;
+    }
     return !!this.editarMaterial().trim() && valor > 0 && valor <= this.limitePorCompra && !this.isProcessando();
   }
 
@@ -709,6 +725,10 @@ export class FundoFixoListComponent implements OnInit {
         linkProduto: this.editarLinksProduto().map(l => l.trim()).filter(Boolean).join('\n') || null,
         valorEstimado: this.editarValorEstimado() ?? 0,
         observacoes: this.editarObservacoes().trim() || null,
+        ...(alvo.status === 'comprado' ? {
+          valorFinal: this.editarValorFinal() ?? undefined,
+          valorFinalSecundario: alvo.formaPagamentoSecundaria ? this.editarValorFinalSecundario() : null,
+        } : {}),
       });
       this.notificationService.showSuccess('Solicitação atualizada.');
       this.fecharEditar();

@@ -384,31 +384,49 @@ export class FundoFixoService {
   async editarSolicitacao(id: string, updates: {
     setor: FundoFixoSetor; fornecedor: string | null; material: string;
     linkProduto: string | null; valorEstimado: number; observacoes: string | null;
+    // Só pra compra já registrada: corrige o valor PAGO (lançado errado ao registrar a
+    // compra). valorFinalSecundario só quando o pagamento foi dividido em duas formas.
+    valorFinal?: number; valorFinalSecundario?: number | null;
   }): Promise<void> {
     const admin = this.authService.currentUser();
     if (!admin) throw new Error('Sessão expirada.');
     if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
+    const anterior = this.getById(id);
+    const payload: Record<string, unknown> = {
+      setor: updates.setor,
+      fornecedor: updates.fornecedor,
+      material: updates.material,
+      link_produto: updates.linkProduto,
+      valor_estimado: updates.valorEstimado,
+      observacoes: updates.observacoes,
+    };
+    const mudouValorPago = anterior?.status === 'comprado' && updates.valorFinal !== undefined
+      && (updates.valorFinal !== anterior.valorFinal
+        || (anterior.formaPagamentoSecundaria != null && (updates.valorFinalSecundario ?? null) !== anterior.valorFinalSecundario));
+    if (mudouValorPago) {
+      payload['valor_final'] = updates.valorFinal;
+      if (anterior!.formaPagamentoSecundaria != null) payload['valor_final_secundario'] = updates.valorFinalSecundario ?? null;
+    }
+
     const { error } = await this.supabaseService.client
       .from('fundo_fixo_solicitacoes')
-      .update({
-        setor: updates.setor,
-        fornecedor: updates.fornecedor,
-        material: updates.material,
-        link_produto: updates.linkProduto,
-        valor_estimado: updates.valorEstimado,
-        observacoes: updates.observacoes,
-      })
+      .update(payload)
       .eq('id', id);
     if (error) throw new Error(error.message);
 
+    const fmt = (v: number | null | undefined) => `R$ ${(v ?? 0).toFixed(2)}`;
+    const valorPagoAntes = (anterior?.valorFinal ?? 0) + (anterior?.valorFinalSecundario ?? 0);
+    const valorPagoDepois = (updates.valorFinal ?? 0) + (anterior?.formaPagamentoSecundaria != null ? (updates.valorFinalSecundario ?? 0) : 0);
     this.auditLogService.log({
       user_id: admin.id,
       user_name: admin.name,
       event_type: 'fundo_fixo_editado',
       resource_type: 'fundo_fixo',
       resource_id: id,
-      description: `${admin.name} editou a solicitação "${updates.material}"`,
+      description: `${admin.name} editou a solicitação "${updates.material}"`
+        + (mudouValorPago ? ` — valor pago ${fmt(valorPagoAntes)} → ${fmt(valorPagoDepois)}` : ''),
+      metadata: mudouValorPago ? { valor_pago_antes: valorPagoAntes, valor_pago_depois: valorPagoDepois } : undefined,
     });
 
     await this.load();
