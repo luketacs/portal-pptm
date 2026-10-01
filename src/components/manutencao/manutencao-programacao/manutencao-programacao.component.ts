@@ -1244,10 +1244,16 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     // dataCicloAoProgramar (reportado: sugestão continuava na semana depois de programada).
     this.formPlanoPreventivoDataPrevista.set(dataCicloAoProgramar(plano));
     this.formChecklist.set(plano.atividades);
-    // Se o número da OS já foi reservado com antecedência (ver salvarNumeroOsReservado
-    // abaixo), vem pré-preenchido — some do plano quando a OS for confirmada (ver
-    // cicloDataPrevista).
-    if (plano.numeroOsReservado) this.formNumeroOs.set(plano.numeroOsReservado);
+    // Número da OS: primeiro a OS já aberta no SIGMA pra ESSA ocorrência (planilha anual
+    // da Operação, migration 067 — cada semana tem a sua); senão o número reservado com
+    // antecedência no plano (ver salvarNumeroOsReservado abaixo).
+    const osDaSemana = this.osDaOcorrencia(plano);
+    if (osDaSemana) this.formNumeroOs.set(osDaSemana);
+    else if (plano.numeroOsReservado) this.formNumeroOs.set(plano.numeroOsReservado);
+    // Ocorrência com data fixa da planilha: já marca o dia dela, se cair na semana.
+    if (osDaSemana && this.diasDaSemanaAtual().some(d => d.data === dataCicloAoProgramar(plano))) {
+      this.formDiasSelecionados.set([dataCicloAoProgramar(plano)]);
+    }
     // Plano com LOTO padrão (ex.: teste que precisa do equipamento rodando) já vem
     // com o campo preenchido — evita esquecer de marcar manualmente toda vez.
     if (plano.lotoPadrao) this.formLoto.set(plano.lotoPadrao);
@@ -1257,6 +1263,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     if (plano.area === 'APOIO' && plano.responsavel) {
       this.formTecnicoNome.set(plano.responsavel);
     }
+  }
+
+  // OS já aberta no SIGMA pra essa ocorrência do plano (planilha anual da Operação) —
+  // null quando o plano não tem OS prevista cadastrada (aí vale o "Nº OS reservado").
+  osDaOcorrencia(plano: PlanoComProximaData): string | null {
+    return this.manutencaoPlanosService.osPrevista(plano.id, dataCicloAoProgramar(plano));
   }
 
   // Edição inline do número de OS reservado direto na lista de "Preventivas da

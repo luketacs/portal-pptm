@@ -593,26 +593,56 @@ describe('agenda compartilhada entre planos e programação', () => {
 // plano voltava pra mesma semana puxado de novo pelo vizinho ainda não programado.
 describe('dataCicloAoProgramar', () => {
   const vizinhoMensal = plano({ id: 'a', area: 'APOIO', tagKks: 'SALA-X', periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)', dataInicial: '2026-10-05' });
-  const quinzenal = plano({ id: 'b', area: 'APOIO', tagKks: 'SALA-X', periodicidadeValor: 14, periodicidadeUnidade: 'Dia(s)', dataInicial: '2026-10-20' });
-  const agenda = (ciclos: Map<string, string | null>) => agendaDosPlanos([vizinhoMensal, quinzenal], ciclos, false, '2026-09-28', new Map());
+  const trimestral = plano({ id: 'b', area: 'APOIO', tagKks: 'SALA-X', periodicidadeValor: 3, periodicidadeUnidade: 'Mes(es)', dataInicial: '2026-10-20' });
+  const quinzenal = plano({ id: 'q', area: 'APOIO', tagKks: 'SALA-X', periodicidadeValor: 14, periodicidadeUnidade: 'Dia(s)', dataInicial: '2026-10-20' });
+  const agenda = (planos: typeof vizinhoMensal[], ciclos: Map<string, string | null>) =>
+    agendaDosPlanos(planos, ciclos, false, '2026-09-28', new Map());
 
   it('sugestão antecipada pelo vizinho grava o ciclo na data REAL do plano', () => {
-    const b = agenda(new Map()).find(p => p.id === 'b')!;
+    const b = agenda([vizinhoMensal, trimestral], new Map()).find(p => p.id === 'b')!;
     expect(b.proximaData).toBe('2026-10-05'); // aparece na S41 junto com o vizinho
     expect(dataCicloAoProgramar(b)).toBe('2026-10-20');
   });
 
   it('depois de programado, não volta pra mesma semana (o vizinho segue pendente)', () => {
-    const b = agenda(new Map()).find(p => p.id === 'b')!;
-    const depois = agenda(new Map([['b', dataCicloAoProgramar(b)]])).find(p => p.id === 'b')!;
+    const b = agenda([vizinhoMensal, trimestral], new Map()).find(p => p.id === 'b')!;
+    const depois = agenda([vizinhoMensal, trimestral], new Map([['b', dataCicloAoProgramar(b)]])).find(p => p.id === 'b')!;
     expect(depois.proximaData > '2026-10-11').toBe(true);
-    // Antes: ciclo na data antecipada (05/10) cobria só até 15/10 e a de 20/10 voltava pra S41.
-    const antes = agenda(new Map([['b', b.proximaData]])).find(p => p.id === 'b')!;
-    expect(antes.proximaData).toBe('2026-10-05');
+  });
+
+  it('quinzenal não é antecipado 15 dias (passa da folga dele, 10 dias) — fica na própria data', () => {
+    const q = agenda([vizinhoMensal, quinzenal], new Map()).find(p => p.id === 'q')!;
+    expect(q.proximaData).toBe('2026-10-20');
+    expect(dataCicloAoProgramar(q)).toBe('2026-10-20');
   });
 
   it('plano não antecipado grava a própria data', () => {
-    const a = agenda(new Map()).find(p => p.id === 'a')!;
+    const a = agenda([vizinhoMensal, trimestral], new Map()).find(p => p.id === 'a')!;
     expect(dataCicloAoProgramar(a)).toBe('2026-10-05');
+  });
+});
+
+// Reportado (S41, OPERAÇÃO): L-OP-1S TRIPPERS (PM-0208, semanal) programada pra 05/10
+// continuava em "Preventivas da semana". Era a ocorrência SEGUINTE (12/10) puxada pra
+// 05/10 pelo L-OP-2S TRIPPERS (PM-0209, quinzenal, mesmo KKS, pendente em 05/10) — e a
+// cada nova programação a próxima (19/10, 26/10...) era puxada de novo.
+describe('alinhamento não antecipa mais que a folga do próprio plano', () => {
+  const kks = { area: 'APOIO' as const, tagKks: 'TORRE91UEF21' };
+  const mensal = plano({ id: '0207', ...kks, periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)', dataInicial: '2026-11-02' });
+  const semanal = plano({ id: '0208', ...kks, periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)', dataInicial: '2026-09-21' });
+  const quinzenal = plano({ id: '0209', ...kks, periodicidadeValor: 2, periodicidadeUnidade: 'Semana(s)', dataInicial: '2026-10-05' });
+  const ciclos = new Map<string, string | null>([['0208', '2026-10-05'], ['0209', '2026-09-21']]);
+  const agenda = () => agendaDosPlanos([mensal, semanal, quinzenal], ciclos, false, '2026-09-28', new Map());
+
+  it('semanal já programado na S41 não volta pra S41 puxado pelo quinzenal pendente', () => {
+    const a = agenda();
+    expect(a.find(p => p.id === '0209')!.proximaData).toBe('2026-10-05');
+    expect(a.find(p => p.id === '0208')!.proximaData).toBe('2026-10-12');
+  });
+
+  it('mensal continua saindo junto com o vizinho dentro de 21 dias', () => {
+    const m = plano({ id: 'm', ...kks, periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)', dataInicial: '2026-10-20' });
+    const a = agendaDosPlanos([m, quinzenal], new Map([['0209', '2026-09-21']]), false, '2026-09-28', new Map());
+    expect(a.find(p => p.id === 'm')!.proximaData).toBe('2026-10-05');
   });
 });

@@ -1,6 +1,6 @@
 import {
-  calcularProximaData, dataLimiteComTolerancia, JANELA_ALINHAMENTO_DIAS, periodicidadeEfetiva, periodicidadeEmDias,
-  preventivaVencendo, proximaDataFixa, PeriodicidadeUnidade, somarDias,
+  calcularProximaData, dataLimiteComTolerancia, folgaCoberturaCiclo, JANELA_ALINHAMENTO_DIAS, periodicidadeEfetiva,
+  periodicidadeEmDias, preventivaVencendo, proximaDataFixa, PeriodicidadeUnidade, somarDias,
 } from './manutencao-preventivas';
 import { CategoriaIndicador, ManutencaoArea, PlanoManutencao } from '../models/manutencao-programacao.model';
 
@@ -208,7 +208,13 @@ export function alinharDatasPorEquipamento(
         // Abre bloco novo: este plano é o mais cedo dele.
         dataAlvo = data;
         limiteBloco = somarDias(data, janelaDias);
-      } else if (data !== dataAlvo) {
+      } else if (data !== dataAlvo && data <= somarDias(dataAlvo, folgaCoberturaCiclo(planos[i].periodicidadeValor, planos[i].periodicidadeUnidade))) {
+        // Antecipa no máximo a folga de cobertura DO PRÓPRIO plano (semanal 5 dias,
+        // quinzenal 10, mensal+ 21). Reportado: L-OP-1S TRIPPERS (semanal) já programada
+        // na S41 voltava pra S41 — a ocorrência seguinte (12/10) era puxada pra 05/10 pelo
+        // vizinho quinzenal pendente, e a cada programação a próxima era puxada de novo.
+        // Fora da folga, o plano fica na própria data (não faz sentido adiantar uma
+        // semanal uma semana inteira).
         resultado[i] = { ...resultado[i], proximaData: dataAlvo, proximaDataOriginal: data };
       }
     }

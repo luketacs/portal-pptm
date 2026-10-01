@@ -111,6 +111,15 @@ export class ManutencaoPlanosService {
 
   isLoading = signal(false);
 
+  // OS já abertas no SIGMA pra cada ocorrência (migration 067 — planilha anual da
+  // Operação): chave `${planoId}|${data}` → número da OS daquela semana.
+  private _osPrevistas = signal<ReadonlyMap<string, string>>(new Map());
+
+  /** Número da OS já aberta pra essa ocorrência do plano (null se não houver). */
+  osPrevista(planoId: string, data: string | null | undefined): string | null {
+    return data ? this._osPrevistas().get(`${planoId}|${data}`) ?? null : null;
+  }
+
   constructor(
     private supabaseService: SupabaseService,
     private authService: AuthService,
@@ -120,14 +129,20 @@ export class ManutencaoPlanosService {
   async load(): Promise<void> {
     this.isLoading.set(true);
     try {
-      const [planosRes, ciclosRes] = await Promise.all([
+      const [planosRes, ciclosRes, osPrevistasRes] = await Promise.all([
         fetchAllRows((from, to) => this.supabaseService.client.from('manutencao_planos').select('*').order('codigo').order('id').range(from, to)),
         fetchAllRows((from, to) => this.supabaseService.client.from('manutencao_ciclos').select('*').order('id').range(from, to)),
+        fetchAllRows<{ plano_id: string; data_prevista: string; numero_os: string }>((from, to) => this.supabaseService.client
+          .from('manutencao_os_previstas').select('plano_id, data_prevista, numero_os').order('id').range(from, to)),
       ]);
       if (planosRes.error) throw new Error(planosRes.error.message);
       if (ciclosRes.error) throw new Error(ciclosRes.error.message);
       this._planos.set((planosRes.data ?? []).map(mapPlanoRow));
       this._ciclos.set((ciclosRes.data ?? []).map(mapCicloRow));
+      // Best-effort: sem a tabela (migration 067 ainda não rodada) a programação só não
+      // preenche o número da semana sozinha — não trava o resto.
+      if (osPrevistasRes.error) console.warn('[ManutencaoPlanos] OS previstas indisponíveis:', osPrevistasRes.error.message);
+      this._osPrevistas.set(new Map((osPrevistasRes.data ?? []).map(r => [`${r.plano_id}|${r.data_prevista}`, r.numero_os])));
     } finally {
       this.isLoading.set(false);
     }
