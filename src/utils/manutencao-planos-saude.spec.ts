@@ -119,7 +119,7 @@ describe('diagnosticarPlanos', () => {
 });
 
 describe('cicloCoerenteComOrdem', () => {
-  it('dentro de 3 semanas fica; além disso vira o 1º dia da OS; sem dias, a segunda', () => {
+  it('dentro de 4 semanas fica; além disso vira o 1º dia da OS; sem dias, a segunda', () => {
     expect(cicloCoerenteComOrdem('2026-10-12', '2026-09-28', ['2026-09-29'])).toBe('2026-10-12');
     expect(cicloCoerenteComOrdem('2027-01-05', '2026-09-28', ['2026-10-01', '2026-09-30'])).toBe('2026-09-30');
     expect(cicloCoerenteComOrdem('2027-01-05', '2026-09-28', [])).toBe('2026-09-28');

@@ -3,7 +3,7 @@ import {
   agendaDosPlanos, alinharDatasPorEquipamento, EQUIPE_APOIO_NAO_CLASSIFICADA, gerarGradeMensal, inferirCategoriaIndicador,
   inferirCategoriaIndicadorPorTecnico, janelaAlinhamentoDaArea, limitarPorEquipeApoio, nomeBaseDoPlano, ocorrenciasNoIntervalo,
   semanasIsoDoAno, siglaPeriodicidade, planosAtrasados, planosComProximaExecucao,
-  planosComProximaExecucaoFixa, proximaExecucaoPlano, resumoPorEquipeApoio, sugestoesDaSemana,
+  planosComProximaExecucaoFixa, proximaExecucaoPlano, resumoPorEquipeApoio, sugestoesDaSemana, dataCicloAoProgramar,
 } from './manutencao-planos';
 
 function plano(overrides: Partial<PlanoManutencao> = {}): PlanoManutencao {
@@ -583,5 +583,36 @@ describe('agenda compartilhada entre planos e programação', () => {
     const agenda = agendaDosPlanos([cadastro], new Map(), false, '2026-09-21', new Map([['2026-09-21', true]]));
     expect(agenda[0].proximaData).toBe('2026-09-28');
     expect(cadastro.dataInicial).toBe('2026-09-21');
+  });
+});
+
+// Reportado (S41, Apoio/Operação): programou a OS da sugestão e ela continuou na lista
+// "Preventivas da semana" — programou 3 vezes. Plano de ciclo curto antecipado pelo
+// alinhamento por equipamento (janela 21 dias no Apoio) gravava o ciclo na data
+// ANTECIPADA; a folga de cobertura dele (3/4 do período) não alcançava a data real, e o
+// plano voltava pra mesma semana puxado de novo pelo vizinho ainda não programado.
+describe('dataCicloAoProgramar', () => {
+  const vizinhoMensal = plano({ id: 'a', area: 'APOIO', tagKks: 'SALA-X', periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)', dataInicial: '2026-10-05' });
+  const quinzenal = plano({ id: 'b', area: 'APOIO', tagKks: 'SALA-X', periodicidadeValor: 14, periodicidadeUnidade: 'Dia(s)', dataInicial: '2026-10-20' });
+  const agenda = (ciclos: Map<string, string | null>) => agendaDosPlanos([vizinhoMensal, quinzenal], ciclos, false, '2026-09-28', new Map());
+
+  it('sugestão antecipada pelo vizinho grava o ciclo na data REAL do plano', () => {
+    const b = agenda(new Map()).find(p => p.id === 'b')!;
+    expect(b.proximaData).toBe('2026-10-05'); // aparece na S41 junto com o vizinho
+    expect(dataCicloAoProgramar(b)).toBe('2026-10-20');
+  });
+
+  it('depois de programado, não volta pra mesma semana (o vizinho segue pendente)', () => {
+    const b = agenda(new Map()).find(p => p.id === 'b')!;
+    const depois = agenda(new Map([['b', dataCicloAoProgramar(b)]])).find(p => p.id === 'b')!;
+    expect(depois.proximaData > '2026-10-11').toBe(true);
+    // Antes: ciclo na data antecipada (05/10) cobria só até 15/10 e a de 20/10 voltava pra S41.
+    const antes = agenda(new Map([['b', b.proximaData]])).find(p => p.id === 'b')!;
+    expect(antes.proximaData).toBe('2026-10-05');
+  });
+
+  it('plano não antecipado grava a própria data', () => {
+    const a = agenda(new Map()).find(p => p.id === 'a')!;
+    expect(dataCicloAoProgramar(a)).toBe('2026-10-05');
   });
 });

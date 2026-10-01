@@ -23,7 +23,7 @@ import {
   indisponibilidadesNaSemana, numerosSigmaParaConsultar,
 } from '../../../utils/manutencao-regras';
 import {
-  agendaDosPlanos, ChaveEquipeApoio, EQUIPE_APOIO_NAO_CLASSIFICADA, inferirCategoriaIndicador,
+  agendaDosPlanos, ChaveEquipeApoio, dataCicloAoProgramar, EQUIPE_APOIO_NAO_CLASSIFICADA, inferirCategoriaIndicador,
   inferirCategoriaIndicadorPorTecnico, limitarPorEquipeApoio, LimitePorEquipeApoio, PlanoComProximaData,
   planosAtrasados,
   resumoPorEquipeApoio, sugestoesDaSemana,
@@ -1240,7 +1240,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     this.formEquipamento.set(plano.equipamento);
     this.formTipoServico.set('PREVENTIVA');
     this.formPlanoPreventivoId.set(plano.id);
-    this.formPlanoPreventivoDataPrevista.set(plano.proximaData);
+    // Data REAL da ocorrência, não a antecipada pelo alinhamento por equipamento — ver
+    // dataCicloAoProgramar (reportado: sugestão continuava na semana depois de programada).
+    this.formPlanoPreventivoDataPrevista.set(dataCicloAoProgramar(plano));
     this.formChecklist.set(plano.atividades);
     // Se o número da OS já foi reservado com antecedência (ver salvarNumeroOsReservado
     // abaixo), vem pré-preenchido — some do plano quando a OS for confirmada (ver
@@ -1547,7 +1549,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   vincularPlano(plano: PlanoManutencao): void {
     this.formPlanoPreventivoId.set(plano.id);
-    this.formPlanoPreventivoDataPrevista.set(this.agendaPlanos().find(p => p.id === plano.id)?.proximaData ?? null);
+    const naAgenda = this.agendaPlanos().find(p => p.id === plano.id);
+    this.formPlanoPreventivoDataPrevista.set(naAgenda ? dataCicloAoProgramar(naAgenda) : null);
     this.formChecklist.set(plano.atividades);
     this.formVincularPlanoTexto.set('');
     if (this.formArea() === 'APOIO' && !this.formCategoriaIndicador()) {

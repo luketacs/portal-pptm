@@ -216,6 +216,17 @@ export function alinharDatasPorEquipamento(
   return resultado;
 }
 
+/**
+ * Data do ciclo a gravar quando a sugestão é programada: a ocorrência REAL do plano
+ * (antes do alinhamento por equipamento), não a data antecipada pra sair junto com o
+ * vizinho. Gravando a antecipada, plano de ciclo curto (folga de cobertura = 3/4 do
+ * período, menor que a janela de 21 dias do Apoio) ficava com a ocorrência real
+ * descoberta e voltava pra mesma semana mesmo depois de programado.
+ */
+export function dataCicloAoProgramar(p: PlanoComProximaData): string {
+  return (p as Partial<PlanoAlinhadoPorEquipamento>).proximaDataOriginal ?? p.proximaData;
+}
+
 // Planos cuja próxima execução cai dentro da semana em exibição, ordenados por
 // prioridade — mesma regra combinada com o usuário pro sistema antigo (ver
 // preventivasVencendoTodas no componente): antes do corte de regras novas, só pela data

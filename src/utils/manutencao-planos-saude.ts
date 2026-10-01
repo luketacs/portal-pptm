@@ -33,13 +33,15 @@ export interface ProblemaSaude {
   ciclo?: { planoId: string; dataAtual: string; dataNova: string };
 }
 
-/** Folga máxima entre a semana da OS e a data do ciclo que ela cobre — mesma janela
- *  máxima do alinhamento por equipamento (Apoio, 21 dias). Passou disso, o ciclo não é
- *  dessa OS: veio de uma âncora futura e esconderia o plano até lá. */
-const FOLGA_CICLO_DIAS = 21;
+/** Folga máxima entre a semana da OS e a data do ciclo que ela cobre. O ciclo é a data
+ *  REAL da ocorrência (dataCicloAoProgramar) e o alinhamento por equipamento antecipa
+ *  até 21 dias a partir de uma data dentro da semana — ou seja, até semana + 6 + 21.
+ *  Passou de 4 semanas, o ciclo não é dessa OS: veio de uma âncora futura e esconderia
+ *  o plano até lá. */
+const FOLGA_CICLO_DIAS = 28;
 
 /**
- * O ciclo acompanha a data da ordem: se a data do ciclo está mais de 3 semanas à frente
+ * O ciclo acompanha a data da ordem: se a data do ciclo está mais de 4 semanas à frente
  * da semana da OS, vira o 1º dia previsto da OS (ou a segunda da semana). Dentro da
  * folga, fica como está (antecipação normal do alinhamento). null = deixa o banco
  * preencher (trigger portal_preparar_ciclo usa o 1º dia previsto).
@@ -215,7 +217,7 @@ export function diagnosticarPlanos(
     }
   }
 
-  // Ciclo gravado > 3 semanas depois da semana da própria OS: esconde o plano até essa
+  // Ciclo gravado > 4 semanas depois da semana da própria OS: esconde o plano até essa
   // data (proximaDataFixa pula tudo até o último ciclo) — ver migration 058. Plano
   // inativo não entra na agenda, então o ciclo dele não atrapalha nada.
   const planoPorId = new Map(planos.map(p => [p.id, p]));
