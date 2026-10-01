@@ -650,6 +650,13 @@
                           <td class="py-1.5 pr-3"></td>
                         </tr>
                       }
+                      @if (grupo.ordens.length === 0 && grupo.indisponibilidades.length === 0) {
+                        <tr>
+                          <td colspan="7" class="py-2 text-xs text-gray-400 italic">
+                            Nada programado nesta semana{{ grupo.capacidade !== null ? ' — ' + grupo.capacidade + 'h disponíveis' : '' }}.
+                          </td>
+                        </tr>
+                      }
                       @for (o of grupo.ordens; track o.id) {
                         <tr [class]="linhaClasse(o.tipo)">
                           <td class="py-1.5 pr-3 whitespace-nowrap text-center">

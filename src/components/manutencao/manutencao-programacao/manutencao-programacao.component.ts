@@ -511,6 +511,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       else porTecnico.set(chave, { label, ordens: [o] });
     }
     const diasIso = dias.map(d => d.data);
+    // Elétrica/Mecânica: toda a equipe aparece sempre, mesmo sem nada lançado na semana —
+    // pedido do usuário: antes só aparecia quem já tinha algo programado, e não dava pra
+    // ver quem estava livre. Só quando não há filtro de técnico/status/busca ativo (com
+    // filtro, a lista mostra só o que bate com ele). Inativos já saem em tecnicosPorArea.
+    const semFiltro = this.tecnicoFiltro() === 'todos' && this.statusFiltro() === 'todos' && !this.searchTerm().trim();
+    if (semFiltro && (this.areaFixa === 'ELETRICA' || this.areaFixa === 'MECANICA')) {
+      for (const t of this.tecnicosPorArea(this.areaFixa)) {
+        const { chave, label } = this.chaveTecnico(t.nome, t.matricula);
+        if (!porTecnico.has(chave)) porTecnico.set(chave, { label, ordens: [] });
+      }
+    }
     // Técnico de férias/atestado na semana aparece mesmo sem nenhum lançamento — o
     // objetivo é justamente avisar antes de alguém tentar programar algo pra ele.
     const area = this.areaFiltro();
@@ -2481,6 +2492,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       return;
     }
     this.isProcessando.set(false);
+    // OS de plano preventivo: o banco apaga o ciclo junto (ou passa pra outra cópia da
+    // mesma OS) — recarrega os ciclos pra preventiva voltar pra "Preventivas da semana"
+    // na hora, sem precisar recarregar a página.
+    this.recarregarCiclosEmSegundoPlano(!!o.planoPreventivoId);
 
     if (vinculadas.length === 0) return;
     const nomes = [...new Set(vinculadas.map(v => v.tecnicoNome))].join(', ');
@@ -2501,6 +2516,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       }
     }
     this.isProcessando.set(false);
+    this.recarregarCiclosEmSegundoPlano(vinculadas.some(v => !!v.planoPreventivoId));
     if (erros === 0) this.notificationService.showSuccess('Apoio(s) vinculado(s) excluído(s) também.');
     else this.notificationService.showError(`${erros} de ${vinculadas.length} vínculo(s) não puderam ser excluídos.`);
   }
