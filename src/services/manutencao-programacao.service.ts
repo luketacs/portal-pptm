@@ -490,8 +490,11 @@ export class ManutencaoProgramacaoService {
         reuniao_horario: updates.reuniaoHorario?.trim() || null,
         reuniao_local: updates.reuniaoLocal?.trim() || null,
         plano_preventivo_id: updates.planoPreventivoId,
-        ciclo_data_prevista: existente
-          ? cicloCoerenteComOrdem(updates.cicloDataPrevista, existente.semanaInicio, updates.diasPrevistos)
+        // undefined = "não mexe no ciclo" (plano não mudou) — fica fora do UPDATE. Antes
+        // passava por cicloCoerenteComOrdem, que devolvia null: toda edição de OS de
+        // preventiva apagava a data do ciclo e o banco recalculava pelo 1º dia previsto.
+        ciclo_data_prevista: updates.cicloDataPrevista === undefined ? undefined
+          : existente ? cicloCoerenteComOrdem(updates.cicloDataPrevista, existente.semanaInicio, updates.diasPrevistos)
           : updates.cicloDataPrevista,
         checklist: updates.checklist,
       })
