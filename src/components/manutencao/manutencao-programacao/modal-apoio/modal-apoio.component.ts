@@ -56,6 +56,20 @@ export class ModalApoioComponent {
     return this.tecnicosPorArea(origem.area).filter(t => t.nome !== origem.tecnicoNome);
   }
 
+  // Empresas/equipes do Apoio (BMS, TOP ANDAIMES...) — OS de Elétrica/Mecânica também
+  // pode precisar de apoio externo (ex.: BMS no SPCI). Antes só apareciam técnicos da
+  // mesma área, e não havia como mandar a OS pra agenda da empresa por aqui. Escolher
+  // uma delas cria o lançamento na programação do Apoio, não na área de origem.
+  empresasParaApoio(): { nome: string; matricula: string | null }[] {
+    const origem = this.origem();
+    if (!origem || origem.area === 'APOIO') return [];
+    return this.tecnicosPorArea('APOIO');
+  }
+
+  ehEmpresaApoio(nome: string): boolean {
+    return this.empresasParaApoio().some(e => e.nome === nome);
+  }
+
   // Dias selecionáveis pro apoio — só os dias em que a OS de origem já está prevista
   // (não faz sentido apoiar num dia em que a atividade nem vai rodar).
   apoioDiasDisponiveis(): DiaSemana[] {
@@ -88,7 +102,7 @@ export class ModalApoioComponent {
 
   onTecnicoSelected(nome: string): void {
     this.tecnicoNome.set(nome);
-    const colaborador = this.tecnicosParaApoio().find(c => c.nome === nome);
+    const colaborador = [...this.tecnicosParaApoio(), ...this.empresasParaApoio()].find(c => c.nome === nome);
     this.tecnicoMatricula.set(colaborador?.matricula ?? '');
   }
 
@@ -128,10 +142,12 @@ export class ModalApoioComponent {
       ...(origem.recursos ? origem.recursos.split(',').map(s => s.trim()).filter(Boolean) : []),
       origem.tecnicoNome,
     ].filter(r => r.toUpperCase() !== apoioTecnico.toUpperCase()).join(', ');
+    const empresa = this.ehEmpresaApoio(apoioTecnico);
+    const vinculo = `Apoio (${apoioTecnico}) — vinculado à OS de ${origem.tecnicoNome}${origem.numeroOs ? ' nº ' + origem.numeroOs : ''}.`;
     try {
       await this.manutencaoService.criarOrdem({
         tipo: 'ordem',
-        area: origem.area,
+        area: empresa ? 'APOIO' : origem.area,
         // Copia a classificação da OS de origem — sem isso, todo apoio de uma OS de
         // Apoio nascia com categoriaIndicador em branco (categoria_indicador só é
         // auto-preenchida pelo service pra Mecânica/Elétrica, nunca pra Apoio) e caía
@@ -154,9 +170,13 @@ export class ModalApoioComponent {
         tecnicoMatricula: this.tecnicoMatricula() || undefined,
         diasPrevistos: this.diasSelecionados(),
         status: 'PEND',
-        observacoes: origem.observacoes ?? undefined,
+        observacoes: empresa
+          ? [origem.observacoes?.trim(), vinculo].filter(Boolean).join(' — ')
+          : origem.observacoes ?? undefined,
       });
-      this.notificationService.showSuccess(`OS adicionada também para ${this.tecnicoNome()}.`);
+      this.notificationService.showSuccess(empresa
+        ? `OS adicionada na programação do Apoio para ${apoioTecnico}.`
+        : `OS adicionada também para ${apoioTecnico}.`);
       this.fechar();
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao adicionar apoio.');

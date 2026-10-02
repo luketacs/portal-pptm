@@ -9,14 +9,31 @@
         </p>
       }
 
-      <label class="block text-sm font-medium text-slate-700 mb-1">Técnico de apoio <span class="text-red-500">*</span></label>
+      <label class="block text-sm font-medium text-slate-700 mb-1">Apoio (técnico ou empresa) <span class="text-red-500">*</span></label>
       <select [ngModel]="tecnicoNome()" (ngModelChange)="onTecnicoSelected($event)"
         class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-4">
         <option value="">Selecione...</option>
-        @for (t of tecnicosParaApoio(); track t.matricula) {
-          <option [value]="t.nome">{{ t.nome }}</option>
+        @if (empresasParaApoio().length > 0) {
+          <optgroup label="Técnicos">
+            @for (t of tecnicosParaApoio(); track t.nome) {
+              <option [value]="t.nome">{{ t.nome }}</option>
+            }
+          </optgroup>
+          <optgroup label="Empresas / equipes de Apoio">
+            @for (e of empresasParaApoio(); track e.nome) {
+              <option [value]="e.nome">{{ e.nome }}</option>
+            }
+          </optgroup>
+        } @else {
+          @for (t of tecnicosParaApoio(); track t.nome) {
+            <option [value]="t.nome">{{ t.nome }}</option>
+          }
         }
       </select>
+
+      @if (ehEmpresaApoio(tecnicoNome())) {
+        <p class="text-xs text-blue-600 -mt-3 mb-4">Vai pra programação do Apoio, na agenda de {{ tecnicoNome() }}.</p>
+      }
 
       <label class="block text-sm font-medium text-slate-700 mb-1">
         Dias do apoio <span class="text-red-500">*</span>
