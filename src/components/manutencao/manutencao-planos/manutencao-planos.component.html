@@ -783,6 +783,31 @@
           }
           <p class="text-xs text-gray-400 mt-1">Só preencha se esse plano exige mais de um equipamento com o mesmo status de LOTO ao mesmo tempo — pré-preenche a Nova OS ao programar, junto do equipamento principal.</p>
         </div>
+        <div class="sm:col-span-2">
+          <label class="block text-sm font-medium text-slate-700 mb-1">Recursos de apoio (Munck, Andaime...)</label>
+          @if (formRecursosApoioLista().length > 0) {
+            <div class="flex flex-wrap gap-1.5 mb-1.5">
+              @for (r of formRecursosApoioLista(); track r) {
+                <span class="inline-flex items-center gap-1 text-xs font-semibold pl-2 pr-1 py-1 rounded-full bg-indigo-50 text-indigo-700">
+                  {{ r }}
+                  <button type="button" (click)="removerRecursoApoio(r)" title="Remover" class="hover:bg-black/10 rounded-full p-0.5">
+                    <svg class="h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </span>
+              }
+            </div>
+          }
+          @if (recursosApoioDisponiveis().length > 0) {
+            <select #selRecursoApoio (change)="adicionarRecursoApoio(selRecursoApoio.value); selRecursoApoio.value = ''"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">Adicionar recurso de apoio...</option>
+              @for (op of recursosApoioDisponiveis(); track op) {
+                <option [value]="op">{{ op }}</option>
+              }
+            </select>
+          }
+          <p class="text-xs text-gray-400 mt-1">Quando o plano precisa de apoio de equipamento — ao programar, a OS já vem com esses recursos (falta só marcar os dias do apoio) e a lista de preventivas da semana avisa com antecedência.</p>
+        </div>
         <div class="flex items-center gap-2 mt-6">
           <input type="checkbox" id="formAtivo" [ngModel]="formAtivo()" (ngModelChange)="formAtivo.set($event)" class="h-4 w-4 rounded border-slate-300" />
           <label for="formAtivo" class="text-sm font-medium text-slate-700">Plano ativo</label>

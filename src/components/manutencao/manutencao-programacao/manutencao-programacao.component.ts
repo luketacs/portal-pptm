@@ -1271,6 +1271,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     if (plano.equipamentosRelacionados) {
       this.formEquipamentosRelacionadosLista.set(plano.equipamentosRelacionados.split(',').map(e => e.trim()).filter(Boolean));
     }
+    // Plano que sempre precisa de Munck/Andaime/Guindaste já vem com o recurso — só
+    // falta marcar os dias do apoio (salvar fica bloqueado até isso, ver
+    // formRecursoSemDiasDeApoio), e o espelho na agenda da empresa sai junto.
+    this.preencherRecursosApoioDoPlano(plano);
     if (plano.area === 'APOIO' && plano.responsavel) {
       this.formTecnicoNome.set(plano.responsavel);
     }
@@ -1584,6 +1588,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     if (plano.equipamentosRelacionados && this.formEquipamentosRelacionadosLista().length === 0) {
       this.formEquipamentosRelacionadosLista.set(plano.equipamentosRelacionados.split(',').map(e => e.trim()).filter(Boolean));
     }
+    this.preencherRecursosApoioDoPlano(plano);
+  }
+
+  // Recursos de apoio do plano (migration 068) entram nos "Recursos" da OS, sem
+  // duplicar o que já estiver lá.
+  private preencherRecursosApoioDoPlano(plano: PlanoManutencao): void {
+    for (const r of (plano.recursosApoio ?? '').split(',').map(x => x.trim()).filter(Boolean)) this.adicionarRecurso(r);
   }
 
   desvincularPlano(): void {

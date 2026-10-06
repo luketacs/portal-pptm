@@ -448,7 +448,13 @@
                       <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">{{ equipeDoPlano(plano) }}</td>
                     }
                     <td class="py-1.5 pr-3 text-gray-800 max-w-xs"><span class="block truncate" [title]="plano.tagKks ? plano.tagKks + ' — ' + plano.equipamento : plano.equipamento">{{ plano.tagKks || plano.equipamento }}</span></td>
-                    <td class="py-1.5 pr-3 text-gray-600 max-w-xs"><span class="block truncate" [title]="plano.nome">{{ plano.nome }}</span></td>
+                    <td class="py-1.5 pr-3 text-gray-600 max-w-xs">
+                      <span class="block truncate" [title]="plano.nome">{{ plano.nome }}</span>
+                      @if (plano.recursosApoio) {
+                        <span class="inline-block mt-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700"
+                          title="Esse plano precisa de apoio de equipamento — já entra nos Recursos da OS ao programar">Apoio: {{ plano.recursosApoio }}</span>
+                      }
+                    </td>
                     <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">{{ plano.periodicidadeValor }} {{ plano.periodicidadeUnidade }}</td>
                     <td class="py-1.5 pr-3 whitespace-nowrap">
                       <span class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700">{{ plano.proximaData }}</span>
@@ -499,7 +505,13 @@
                 @for (plano of preventivasAtrasadas(); track plano.id) {
                   <tr>
                     <td class="py-1.5 pr-3 text-gray-800 max-w-xs"><span class="block truncate" [title]="plano.tagKks ? plano.tagKks + ' — ' + plano.equipamento : plano.equipamento">{{ plano.tagKks || plano.equipamento }}</span></td>
-                    <td class="py-1.5 pr-3 text-gray-600 max-w-xs"><span class="block truncate" [title]="plano.nome">{{ plano.nome }}</span></td>
+                    <td class="py-1.5 pr-3 text-gray-600 max-w-xs">
+                      <span class="block truncate" [title]="plano.nome">{{ plano.nome }}</span>
+                      @if (plano.recursosApoio) {
+                        <span class="inline-block mt-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700"
+                          title="Esse plano precisa de apoio de equipamento — já entra nos Recursos da OS ao programar">Apoio: {{ plano.recursosApoio }}</span>
+                      }
+                    </td>
                     <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">{{ plano.periodicidadeValor }} {{ plano.periodicidadeUnidade }}</td>
                     <td class="py-1.5 pr-3 whitespace-nowrap">
                       <span class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700">{{ plano.proximaData }}</span>

@@ -263,6 +263,7 @@ const CAMPOS_RASTREADOS: { chave: keyof EditarPlanoManutencaoRequest; rotulo: st
   { chave: 'ativo', rotulo: 'Ativo' },
   { chave: 'lotoPadrao', rotulo: 'LOTO padrão' },
   { chave: 'equipamentosRelacionados', rotulo: 'Equipamentos relacionados' },
+  { chave: 'recursosApoio', rotulo: 'Recursos de apoio' },
 ];
 
 function texto(v: unknown): string {

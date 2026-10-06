@@ -30,6 +30,7 @@ interface PlanoManutencaoRow {
   numero_os_reservado: string | null;
   loto_padrao: string | null;
   equipamentos_relacionados: string | null;
+  recursos_apoio?: string | null;
   agenda_rigida?: boolean | null;
   criado_por_id: string | null;
   criado_por_nome: string;
@@ -77,6 +78,7 @@ function mapPlanoRow(r: PlanoManutencaoRow): PlanoManutencao {
     numeroOsReservado: r.numero_os_reservado,
     lotoPadrao: r.loto_padrao,
     equipamentosRelacionados: r.equipamentos_relacionados,
+    recursosApoio: r.recursos_apoio ?? null,
     agendaRigida: r.agenda_rigida ?? false,
     criadoPorId: r.criado_por_id,
     criadoPorNome: r.criado_por_nome,
@@ -195,6 +197,7 @@ export class ManutencaoPlanosService {
       ativo: req.ativo ?? true,
       loto_padrao: req.lotoPadrao?.trim() || null,
       equipamentos_relacionados: req.equipamentosRelacionados?.trim() || null,
+      recursos_apoio: req.recursosApoio?.trim() || null,
       criado_por_id: user.id,
       criado_por_nome: user.name,
     });
@@ -237,6 +240,7 @@ export class ManutencaoPlanosService {
         ativo: req.ativo,
         loto_padrao: req.lotoPadrao?.trim() || null,
         equipamentos_relacionados: req.equipamentosRelacionados?.trim() || null,
+      recursos_apoio: req.recursosApoio?.trim() || null,
         atualizado_por_id: user.id,
         atualizado_por_nome: user.name,
         atualizado_em: new Date().toISOString(),

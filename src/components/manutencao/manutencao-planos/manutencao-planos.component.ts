@@ -132,6 +132,7 @@ export class ManutencaoPlanosComponent implements OnInit {
         this.manutencaoProgramacaoService.loadEquipamentos(),
         this.manutencaoProgramacaoService.loadParadaAtual(),
         this.manutencaoProgramacaoService.loadSemanasFechadas(),
+        this.manutencaoProgramacaoService.loadRecursosEspeciais(),
       ]);
     } catch {
       this.errorMessage.set('Erro ao carregar os planos de manutenção.');
@@ -544,6 +545,27 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formEquipamentosRelacionadosLista.update(lista => lista.filter(e => e !== valor));
   }
 
+  // Recursos de apoio de equipamento que o plano sempre exige (Andaime, Munck,
+  // Guindaste...) — pré-preenche "Recursos" da Nova OS ao programar, pra já prever o
+  // apoio (ver programarDaPreventiva na Programação). Só as opções cadastradas em
+  // "Gerenciar Recursos": é por elas que a OS cria o espelho na agenda da empresa.
+  formRecursosApoioLista = signal<string[]>([]);
+  formRecursosApoioTexto = computed(() => this.formRecursosApoioLista().join(', '));
+  recursosApoioDisponiveis = computed(() => {
+    const ja = new Set(this.formRecursosApoioLista().map(r => r.toUpperCase()));
+    return this.manutencaoProgramacaoService.recursosEspeciais().map(r => r.opcao).filter(op => !ja.has(op.toUpperCase()));
+  });
+
+  adicionarRecursoApoio(valor: string): void {
+    const v = valor.trim();
+    if (!v || this.formRecursosApoioLista().some(r => r.toUpperCase() === v.toUpperCase())) return;
+    this.formRecursosApoioLista.update(lista => [...lista, v]);
+  }
+
+  removerRecursoApoio(valor: string): void {
+    this.formRecursosApoioLista.update(lista => lista.filter(r => r !== valor));
+  }
+
   personalizadaSelecionada = computed(() => this.formPeriodicidadePreset() === 'Personalizada');
 
   selecionarPreset(label: string): void {
@@ -578,6 +600,7 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formLotoPadrao.set('');
     this.formEquipamentosRelacionadosLista.set([]);
     this.formEquipamentosRelacionadosDigitando.set('');
+    this.formRecursosApoioLista.set([]);
     this.formAberto.set(true);
   }
 
@@ -604,6 +627,7 @@ export class ManutencaoPlanosComponent implements OnInit {
     this.formAtivo.set(plano.ativo);
     this.formLotoPadrao.set(plano.lotoPadrao ?? '');
     this.formEquipamentosRelacionadosLista.set((plano.equipamentosRelacionados ?? '').split(',').map(e => e.trim()).filter(Boolean));
+    this.formRecursosApoioLista.set((plano.recursosApoio ?? '').split(',').map(r => r.trim()).filter(Boolean));
     this.formEquipamentosRelacionadosDigitando.set('');
     this.formAberto.set(true);
   }
@@ -991,6 +1015,7 @@ export class ManutencaoPlanosComponent implements OnInit {
           ativo: this.formAtivo(),
           lotoPadrao: this.formLotoPadrao() || null,
           equipamentosRelacionados: this.formEquipamentosRelacionadosTexto() || null,
+          recursosApoio: this.formRecursosApoioTexto() || null,
         });
         this.notificationService.showSuccess('Plano atualizado.');
       } else {
@@ -1017,6 +1042,7 @@ export class ManutencaoPlanosComponent implements OnInit {
           ativo: this.formAtivo(),
           lotoPadrao: this.formLotoPadrao() || undefined,
           equipamentosRelacionados: this.formEquipamentosRelacionadosTexto() || undefined,
+          recursosApoio: this.formRecursosApoioTexto() || undefined,
         });
         this.notificationService.showSuccess('Plano cadastrado.');
       }

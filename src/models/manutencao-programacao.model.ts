@@ -132,6 +132,10 @@ export interface PlanoManutencao {
   // sempre que esse plano for programado (ex.: teste que envolve vários equipamentos
   // ao mesmo tempo) — texto livre separado por vírgula, pré-preenche a Nova OS.
   equipamentosRelacionados: string | null;
+  // Recursos de apoio de equipamento que o plano sempre exige (Andaime, Munck,
+  // Guindaste... — opções de "Gerenciar Recursos"), texto separado por vírgula.
+  // Pré-preenche "Recursos" da Nova OS ao programar (migration 068).
+  recursosApoio: string | null;
   // Plano que tem que sair exatamente na data da sua cadência (ex. teste de
   // disponibilidade do sistema de carvão, migration 059): nunca é antecipado pelo
   // alinhamento por equipamento nem cortado pelo limite semanal da equipe. Opcional —
@@ -163,6 +167,7 @@ export interface CreatePlanoManutencaoRequest {
   ativo?: boolean; // default true no service
   lotoPadrao?: string;
   equipamentosRelacionados?: string;
+  recursosApoio?: string;
 }
 
 export interface EditarPlanoManutencaoRequest {
@@ -183,6 +188,7 @@ export interface EditarPlanoManutencaoRequest {
   ativo: boolean;
   lotoPadrao: string | null;
   equipamentosRelacionados: string | null;
+  recursosApoio: string | null;
 }
 
 // Ledger de duplicidade — uma linha por ocorrência já programada de um plano (ver
