@@ -12,12 +12,12 @@ import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, Impor
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
   META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, STATUS_GERAL_COR, StatusGeralSemana,
-  TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, indiceAtingimentoMeta,
+  TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, entraNoFechamentoIndicador, indiceAtingimentoMeta,
 } from '../../../utils/manutencao-indicadores';
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
-import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApontamento, StatusExecucaoGrupo, apontamentosSobrepostos, calcularHhTecnico, calcularKpiExecucao, extratoHorasColaborador, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
+import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApontamento, StatusExecucaoGrupo, apontamentosSobrepostos, calcularHhTecnico, calcularKpiExecucao, extratoHorasColaborador, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
 import { encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
@@ -281,10 +281,10 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // inferirCategoriaIndicadorPorTecnico). O resto do Apoio (empresas de
   // equipamento/andaime tipo TOP ANDAIMES, guindaste etc.) não faz parte do fechamento
   // desse indicador — não é "não classificado" esperando revisão, é fora da conta
-  // mesmo, por decisão do usuário. categoriaIndicador nulo em Mecânica/Elétrica nunca
-  // acontece (o service preenche sozinho), então esse filtro só afeta Apoio na prática.
+  // mesmo, por decisão do usuário — inclusive quando o espelho herdou a categoria da OS
+  // principal (ver entraNoFechamentoIndicador).
   private ordensParaFechamento = computed(() =>
-    this.ordensTipo().filter(o => o.area !== 'APOIO' || !!o.categoriaIndicador));
+    this.ordensTipo().filter(entraNoFechamentoIndicador));
 
   // ordensParaFechamento, já restrita ao período selecionado — mesmo filtro que
   // indicadores() já fazia inline; extraído porque kpiCorretivas/kpiPreventivas
@@ -527,10 +527,15 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       .filter(c => normalizarTexto(c.area).includes('MECAN') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))
         && this.tecnicoRelevanteNoPeriodo(normalizarTexto(c.nome))));
 
+  // Ordens com o crédito "OS executada por outro técnico conta pra quem executou" já
+  // aplicada (ver creditarOsExecutadasPorOutro) — base do card de horas/eficiência.
+  private ordensParaHoras = computed(() =>
+    creditarOsExecutadasPorOutro(this.manutencaoService.ordens(), this.sigmaPorOs(), this.matchColaborador));
+
   private calcularHorasPorTecnico(tecnicos: Colaborador[]): HorasTecnicoItem[] {
     const ferias = this.manutencaoService.ferias();
     const atestados = this.manutencaoService.atestados();
-    const ordensTodas = this.manutencaoService.ordens();
+    const ordensTodas = this.ordensParaHoras();
     const sigmaPorOs = this.sigmaPorOs();
     const apontamentosPeriodo = this.apontamentosPeriodo().lista;
     const resultado: HorasTecnicoItem[] = tecnicos.map(c => ({ colaborador: c, horasProgramadas: 0, horasApontadas: 0, horasForaProgramacao: 0, horasDisponiveis: 0, eficiencia: 0 }));
@@ -592,7 +597,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     const item = this.extratoItem();
     if (!item) return null;
     const semanas = [...this.semanasDoPeriodoSet()].sort();
-    const ordens = this.ordensDoColaborador(this.manutencaoService.ordens().filter(o => semanas.includes(o.semanaInicio)), item.colaborador);
+    const ordens = this.ordensDoColaborador(this.ordensParaHoras().filter(o => semanas.includes(o.semanaInicio)), item.colaborador);
     return extratoHorasColaborador(ordens, this.apontamentosPeriodo().lista, String(item.colaborador.matricula).trim(), semanas);
   });
 

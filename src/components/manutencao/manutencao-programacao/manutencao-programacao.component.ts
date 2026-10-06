@@ -1796,7 +1796,36 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         title: `Executada — apontada em: ${dentroDaSemana.map(a => a.data).join(', ')}`,
       };
     }
+    // Ninguém programado nessa OS apontou, mas outro técnico apontou dentro da semana:
+    // o serviço foi feito, conta como executada (mesma regra de ordemExecutadaAgrupada,
+    // usada no Acompanhamento de Indicadores — caso real S40: Rafael Bruno apontando
+    // OS do Moacir/Claudiney). Se ALGUÉM programado na OS já apontou, é o caso de
+    // "parcial" — essa linha continua como não executada.
+    const porOutro = this.apontamentosPorOutroTecnico(o, resultado.apontamentos, domingo);
+    if (porOutro.length > 0) {
+      return {
+        label: 'Executada', class: 'bg-green-100 text-green-700', dot: 'bg-green-500',
+        title: `Executada por outro técnico (matrícula ${[...new Set(porOutro.map(a => a.executante))].join(', ')}) — apontada em: ${porOutro.map(a => a.data).join(', ')}`,
+      };
+    }
     return { label: 'Não executada', class: 'bg-gray-100 text-gray-500', dot: 'bg-gray-400', title: 'Nenhum apontamento encontrado dentro da semana programada.' };
+  }
+
+  // Apontamentos da OS dentro da semana quando NENHUMA linha programada dessa OS
+  // (mesmo número, mesma semana) tem apontamento do próprio técnico — vazio caso
+  // contrário. Ver statusExecucao().
+  private apontamentosPorOutroTecnico<A extends { data: string; executante: string }>(
+    o: ManutencaoOrdem, apontamentos: A[], domingo: string,
+  ): A[] {
+    const naSemana = apontamentos.filter(a => a.data >= o.semanaInicio && a.data <= domingo);
+    if (naSemana.length === 0) return [];
+    const numero = normalizarNumeroOs(o.numeroOs!);
+    const algumProgramadoApontou = this.manutencaoService.ordens().some(x => {
+      if (x.tipo !== 'ordem' || x.semanaInicio !== o.semanaInicio || !x.numeroOs?.trim() || normalizarNumeroOs(x.numeroOs) !== numero) return false;
+      const colaborador = this.apontamentosService.matchColaboradorDaOrdem(x.tecnicoMatricula, x.tecnicoNome ?? '');
+      return !!colaborador && naSemana.some(a => a.executante === colaborador.matricula);
+    });
+    return algumProgramadoApontou ? [] : naSemana;
   }
 
   // A coluna "Status" hoje é sempre 'PEND' pra qualquer OS criada pelo Portal (o valor
@@ -1856,6 +1885,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       // já muda, mas o indicador continuava parado sem explicar o motivo).
       if (apontou.every(Boolean)) executadas++;
       else if (apontou.some(Boolean)) parciais++;
+      // Ninguém programado apontou, mas outro técnico apontou dentro da semana — conta
+      // como executada (ver statusExecucao()).
+      else if (resultado.apontamentos.some(a => a.data >= linhas[0].semanaInicio && a.data <= domingoDaSemana(linhas[0].semanaInicio))) executadas++;
     }
     const percentual = rastreaveis > 0 ? Math.round((executadas / rastreaveis) * 100) : 0;
     return { executadas, parciais, rastreaveis, totalOrdens: porOs.size, percentual };
@@ -2186,9 +2218,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       // por dia previsto (6,5 = dia todo, 3,5 = meio período), ver capacidadeSemana().
       const ehTreinamento = tipo === 'treinamento';
       const idEdicao = this.formIdEdicao();
+      // Espelhos de apoio que a OS JÁ tinha, pela chave de ANTES da edição (número antigo,
+      // ou descrição+equipamento quando estava sem OS) — pôr/trocar o número tem que
+      // atualizar esses, não criar outros e deixar os antigos órfãos.
+      const original = idEdicao ? this.manutencaoService.getById(idEdicao) : undefined;
+      const espelhosExistentes = ehOrdem && original?.tipo === 'ordem' ? this.ordensVinculadas(original) : [];
       // Cópias de apoio planejadas ANTES de gravar, com o formulário ainda preenchido —
       // assim ele pode fechar logo depois da OS principal (ver planejarEspelhos).
-      const espelhos: PlanoEspelhos = ehOrdem ? this.planejarEspelhos() : { espelhos: [], naoProgramados: [] };
+      const espelhos: PlanoEspelhos = ehOrdem ? this.planejarEspelhos(espelhosExistentes) : { espelhos: [], naoProgramados: [] };
+      const numeroNovo = ehOrdem && !this.formSemOs() ? (this.formNumeroOs().trim() || null) : null;
+      const chaveOs = (n: string | null | undefined) => n?.trim() ? normalizarNumeroOs(n) : null;
+      const espelhosComNumeroAntigo = espelhosExistentes.filter(x => chaveOs(x.numeroOs) !== chaveOs(numeroNovo)).map(x => x.id);
       const recarregarCiclos = !!this.formPlanoPreventivoId() || !!this.formPlanoPreventivoIdOriginal();
       let principal: string;
       if (idEdicao) {
@@ -2253,6 +2293,13 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         this.idNovaOrdemPendente = null;
         this.fecharForm();
         principal = `${TIPO_LABEL[tipo]} adicionada à programação.`;
+      }
+      if (espelhosComNumeroAntigo.length > 0) {
+        try {
+          await this.manutencaoService.atualizarNumeroOsEspelhos(espelhosComNumeroAntigo, numeroNovo);
+        } catch (err: unknown) {
+          this.notificationService.showError(`OS salva, mas o número não foi levado pros apoios vinculados: ${err instanceof Error ? err.message : 'erro desconhecido'}`);
+        }
       }
       // Formulário já fechado: cópias de apoio numa requisição só, e o ciclo do plano
       // preventivo (gravado pelo trigger junto com a OS) atualiza a lista de sugestões
@@ -2331,7 +2378,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   //
   // Roda na criação E na edição (ex.: adicionar um ajudante só depois, reabrindo a OS)
   // — a checagem de duplicata evita criar de novo pra quem já tem essa OS nesses dias.
-  private planejarEspelhos(): PlanoEspelhos {
+  private planejarEspelhos(espelhosExistentes: ManutencaoOrdem[] = []): PlanoEspelhos {
     const espelhos: { req: CreateManutencaoOrdemRequest; nome: string }[] = [];
     const naoProgramados: { nome: string; tipo: TipoBloqueio }[] = [];
     const bloqueios = this.formApoioBloqueios();
@@ -2348,7 +2395,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const numeroNorm = numero ? normalizarNumeroOs(numero) : null;
     const semana = this.semanaFiltro();
     const idEdicao = this.formIdEdicao();
-    const jaTemEssaOs = (nome: string) => this.manutencaoService.ordens().some(x =>
+    // Espelho que já existia pela chave antiga (antes de pôr/trocar o número) também
+    // conta — ele recebe o número novo em confirmarForm, não ganha uma cópia nova.
+    const jaTemEssaOs = (nome: string) => espelhosExistentes.some(x => x.tecnicoNome.trim().toUpperCase() === nome.trim().toUpperCase())
+      || this.manutencaoService.ordens().some(x =>
       x.id !== idEdicao && x.tipo === 'ordem' && x.semanaInicio === semana
       && x.tecnicoNome.trim().toUpperCase() === nome.trim().toUpperCase()
       && (numeroNorm

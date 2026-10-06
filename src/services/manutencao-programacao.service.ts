@@ -517,6 +517,34 @@ export class ManutencaoProgramacaoService {
     this.incluirNaLista([data as ManutencaoOrdemRow]);
   }
 
+  // Leva o número de OS da linha do responsável pros espelhos de apoio dela (ver
+  // planejarEspelhos/ordensVinculadas no componente) — sem isso, pôr o número depois
+  // deixava o espelho antigo "sem OS" órfão (reportado S40: OS 035688 do Daniel, cópia
+  // da Fontebras ficou sem número e contava como não executada).
+  async atualizarNumeroOsEspelhos(ids: string[], numeroOs: string | null): Promise<void> {
+    if (ids.length === 0) return;
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+    const { data, error } = await this.executarGravacao('editar', () => this.supabaseService.client
+      .from('manutencao_programacao')
+      .update({ numero_os: numeroOs, ...(numeroOs ? { sem_os: false } : {}) })
+      .in('id', ids)
+      .select('*')
+      .abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS)));
+    if (error) throw new Error(mensagemErroGravacao(error));
+
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'manutencao_programacao_editada',
+      resource_type: 'manutencao_programacao',
+      resource_id: ids[0],
+      description: `${user.name} atualizou o nº da OS para ${numeroOs ?? '(sem número)'} em ${ids.length} apoio(s) vinculado(s)`,
+    });
+
+    this.incluirNaLista((data ?? []) as ManutencaoOrdemRow[]);
+  }
+
   async excluir(id: string): Promise<void> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');

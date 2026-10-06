@@ -1,4 +1,4 @@
-import { apontamentosSobrepostos, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, extratoHorasColaborador, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada } from './manutencao-dashboard';
+import { apontamentosSobrepostos, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, extratoHorasColaborador, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from './manutencao-dashboard';
 import { ConsultaSigmaResultado, ManutencaoOrdem } from '../models/manutencao-programacao.model';
 
 const DIAS_SEMANA_37 = [
@@ -177,18 +177,25 @@ describe('ordemExecutadaAgrupada', () => {
     expect(ordemExecutadaAgrupada([o], {}, matchPorMatricula)).toEqual(['nao-executada']);
   });
 
-  it('colaborador resolvido (individual): exige apontamento DAQUELA matrícula dentro da semana', () => {
+  it('colaborador resolvido (individual): apontamento DAQUELA matrícula dentro da semana = executada', () => {
     const executada = ordem();
     const sigmaPorOs: Record<string, ConsultaSigmaResultado> = {
       '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '20006136', horas: 6.5 }] },
     };
     expect(ordemExecutadaAgrupada([executada], sigmaPorOs, matchPorMatricula)).toEqual(['executada']);
+  });
 
-    // Apontamento existe, mas é de outra matrícula — não conta pra esse técnico específico.
+  // Caso real S40: OS do Moacir/Claudiney executadas e apontadas pelo Rafael Bruno.
+  it('ninguém programado apontou, mas OUTRO técnico apontou dentro da semana: executada', () => {
     const outraPessoa: Record<string, ConsultaSigmaResultado> = {
       '045203': { os: null, apontamentos: [{ data: '2026-09-09', status: 'EXEC', executante: '11111111', horas: 6.5 }] },
     };
-    expect(ordemExecutadaAgrupada([executada], outraPessoa, matchPorMatricula)).toEqual(['nao-executada']);
+    expect(ordemExecutadaAgrupada([ordem()], outraPessoa, matchPorMatricula)).toEqual(['executada']);
+
+    const outraPessoaForaDaSemana: Record<string, ConsultaSigmaResultado> = {
+      '045203': { os: null, apontamentos: [{ data: '2026-09-21', status: 'EXEC', executante: '11111111', horas: 6.5 }] },
+    };
+    expect(ordemExecutadaAgrupada([ordem()], outraPessoaForaDaSemana, matchPorMatricula)).toEqual(['nao-executada']);
   });
 
   it('apontamento fora da semana (mesmo com matrícula certa) não conta como executada', () => {
@@ -385,5 +392,39 @@ describe('horasForaDaProgramacao', () => {
   it('OS programada pra pessoa em OUTRA semana conta como fora nesta', () => {
     const outraSemana = ordem({ numeroOs: '47666', semanaInicio: '2026-08-31' });
     expect(horasForaDaProgramacao([outraSemana], [apont('047666', '2026-09-09', 7)], '20006136', '2026-09-07')).toBe(7);
+  });
+});
+
+describe('creditarOsExecutadasPorOutro', () => {
+  const match = (matricula: string | null) => matricula ? { matricula } : null;
+  const sigma = (executante: string, data = '2026-09-09'): Record<string, ConsultaSigmaResultado> => ({
+    '045203': { os: null, apontamentos: [{ data, status: 'EXEC', executante, horas: 6.5 }] },
+  });
+
+  // Caso real S40: Rafael Bruno executou OS programada pro Moacir.
+  it('ninguém programado apontou, outro técnico apontou na semana: horas contam pra quem executou, programação de ninguém muda', () => {
+    const original = ordem();
+    const r = creditarOsExecutadasPorOutro([original], sigma('20006210'), match);
+    expect(r).toHaveLength(2);
+    expect(r[0]).toBe(original); // continua na programação de quem estava programado
+    expect(r[1].tecnicoMatricula).toBe('20006210');
+    expect(r[1].duracaoHoras).toBe(0); // quem executou não ganha hora programada
+    const doRafael = r.filter(o => o.tecnicoMatricula === '20006210');
+    expect(horasApontadasDoColaborador(doRafael, sigma('20006210'), '20006210')).toBe(6.5);
+  });
+
+  it('programado apontou: nada muda', () => {
+    const ordens = [ordem()];
+    expect(creditarOsExecutadasPorOutro(ordens, sigma('20006136'), match)).toBe(ordens);
+  });
+
+  it('apontamento de outro fora da semana: nada muda', () => {
+    const ordens = [ordem()];
+    expect(creditarOsExecutadasPorOutro(ordens, sigma('20006210', '2026-09-21'), match)).toBe(ordens);
+  });
+
+  it('linha de Apoio por empresa (sem colaborador resolvido) não é mexida', () => {
+    const apoio = ordem({ id: 'a1', area: 'APOIO', tecnicoNome: 'SERVPLEX', tecnicoMatricula: null });
+    expect(creditarOsExecutadasPorOutro([apoio], sigma('20006210'), match)).toEqual([apoio]);
   });
 });

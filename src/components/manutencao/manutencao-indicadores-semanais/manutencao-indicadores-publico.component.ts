@@ -24,11 +24,11 @@ import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, Manut
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
   META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, STATUS_GERAL_COR, StatusGeralSemana,
-  TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, indiceAtingimentoMeta,
+  TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, entraNoFechamentoIndicador, indiceAtingimentoMeta,
 } from '../../../utils/manutencao-indicadores';
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
-import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, ordemExecutadaAgrupada } from '../../../utils/manutencao-dashboard';
+import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
   paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem,
@@ -395,7 +395,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   });
 
   private ordensParaFechamento = computed(() =>
-    this.ordensTipo().filter(o => o.area !== 'APOIO' || !!o.categoriaIndicador));
+    this.ordensTipo().filter(entraNoFechamentoIndicador));
 
   // ordensParaFechamento, já restrita ao período selecionado — kpiCorretivas/
   // kpiPreventivas precisavam da mesma exclusão do Apoio não classificado (usavam
@@ -482,8 +482,13 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     this.colaboradoresRaw().filter(c => normalizarTexto(c.area).includes('MECAN') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))
       && this.tecnicoRelevanteNoPeriodo(normalizarTexto(c.nome))));
 
+  // Ordens com o crédito "OS executada por outro técnico conta pra quem executou" já
+  // aplicada (ver creditarOsExecutadasPorOutro) — base do card de horas/eficiência.
+  private ordensParaHoras = computed(() =>
+    creditarOsExecutadasPorOutro(this.ordensRaw(), this.sigmaPorOs(), this.matchColaboradorFn));
+
   private calcularHorasPorTecnico(tecnicos: Colaborador[]): HorasTecnicoItem[] {
-    const ordensTodas = this.ordensRaw();
+    const ordensTodas = this.ordensParaHoras();
     const sigmaPorOs = this.sigmaPorOs();
     const resultado: HorasTecnicoItem[] = tecnicos.map(c => ({ colaborador: c, horasProgramadas: 0, horasApontadas: 0, horasDisponiveis: 0, eficiencia: 0 }));
     for (const semanaIso of this.semanasDoPeriodoSet()) {

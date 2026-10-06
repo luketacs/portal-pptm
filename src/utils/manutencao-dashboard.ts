@@ -42,12 +42,10 @@ function domingoDaSemana(segundaIso: string): string {
 // OS" — mesmo princípio de sempre (semana inteira, não o dia previsto exato), só que
 // sem exigir que o apontamento seja de uma matrícula em particular.
 //
-// Restrito a area==='APOIO': pra Elétrica/Mecânica um `colaborador` não resolvido quase
-// sempre é indício de problema de dado (nome com typo não reconhecido nem como
-// pessoa nem como equipe de Apoio) — mais seguro continuar marcando como "não
-// executada" nesse caso do que aceitar qualquer apontamento da OS como se fosse
-// daquele técnico específico. Só Apoio tem esse "sem pessoa específica pra cobrar" por
-// design (programado por empresa/equipe, não por indivíduo).
+// Por linha, o fallback é restrito a area==='APOIO' (Elétrica/Mecânica cobra a matrícula
+// do técnico, pra separar 'executada' de 'parcial'). Mas, no grupo, se NINGUÉM
+// programado apontou e outro técnico apontou a OS dentro da semana, a OS conta como
+// executada — pedido do usuário: o serviço foi feito, só por outra pessoa.
 //
 // 'parcial': quando a OS é dividida entre 2+ técnicos e SÓ ALGUNS apontaram dentro da
 // semana (não todos, mas também não nenhum) — reportado: um técnico aponta, a linha
@@ -84,8 +82,60 @@ export function ordemExecutadaAgrupada(
     });
     if (apontou.every(Boolean)) return 'executada';
     if (apontou.some(Boolean)) return 'parcial';
+    // Ninguém programado apontou, mas outro técnico apontou a OS dentro da semana —
+    // pedido do usuário: o serviço foi feito, conta como executada (caso real S40: OS do
+    // Moacir/Claudiney executadas e apontadas pelo Rafael Bruno).
+    const domingo = domingoDaSemana(linhas[0].semanaInicio);
+    if (resultado.apontamentos.some(a => a.data >= linhas[0].semanaInicio && a.data <= domingo)) return 'executada';
     return 'nao-executada';
   });
+}
+
+// Card de horas (pedido do usuário): OS que NENHUM técnico programado apontou, mas
+// outro técnico apontou dentro da semana, vira crédito de horas pra quem executou —
+// as horas que ele apontou nela entram em "Apontadas" (e saem de "fora da
+// programação"), mas a programação de NINGUÉM muda: quem executou não ganha horas
+// programadas (programação semanal tem teto, 32,5h) e quem estava programado continua
+// com a OS na programação dele. Mesmo critério de "executada por outro" de
+// ordemExecutadaAgrupada. Caso real S40: Rafael Bruno executou OS do Moacir/Claudiney
+// e ficava com essas 6,5h como "fora da programação", fora da eficiência.
+//
+// Implementado como linha extra com duração 0 na agenda de quem executou — assim
+// horasApontadasDoColaborador/horasForaDaProgramacao/extratoHorasColaborador já tratam
+// a OS como "dele" sem somar nada em Programadas. Só olha linhas de pessoa (colaborador
+// resolvido) — OS só de Apoio por empresa fica como está.
+export function creditarOsExecutadasPorOutro(
+  ordens: ManutencaoOrdem[],
+  sigmaPorOs: Record<string, ConsultaSigmaResultado>,
+  matchColaborador: (matricula: string | null, nome: string) => { matricula: string } | null,
+): ManutencaoOrdem[] {
+  const porOs = new Map<string, ManutencaoOrdem[]>();
+  for (const o of ordens) {
+    if (o.tipo !== 'ordem' || !o.numeroOs?.trim()) continue;
+    const chave = `${o.semanaInicio}:${normalizarNumeroOs(o.numeroOs)}`;
+    const lista = porOs.get(chave);
+    if (lista) lista.push(o);
+    else porOs.set(chave, [o]);
+  }
+
+  const creditos: ManutencaoOrdem[] = [];
+  for (const linhas of porOs.values()) {
+    const resultado = sigmaPorOs[normalizarNumeroOs(linhas[0].numeroOs!)];
+    if (!resultado) continue;
+    const pessoas = linhas
+      .map(o => matchColaborador(o.tecnicoMatricula, o.tecnicoNome ?? ''))
+      .filter((c): c is { matricula: string } => !!c);
+    if (pessoas.length === 0) continue;
+    const domingo = domingoDaSemana(linhas[0].semanaInicio);
+    const naSemana = resultado.apontamentos.filter(a => a.data >= linhas[0].semanaInicio && a.data <= domingo);
+    if (naSemana.length === 0) continue;
+    if (pessoas.some(c => naSemana.some(a => a.executante === c.matricula))) continue;
+
+    for (const executante of new Set(naSemana.map(a => String(a.executante).trim()))) {
+      creditos.push({ ...linhas[0], id: `${linhas[0].id}:executada-por:${executante}`, tecnicoMatricula: executante, tecnicoNome: '', duracaoHoras: 0 });
+    }
+  }
+  return creditos.length === 0 ? ordens : [...ordens, ...creditos];
 }
 
 // Soma as horas REAIS apontadas por UM colaborador específico (matrícula), dentro da

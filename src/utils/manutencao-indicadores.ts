@@ -6,6 +6,7 @@
 // dias originalmente previstos), sem duplicar nenhum dos dois.
 import { CategoriaIndicador, ConsultaSigmaResultado, ManutencaoOrdem } from '../models/manutencao-programacao.model';
 import { ordemExecutadaAgrupada } from './manutencao-dashboard';
+import { inferirCategoriaIndicadorPorTecnico } from './manutencao-planos';
 import { round2 } from './formatacao';
 
 export type StatusGeralSemana = 'Dentro da Meta' | 'Próximo da Meta' | 'Abaixo da Meta';
@@ -122,6 +123,17 @@ function contarExecucao(
     // Cumprimento do Plano (lê como falha total), e sim 100%.
     atendimento: programadas > 0 ? round2((executadas / programadas) * 100) : 100,
   };
+}
+
+// Quais ordens entram no fechamento do indicador (Atendimento à Programação /
+// Cumprimento do Plano). Do Apoio, só as 3 equipes reais do indicador — SERVPLEX,
+// OPERAÇÃO e BMS (ver inferirCategoriaIndicadorPorTecnico). Fontebras, TOP ANDAIMES,
+// DB GUINDASTES etc. ficam fora MESMO quando herdaram categoria da OS principal (o
+// espelho automático copia a categoria — ver planejarEspelhos): reportado na S40, um
+// espelho da Fontebras sem número de OS contava como "não executada" na Mecânica.
+export function entraNoFechamentoIndicador(o: ManutencaoOrdem): boolean {
+  if (o.area !== 'APOIO') return true;
+  return !!o.categoriaIndicador && inferirCategoriaIndicadorPorTecnico(o.tecnicoNome ?? '') !== null;
 }
 
 export const CATEGORIAS_INDICADOR: CategoriaIndicador[] = ['MECANICA', 'ELETRICA', 'LIMP_OPERACIONAL', 'REFRIGERACAO', 'SPCI'];
