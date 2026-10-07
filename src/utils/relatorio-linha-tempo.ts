@@ -28,7 +28,6 @@ export interface LinhaTempoGeometria {
   linhaCumprimento: string;
   eixoX: RotuloEixo[];
   eixoY: RotuloEixo[];
-  eixoYMinimo: number; // valor (%) do piso do eixo Y — o teto é sempre 100
 }
 
 const LARGURA_PADRAO = 720;
@@ -102,7 +101,6 @@ export function calcularLinhaTempo(
     linhaAtendimento: paraAtributoPoints(pontosAtendimento),
     linhaCumprimento: paraAtributoPoints(pontosCumprimento),
     eixoX,
-    eixoYMinimo,
     eixoY: [0, 1, 2, 3, 4].map(i => {
       const valor = eixoYMinimo + (faixaY * i) / 4;
       return { posicao: escalaY(valor), label: `${Math.round(valor)}%` };
@@ -123,7 +121,6 @@ export interface LinhaTempoGeometriaEnriquecida extends LinhaTempoGeometria {
   yRotuloAtendimento: number | null;
   yRotuloCumprimento: number | null;
   rotulosPontos: RotuloPonto[];
-  yMeta: number | null; // linha tracejada da meta; null sem meta ou fora do eixo
 }
 
 // % escrito em cima de cada ponto intermediário (o último já tem o rótulo grande de
@@ -147,7 +144,7 @@ const MAX_PONTOS_COM_ROTULO = 16;
 // coladas) + posição dos rótulos "XX%" do ponto final. Usada pelos Indicadores Semanais
 // (autenticado e público) — estava reimplementada idêntica nos dois componentes.
 export function enriquecerGeometria(
-  geo: LinhaTempoGeometria | null, pontos: PontoLinhaTempo[], meta?: number,
+  geo: LinhaTempoGeometria | null, pontos: PontoLinhaTempo[],
 ): LinhaTempoGeometriaEnriquecida | null {
   if (!geo) return null;
   const baseY = geo.altura - geo.margem.baixo;
@@ -170,9 +167,6 @@ export function enriquecerGeometria(
     yRotuloAtendimento: rotulos?.yRotuloAtendimento ?? null,
     yRotuloCumprimento: rotulos?.yRotuloCumprimento ?? null,
     rotulosPontos: rotulosDosPontos(geo, pontos, baseY),
-    yMeta: meta !== undefined && meta >= geo.eixoYMinimo && meta <= 100
-      ? geo.margem.topo + (1 - (meta - geo.eixoYMinimo) / (100 - geo.eixoYMinimo)) * (baseY - geo.margem.topo)
-      : null,
   };
 }
 

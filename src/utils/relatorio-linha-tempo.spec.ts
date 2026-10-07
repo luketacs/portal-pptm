@@ -231,22 +231,3 @@ describe('rotulosPontos (enriquecerGeometria)', () => {
     expect(enriquecer(pontos).rotulosPontos).toEqual([]);
   });
 });
-
-describe('yMeta (enriquecerGeometria)', () => {
-  const pontos = [
-    { label: 'S1', atendimento: 90, cumprimento: 92 },
-    { label: 'S2', atendimento: 100, cumprimento: 98 },
-  ];
-
-  it('linha de meta fica na altura proporcional do eixo Y', () => {
-    const lt = enriquecerGeometria(calcularLinhaTempo(pontos), pontos, 95)!;
-    const topo = lt.eixoY[lt.eixoY.length - 1].posicao; // 100%
-    const base = lt.eixoY[0].posicao;                     // piso do eixo (80%)
-    expect(lt.yMeta).toBeCloseTo(base + (topo - base) * (95 - 80) / 20);
-  });
-
-  it('sem meta ou meta fora do eixo = sem linha', () => {
-    expect(enriquecerGeometria(calcularLinhaTempo(pontos), pontos)!.yMeta).toBeNull();
-    expect(enriquecerGeometria(calcularLinhaTempo(pontos), pontos, 50)!.yMeta).toBeNull();
-  });
-});

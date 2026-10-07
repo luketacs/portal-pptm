@@ -1,0 +1,211 @@
+@let d = dados();
+
+<ng-template #topo>
+  <header class="topo">
+    <img src="/company-logo.png" alt="Diamante — Geração de Energia" />
+    <div class="topo-txt">Acompanhamento de indicadores de manutenção<br /><span>Porto do Pecém Transportadora de Minérios</span></div>
+  </header>
+</ng-template>
+
+<!-- Página 1 — resumo -->
+<section class="pg">
+  <ng-container *ngTemplateOutlet="topo" />
+  <div class="corpo">
+    <div class="g-resumo">
+      <div>
+        <h1>{{ titulo() }}</h1>
+        <p class="lede">{{ lede() }}</p>
+        <div class="hero">
+          <div>
+            <div class="big" [class.ruim]="d.atendimento.percentual < d.meta">{{ pct(d.atendimento.percentual) }}</div>
+            <div class="lbl">Atendimento à programação</div>
+            <div class="med"><div class="med-valor" [style.width.%]="d.atendimento.percentual"></div><div class="med-meta" [style.left.%]="d.meta"></div></div>
+            <div class="sub">{{ num(d.atendimento.executadas) }} de {{ num(d.atendimento.programadas) }} ordens · meta {{ pct(d.meta) }}</div>
+          </div>
+          <div>
+            <div class="big" [class.ruim]="d.cumprimento.percentual < d.meta">{{ pct(d.cumprimento.percentual) }}</div>
+            <div class="lbl">Cumprimento do plano</div>
+            <div class="med"><div class="med-valor" [style.width.%]="d.cumprimento.percentual"></div><div class="med-meta" [style.left.%]="d.meta"></div></div>
+            <div class="sub">{{ num(d.cumprimento.executadas) }} de {{ num(d.cumprimento.programadas) }} ordens do plano · meta {{ pct(d.meta) }}</div>
+          </div>
+        </div>
+
+        <h2>Por área</h2>
+        <table class="t area">
+          <thead>
+            <tr><th>Área</th><th class="n">Executadas</th><th></th><th class="n">Atendimento</th><th class="n">Do plano</th><th></th><th class="n">Cumprimento</th></tr>
+          </thead>
+          <tbody>
+            @for (a of d.areas; track a.nome) {
+              <tr>
+                <td>{{ a.nome }}</td>
+                <td class="n">{{ num(a.atendimento.executadas) }} de {{ num(a.atendimento.programadas) }}</td>
+                <td class="col-med"><div class="med"><div class="med-valor" [style.width.%]="a.atendimento.percentual"></div><div class="med-meta" [style.left.%]="d.meta"></div></div></td>
+                <td class="n f" [class.ruim]="a.atendimento.percentual < d.meta">{{ pct(a.atendimento.percentual) }}</td>
+                <td class="n">{{ num(a.cumprimento.executadas) }} de {{ num(a.cumprimento.programadas) }}</td>
+                <td class="col-med"><div class="med"><div class="med-valor" [style.width.%]="a.cumprimento.percentual"></div><div class="med-meta" [style.left.%]="d.meta"></div></div></td>
+                <td class="n f" [class.ruim]="a.cumprimento.percentual < d.meta">{{ pct(a.cumprimento.percentual) }}</td>
+              </tr>
+            }
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>Total</td>
+              <td class="n">{{ num(d.atendimento.executadas) }} de {{ num(d.atendimento.programadas) }}</td><td></td>
+              <td class="n f">{{ pct(d.atendimento.percentual) }}</td>
+              <td class="n">{{ num(d.cumprimento.executadas) }} de {{ num(d.cumprimento.programadas) }}</td><td></td>
+              <td class="n f">{{ pct(d.cumprimento.percentual) }}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <aside class="painel">
+        <h2>{{ d.unidadeTendencia === 'meses' ? 'O mês em números' : 'A semana em números' }}</h2>
+        <dl class="kv">
+          <div><dt>Corretivas executadas</dt><dd>{{ num(d.corretivas.executadas) }} de {{ num(d.corretivas.programadas) }}</dd></div>
+          <div><dt>Preventivas executadas</dt><dd>{{ num(d.preventivas.executadas) }} de {{ num(d.preventivas.programadas) }}</dd></div>
+          <div><dt>HH disponível</dt><dd>{{ num(d.hhDisponivel) }} h</dd></div>
+          <div><dt>HH indisponível</dt><dd>{{ num(d.hhIndisponivel) }} h</dd></div>
+          <div><dt>Folgas</dt><dd>{{ d.folgas === 1 ? '1 dia' : num(d.folgas) + ' dias' }}</dd></div>
+          <div><dt>Exames médicos</dt><dd>{{ d.exames === 0 ? 'nenhum' : num(d.exames) }}</dd></div>
+        </dl>
+        <h2>Acumulado de {{ d.ano.ano }}</h2>
+        <dl class="kv">
+          <div [class.ruim]="d.ano.atendimento.percentual < d.meta">
+            <dt>Atendimento à programação<small>{{ num(d.ano.atendimento.executadas) }} de {{ num(d.ano.atendimento.programadas) }} · meta {{ pct(d.meta) }}</small></dt>
+            <dd>{{ pct(d.ano.atendimento.percentual) }}</dd>
+          </div>
+          <div [class.ruim]="d.ano.cumprimento.percentual < d.meta">
+            <dt>Cumprimento do plano<small>{{ num(d.ano.cumprimento.executadas) }} de {{ num(d.ano.cumprimento.programadas) }} · meta {{ pct(d.meta) }}</small></dt>
+            <dd>{{ pct(d.ano.cumprimento.percentual) }}</dd>
+          </div>
+          <div [class.ruim]="d.ano.disponibilidade !== null && d.ano.disponibilidade < d.ano.metaDisponibilidade">
+            <dt>Disponibilidade global<small>meta {{ pct(d.ano.metaDisponibilidade) }}</small></dt>
+            <dd>{{ d.ano.disponibilidade === null ? '—' : pct(d.ano.disponibilidade) }}</dd>
+          </div>
+          @let navioRuim = d.ano.diasNavio !== null && d.ano.diasNavio > d.ano.metaDiasNavio;
+          <div [class.ruim]="navioRuim">
+            <dt>Dias por navio (TCLD)<small>meta {{ num2(d.ano.metaDiasNavio) }}{{ navioRuim ? ' · acima do limite' : '' }}</small></dt>
+            <dd>{{ d.ano.diasNavio === null ? '—' : num2(d.ano.diasNavio) }}</dd>
+          </div>
+        </dl>
+      </aside>
+    </div>
+  </div>
+  <footer class="rodape"><span>PPTM · {{ d.rotulo }} · {{ d.intervalo }}</span><span>Emitido em {{ emitido() }} · 1 de {{ totalPaginas }}</span></footer>
+</section>
+
+<!-- Página 2 — equipe e horas -->
+<section class="pg">
+  <ng-container *ngTemplateOutlet="topo" />
+  <div class="corpo">
+    <h1 class="h1p">Onde as horas da equipe foram gastas</h1>
+    <div class="g-horas">
+      <div>
+        <h2>Horas por equipamento</h2>
+        @for (e of d.equipamentos; track e.nome) {
+          <div class="bar">
+            <span>{{ e.nome }}</span>
+            <span class="bar-trilho"><span [style.width.%]="e.horas / maiorHoraEquipamento() * 100"></span></span>
+            <span class="bar-v">{{ num(e.horas) }} h</span>
+          </div>
+        } @empty {
+          <p class="vazio">Nenhuma ordem com equipamento e duração preenchidos no período.</p>
+        }
+        <h2 class="mt">Atividades com mais horas</h2>
+        <ol class="ativ">
+          @for (a of d.atividades; track a.nome) {
+            <li><span>{{ a.nome }}</span><b>{{ num(a.horas) }} h</b></li>
+          } @empty {
+            <li class="vazio">Nenhuma ordem com descrição e duração preenchidas no período.</li>
+          }
+        </ol>
+      </div>
+      <div>
+        <h2>Horas por técnico</h2>
+        <p class="nota">Horas apontadas no SIGMA, programadas e disponíveis. Eficiência = apontadas ÷ programadas; abaixo de {{ eficienciaMinima }}% em vermelho.</p>
+        <div class="g-tec">
+          @for (grupo of d.tecnicos; track grupo.area) {
+            <div>
+              <h3>{{ grupo.area }}</h3>
+              <table class="t tec">
+                <thead><tr><th>Técnico</th><th class="n">Apont.</th><th class="n">Prog.</th><th class="n">Disp.</th><th class="n">Efic.</th></tr></thead>
+                <tbody>
+                  @for (t of grupo.linhas; track t.nome) {
+                    <tr>
+                      <td>{{ t.nome }}</td>
+                      <td class="n">{{ num(t.apontadas) }}</td>
+                      <td class="n">{{ num(t.programadas) }}</td>
+                      <td class="n">{{ num(t.disponiveis) }}</td>
+                      <td class="n f" [class.ruim]="t.programadas > 0 && t.eficiencia < eficienciaMinima">{{ pct(t.eficiencia) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer class="rodape"><span>PPTM · {{ d.rotulo }} · {{ d.intervalo }}</span><span>Emitido em {{ emitido() }} · 2 de {{ totalPaginas }}</span></footer>
+</section>
+
+<!-- Página 3 — tendência -->
+<section class="pg">
+  <ng-container *ngTemplateOutlet="topo" />
+  <div class="corpo">
+    <h1 class="h1p">{{ tituloTendencia(d.tendencia.length, d.unidadeTendencia) }}</h1>
+    <p class="lede curta">{{ ledeTendencia() }}</p>
+    <div class="leg">
+      <span><i class="leg-at"></i>Atendimento à programação</span>
+      <span><i class="leg-cu"></i>Cumprimento do plano</span>
+      <span><i class="leg-meta"></i>Meta {{ pct(d.meta) }}</span>
+    </div>
+    @let g = tendencia();
+    <svg class="graf" [attr.viewBox]="'0 0 ' + grafico.largura + ' ' + grafico.altura">
+      @for (t of g.gradeY; track t.valor) {
+        <line class="grade" x1="34" [attr.x2]="grafico.largura - 48" [attr.y1]="t.y" [attr.y2]="t.y" />
+        <text class="ax" x="28" [attr.y]="t.y + 3" text-anchor="end">{{ pct(t.valor) }}</text>
+      }
+      <line class="meta" x1="34" [attr.x2]="grafico.largura - 48" [attr.y1]="g.yMeta" [attr.y2]="g.yMeta" />
+      @for (p of d.tendencia; track p.rotulo; let i = $index) {
+        <text class="ax" [attr.x]="g.xs[i]" [attr.y]="grafico.altura - 6" text-anchor="middle">{{ p.rotulo }}</text>
+      }
+      <polyline class="linha-cu" [attr.points]="pontosSvg(g.cumprimento)" />
+      <polyline class="linha-at" [attr.points]="pontosSvg(g.atendimento)" />
+      @if (g.atendimento.length) {
+        @let fimCu = g.cumprimento[g.cumprimento.length - 1];
+        @let fimAt = g.atendimento[g.atendimento.length - 1];
+        <circle class="ponto-cu" [attr.cx]="fimCu.x" [attr.cy]="fimCu.y" r="3" />
+        <circle class="ponto-at" [attr.cx]="fimAt.x" [attr.cy]="fimAt.y" r="3" />
+        <text class="val" [attr.x]="fimAt.x + 8" [attr.y]="fimAt.y + 4">{{ pct(g.ultimoAtendimento) }}</text>
+      }
+      @if (g.piorPlano; as pior) {
+        <text class="ax" [attr.x]="pior.ponto.x" [attr.y]="pior.ponto.y + 14" text-anchor="middle">{{ pct(pior.valor) }}</text>
+      }
+    </svg>
+
+    <h2>Atendimento por área</h2>
+    <div class="mults">
+      @for (a of tendenciaAreas(); track a.nome) {
+        <div>
+          <div class="mini-t"><span>{{ a.nome }}</span><b [class.ruim]="a.ultimo < d.meta">{{ pct(a.ultimo) }}</b></div>
+          <svg [attr.viewBox]="'0 0 ' + mini.largura + ' ' + mini.altura">
+            @for (t of a.gradeY; track t.valor) {
+              <line class="grade" x1="14" [attr.x2]="mini.largura - 14" [attr.y1]="t.y" [attr.y2]="t.y" />
+            }
+            <line class="meta" x1="14" [attr.x2]="mini.largura - 14" [attr.y1]="a.yMeta" [attr.y2]="a.yMeta" />
+            <polyline class="linha-at fina" [attr.points]="pontosSvg(a.linha)" />
+            @if (a.linha.length) {
+              <text class="ax" [attr.x]="a.xs[0]" [attr.y]="mini.altura - 4">{{ d.tendencia[0]?.rotulo }}</text>
+              <text class="ax" [attr.x]="a.xs[a.xs.length - 1]" [attr.y]="mini.altura - 4" text-anchor="end">{{ d.tendencia[d.tendencia.length - 1]?.rotulo }}</text>
+            }
+          </svg>
+        </div>
+      }
+    </div>
+  </div>
+  <footer class="rodape"><span>PPTM · {{ d.rotulo }} · {{ d.intervalo }}</span><span>Emitido em {{ emitido() }} · 3 de {{ totalPaginas }}</span></footer>
+</section>

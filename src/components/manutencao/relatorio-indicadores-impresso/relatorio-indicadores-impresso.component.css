@@ -1,0 +1,120 @@
+/* Documento impresso: só existe no papel. Na tela o host fica escondido; no impresso
+   a tela que o contém esconde tudo o mais (ver manutencao-indicadores-impressao.css). */
+:host { display: none; }
+
+@media print {
+  :host {
+    display: block;
+    --tinta: #151a2d;
+    --texto: #2b3245;
+    --mudo: #5d6678;
+    --fio: #e2e6ed;
+    --fio-claro: #edf0f4;
+    --superficie: #f4f6f9;
+    --dado: #2039f9;       /* azul Diamante (Manual de Identidade) */
+    --dado-2: #8fc4fb;     /* série secundária: mesmo matiz, mais claro */
+    --ruim: #c0352b;
+    font-family: 'Source Sans 3', 'Segoe UI', Arial, sans-serif;
+    color: var(--tinta);
+    font-size: 9.5pt;
+    line-height: 1.45;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+.pg {
+  width: 297mm;
+  height: 210mm;
+  padding: 11mm 15mm 8mm;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+  break-after: page;
+}
+.pg:last-child { break-after: auto; }
+
+.topo { display: flex; align-items: center; justify-content: space-between; padding-bottom: 5mm; border-bottom: 1px solid var(--fio); }
+.topo img { height: 44px; width: auto; }
+.topo-txt { text-align: right; font-family: Montserrat, sans-serif; font-weight: 600; font-size: 8.5pt; line-height: 1.35; }
+.topo-txt span { font-weight: 500; color: var(--mudo); }
+.corpo { padding-top: 7mm; overflow: hidden; }
+.rodape { display: flex; justify-content: space-between; border-top: 1px solid var(--fio); padding-top: 3mm; font-size: 7.5pt; color: var(--mudo); }
+
+h1, .h1p { font-family: Montserrat, sans-serif; font-weight: 700; font-size: 19pt; line-height: 1.15; letter-spacing: -.02em; max-width: 24ch; text-wrap: balance; }
+.h1p { max-width: none; font-size: 16pt; }
+h2 { font-family: Montserrat, sans-serif; font-weight: 600; font-size: 10pt; margin: 0 0 3mm; }
+h2.mt { margin-top: 7mm; }
+h3 { font-family: Montserrat, sans-serif; font-weight: 600; font-size: 8.5pt; color: var(--mudo); margin: 0 0 1.5mm; }
+.lede { font-size: 10.5pt; line-height: 1.5; color: var(--texto); margin: 3.5mm 0 6mm; max-width: 68ch; }
+.lede.curta { margin: 2mm 0 4mm; }
+.nota, .vazio { font-size: 8pt; color: var(--mudo); }
+.nota { margin: -1.5mm 0 3mm; }
+.ruim { color: var(--ruim) !important; }
+
+/* Página 1 */
+.g-resumo { display: grid; grid-template-columns: 1fr 82mm; gap: 12mm; height: 100%; }
+.hero { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; margin-bottom: 6mm; }
+.big { font-family: Montserrat, sans-serif; font-weight: 700; font-size: 34pt; line-height: 1; letter-spacing: -.03em; }
+.lbl { font-weight: 600; font-size: 10pt; margin: 1.5mm 0 2.5mm; }
+.sub { color: var(--mudo); font-size: 8.5pt; margin-top: 1.5mm; }
+.med { position: relative; height: 5px; background: #e6e9ef; border-radius: 2px; }
+.med-valor { height: 100%; max-width: 100%; background: var(--dado); border-radius: 2px; }
+.med-meta { position: absolute; top: -3px; bottom: -3px; width: 1.5px; background: var(--tinta); }
+.painel { background: var(--superficie); border-radius: 6px; padding: 7mm; }
+.painel h2 + .kv { margin-bottom: 7mm; }
+.kv div { display: flex; justify-content: space-between; align-items: baseline; gap: 4mm; padding: 2mm 0; border-bottom: 1px solid var(--fio); }
+.kv div:last-child { border-bottom: none; }
+.kv dt { font-size: 9pt; }
+.kv dt small { display: block; font-size: 7.5pt; color: var(--mudo); }
+.kv .ruim dt small { color: var(--ruim); }
+.kv dd { font-family: Montserrat, sans-serif; font-weight: 700; font-size: 11pt; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Tabelas */
+.t { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.t th { font-weight: 600; font-size: 7.5pt; color: var(--mudo); text-align: left; padding: 0 0 1.5mm; border-bottom: 1px solid #c9ced8; }
+.t td { padding: 1.4mm 0; border-bottom: 1px solid var(--fio-claro); }
+.t .n { text-align: right; padding-right: 2mm; white-space: nowrap; }
+.t .f { font-weight: 700; }
+.t tfoot td { border-top: 1px solid #9aa2b1; border-bottom: none; font-weight: 600; }
+.area .col-med { width: 22mm; padding-left: 2mm; }
+.area .med { height: 4px; }
+.tec td, .tec th { font-size: 8pt; }
+.tec td { padding: 1.1mm 0; }
+.tec td:first-child { white-space: nowrap; }
+.tec .n { padding-right: 0; padding-left: 2mm; }
+
+/* Página 2 */
+.g-horas { display: grid; grid-template-columns: 1fr 1.45fr; gap: 12mm; margin-top: 6mm; }
+.g-tec { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; }
+.bar { display: grid; grid-template-columns: 22mm 1fr 16mm; align-items: center; gap: 3mm; padding: 1.2mm 0; font-size: 8.5pt; }
+.bar-trilho { height: 7px; background: #eef0f4; border-radius: 0 2px 2px 0; }
+.bar-trilho span { display: block; height: 100%; background: var(--dado); border-radius: 0 2px 2px 0; }
+.bar-v { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ativ { list-style: none; }
+.ativ li { display: flex; justify-content: space-between; gap: 4mm; padding: 2mm 0; border-bottom: 1px solid var(--fio-claro); font-size: 9pt; }
+.ativ b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Página 3 */
+.leg { display: flex; gap: 6mm; font-size: 8pt; color: var(--texto); margin-bottom: 1mm; }
+.leg i { display: inline-block; width: 10px; height: 3px; border-radius: 1px; vertical-align: middle; margin-right: 2mm; }
+.leg-at { background: var(--dado); }
+.leg-cu { background: var(--dado-2); }
+.leg i.leg-meta { height: 0; border-top: 1.5px dashed var(--tinta); }
+.graf { width: 100%; height: auto; margin-bottom: 4mm; }
+svg .grade { stroke: var(--fio); stroke-width: .6; }
+svg .meta { stroke: var(--tinta); stroke-width: .8; stroke-dasharray: 3 3; }
+svg .linha-at, svg .linha-cu { fill: none; stroke-width: 2; stroke-linejoin: round; }
+svg .linha-at { stroke: var(--dado); }
+svg .linha-cu { stroke: var(--dado-2); }
+svg .linha-at.fina { stroke-width: 1.6; }
+svg .ponto-at { fill: var(--dado); stroke: #fff; stroke-width: 1.5; }
+svg .ponto-cu { fill: var(--dado-2); stroke: #fff; stroke-width: 1.5; }
+svg .ax { font: 500 9px 'Source Sans 3', sans-serif; fill: var(--mudo); }
+svg .val { font: 700 11px Montserrat, sans-serif; fill: var(--tinta); }
+.mults { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6mm; }
+.mults svg { width: 100%; height: auto; }
+.mini-t { display: flex; justify-content: space-between; font-size: 8.5pt; font-weight: 600; border-bottom: 1px solid var(--fio); padding-bottom: 1mm; margin-bottom: 1mm; }
+.mini-t b { font-family: Montserrat, sans-serif; }

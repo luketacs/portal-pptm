@@ -31,9 +31,11 @@ import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
 import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
-  paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem, statusMeta, cssPaginasImpressao, StatusMeta,
+  paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem,
 } from '../../../utils/manutencao-indicadores-periodo';
 import { VisivelNaTelaDirective } from './visivel-na-tela.directive';
+import { RelatorioIndicadoresImpressoComponent } from '../relatorio-indicadores-impresso/relatorio-indicadores-impresso.component';
+import { CSS_PAGINA_IMPRESSAO, DadosRelatorioImpresso, montarDadosRelatorioImpresso } from '../../../utils/relatorio-impresso';
 
 // Mesmo shape de Colaborador/Apontamento.Colaborador (src/services/apontamentos.
 // service.ts) — redeclarado aqui pra não importar o service (que traz AuthService/
@@ -54,8 +56,6 @@ interface CardIndicador {
   meta?: string;
   cor: 'green' | 'blue' | 'purple' | 'orange' | 'teal' | 'red';
   icone: string;
-  // Semáforo vs meta — só o PDF pinta (ver .pcm-card--status-* no CSS de impressão).
-  status?: StatusMeta;
 }
 
 interface HorasTecnicoItem {
@@ -204,7 +204,7 @@ const RELOAD_PAGINA_MS = 60 * 60 * 1000;
 @Component({
   selector: 'app-manutencao-indicadores-publico',
   standalone: true,
-  imports: [CommonModule, FormsModule, VisivelNaTelaDirective],
+  imports: [CommonModule, FormsModule, VisivelNaTelaDirective, RelatorioIndicadoresImpressoComponent],
   templateUrl: './manutencao-indicadores-publico.component.html',
   styleUrls: ['./manutencao-indicadores-semanais.component.css', './manutencao-indicadores-impressao.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -523,40 +523,76 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   rankingHorasApontadasEletrica = computed<HorasTecnicoItem[]>(() => this.calcularHorasPorTecnico(this.tecnicosEletrica()));
   rankingHorasApontadasMecanica = computed<HorasTecnicoItem[]>(() => this.calcularHorasPorTecnico(this.tecnicosMecanica()));
 
-  // Tabela do PDF pula técnico sem nada no período (0h em tudo — afastado, recém
+  // Tabela do PDF (documento impresso) pula técnico sem nada no período (0h em tudo — afastado, recém
   // contratado sem programação etc.): no papel é só ruído. A tela continua mostrando.
   private semHoras = (t: HorasTecnicoItem) =>
     !t.horasApontadas && !t.horasProgramadas && !t.horasDisponiveis;
   horasEletricaImpressao = computed(() => this.rankingHorasApontadasEletrica().filter(t => !this.semHoras(t)));
   horasMecanicaImpressao = computed(() => this.rankingHorasApontadasMecanica().filter(t => !this.semHoras(t)));
 
+  dadosImpressao = computed<DadosRelatorioImpresso>(() => {
+    const mensal = this.modoPeriodo() === 'mes';
+    return montarDadosRelatorioImpresso({
+      modo: this.modoPeriodo(),
+      periodoIso: mensal ? this.mesFiltro() : this.semanaFiltro(),
+      semanasDoPeriodo: [...this.semanasDoPeriodoSet()].sort(),
+      emitidoEm: this.emitidoEm(),
+      meta: this.metaAtendimento,
+      indicadores: this.indicadores(),
+      corretivas: this.kpiCorretivas(),
+      preventivas: this.kpiPreventivas(),
+      hh: this.hhTotais(),
+      folgas: this.qtdFolgas(),
+      exames: this.qtdExames(),
+      ano: this.consolidadoAno(),
+      anoNumero: new Date().getFullYear(),
+      disponibilidade: this.valorDisponibilidadeGlobalAno(),
+      metaDisponibilidade: META_DISPONIBILIDADE_GLOBAL,
+      diasNavio: this.valorDiasNavioAno(),
+      metaDiasNavio: META_DIAS_NAVIO,
+      equipamentos: this.hhPorEquipamentoTop10(),
+      atividades: this.hhPorAtividadeTop3(),
+      tecnicos: [
+        { area: 'Elétrica', itens: this.horasEletricaImpressao() },
+        { area: 'Mecânica', itens: this.horasMecanicaImpressao() },
+      ],
+      tendencia: mensal
+        ? this.pontosEvolucaoGeralMensal().map(p => ({ chave: p.mes, atendimento: p.atendimento, cumprimento: p.cumprimento }))
+        : this.pontosEvolucaoGeral().map(p => ({ chave: p.semana, atendimento: p.atendimento, cumprimento: p.cumprimento })),
+      tendenciaAreas: mensal ? this.pontosEvolucaoPorAreaMensal() : this.pontosEvolucaoPorArea(),
+    });
+  });
+
   percentualBarraHoras(valor: number, disponivel: number): number {
     return disponivel > 0 ? Math.min(100, Math.round((valor / disponivel) * 100)) : 0;
   }
 
-  // Margens da página (rodapé com paginação/data de emissão, cabeçalho fino da 2a
-  // página em diante) dependem do período e do relógio — injetadas só durante o
-  // print() (bloqueante no Chrome) e removidas logo depois. Ver cssPaginasImpressao.
-  imprimir(): void {
-    const estilo = document.createElement('style');
-    estilo.textContent = cssPaginasImpressao({ titulo: this.tituloPagina(), periodo: this.periodoLabel(), emitidoEm: new Date() });
-    document.head.appendChild(estilo);
-    try {
-      window.print();
-    } finally {
-      estilo.remove();
-    }
-  }
+  // O PDF é o documento de <app-relatorio-indicadores-impresso> (páginas A4 de tamanho
+  // fixo, com cabeçalho/rodapé próprios) — a página do navegador precisa de margem 0.
+  // Injetado só durante o print() e removido depois: o @page dos estilos da tela
+  // (pcm-report-shared.css) tem margem e viria antes na cascata. setTimeout deixa o
+  // Angular redesenhar o "Emitido em" antes de abrir o diálogo de impressão.
+  emitidoEm = signal(new Date());
 
-  // Etiqueta do semáforo no PDF — em texto (não só cor) pra continuar legível
-  // impresso em preto e branco.
-  readonly rotuloStatus: Record<StatusMeta, string> = { ok: 'Na meta', atencao: 'Atenção', critico: 'Fora da meta' };
+  imprimir(): void {
+    this.emitidoEm.set(new Date());
+    setTimeout(() => {
+      const estilo = document.createElement('style');
+      estilo.textContent = CSS_PAGINA_IMPRESSAO;
+      document.head.appendChild(estilo);
+      try {
+        window.print();
+      } finally {
+        estilo.remove();
+      }
+    });
+  }
 
   cardsResumoExecutivo = computed<CardIndicador[]>(() => {
     const ind = this.indicadores();
     return [
-      { titulo: 'Atendimento à Programação', valor: `${this.atendimentoAnimado()}%`, meta: `Meta: ${this.metaAtendimento}%`, cor: 'green', icone: 'check', status: statusMeta(ind.geral.atendimento, this.metaAtendimento) },
-      { titulo: 'Cumprimento do Plano', valor: `${this.cumprimentoAnimado()}%`, meta: `Meta: ${this.metaCumprimento}%`, cor: 'blue', icone: 'calendario', status: statusMeta(ind.cumprimentoPlano.atendimento, this.metaCumprimento) },
+      { titulo: 'Atendimento à Programação', valor: `${this.atendimentoAnimado()}%`, meta: `Meta: ${this.metaAtendimento}%`, cor: 'green', icone: 'check' },
+      { titulo: 'Cumprimento do Plano', valor: `${this.cumprimentoAnimado()}%`, meta: `Meta: ${this.metaCumprimento}%`, cor: 'blue', icone: 'calendario' },
       { titulo: "OS's Executadas", valor: `${ind.geral.executadas}/${ind.geral.programadas}`, cor: 'purple', icone: 'lista' },
       { titulo: "OS's Não Executadas", valor: `${ind.geral.naoExecutadas}`, cor: 'orange', icone: 'alerta' },
       { titulo: "OS's Planejadas Plano", valor: `${ind.cumprimentoPlano.programadas}`, meta: `${ind.cumprimentoPlano.executadas} executadas do plano`, cor: 'teal', icone: 'prancheta' },
@@ -577,17 +613,17 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     const disponibilidade = this.valorDisponibilidadeGlobalAno();
     const diasNavio = this.valorDiasNavioAno();
     return [
-      { titulo: 'Atendimento à Programação', valor: `${ano.geral.atendimento}%`, meta: `${ano.geral.executadas} de ${ano.geral.programadas} executadas no ano · Meta: ${this.metaAtendimento}% · Índice: ${this.indiceAtendimentoAno()}%`, cor: 'green', icone: 'check', status: statusMeta(ano.geral.atendimento, this.metaAtendimento) },
-      { titulo: 'Cumprimento do Plano', valor: `${ano.cumprimentoPlano.atendimento}%`, meta: `${ano.cumprimentoPlano.executadas} de ${ano.cumprimentoPlano.programadas} planejadas do Plano · Meta: ${this.metaCumprimento}% · Índice: ${this.indiceCumprimentoAno()}%`, cor: 'blue', icone: 'calendario', status: statusMeta(ano.cumprimentoPlano.atendimento, this.metaCumprimento) },
+      { titulo: 'Atendimento à Programação', valor: `${ano.geral.atendimento}%`, meta: `${ano.geral.executadas} de ${ano.geral.programadas} executadas no ano · Meta: ${this.metaAtendimento}% · Índice: ${this.indiceAtendimentoAno()}%`, cor: 'green', icone: 'check' },
+      { titulo: 'Cumprimento do Plano', valor: `${ano.cumprimentoPlano.atendimento}%`, meta: `${ano.cumprimentoPlano.executadas} de ${ano.cumprimentoPlano.programadas} planejadas do Plano · Meta: ${this.metaCumprimento}% · Índice: ${this.indiceCumprimentoAno()}%`, cor: 'blue', icone: 'calendario' },
       {
         titulo: 'Disponibilidade Global Anual', valor: disponibilidade !== null ? `${disponibilidade}%` : '—',
         meta: disponibilidade !== null ? `Meta: ${META_DISPONIBILIDADE_GLOBAL}% · Índice: ${this.indiceDisponibilidadeGlobalAno()}%` : 'Ainda não informado',
-        cor: 'purple', icone: 'escudo', status: statusMeta(disponibilidade, META_DISPONIBILIDADE_GLOBAL),
+        cor: 'purple', icone: 'escudo',
       },
       {
         titulo: 'Dias/Navio (TCLD)', valor: diasNavio !== null ? `${diasNavio}` : '—',
         meta: diasNavio !== null ? `Meta: ${META_DIAS_NAVIO} · Índice: ${this.indiceDiasNavioAno()}%` : 'Ainda não informado',
-        cor: 'orange', icone: 'prancheta', status: statusMeta(diasNavio, META_DIAS_NAVIO, { menorMelhor: true }),
+        cor: 'orange', icone: 'prancheta',
       },
       { titulo: 'Status Geral do Ano', valor: this.statusAnoSimplificado(), cor: 'teal', icone: 'bandeira' },
     ];
@@ -791,7 +827,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     const pontos = this.modoPeriodo() === 'mes'
       ? this.pontosEvolucaoGeralMensal().map(p => ({ label: labelMesCurto(p.mes), atendimento: p.atendimento, cumprimento: p.cumprimento }))
       : this.pontosEvolucaoGeral().map(p => ({ label: `S${numeroSemanaISO(p.semana)}`, atendimento: p.atendimento, cumprimento: p.cumprimento }));
-    return enriquecerGeometria(calcularLinhaTempo(pontos), pontos, this.metaAtendimento);
+    return enriquecerGeometria(calcularLinhaTempo(pontos), pontos);
   });
 
   linhaTempoPorArea = computed(() => {
@@ -804,7 +840,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
           label: mensal ? labelMesCurto(chave) : `S${numeroSemanaISO(chave)}`,
           atendimento: v.atendimento, cumprimento: v.cumprimento,
         }));
-      return { categoria, label: CATEGORIA_LABEL[categoria], geometria: enriquecerGeometria(calcularLinhaTempo(pontos), pontos, this.metaAtendimento) };
+      return { categoria, label: CATEGORIA_LABEL[categoria], geometria: enriquecerGeometria(calcularLinhaTempo(pontos), pontos) };
     });
   });
 
