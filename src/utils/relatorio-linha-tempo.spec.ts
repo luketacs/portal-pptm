@@ -1,4 +1,4 @@
-import { calcularLinhaTempo, linhaRetaAreaPath, linhaRetaPath, posicionarRotulosFinais } from './relatorio-linha-tempo';
+import { calcularLinhaTempo, enriquecerGeometria, linhaRetaAreaPath, linhaRetaPath, posicionarRotulosFinais } from './relatorio-linha-tempo';
 
 describe('calcularLinhaTempo', () => {
   it('retorna null quando nao ha pontos', () => {
@@ -187,5 +187,38 @@ describe('posicionarRotulosFinais', () => {
   it('mesmo nos dois extremos ao mesmo tempo (topo/base apertados), mantém alguma separação', () => {
     const r = posicionarRotulosFinais({ yPontoAtendimento: 16, yPontoCumprimento: 16, margemTopo: 16, alturaUtil: 34 });
     expect(r.yRotuloCumprimento).toBeGreaterThan(r.yRotuloAtendimento);
+  });
+});
+
+describe('rotulosPontos (enriquecerGeometria)', () => {
+  const enriquecer = (pontos: { label: string; atendimento: number; cumprimento: number }[]) =>
+    enriquecerGeometria(calcularLinhaTempo(pontos), pontos)!;
+
+  it('um rótulo por ponto, menos o último (esse já tem o rótulo final), com % arredondado', () => {
+    const r = enriquecer([
+      { label: 'JAN', atendimento: 97.6, cumprimento: 99.2 },
+      { label: 'FEV', atendimento: 95, cumprimento: 93 },
+      { label: 'MAR', atendimento: 98, cumprimento: 98 },
+    ]).rotulosPontos;
+    expect(r.length).toBe(2);
+    expect(r[0].atendimento).toBe(98);
+    expect(r[0].cumprimento).toBe(99);
+  });
+
+  it('valor maior fica com o rótulo de cima, sem colidir com o de baixo', () => {
+    const lt = enriquecer([
+      { label: 'JAN', atendimento: 90, cumprimento: 99 },
+      { label: 'FEV', atendimento: 99, cumprimento: 90 },
+      { label: 'MAR', atendimento: 95, cumprimento: 95 },
+    ]);
+    const [jan, fev] = lt.rotulosPontos;
+    expect(jan.yCumprimento).toBeLessThan(jan.yAtendimento);
+    expect(fev.yAtendimento).toBeLessThan(fev.yCumprimento);
+    for (const r of lt.rotulosPontos) expect(Math.abs(r.yAtendimento - r.yCumprimento)).toBeGreaterThanOrEqual(11);
+  });
+
+  it('série longa (visão semanal) não ganha rótulo por ponto', () => {
+    const pontos = Array.from({ length: 40 }, (_, i) => ({ label: `S${i + 1}`, atendimento: 95, cumprimento: 96 }));
+    expect(enriquecer(pontos).rotulosPontos).toEqual([]);
   });
 });

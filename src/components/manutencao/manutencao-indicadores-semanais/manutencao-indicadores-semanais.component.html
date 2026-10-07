@@ -510,6 +510,10 @@
             @for (p of lt.pontosAtendimento; track $index) {
               <circle [attr.cx]="p.x" [attr.cy]="p.y" r="2" class="pcm-linha-tempo-ponto--atendimento" />
             }
+            @for (r of lt.rotulosPontos; track $index) {
+              <text [attr.x]="r.x" [attr.y]="r.yAtendimento" class="pcm-linha-tempo-rotulo-final pcm-linha-tempo-rotulo-ponto pcm-linha-tempo-rotulo-final--atendimento">{{ r.atendimento }}%</text>
+              <text [attr.x]="r.x" [attr.y]="r.yCumprimento" class="pcm-linha-tempo-rotulo-final pcm-linha-tempo-rotulo-ponto pcm-linha-tempo-rotulo-final--cumprimento">{{ r.cumprimento }}%</text>
+            }
             @if (lt.pontosAtendimento.length > 0) {
               <circle [attr.cx]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].x" [attr.cy]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].y" r="10" class="pcm-linha-tempo-destaque pcm-linha-tempo-destaque--atendimento" />
               <circle [attr.cx]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].x" [attr.cy]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].y" r="4.5" class="pcm-linha-tempo-ponto--atendimento pcm-linha-tempo-ponto--final" />
@@ -561,6 +565,10 @@
                 }
                 @for (p of lt.pontosAtendimento; track $index) {
                   <circle [attr.cx]="p.x" [attr.cy]="p.y" r="1.6" class="pcm-linha-tempo-ponto--atendimento" />
+                }
+                @for (r of lt.rotulosPontos; track $index) {
+                  <text [attr.x]="r.x" [attr.y]="r.yAtendimento" class="pcm-linha-tempo-rotulo-final pcm-linha-tempo-rotulo-ponto pcm-linha-tempo-rotulo-final--atendimento">{{ r.atendimento }}%</text>
+                  <text [attr.x]="r.x" [attr.y]="r.yCumprimento" class="pcm-linha-tempo-rotulo-final pcm-linha-tempo-rotulo-ponto pcm-linha-tempo-rotulo-final--cumprimento">{{ r.cumprimento }}%</text>
                 }
                 @if (lt.pontosAtendimento.length > 0) {
                   <circle [attr.cx]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].x" [attr.cy]="lt.pontosAtendimento[lt.pontosAtendimento.length-1].y" r="3.5" class="pcm-linha-tempo-ponto--atendimento pcm-linha-tempo-ponto--final" />

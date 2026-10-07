@@ -101,6 +101,13 @@
 }
 .pcm-linha-tempo-rotulo-final--atendimento { fill: #2e7d32; }
 .pcm-linha-tempo-rotulo-final--cumprimento { fill: var(--diamante-azul-escuro); }
+/* % de cada ponto intermediário — mesmo halo/animação do rótulo final, menor e centrado. */
+.pcm-linha-tempo-rotulo-ponto {
+  font-size: 9px;
+  font-weight: 600;
+  text-anchor: middle;
+  stroke-width: 2.5px;
+}
 
 /* Cumprimento do Plano (linha/ponto/legenda) na cor oficial da marca — era um azul
    genérico (#2196F3) herdado do documento PCM original. Atendimento fica verde (não é

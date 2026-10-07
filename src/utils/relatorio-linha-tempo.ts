@@ -117,7 +117,22 @@ export interface LinhaTempoGeometriaEnriquecida extends LinhaTempoGeometria {
   ultimoCumprimento: number | null;
   yRotuloAtendimento: number | null;
   yRotuloCumprimento: number | null;
+  rotulosPontos: RotuloPonto[];
 }
+
+// % escrito em cima de cada ponto intermediário (o último já tem o rótulo grande de
+// posicionarRotulosFinais). Só sai quando a série é curta (ver MAX_PONTOS_COM_ROTULO).
+export interface RotuloPonto {
+  x: number;
+  yAtendimento: number;
+  yCumprimento: number;
+  atendimento: number;
+  cumprimento: number;
+}
+
+// Acima disso (ex.: visão semanal com 40 semanas) os rótulos ficam a ~18px um do outro
+// e viram borrão — o gráfico fica só com os pontos, como antes.
+const MAX_PONTOS_COM_ROTULO = 16;
 
 // Enriquece a geometria crua de calcularLinhaTempo com path em <path> (segmento reto
 // entre pontos — precisa de <path>, não <polyline>, pra animação de "desenhar a linha"
@@ -148,7 +163,35 @@ export function enriquecerGeometria(
     ultimoCumprimento: ultimo ? Math.round(ultimo.cumprimento) : null,
     yRotuloAtendimento: rotulos?.yRotuloAtendimento ?? null,
     yRotuloCumprimento: rotulos?.yRotuloCumprimento ?? null,
+    rotulosPontos: rotulosDosPontos(geo, pontos, baseY),
   };
+}
+
+// Mesma ideia de posicionarRotulosFinais, em escala menor: o valor maior (ponto mais
+// alto) leva o rótulo acima do ponto, o menor leva abaixo — os dois nunca se cruzam
+// mesmo quando as linhas andam coladas. Presos dentro da área desenhável.
+export function rotulosDosPontos(geo: LinhaTempoGeometria, pontos: PontoLinhaTempo[], baseY: number): RotuloPonto[] {
+  if (pontos.length > MAX_PONTOS_COM_ROTULO) return [];
+  const OFFSET_ACIMA = 6;
+  const OFFSET_ABAIXO = 13;
+  const SEPARACAO_MINIMA = 11;
+  const yMinimo = geo.margem.topo - 6;
+  const yMaximo = baseY - 2;
+  return pontos.slice(0, -1).map((p, i) => {
+    const yA = geo.pontosAtendimento[i].y;
+    const yC = geo.pontosCumprimento[i].y;
+    const atendimentoEmCima = yA <= yC;
+    let yDeCima = Math.max(yMinimo, Math.min(yA, yC) - OFFSET_ACIMA);
+    const yDeBaixo = Math.min(yMaximo, Math.max(yDeCima + SEPARACAO_MINIMA, Math.max(yA, yC) + OFFSET_ABAIXO));
+    yDeCima = Math.min(yDeCima, yDeBaixo - SEPARACAO_MINIMA);
+    return {
+      x: geo.pontosAtendimento[i].x,
+      yAtendimento: atendimentoEmCima ? yDeCima : yDeBaixo,
+      yCumprimento: atendimentoEmCima ? yDeBaixo : yDeCima,
+      atendimento: Math.round(p.atendimento),
+      cumprimento: Math.round(p.cumprimento),
+    };
+  });
 }
 
 export function linhaRetaPath(pontos: CoordenadaSvg[]): string {
