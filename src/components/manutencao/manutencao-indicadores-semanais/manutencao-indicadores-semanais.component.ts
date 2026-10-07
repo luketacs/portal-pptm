@@ -88,7 +88,7 @@ const INTERVALO_POLL_MS = 3 * 60 * 1000;
   standalone: true,
   imports: [CommonModule, FormsModule, VisivelNaTelaDirective],
   templateUrl: './manutencao-indicadores-semanais.component.html',
-  styleUrl: './manutencao-indicadores-semanais.component.css',
+  styleUrls: ['./manutencao-indicadores-semanais.component.css', './manutencao-indicadores-impressao.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy {
@@ -1006,7 +1006,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     const pontos = this.modoPeriodo() === 'mes'
       ? this.pontosEvolucaoGeralMensal().map(p => ({ label: labelMesCurto(p.mes), atendimento: p.atendimento, cumprimento: p.cumprimento }))
       : this.pontosEvolucaoGeral().map(p => ({ label: `S${numeroSemanaISO(p.semana)}`, atendimento: p.atendimento, cumprimento: p.cumprimento }));
-    return enriquecerGeometria(calcularLinhaTempo(pontos), pontos);
+    return enriquecerGeometria(calcularLinhaTempo(pontos), pontos, this.metaAtendimento);
   });
 
   linhaTempoPorArea = computed(() => {
@@ -1019,7 +1019,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
           label: mensal ? labelMesCurto(chave) : `S${numeroSemanaISO(chave)}`,
           atendimento: v.atendimento, cumprimento: v.cumprimento,
         }));
-      return { categoria, label: CATEGORIA_LABEL[categoria], geometria: enriquecerGeometria(calcularLinhaTempo(pontos), pontos) };
+      return { categoria, label: CATEGORIA_LABEL[categoria], geometria: enriquecerGeometria(calcularLinhaTempo(pontos), pontos, this.metaAtendimento) };
     });
   });
 

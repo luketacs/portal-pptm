@@ -61,6 +61,15 @@ describe('calcularLinhaTempo', () => {
     expect(geo.eixoY[geo.eixoY.length - 1].label).toBe('100%');
   });
 
+  it('piso sempre num degrau que dá rótulos redondos (nunca 10/33/55/78%)', () => {
+    // menor valor 15 -> bruto 10 -> desce pro degrau 0 (passo 25)
+    const geo = calcularLinhaTempo([{ label: 'S1', atendimento: 15, cumprimento: 100 }])!;
+    expect(geo.eixoY.map(g => g.label)).toEqual(['0%', '25%', '50%', '75%', '100%']);
+    // menor valor 97 -> bruto 90 -> degrau 80 (passo 5)
+    const alto = calcularLinhaTempo([{ label: 'S1', atendimento: 97, cumprimento: 100 }])!;
+    expect(alto.eixoY.map(g => g.label)).toEqual(['80%', '85%', '90%', '95%', '100%']);
+  });
+
   it('mantem a escala cheia (piso 0%) quando algum valor cai bem abaixo', () => {
     const geo = calcularLinhaTempo([
       { label: 'S1', atendimento: 100, cumprimento: 100 },
@@ -220,5 +229,24 @@ describe('rotulosPontos (enriquecerGeometria)', () => {
   it('série longa (visão semanal) não ganha rótulo por ponto', () => {
     const pontos = Array.from({ length: 40 }, (_, i) => ({ label: `S${i + 1}`, atendimento: 95, cumprimento: 96 }));
     expect(enriquecer(pontos).rotulosPontos).toEqual([]);
+  });
+});
+
+describe('yMeta (enriquecerGeometria)', () => {
+  const pontos = [
+    { label: 'S1', atendimento: 90, cumprimento: 92 },
+    { label: 'S2', atendimento: 100, cumprimento: 98 },
+  ];
+
+  it('linha de meta fica na altura proporcional do eixo Y', () => {
+    const lt = enriquecerGeometria(calcularLinhaTempo(pontos), pontos, 95)!;
+    const topo = lt.eixoY[lt.eixoY.length - 1].posicao; // 100%
+    const base = lt.eixoY[0].posicao;                     // piso do eixo (80%)
+    expect(lt.yMeta).toBeCloseTo(base + (topo - base) * (95 - 80) / 20);
+  });
+
+  it('sem meta ou meta fora do eixo = sem linha', () => {
+    expect(enriquecerGeometria(calcularLinhaTempo(pontos), pontos)!.yMeta).toBeNull();
+    expect(enriquecerGeometria(calcularLinhaTempo(pontos), pontos, 50)!.yMeta).toBeNull();
   });
 });

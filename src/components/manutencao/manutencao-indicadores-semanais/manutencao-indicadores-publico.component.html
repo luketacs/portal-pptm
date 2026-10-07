@@ -76,7 +76,7 @@
       </div>
       <div class="pcm-report-info">
         <div class="pcm-periodo-info">{{ periodoLabel() }}</div>
-        <div class="pcm-status-badge" [style.background-color]="statusCor(indicadores().statusGeral)">
+        <div class="pcm-status-badge" [style.background-color]="statusCor(indicadores().statusGeral)" [style.--status-cor]="statusCor(indicadores().statusGeral)">
           STATUS GERAL: {{ indicadores().statusGeral }}
         </div>
         @if (pessoasVendoAgora(); as n) {
@@ -124,7 +124,7 @@
 
     <div class="pcm-print-dupla">
     <section class="pcm-section">
-      <h2 class="pcm-section-title">HH por Equipamento — Top 10</h2>
+      <h2 class="pcm-section-title">HH por Equipamento (Top 10)</h2>
       @if (hhPorEquipamentoTop10().length === 0) {
         <p class="pcm-empty">Nenhuma OS com equipamento/duração preenchidos nessa semana.</p>
       } @else {
@@ -143,7 +143,7 @@
     </section>
 
     <section class="pcm-section">
-      <h2 class="pcm-section-title">Principais Atividades — Top 3</h2>
+      <h2 class="pcm-section-title">Principais Atividades (Top 3)</h2>
       @if (hhPorAtividadeTop3().length === 0) {
         <p class="pcm-empty">Nenhuma OS com descrição/duração preenchidos nessa semana.</p>
       } @else {
@@ -396,6 +396,9 @@
             @for (l of lt.eixoX; track l.label) {
               <text [attr.x]="l.posicao" [attr.y]="lt.altura - 8" class="pcm-linha-tempo-eixo-x">{{ l.label }}</text>
             }
+            @if (lt.yMeta !== null) {
+              <line [attr.x1]="lt.margem.esquerda" [attr.x2]="lt.largura - lt.margem.direita" [attr.y1]="lt.yMeta" [attr.y2]="lt.yMeta" class="pcm-linha-tempo-meta" />
+            }
             <path [attr.d]="lt.areaAtendimento" fill="url(#pcm-grad-area-geral)" stroke="none" />
             <path [attr.d]="lt.pathCumprimento" pathLength="1" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
             <path [attr.d]="lt.pathAtendimento" pathLength="1" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--atendimento" />
@@ -420,6 +423,7 @@
           <div class="pcm-linha-tempo-legenda">
             <span><span class="pcm-legenda-cor pcm-legenda-cor--atendimento"></span>Atendimento à Programação</span>
             <span><span class="pcm-legenda-cor pcm-legenda-cor--cumprimento"></span>Cumprimento do Plano</span>
+            <span class="pcm-legenda-meta"><span class="pcm-legenda-traco"></span>Meta {{ metaAtendimento }}%</span>
           </div>
         </div>
       } @else {
@@ -428,10 +432,11 @@
     </section>
 
     <section class="pcm-section pcm-secao-evolucao-areas">
-      <h2 class="pcm-section-title">Evolução ao Longo do Ano — por Área</h2>
+      <h2 class="pcm-section-title">Evolução ao Longo do Ano por Área</h2>
       <div class="pcm-linha-tempo-legenda">
         <span><span class="pcm-legenda-cor pcm-legenda-cor--atendimento"></span>Atendimento à Programação</span>
         <span><span class="pcm-legenda-cor pcm-legenda-cor--cumprimento"></span>Cumprimento do Plano</span>
+            <span class="pcm-legenda-meta"><span class="pcm-legenda-traco"></span>Meta {{ metaAtendimento }}%</span>
       </div>
       <div class="pcm-linha-tempo-grid-areas">
         @for (item of linhaTempoPorArea(); track item.categoria) {
@@ -451,6 +456,9 @@
                 }
                 @for (l of lt.eixoX; track l.label) {
                   <text [attr.x]="l.posicao" [attr.y]="lt.altura - 8" class="pcm-linha-tempo-eixo-x">{{ l.label }}</text>
+                }
+                @if (lt.yMeta !== null) {
+                  <line [attr.x1]="lt.margem.esquerda" [attr.x2]="lt.largura - lt.margem.direita" [attr.y1]="lt.yMeta" [attr.y2]="lt.yMeta" class="pcm-linha-tempo-meta" />
                 }
                 <path [attr.d]="lt.areaAtendimento" [attr.fill]="'url(#pcm-grad-area-' + item.categoria + ')'" stroke="none" />
                 <path [attr.d]="lt.pathCumprimento" pathLength="1" class="pcm-linha-tempo-linha pcm-linha-tempo-linha--cumprimento" />
