@@ -91,11 +91,12 @@
       <h2 class="pcm-section-title">Resumo Executivo</h2>
       <div class="pcm-cards">
         @for (c of cardsResumoExecutivo(); track c.titulo) {
-          <div class="pcm-card" [class]="'pcm-card--' + c.cor">
+          <div class="pcm-card" [class]="'pcm-card--' + c.cor + (c.status ? ' pcm-card--status-' + c.status : '')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="pcm-card-icone" [class]="'pcm-card-icone--' + c.cor">
               <path [attr.d]="icones[c.icone]" />
             </svg>
             <div class="pcm-card-title">{{ c.titulo }}</div>
+            @if (c.status) { <div class="pcm-card-status" [class]="'pcm-card-status--' + c.status">{{ rotuloStatus[c.status] }}</div> }
             <div class="pcm-card-value">{{ c.valor }}</div>
             @if (c.meta) { <div class="pcm-card-meta">{{ c.meta }}</div> }
           </div>
@@ -107,11 +108,12 @@
       <h2 class="pcm-section-title">Corretivas, Preventivas e Disponibilidade</h2>
       <div class="pcm-cards">
         @for (c of cardsCorretivasPreventivas(); track c.titulo) {
-          <div class="pcm-card" [class]="'pcm-card--' + c.cor">
+          <div class="pcm-card" [class]="'pcm-card--' + c.cor + (c.status ? ' pcm-card--status-' + c.status : '')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="pcm-card-icone" [class]="'pcm-card-icone--' + c.cor">
               <path [attr.d]="icones[c.icone]" />
             </svg>
             <div class="pcm-card-title">{{ c.titulo }}</div>
+            @if (c.status) { <div class="pcm-card-status" [class]="'pcm-card-status--' + c.status">{{ rotuloStatus[c.status] }}</div> }
             <div class="pcm-card-value">{{ c.valor }}</div>
             @if (c.meta) { <div class="pcm-card-meta">{{ c.meta }}</div> }
           </div>
@@ -120,6 +122,7 @@
       <p class="text-xs text-gray-400 mt-2">HH disponível/indisponível soma Elétrica + Mecânica.</p>
     </section>
 
+    <div class="pcm-print-dupla">
     <section class="pcm-section">
       <h2 class="pcm-section-title">HH por Equipamento — Top 10</h2>
       @if (hhPorEquipamentoTop10().length === 0) {
@@ -159,13 +162,16 @@
         </div>
       }
     </section>
+    </div>
 
     <section class="pcm-section">
       <h2 class="pcm-section-title">Horas Apontadas por Técnico</h2>
       @if (rankingHorasApontadasEletrica().length === 0 && rankingHorasApontadasMecanica().length === 0) {
         <p class="pcm-empty">Nenhum apontamento de Elétrica/Mecânica nesse período.</p>
       } @else {
+        <div class="pcm-horas-blocos">
         @if (rankingHorasApontadasEletrica().length > 0) {
+          <div class="pcm-horas-bloco">
           <h3 class="pcm-horas-tecnico-subtitulo">Elétrica</h3>
           <div class="pcm-horas-tecnico-grid pcm-somente-tela">
             @for (item of rankingHorasApontadasEletrica(); track item.colaborador.matricula) {
@@ -204,7 +210,7 @@
           <table class="pcm-somente-impressao pcm-table">
             <thead><tr><th>Técnico</th><th>Apontada</th><th>Programada</th><th>Disponível</th><th>Eficiência</th></tr></thead>
             <tbody>
-              @for (item of rankingHorasApontadasEletrica(); track item.colaborador.matricula; let i = $index) {
+              @for (item of horasEletricaImpressao(); track item.colaborador.matricula; let i = $index) {
                 <tr [class]="i % 2 === 0 ? 'pcm-even-row' : 'pcm-odd-row'">
                   <td class="pcm-area-name">{{ item.colaborador.nome }}</td>
                   <td>{{ item.horasApontadas }}h</td>
@@ -215,8 +221,10 @@
               }
             </tbody>
           </table>
+          </div>
         }
         @if (rankingHorasApontadasMecanica().length > 0) {
+          <div class="pcm-horas-bloco">
           <h3 class="pcm-horas-tecnico-subtitulo">Mecânica</h3>
           <div class="pcm-horas-tecnico-grid pcm-somente-tela">
             @for (item of rankingHorasApontadasMecanica(); track item.colaborador.matricula) {
@@ -255,7 +263,7 @@
           <table class="pcm-somente-impressao pcm-table">
             <thead><tr><th>Técnico</th><th>Apontada</th><th>Programada</th><th>Disponível</th><th>Eficiência</th></tr></thead>
             <tbody>
-              @for (item of rankingHorasApontadasMecanica(); track item.colaborador.matricula; let i = $index) {
+              @for (item of horasMecanicaImpressao(); track item.colaborador.matricula; let i = $index) {
                 <tr [class]="i % 2 === 0 ? 'pcm-even-row' : 'pcm-odd-row'">
                   <td class="pcm-area-name">{{ item.colaborador.nome }}</td>
                   <td>{{ item.horasApontadas }}h</td>
@@ -266,7 +274,9 @@
               }
             </tbody>
           </table>
+          </div>
         }
+        </div>
         <p class="text-xs text-gray-400 mt-2 pcm-somente-tela">Horas Programadas/Eficiência só calculadas pra Elétrica/Mecânica — mesma restrição do HH acima. Barras na escala da própria Hora Disponível do técnico.</p>
       }
     </section>
@@ -351,11 +361,12 @@
       <h2 class="pcm-section-title">Consolidado do Ano</h2>
       <div class="pcm-cards">
         @for (c of cardsConsolidadoAno(); track c.titulo) {
-          <div class="pcm-card" [class]="'pcm-card--' + c.cor">
+          <div class="pcm-card" [class]="'pcm-card--' + c.cor + (c.status ? ' pcm-card--status-' + c.status : '')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="pcm-card-icone" [class]="'pcm-card-icone--' + c.cor">
               <path [attr.d]="icones[c.icone]" />
             </svg>
             <div class="pcm-card-title">{{ c.titulo }}</div>
+            @if (c.status) { <div class="pcm-card-status" [class]="'pcm-card-status--' + c.status">{{ rotuloStatus[c.status] }}</div> }
             @if (c.titulo === 'Status Geral do Ano') {
               <div class="pcm-card-value" style="font-size: 1.1rem;" [style.color]="statusAnoCor()">{{ c.valor }}</div>
             } @else {

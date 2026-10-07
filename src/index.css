@@ -209,3 +209,16 @@ input, button, textarea, select { font: inherit; }
 
   a[href]::after { content: none !important; }
 }
+
+/* PDF da tela de Indicadores (.pcm-report): o fundo cinza do layout e o padding do
+   <main> vazavam como faixas nas laterais de toda página. As margens já vêm do @page. */
+@media print {
+  body:has(.pcm-report) main,
+  body:has(.pcm-report) div:has(> main),
+  body:has(.pcm-report) div:has(> div > main) {
+    background: #fff !important;
+  }
+  body:has(.pcm-report) main {
+    padding: 0 !important;
+  }
+}

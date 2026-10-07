@@ -1,6 +1,6 @@
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, numeroSemanaISO,
-  paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem,
+  paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem, statusMeta, cssPaginasImpressao,
 } from './manutencao-indicadores-periodo';
 
 describe('semanasDoMes', () => {
@@ -80,5 +80,46 @@ describe('somarContagem', () => {
   it('0 programadas no total não quebra e lê como 100% (nada previsto, nada faltando)', () => {
     const zero = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 0 };
     expect(somarContagem(zero, zero)).toEqual({ programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 });
+  });
+});
+
+describe('statusMeta', () => {
+  it('maior é melhor: bate a meta = ok, até 5 pontos abaixo = atencao, pior = critico', () => {
+    expect(statusMeta(95, 95)).toBe('ok');
+    expect(statusMeta(100, 95)).toBe('ok');
+    expect(statusMeta(92, 95)).toBe('atencao');
+    expect(statusMeta(90, 95)).toBe('atencao');
+    expect(statusMeta(89.9, 95)).toBe('critico');
+  });
+
+  it('menor é melhor (Dias/Navio): até a meta = ok, até 10% acima = atencao, pior = critico', () => {
+    expect(statusMeta(4.5, 4.5, { menorMelhor: true })).toBe('ok');
+    expect(statusMeta(4.9, 4.5, { menorMelhor: true })).toBe('atencao');
+    expect(statusMeta(8.64, 4.5, { menorMelhor: true })).toBe('critico');
+  });
+
+  it('sem valor = sem status', () => {
+    expect(statusMeta(null, 95)).toBeUndefined();
+  });
+});
+
+describe('cssPaginasImpressao', () => {
+  const css = cssPaginasImpressao({ titulo: 'Acompanhamento de Indicadores Semanais', periodo: 'SEMANA 39 · 21/09 a 27/09/2026', emitidoEm: new Date(2026, 9, 7, 14, 5) });
+
+  it('rodapé com período, data de emissão e paginação', () => {
+    expect(css).toContain('@bottom-left');
+    expect(css).toContain('SEMANA 39 · 21/09 a 27/09/2026');
+    expect(css).toContain('Emitido em 07/10/2026 14:05');
+    expect(css).toContain('counter(page)');
+    expect(css).toContain('counter(pages)');
+  });
+
+  it('cabeçalho fino some na 1a página (lá já tem o cabeçalho com logo)', () => {
+    expect(css).toMatch(/@page\s*:first\s*\{[^}]*@top-left\s*\{\s*content:\s*none/);
+  });
+
+  it('escapa aspas e barra invertida do texto', () => {
+    const c = cssPaginasImpressao({ titulo: 'a "b" \\ c', periodo: 'x', emitidoEm: new Date(2026, 0, 1) });
+    expect(c).toContain('a \\"b\\" \\\\ c');
   });
 });

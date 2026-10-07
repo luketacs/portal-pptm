@@ -21,7 +21,7 @@ import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApon
 import { encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
-  paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem,
+  paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem, statusMeta, cssPaginasImpressao, StatusMeta,
 } from '../../../utils/manutencao-indicadores-periodo';
 import { VisivelNaTelaDirective } from './visivel-na-tela.directive';
 
@@ -59,6 +59,8 @@ interface CardIndicador {
   meta?: string;
   cor: 'green' | 'blue' | 'purple' | 'orange' | 'teal' | 'red';
   icone: string;
+  // Semáforo vs meta — só o PDF pinta (ver .pcm-card--status-* no CSS de impressão).
+  status?: StatusMeta;
 }
 
 interface HorasTecnicoItem {
@@ -639,6 +641,13 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   rankingHorasApontadasEletrica = computed<HorasTecnicoItem[]>(() => this.calcularHorasPorTecnico(this.tecnicosEletrica()));
   rankingHorasApontadasMecanica = computed<HorasTecnicoItem[]>(() => this.calcularHorasPorTecnico(this.tecnicosMecanica()));
 
+  // Tabela do PDF pula técnico sem nada no período (0h em tudo — afastado, recém
+  // contratado sem programação etc.): no papel é só ruído. A tela continua mostrando.
+  private semHoras = (t: HorasTecnicoItem) =>
+    !t.horasApontadas && !t.horasProgramadas && !t.horasDisponiveis && !t.horasForaProgramacao;
+  horasEletricaImpressao = computed(() => this.rankingHorasApontadasEletrica().filter(t => !this.semHoras(t)));
+  horasMecanicaImpressao = computed(() => this.rankingHorasApontadasMecanica().filter(t => !this.semHoras(t)));
+
   // Largura da barra em % da própria Hora Disponível do técnico (referência = 100%) —
   // capada em 100 pra não estourar o container quando apontado/programado > disponível.
   percentualBarraHoras(valor: number, disponivel: number): number {
@@ -646,8 +655,18 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   }
 
 
+  // Margens da página (rodapé com paginação/data de emissão, cabeçalho fino da 2a
+  // página em diante) dependem do período e do relógio — injetadas só durante o
+  // print() (bloqueante no Chrome) e removidas logo depois. Ver cssPaginasImpressao.
   imprimir(): void {
-    window.print();
+    const estilo = document.createElement('style');
+    estilo.textContent = cssPaginasImpressao({ titulo: this.tituloPagina(), periodo: this.periodoLabel(), emitidoEm: new Date() });
+    document.head.appendChild(estilo);
+    try {
+      window.print();
+    } finally {
+      estilo.remove();
+    }
   }
 
   // Link público (sem login, sem timeout de inatividade — ver publico/indicadores-
@@ -665,11 +684,15 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
 
   // ── Cards dos KPIs, dirigidos por config (em vez de bloco repetido por card no
   // template) — cada seção vira um @for só, mais fácil de manter e de adicionar ícone. ──
+  // Etiqueta do semáforo no PDF — em texto (não só cor) pra continuar legível
+  // impresso em preto e branco.
+  readonly rotuloStatus: Record<StatusMeta, string> = { ok: 'Na meta', atencao: 'Atenção', critico: 'Fora da meta' };
+
   cardsResumoExecutivo = computed<CardIndicador[]>(() => {
     const ind = this.indicadores();
     return [
-      { titulo: 'Atendimento à Programação', valor: `${this.atendimentoAnimado()}%`, meta: `Meta: ${this.metaAtendimento}%`, cor: 'green', icone: 'check' },
-      { titulo: 'Cumprimento do Plano', valor: `${this.cumprimentoAnimado()}%`, meta: `Meta: ${this.metaCumprimento}%`, cor: 'blue', icone: 'calendario' },
+      { titulo: 'Atendimento à Programação', valor: `${this.atendimentoAnimado()}%`, meta: `Meta: ${this.metaAtendimento}%`, cor: 'green', icone: 'check', status: statusMeta(ind.geral.atendimento, this.metaAtendimento) },
+      { titulo: 'Cumprimento do Plano', valor: `${this.cumprimentoAnimado()}%`, meta: `Meta: ${this.metaCumprimento}%`, cor: 'blue', icone: 'calendario', status: statusMeta(ind.cumprimentoPlano.atendimento, this.metaCumprimento) },
       { titulo: "OS's Executadas", valor: `${ind.geral.executadas}/${ind.geral.programadas}`, cor: 'purple', icone: 'lista' },
       { titulo: "OS's Não Executadas", valor: `${ind.geral.naoExecutadas}`, cor: 'orange', icone: 'alerta' },
       { titulo: "OS's Planejadas Plano", valor: `${ind.cumprimentoPlano.programadas}`, meta: `${ind.cumprimentoPlano.executadas} executadas do plano`, cor: 'teal', icone: 'prancheta' },
@@ -690,17 +713,17 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     const disponibilidade = this.valorDisponibilidadeGlobalAno();
     const diasNavio = this.valorDiasNavioAno();
     return [
-      { titulo: 'Atendimento à Programação', valor: `${ano.geral.atendimento}%`, meta: `${ano.geral.executadas} de ${ano.geral.programadas} executadas no ano · Meta: ${this.metaAtendimento}% · Índice: ${this.indiceAtendimentoAno()}%`, cor: 'green', icone: 'check' },
-      { titulo: 'Cumprimento do Plano', valor: `${ano.cumprimentoPlano.atendimento}%`, meta: `${ano.cumprimentoPlano.executadas} de ${ano.cumprimentoPlano.programadas} planejadas do Plano · Meta: ${this.metaCumprimento}% · Índice: ${this.indiceCumprimentoAno()}%`, cor: 'blue', icone: 'calendario' },
+      { titulo: 'Atendimento à Programação', valor: `${ano.geral.atendimento}%`, meta: `${ano.geral.executadas} de ${ano.geral.programadas} executadas no ano · Meta: ${this.metaAtendimento}% · Índice: ${this.indiceAtendimentoAno()}%`, cor: 'green', icone: 'check', status: statusMeta(ano.geral.atendimento, this.metaAtendimento) },
+      { titulo: 'Cumprimento do Plano', valor: `${ano.cumprimentoPlano.atendimento}%`, meta: `${ano.cumprimentoPlano.executadas} de ${ano.cumprimentoPlano.programadas} planejadas do Plano · Meta: ${this.metaCumprimento}% · Índice: ${this.indiceCumprimentoAno()}%`, cor: 'blue', icone: 'calendario', status: statusMeta(ano.cumprimentoPlano.atendimento, this.metaCumprimento) },
       {
         titulo: 'Disponibilidade Global Anual', valor: disponibilidade !== null ? `${disponibilidade}%` : '—',
         meta: disponibilidade !== null ? `Meta: ${META_DISPONIBILIDADE_GLOBAL}% · Índice: ${this.indiceDisponibilidadeGlobalAno()}%` : 'Ainda não informado (input manual)',
-        cor: 'purple', icone: 'escudo',
+        cor: 'purple', icone: 'escudo', status: statusMeta(disponibilidade, META_DISPONIBILIDADE_GLOBAL),
       },
       {
         titulo: 'Dias/Navio (TCLD)', valor: diasNavio !== null ? `${diasNavio}` : '—',
         meta: diasNavio !== null ? `Meta: ${META_DIAS_NAVIO} · Índice: ${this.indiceDiasNavioAno()}%` : 'Ainda não informado (input manual)',
-        cor: 'orange', icone: 'prancheta',
+        cor: 'orange', icone: 'prancheta', status: statusMeta(diasNavio, META_DIAS_NAVIO, { menorMelhor: true }),
       },
       { titulo: 'Status Geral do Ano', valor: this.statusAnoSimplificado(), cor: 'teal', icone: 'bandeira' },
     ];
