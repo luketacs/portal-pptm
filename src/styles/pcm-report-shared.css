@@ -569,9 +569,12 @@
 
 /* ── Impressão ─────────────────────────────────────────────────────────── */
 @media print {
+  /* Margem 0: o PDF desta tela é o documento de <app-relatorio-indicadores-impresso>,
+     com páginas de 297×210mm que já trazem o próprio respiro. Com margem aqui, cada
+     página passava da folha e gerava uma folha em branco depois dela. */
   @page {
     size: A4 landscape;
-    margin: 0.8cm;
+    margin: 0;
   }
 
   .pcm-report {

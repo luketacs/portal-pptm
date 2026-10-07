@@ -25,7 +25,7 @@ import {
 } from '../../../utils/manutencao-indicadores-periodo';
 import { VisivelNaTelaDirective } from './visivel-na-tela.directive';
 import { RelatorioIndicadoresImpressoComponent } from '../relatorio-indicadores-impresso/relatorio-indicadores-impresso.component';
-import { CSS_PAGINA_IMPRESSAO, DadosRelatorioImpresso, montarDadosRelatorioImpresso } from '../../../utils/relatorio-impresso';
+import { DadosRelatorioImpresso, montarDadosRelatorioImpresso } from '../../../utils/relatorio-impresso';
 
 // Nomes de área do relatório PCM antigo -> categoria desta tela (mesmo recorte de 5,
 // já sem "Lubrificação" — dentro de Mecânica — nem "Operação" separada de "Limp
@@ -689,24 +689,13 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
 
 
   // O PDF é o documento de <app-relatorio-indicadores-impresso> (páginas A4 de tamanho
-  // fixo, com cabeçalho/rodapé próprios) — a página do navegador precisa de margem 0.
-  // Injetado só durante o print() e removido depois: o @page dos estilos da tela
-  // (pcm-report-shared.css) tem margem e viria antes na cascata. setTimeout deixa o
-  // Angular redesenhar o "Emitido em" antes de abrir o diálogo de impressão.
+  // fixo, margem 0 no @page de pcm-report-shared.css). setTimeout deixa o Angular
+  // redesenhar o "Emitido em" antes de abrir o diálogo de impressão.
   emitidoEm = signal(new Date());
 
   imprimir(): void {
     this.emitidoEm.set(new Date());
-    setTimeout(() => {
-      const estilo = document.createElement('style');
-      estilo.textContent = CSS_PAGINA_IMPRESSAO;
-      document.head.appendChild(estilo);
-      try {
-        window.print();
-      } finally {
-        estilo.remove();
-      }
-    });
+    setTimeout(() => window.print());
   }
 
   // Link público (sem login, sem timeout de inatividade — ver publico/indicadores-

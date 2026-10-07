@@ -65,8 +65,6 @@ export interface DadosRelatorioImpresso {
   tendenciaAreas: { nome: string; pontos: number[] }[];
 }
 
-export const CSS_PAGINA_IMPRESSAO = '@media print { @page { size: A4 landscape; margin: 0; } }';
-
 // ── Formatação ──
 const formatoNumero = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
 export const num = (v: number): string => formatoNumero.format(v);
