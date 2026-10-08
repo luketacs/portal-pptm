@@ -48,6 +48,7 @@ interface Colaborador {
   nomeNorm: string;
   disponibilidade: number;
   disponibilidade_pos_corte?: number;
+  ativo_desde?: string;
 }
 
 interface CardIndicador {
@@ -265,7 +266,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     try {
       const resp = await fetch('/matriculas.json');
       if (resp.ok) {
-        const data = await resp.json() as Array<{ nome: string; matricula: string; area: string; email: string; disponibilidade?: number; disponibilidade_pos_corte?: number }>;
+        const data = await resp.json() as Array<{ nome: string; matricula: string; area: string; email: string; disponibilidade?: number; disponibilidade_pos_corte?: number; ativo_desde?: string }>;
         this.colaboradoresRaw.set(data.map(d => ({
           nome: d.nome.trim(),
           matricula: String(d.matricula).trim(),
@@ -274,6 +275,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
           nomeNorm: normalizarNome(d.nome),
           disponibilidade: typeof d.disponibilidade === 'number' ? d.disponibilidade : DISP_PADRAO,
           disponibilidade_pos_corte: typeof d.disponibilidade_pos_corte === 'number' ? d.disponibilidade_pos_corte : undefined,
+          ativo_desde: d.ativo_desde?.trim() || undefined,
         })));
       }
     } catch {
@@ -477,12 +479,21 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     return false;
   }
 
+  // Quem entrou na equipe depois do início do período (ativo_desde em
+  // matriculas.json) só aparece nos períodos que tenham pelo menos uma semana a partir
+  // da entrada — ex.: Claudiane (Mecânica) a partir da semana 42 (2026-10-12).
+  private ativoNoPeriodo(c: Colaborador): boolean {
+    if (!c.ativo_desde) return true;
+    for (const semana of this.semanasDoPeriodoSet()) if (diasDaSemana(semana).at(-1)!.data >= c.ativo_desde) return true;
+    return false;
+  }
+
   private tecnicosEletrica = computed(() =>
     this.colaboradoresRaw().filter(c => normalizarTexto(c.area).includes('ELETR') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))
-      && this.tecnicoRelevanteNoPeriodo(normalizarTexto(c.nome))));
+      && this.tecnicoRelevanteNoPeriodo(normalizarTexto(c.nome)) && this.ativoNoPeriodo(c)));
   private tecnicosMecanica = computed(() =>
     this.colaboradoresRaw().filter(c => normalizarTexto(c.area).includes('MECAN') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))
-      && this.tecnicoRelevanteNoPeriodo(normalizarTexto(c.nome))));
+      && this.tecnicoRelevanteNoPeriodo(normalizarTexto(c.nome)) && this.ativoNoPeriodo(c)));
 
   // Ordens com o crédito "OS executada por outro técnico conta pra quem executou" já
   // aplicada (ver creditarOsExecutadasPorOutro) — base do card de horas/eficiência.

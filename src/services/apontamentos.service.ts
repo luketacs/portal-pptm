@@ -47,6 +47,7 @@ export interface Colaborador {
   nomeNorm: string;
   disponibilidade: number;          // horas por dia antes do corte
   disponibilidade_pos_corte?: number; // horas por dia a partir do corte (se diferente)
+  ativo_desde?: string;               // 'YYYY-MM-DD' — entrou na equipe nessa data; antes dela não tem disponibilidade
 }
 
 export interface RankingItem {
@@ -97,7 +98,7 @@ export class ApontamentosService {
       // Arquivo estático bundlado pelo Angular (public/matriculas.json)
       const resp = await fetch('/matriculas.json');
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json() as Array<{ nome: string; matricula: string; area: string; email: string; disponibilidade?: number; disponibilidade_pos_corte?: number }>;
+      const data = await resp.json() as Array<{ nome: string; matricula: string; area: string; email: string; disponibilidade?: number; disponibilidade_pos_corte?: number; ativo_desde?: string }>;
       this._colaboradoresData.set(data.map(d => ({
         nome:           d.nome.trim(),
         matricula:      String(d.matricula).trim(),
@@ -106,6 +107,7 @@ export class ApontamentosService {
         nomeNorm:       this.normalizar(d.nome),
         disponibilidade:          typeof d.disponibilidade         === 'number' ? d.disponibilidade         : DISP_PADRAO,
         disponibilidade_pos_corte: typeof d.disponibilidade_pos_corte === 'number' ? d.disponibilidade_pos_corte : undefined,
+        ativo_desde:    d.ativo_desde?.trim() || undefined,
       })));
     } catch (err) {
       console.warn('[ApontamentosService] Falha ao carregar matriculas.json:', err);
@@ -118,6 +120,7 @@ export class ApontamentosService {
   // de 01/06/2026 (mesma regra usada no Relatório Mensal PCM). Reaproveitada pela
   // Programação de Manutenção pra calcular capacidade semanal (Efetivo).
   disponibilidadeNoDia(colaborador: Colaborador, dataIso: string): number {
+    if (colaborador.ativo_desde && dataIso < colaborador.ativo_desde) return 0;
     return dataIso >= CUTOFF_DISPONIBILIDADE
       ? (colaborador.disponibilidade_pos_corte ?? colaborador.disponibilidade)
       : colaborador.disponibilidade;

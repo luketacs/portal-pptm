@@ -520,14 +520,23 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     return false;
   }
 
+  // Quem entrou na equipe depois do início do período (ativo_desde em
+  // matriculas.json) só aparece nos períodos que tenham pelo menos uma semana a partir
+  // da entrada — ex.: Claudiane (Mecânica) a partir da semana 42 (2026-10-12).
+  private ativoNoPeriodo(c: Colaborador): boolean {
+    if (!c.ativo_desde) return true;
+    for (const semana of this.semanasDoPeriodoSet()) if (diasDaSemana(semana).at(-1)!.data >= c.ativo_desde) return true;
+    return false;
+  }
+
   private tecnicosEletrica = computed(() =>
     this.apontamentosService.colaboradores()
       .filter(c => normalizarTexto(c.area).includes('ELETR') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))
-        && this.tecnicoRelevanteNoPeriodo(normalizarTexto(c.nome))));
+        && this.tecnicoRelevanteNoPeriodo(normalizarTexto(c.nome)) && this.ativoNoPeriodo(c)));
   private tecnicosMecanica = computed(() =>
     this.apontamentosService.colaboradores()
       .filter(c => normalizarTexto(c.area).includes('MECAN') && !this.NOMES_EXCLUIDOS_HORAS.has(normalizarTexto(c.nome))
-        && this.tecnicoRelevanteNoPeriodo(normalizarTexto(c.nome))));
+        && this.tecnicoRelevanteNoPeriodo(normalizarTexto(c.nome)) && this.ativoNoPeriodo(c)));
 
   // Ordens com o crédito "OS executada por outro técnico conta pra quem executou" já
   // aplicada (ver creditarOsExecutadasPorOutro) — base do card de horas/eficiência.

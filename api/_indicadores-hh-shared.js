@@ -21,6 +21,8 @@ export function resumirDisponibilidade(ordens, afastamentos, colaboradores, anos
       for (const c of tecnicos) {
         const corte = INATIVO[normalizar(c.nome)];
         if (corte && semana >= corte) continue;
+        // Entrou na equipe depois (ativo_desde em matriculas.json): semanas anteriores não contam.
+        if (c.ativo_desde && semana < c.ativo_desde) continue;
         const ausencias = afastamentos.filter(a => daPessoa(a, c));
         const folgas = new Set(ordensSemana.filter(o => o.tipo === 'folga' && daPessoa(o, c)).flatMap(o => o.diasPrevistos));
         let disponivel = 0;
