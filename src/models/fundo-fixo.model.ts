@@ -36,6 +36,8 @@ export interface FundoFixoSolicitacao {
   // marcado — não depende do mesReferencia da solicitação original.
   reembolsado: boolean;
   dataReembolso: Date | null;
+  // Quando foi enviada pra aprovação no Teams do gestor (null = não foi).
+  teamsEnviadoEm: Date | null;
 }
 
 export interface CreateFundoFixoRequest {

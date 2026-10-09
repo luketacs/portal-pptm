@@ -47,6 +47,7 @@ function solicitacao(overrides: Partial<FundoFixoSolicitacao> = {}): FundoFixoSo
     dataCompra: null,
     reembolsado: false,
     dataReembolso: null,
+    teamsEnviadoEm: null,
     ...overrides,
   };
 }

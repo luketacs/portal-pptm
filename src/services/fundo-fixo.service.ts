@@ -12,11 +12,18 @@ import { calcularSaldoCaixa, calcularTotalComprometidoMes, proximoMes } from '..
 export const FUNDO_FIXO_LIMITE_MENSAL = 3000;
 export const FUNDO_FIXO_LIMITE_POR_COMPRA = 500;
 export const FUNDO_FIXO_SETORES: FundoFixoSetor[] = ['Manutenção', 'Operação', 'Infraestrutura', 'Outros'];
-// Gestores responsáveis fora do portal — só informativo (aparece em listas/relatórios).
-// A aprovação de fato no sistema é feita só pelo Admin, por enquanto.
+// Gestores responsáveis fora do portal — aprovam pelo Teams (Power Automate, ver
+// docs/FUNDO-FIXO-TEAMS.md); o Admin também pode aprovar direto no portal.
 // A partir de set/2026: Italo Rosse no lugar de Charles Rabelo (registros antigos
 // continuam com o nome gravado; setembro em diante corrigido na migration 066).
 export const FUNDO_FIXO_GESTORES: string[] = ['Italo Rosse', 'João Nunes'];
+// Gestor que recebe a aprovação no Teams, por setor ('Outros' fica com o Admin no portal).
+// Precisa ficar em sincronia com GESTOR_POR_SETOR em api/_fundo-fixo-teams-shared.js
+export const FUNDO_FIXO_GESTOR_POR_SETOR: Partial<Record<FundoFixoSetor, string>> = {
+  'Operação': 'João Nunes',
+  'Manutenção': 'Italo Rosse',
+  'Infraestrutura': 'Italo Rosse',
+};
 
 interface FundoFixoRow {
   id: string;
@@ -47,6 +54,7 @@ interface FundoFixoRow {
   data_compra: string | null;
   reembolsado: boolean | null;
   data_reembolso: string | null;
+  teams_enviado_em: string | null;
 }
 
 interface FundoFixoSaqueRow {
@@ -97,6 +105,7 @@ function mapRow(r: FundoFixoRow): FundoFixoSolicitacao {
     dataCompra: r.data_compra ? new Date(r.data_compra) : null,
     reembolsado: r.reembolsado ?? false,
     dataReembolso: r.data_reembolso ? new Date(r.data_reembolso) : null,
+    teamsEnviadoEm: r.teams_enviado_em ? new Date(r.teams_enviado_em) : null,
   };
 }
 
@@ -311,8 +320,19 @@ export class FundoFixoService {
       mes_referencia: mesAtual(),
     };
 
-    const { error } = await this.supabaseService.client.from('fundo_fixo_solicitacoes').insert(payload);
+    const { data: inserted, error } = await this.supabaseService.client
+      .from('fundo_fixo_solicitacoes').insert(payload).select('id').single();
     if (error) throw new Error(error.message);
+
+    // Manda pra aprovação no Teams do gestor do setor. Fire-and-forget: se falhar, a
+    // solicitação continua pendente no portal pro Admin.
+    if (inserted?.id) {
+      fetch('/api/fundo-fixo-public-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'teams-notificar', id: inserted.id }),
+      }).catch(err => console.error('[fundo-fixo] Falha ao enviar pro Teams:', err));
+    }
 
     const descricaoEmNomeDe = solicitanteId !== user.id ? ` em nome de ${solicitanteNome}` : '';
     this.auditLogService.log({

@@ -16,10 +16,25 @@
 // payload do Vercel. O token assinado autoriza o upload sozinho, então a política do
 // bucket continua só permitindo INSERT autenticado — ninguém anônimo ganha acesso de
 // escrita direta.
+//
+// 'teams-notificar' manda a solicitação pendente pro fluxo do Power Automate, que posta
+// o card de aprovação no chat do Teams do gestor do setor. Chamada aqui mesmo depois do
+// 'request' e pelo portal depois de criar pelo formulário interno. Não precisa de login:
+// só envia uma vez por solicitação (teams_enviado_em) e só se ainda estiver pendente — o
+// pior que alguém consegue é disparar um aviso que já ia ser disparado.
+//
+// 'decisao-ver' / 'decisao-confirmar' atendem a página /publico/fundo-fixo/decisao, que
+// os botões do card abrem. A autorização é o token do link (só o hash fica no banco),
+// que vale só pra aquela solicitação, expira e só grava se ainda estiver pendente — se o
+// Admin já decidiu no portal, vale a dele.
 
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import { createRateLimiter } from './_rate-limit-shared.js';
+import {
+  TOKEN_VALIDADE_DIAS, emailDoGestor, gerarToken, gestorDaSolicitacao, hashToken, interpretarDecisao,
+  montarCardConfirmacao, montarCardSolicitacao, tokenValido,
+} from './_fundo-fixo-teams-shared.js';
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://portalpptm.com').split(',');
 const BUCKET = 'fundo-fixo-anexos';
@@ -40,6 +55,8 @@ const ALLOWED_TYPES = {
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const checkRateLimitRequest = createRateLimiter({ windowMs: RATE_LIMIT_WINDOW_MS, max: 5 });
 const checkRateLimitUploadUrl = createRateLimiter({ windowMs: RATE_LIMIT_WINDOW_MS, max: 8 });
+const checkRateLimitTeams = createRateLimiter({ windowMs: RATE_LIMIT_WINDOW_MS, max: 10 });
+const FLOW_TIMEOUT_MS = 8000;
 
 function sanitize(value, maxLength) {
   if (typeof value !== 'string') return '';
@@ -128,7 +145,187 @@ async function handleRequest(req, res, ip, supabase) {
     if (logError) console.error('[fundo-fixo-public-request] Audit log error:', logError.message);
   });
 
+  // Antes de responder: a Vercel pode congelar a function depois do res.json.
+  if (inserted?.id) await notificarTeams(supabase, inserted.id);
+
   return res.status(200).json({ success: true });
+}
+
+// Envia a solicitação pro fluxo do Teams (card com os links de Aprovar/Recusar). Devolve
+// um motivo curto (pra log/resposta); nunca lança — falha aqui não pode derrubar a
+// criação da solicitação.
+export async function notificarTeams(supabase, id, env = process.env, fetchImpl = fetch) {
+  if (!env.FUNDO_FIXO_FLOW_URL) return 'desligado';
+  let marcou = false;
+  try {
+    const { data: row, error } = await supabase
+      .from('fundo_fixo_solicitacoes').select('*').eq('id', id).maybeSingle();
+    if (error || !row) return 'nao-encontrada';
+    if (row.status !== 'pendente') return 'ja-decidida';
+    if (row.teams_enviado_em) return 'ja-enviada';
+    const gestor = gestorDaSolicitacao(row);
+    const email = gestor ? emailDoGestor(gestor, env) : null;
+    if (!email) return 'sem-gestor';
+
+    // Marca antes de enviar (só quem conseguir marcar envia) — evita card duplicado
+    // se duas chamadas chegarem juntas.
+    const token = gerarToken();
+    const expira = new Date(Date.now() + TOKEN_VALIDADE_DIAS * 24 * 60 * 60 * 1000);
+    const { data: marcadas } = await supabase
+      .from('fundo_fixo_solicitacoes')
+      .update({
+        teams_enviado_em: new Date().toISOString(),
+        gestor_aprovador: gestor,
+        teams_token_hash: hashToken(token),
+        teams_token_expira_em: expira.toISOString(),
+      })
+      .eq('id', id).is('teams_enviado_em', null)
+      .select('id');
+    if (!marcadas?.length) return 'ja-enviada';
+    marcou = true;
+
+    await postarNoTeams(email, montarCardSolicitacao(row, ALLOWED_ORIGINS[0], token), env, fetchImpl);
+    return 'enviada';
+  } catch (err) {
+    console.error('[fundo-fixo-teams] Falha ao enviar pro Teams:', err?.message || err);
+    // Desmarca pra uma próxima chamada poder tentar de novo.
+    if (marcou) {
+      await supabase.from('fundo_fixo_solicitacoes')
+        .update({ teams_enviado_em: null, teams_token_hash: null, teams_token_expira_em: null })
+        .eq('id', id);
+    }
+    return 'falhou';
+  }
+}
+
+async function postarNoTeams(email, card, env, fetchImpl) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FLOW_TIMEOUT_MS);
+  try {
+    const resp = await fetchImpl(env.FUNDO_FIXO_FLOW_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ aprovadorEmail: email, card }),
+      signal: controller.signal,
+    });
+    if (!resp.ok) throw new Error(`fluxo respondeu ${resp.status}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function handleTeamsNotificar(req, res, ip, supabase) {
+  if (!checkRateLimitTeams(ip)) {
+    return res.status(429).json({ success: false, error: 'Muitas requisições. Tente novamente em instantes.' });
+  }
+  const id = String(req.body?.id || '');
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ success: false, error: 'id inválido.' });
+  const resultado = await notificarTeams(supabase, id);
+  return res.status(200).json({ success: true, resultado });
+}
+
+// Só o que a página de decisão precisa mostrar — nada de ids de usuário ou do token.
+function solicitacaoPublica(row) {
+  return {
+    solicitanteNome: row.solicitante_nome,
+    setor: row.setor,
+    fornecedor: row.fornecedor,
+    material: row.material,
+    linkProduto: row.link_produto,
+    valorEstimado: Number(row.valor_estimado) || 0,
+    orcamentoUrl: row.orcamento_url,
+    observacoes: row.observacoes,
+    dataSolicitacao: row.data_solicitacao,
+    status: row.status,
+    gestorAprovador: row.gestor_aprovador,
+    aprovadorNome: row.aprovador_nome,
+    dataAprovacao: row.data_aprovacao,
+    motivoRecusa: row.motivo_recusa,
+    expirado: row.status === 'pendente' && new Date(row.teams_token_expira_em) <= new Date(),
+  };
+}
+
+async function buscarPorToken(supabase, token) {
+  const { data } = await supabase
+    .from('fundo_fixo_solicitacoes').select('*').eq('teams_token_hash', hashToken(token)).maybeSingle();
+  return data ?? null;
+}
+
+// 'decisao-ver': a página abre e mostra a solicitação. Abrir o link não decide nada — o
+// Teams abre os links sozinho pra gerar prévia; só o POST de 'decisao-confirmar' grava.
+export async function handleDecisaoVer(req, res, ip, supabase) {
+  if (!checkRateLimitTeams(ip)) {
+    return res.status(429).json({ success: false, error: 'Muitas requisições. Tente novamente em instantes.' });
+  }
+  const token = req.body?.token;
+  if (!tokenValido(token)) return res.status(400).json({ success: false, error: 'Link inválido.' });
+  const row = await buscarPorToken(supabase, token);
+  if (!row) return res.status(404).json({ success: false, error: 'Link inválido ou não encontrado.' });
+  return res.status(200).json({ success: true, solicitacao: solicitacaoPublica(row) });
+}
+
+export async function handleDecisaoConfirmar(req, res, ip, supabase, env = process.env, fetchImpl = fetch) {
+  if (!checkRateLimitTeams(ip)) {
+    return res.status(429).json({ success: false, error: 'Muitas requisições. Tente novamente em instantes.' });
+  }
+  const d = interpretarDecisao(req.body);
+  if (d.erro) return res.status(400).json({ success: false, error: d.erro });
+
+  const agora = new Date().toISOString();
+  const row = await buscarPorToken(supabase, d.token);
+  if (!row) return res.status(404).json({ success: false, error: 'Link inválido ou não encontrado.' });
+  const quem = row.gestor_aprovador || 'Gestor';
+  const update = {
+    status: d.aprovado ? 'aprovado' : 'recusado',
+    aprovador_id: null,
+    aprovador_nome: `${quem} (Teams)`,
+    data_aprovacao: agora,
+    ...(d.aprovado ? {} : { motivo_recusa: d.comentario || null }),
+  };
+
+  // Só grava se ainda estiver pendente e o link não venceu — se o Admin decidiu antes
+  // no portal, vale a dele.
+  const { data: alteradas, error } = await supabase
+    .from('fundo_fixo_solicitacoes')
+    .update(update)
+    .eq('id', row.id).eq('status', 'pendente').gt('teams_token_expira_em', agora)
+    .select('*');
+  if (error) {
+    console.error('[fundo-fixo-teams] Erro ao gravar decisão:', error.message);
+    return res.status(500).json({ success: false, error: 'Erro ao gravar decisão. Tente novamente.' });
+  }
+  if (!alteradas?.length) {
+    const atual = await buscarPorToken(supabase, d.token);
+    return res.status(409).json({
+      success: false,
+      error: atual?.status === 'pendente' ? 'Este link expirou. Peça a aprovação pelo portal.' : 'Esta solicitação já tinha sido decidida.',
+      solicitacao: atual ? solicitacaoPublica(atual) : null,
+    });
+  }
+
+  const salva = alteradas[0];
+  const { error: logError } = await supabase.from('audit_logs').insert({
+    user_id: null,
+    user_name: quem,
+    event_type: d.aprovado ? 'fundo_fixo_aprovado' : 'fundo_fixo_recusado',
+    resource_type: 'fundo_fixo',
+    resource_id: salva.id,
+    description: `${quem} ${d.aprovado ? 'aprovou' : 'recusou'} pelo Teams a solicitação de Fundo Fixo de ${salva.solicitante_nome}: ${salva.material}`,
+    metadata: { origem: 'teams', gestor_aprovador: quem, comentario: d.comentario || null },
+  });
+  if (logError) console.error('[fundo-fixo-teams] Audit log error:', logError.message);
+
+  // Confirmação no chat do gestor. Falhar aqui não desfaz a decisão.
+  const email = emailDoGestor(quem, env);
+  if (email && env.FUNDO_FIXO_FLOW_URL) {
+    try {
+      await postarNoTeams(email, montarCardConfirmacao(salva, d.aprovado, d.comentario), env, fetchImpl);
+    } catch (err) {
+      console.error('[fundo-fixo-teams] Falha ao enviar confirmação:', err?.message || err);
+    }
+  }
+
+  return res.status(200).json({ success: true, solicitacao: solicitacaoPublica(salva) });
 }
 
 async function handleUploadUrl(req, res, ip, supabase) {
@@ -173,5 +370,8 @@ export default async function handler(req, res) {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   if (req.body?.action === 'upload-url') return handleUploadUrl(req, res, ip, supabase);
+  if (req.body?.action === 'teams-notificar') return handleTeamsNotificar(req, res, ip, supabase);
+  if (req.body?.action === 'decisao-ver') return handleDecisaoVer(req, res, ip, supabase);
+  if (req.body?.action === 'decisao-confirmar') return handleDecisaoConfirmar(req, res, ip, supabase);
   return handleRequest(req, res, ip, supabase);
 }

@@ -329,6 +329,11 @@
                   <span class="text-xs font-semibold px-2 py-1 rounded-full" [class]="statusBadge[s.status]">
                     {{ statusLabel[s.status] }}
                   </span>
+                  @if (s.status === 'pendente' && s.teamsEnviadoEm) {
+                    <div class="text-xs text-gray-400 mt-1" title="Aprovação enviada no Teams">Aguardando {{ s.gestorAprovador }} no Teams</div>
+                  } @else if (s.aprovadorNome?.endsWith('(Teams)')) {
+                    <div class="text-xs text-gray-400 mt-1">via Teams</div>
+                  }
                   @if (s.status === 'recusado' && s.motivoRecusa) {
                     <div class="text-xs text-gray-400 mt-1" [title]="s.motivoRecusa">{{ s.motivoRecusa }}</div>
                   }

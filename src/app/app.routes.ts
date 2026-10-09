@@ -159,6 +159,12 @@ export const APP_ROUTES: Routes = [
     title: 'Solicitar Compra — Fundo Fixo',
   },
   {
+    path: 'publico/fundo-fixo/decisao',
+    loadComponent: () =>
+      import('../components/fundo-fixo/fundo-fixo-decisao-publico/fundo-fixo-decisao-publico.component').then(m => m.FundoFixoDecisaoPublicoComponent),
+    title: 'Aprovação — Fundo Fixo',
+  },
+  {
     path: 'publico/kanban-oficina',
     loadComponent: () =>
       import('../components/manutencao/kanban-oficina/kanban-oficina-publico.component').then(m => m.KanbanOficinaPublicoComponent),

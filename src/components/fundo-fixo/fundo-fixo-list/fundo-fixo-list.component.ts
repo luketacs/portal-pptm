@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@a
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { FundoFixoService, FUNDO_FIXO_GESTORES, FUNDO_FIXO_LIMITE_MENSAL, FUNDO_FIXO_LIMITE_POR_COMPRA, FUNDO_FIXO_SETORES } from '../../../services/fundo-fixo.service';
+import { FundoFixoService, FUNDO_FIXO_GESTORES, FUNDO_FIXO_GESTOR_POR_SETOR, FUNDO_FIXO_LIMITE_MENSAL, FUNDO_FIXO_LIMITE_POR_COMPRA, FUNDO_FIXO_SETORES } from '../../../services/fundo-fixo.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
@@ -293,7 +293,7 @@ export class FundoFixoListComponent implements OnInit {
   // ── Aprovar ────────────────────────────────────────────────────────────
   abrirAprovar(s: FundoFixoSolicitacao): void {
     this.aprovarAlvo.set(s);
-    this.aprovarGestor.set('');
+    this.aprovarGestor.set(s.gestorAprovador ?? FUNDO_FIXO_GESTOR_POR_SETOR[s.setor] ?? '');
   }
 
   fecharAprovar(): void {

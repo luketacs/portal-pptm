@@ -1,0 +1,118 @@
+<div class="max-w-xl mx-auto space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-800">Aprovação — Fundo Fixo</h1>
+    <p class="text-sm text-gray-500 mt-1">Confira a solicitação e confirme sua decisão.</p>
+  </div>
+
+  @if (carregando()) {
+    <div class="app-card p-8 text-center text-sm text-gray-500">Carregando…</div>
+  } @else if (!solicitacao()) {
+    <div class="app-card p-8 text-center space-y-2">
+      <h2 class="text-lg font-bold text-gray-800">Link inválido</h2>
+      <p class="text-sm text-gray-500">{{ errorMessage() || 'Não encontramos esta solicitação.' }}</p>
+    </div>
+  } @else {
+    @let s = solicitacao()!;
+
+    <div class="app-card p-6 space-y-4">
+      <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+        <div>
+          <dt class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Solicitante</dt>
+          <dd class="text-gray-800">{{ s.solicitanteNome }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Setor</dt>
+          <dd class="text-gray-800">{{ s.setor }}</dd>
+        </div>
+        <div class="sm:col-span-2">
+          <dt class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Material</dt>
+          <dd class="text-gray-800 whitespace-pre-line">{{ s.material }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Valor estimado</dt>
+          <dd class="text-gray-800 font-semibold">{{ s.valorEstimado | currency:'BRL' }}</dd>
+        </div>
+        @if (s.fornecedor) {
+          <div>
+            <dt class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Fornecedor</dt>
+            <dd class="text-gray-800">{{ s.fornecedor }}</dd>
+          </div>
+        }
+        @if (s.observacoes) {
+          <div class="sm:col-span-2">
+            <dt class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Observações</dt>
+            <dd class="text-gray-800 whitespace-pre-line">{{ s.observacoes }}</dd>
+          </div>
+        }
+        @if (links().length || s.orcamentoUrl) {
+          <div class="sm:col-span-2 flex flex-wrap gap-3">
+            @for (link of links(); track link; let i = $index) {
+              <a [href]="link" target="_blank" rel="noopener" class="text-blue-600 hover:underline">Produto {{ i + 1 }}</a>
+            }
+            @if (s.orcamentoUrl) {
+              <a [href]="s.orcamentoUrl" target="_blank" rel="noopener" class="text-blue-600 hover:underline">Orçamento</a>
+            }
+          </div>
+        }
+      </dl>
+    </div>
+
+    @if (s.status !== 'pendente') {
+      <div class="app-card p-6 text-center space-y-2">
+        @if (s.status === 'recusado') {
+          <h2 class="text-lg font-bold text-red-600">{{ decididaAgora() ? 'Recusa registrada' : 'Solicitação já recusada' }}</h2>
+        } @else {
+          <h2 class="text-lg font-bold text-green-600">{{ decididaAgora() ? 'Aprovação registrada' : 'Solicitação já aprovada' }}</h2>
+        }
+        <p class="text-sm text-gray-500">
+          @if (s.aprovadorNome) { Por {{ s.aprovadorNome }} }
+          @if (s.dataAprovacao) { em {{ s.dataAprovacao | date:'dd/MM/yyyy HH:mm' }} }
+        </p>
+        @if (s.status === 'recusado' && s.motivoRecusa) {
+          <p class="text-sm text-gray-600">Motivo: {{ s.motivoRecusa }}</p>
+        }
+        @if (decididaAgora()) {
+          <p class="text-xs text-gray-400 pt-2">Pode fechar esta página.</p>
+        }
+      </div>
+    } @else if (s.expirado) {
+      <div class="app-card p-6 text-center space-y-2">
+        <h2 class="text-lg font-bold text-gray-800">Link expirado</h2>
+        <p class="text-sm text-gray-500">Esta solicitação continua pendente. Peça a aprovação pelo portal.</p>
+      </div>
+    } @else {
+      <div class="app-card p-6 space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <button type="button" (click)="decisao.set('aprovar')"
+            class="py-2.5 rounded-lg border-2 font-semibold text-sm transition"
+            [class]="decisao() === 'aprovar' ? 'border-green-600 bg-green-50 text-green-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'">
+            Aprovar
+          </button>
+          <button type="button" (click)="decisao.set('recusar')"
+            class="py-2.5 rounded-lg border-2 font-semibold text-sm transition"
+            [class]="decisao() === 'recusar' ? 'border-red-600 bg-red-50 text-red-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'">
+            Recusar
+          </button>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">
+            {{ decisao() === 'recusar' ? 'Motivo da recusa' : 'Comentário (opcional)' }}
+          </label>
+          <textarea rows="3" maxlength="1000" [ngModel]="comentario()" (ngModelChange)="comentario.set($event)"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+
+        @if (errorMessage()) {
+          <div class="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{{ errorMessage() }}</div>
+        }
+
+        <button type="button" (click)="confirmar()" [disabled]="enviando()"
+          class="w-full text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-50"
+          [class]="decisao() === 'aprovar' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'">
+          {{ enviando() ? 'Registrando…' : (decisao() === 'aprovar' ? 'Confirmar aprovação' : 'Confirmar recusa') }}
+        </button>
+      </div>
+    }
+  }
+</div>
