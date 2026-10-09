@@ -82,6 +82,43 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ success: false, error: 'Método não permitido.' });
 
+  // Apontamentos do SIGMA de um período (?apontamentos_de=YYYY-MM-DD&apontamentos_ate=
+  // YYYY-MM-DD) — mesma consulta de sigma-ordens-proxy.js (que exige login), usada pra
+  // "Fora da prog.", apontamentos sobrepostos/duplicados e extrato na tela pública.
+  // Executantes fixados aqui no servidor (técnicos de Elétrica/Mecânica de
+  // matriculas.json) — o cliente não escolhe de quem vê os apontamentos.
+  const de = String(req.query?.apontamentos_de || '').trim();
+  const ate = String(req.query?.apontamentos_ate || '').trim();
+  if (de || ate) {
+    const dataOk = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
+    if (!dataOk(de) || !dataOk(ate) || de > ate) {
+      return res.status(200).json({ success: false, error: 'Período inválido.' });
+    }
+    if ((Date.parse(ate) - Date.parse(de)) / 86400000 > 45) {
+      return res.status(200).json({ success: false, error: 'Período máximo de 45 dias.' });
+    }
+    try {
+      const executantes = new Set(colaboradores
+        .filter(c => {
+          const area = String(c.area ?? '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+          return area.includes('ELETR') || area.includes('MECAN');
+        })
+        .map(c => String(c.matricula).trim()));
+      const dados = await obterCache();
+      const apontamentos = dados.apontamentosLista
+        .filter(a => a.data >= de && a.data <= ate && executantes.has(a.executante))
+        .map(a => {
+          const os = dados.osPorNumero.get(a.numeroOs);
+          return { ...a, descricao: os?.descricao ?? '', equipamento: os?.equipamento ?? '' };
+        });
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json({ success: true, apontamentos, atualizadoEm: dados.ts });
+    } catch (error) {
+      console.error('[indicadores-manutencao-publico] SIGMA indisponível (apontamentos):', error.message);
+      return res.status(200).json({ success: false, error: 'SIGMA indisponível no momento.' });
+    }
+  }
+
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {

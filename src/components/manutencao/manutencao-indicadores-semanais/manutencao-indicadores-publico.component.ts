@@ -20,7 +20,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, WritableSignal, computed, effect, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, ManutencaoOrdem } from '../../../models/manutencao-programacao.model';
+import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, ManutencaoOrdem, SigmaApontamentoPeriodo } from '../../../models/manutencao-programacao.model';
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
   META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, STATUS_GERAL_COR, StatusGeralSemana,
@@ -28,7 +28,7 @@ import {
 } from '../../../utils/manutencao-indicadores';
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
-import { HhAtividade, HhEquipamento, KpiExecucao, StatusExecucaoGrupo, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
+import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApontamento, StatusExecucaoGrupo, apontamentosSobrepostos, calcularKpiExecucao, extratoHorasColaborador, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
   paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem,
@@ -63,6 +63,7 @@ interface HorasTecnicoItem {
   colaborador: Colaborador;
   horasProgramadas: number;
   horasApontadas: number;
+  horasForaProgramacao: number;
   horasDisponiveis: number;
   eficiencia: number;
 }
@@ -224,6 +225,13 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   constructor() {
     effect(() => this.animarContador(this.indicadores().geral.atendimento, this.atendimentoAnimado));
     effect(() => this.animarContador(this.indicadores().cumprimentoPlano.atendimento, this.cumprimentoAnimado));
+    // Apontamentos do período inteiro (qualquer OS) — refaz ao trocar semana/mês.
+    // Base de "Fora da prog.", sobrepostos e extrato.
+    effect(() => {
+      const periodo = this.periodoApontamentos();
+      if (!periodo) return;
+      untracked(() => this.buscarApontamentosPeriodo(periodo));
+    });
   }
 
   atendimentoAnimado = signal(0);
@@ -309,6 +317,8 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
       this.pessoasVendoAgora.set(typeof body.pessoasVendoAgora === 'number' ? body.pessoasVendoAgora : null);
       this.ultimaAtualizacaoEm.set(new Date());
       this.errorMessage.set('');
+      const periodo = this.periodoApontamentos();
+      if (periodo) await this.buscarApontamentosPeriodo(periodo);
     } catch (err: unknown) {
       this.errorMessage.set(err instanceof Error ? err.message : 'Erro ao carregar os indicadores.');
     } finally {
@@ -503,7 +513,8 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   private calcularHorasPorTecnico(tecnicos: Colaborador[]): HorasTecnicoItem[] {
     const ordensTodas = this.ordensParaHoras();
     const sigmaPorOs = this.sigmaPorOs();
-    const resultado: HorasTecnicoItem[] = tecnicos.map(c => ({ colaborador: c, horasProgramadas: 0, horasApontadas: 0, horasDisponiveis: 0, eficiencia: 0 }));
+    const apontamentosPeriodo = this.apontamentosPeriodo().lista;
+    const resultado: HorasTecnicoItem[] = tecnicos.map(c => ({ colaborador: c, horasProgramadas: 0, horasApontadas: 0, horasForaProgramacao: 0, horasDisponiveis: 0, eficiencia: 0 }));
     for (const semanaIso of this.semanasDoPeriodoSet()) {
       const ordensDaSemanaTodas = ordensTodas.filter(o => o.semanaInicio === semanaIso);
       for (const item of resultado) {
@@ -516,12 +527,14 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
           item.horasProgramadas += o.duracaoHoras ?? 0;
         }
         item.horasApontadas += horasApontadasDoColaborador(ordensDoTecnicoTipoOrdem, sigmaPorOs, item.colaborador.matricula);
+        item.horasForaProgramacao += horasForaDaProgramacao(ordensDoTecnicoTipoOrdem, apontamentosPeriodo, String(item.colaborador.matricula).trim(), semanaIso);
         item.horasDisponiveis += this.disponibilidadeRaw()[semanaIso]?.porTecnico[item.colaborador.matricula] ?? 0;
       }
     }
     for (const item of resultado) {
       item.horasProgramadas = Math.round(item.horasProgramadas * 100) / 100;
       item.horasApontadas = Math.round(item.horasApontadas * 100) / 100;
+      item.horasForaProgramacao = Math.round(item.horasForaProgramacao * 100) / 100;
       item.horasDisponiveis = Math.round(item.horasDisponiveis * 100) / 100;
       item.eficiencia = item.horasProgramadas > 0 ? Math.round((item.horasApontadas / item.horasProgramadas) * 1000) / 10 : 0;
     }
@@ -531,13 +544,94 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     return resultado.sort((a, b) => a.colaborador.nome.localeCompare(b.colaborador.nome, 'pt-BR'));
   }
 
+  // ── Apontamentos fora da programação / sobrepostos / extrato ──
+  // Mesma lógica da tela autenticada (manutencao-indicadores-semanais.component.ts),
+  // só que os apontamentos do período vêm do endpoint público
+  // (/api/indicadores-manutencao-publico?apontamentos_de=...&apontamentos_ate=...), que
+  // já devolve só os técnicos de Elétrica/Mecânica.
+  private apontamentosPeriodo = signal<{ chave: string; lista: SigmaApontamentoPeriodo[] }>({ chave: '', lista: [] });
+
+  private periodoApontamentos = computed(() => {
+    const semanas = [...this.semanasDoPeriodoSet()].sort();
+    if (!semanas.length) return null;
+    const ate = diasDaSemana(semanas[semanas.length - 1]).at(-1)!.data;
+    return { de: semanas[0], ate, chave: `${semanas[0]}|${ate}` };
+  });
+
+  private async buscarApontamentosPeriodo(p: { de: string; ate: string; chave: string }): Promise<void> {
+    try {
+      const params = new URLSearchParams({ apontamentos_de: p.de, apontamentos_ate: p.ate });
+      const resp = await fetch(`/api/indicadores-manutencao-publico?${params}`);
+      const body = await resp.json().catch(() => null);
+      if (!resp.ok || !body?.success) return;
+      // Resposta atrasada de um período que já não está na tela é descartada.
+      if (this.periodoApontamentos()?.chave === p.chave) this.apontamentosPeriodo.set({ chave: p.chave, lista: body.apontamentos as SigmaApontamentoPeriodo[] });
+    } catch {
+      // Best-effort: sem isso "Fora da prog."/sobrepostos/extrato só ficam vazios.
+    }
+  }
+
+  // Clique no card do técnico: cada apontamento do SIGMA no período, dia a dia.
+  extratoMatricula = signal<string | null>(null);
+
+  tecnicosDoExtrato = computed(() => [...this.rankingHorasApontadasEletrica(), ...this.rankingHorasApontadasMecanica()]
+    .sort((a, b) => a.colaborador.nome.localeCompare(b.colaborador.nome, 'pt-BR')));
+
+  extratoItem = computed(() => {
+    const matricula = this.extratoMatricula();
+    return matricula ? this.tecnicosDoExtrato().find(i => String(i.colaborador.matricula).trim() === matricula) ?? null : null;
+  });
+
+  extrato = computed<ExtratoHoras | null>(() => {
+    const item = this.extratoItem();
+    if (!item) return null;
+    const semanas = [...this.semanasDoPeriodoSet()].sort();
+    const ordens = this.ordensDoColaborador(this.ordensParaHoras().filter(o => semanas.includes(o.semanaInicio)), item.colaborador);
+    return extratoHorasColaborador(ordens, this.apontamentosPeriodo().lista, String(item.colaborador.matricula).trim(), semanas);
+  });
+
+  // Apontamentos sobrepostos no período (mesma pessoa/dia, horário que se cruza) —
+  // horas contadas em dobro. Agrupado por técnico.
+  sobrepostosPorTecnico = computed(() => {
+    const porMatricula = new Map(this.tecnicosDoExtrato().map(i => [String(i.colaborador.matricula).trim(), i]));
+    const grupos = new Map<string, { item: HorasTecnicoItem; pares: SobreposicaoApontamento[] }>();
+    for (const par of apontamentosSobrepostos(this.apontamentosPeriodo().lista)) {
+      const item = porMatricula.get(par.executante);
+      if (!item) continue;
+      const g = grupos.get(par.executante) ?? { item, pares: [] };
+      g.pares.push(par);
+      grupos.set(par.executante, g);
+    }
+    return [...grupos.values()].sort((a, b) => a.item.colaborador.nome.localeCompare(b.item.colaborador.nome, 'pt-BR'));
+  });
+
+  totalSobrepostos = computed(() => this.sobrepostosPorTecnico().reduce((s, g) => s + g.pares.length, 0));
+
+  formatarMinutos(min: number): string {
+    const h = Math.floor(min / 60), m = min % 60;
+    return h > 0 ? `${h}h${m ? String(m).padStart(2, '0') : ''}` : `${m}min`;
+  }
+
+  abrirExtrato(item: HorasTecnicoItem): void {
+    this.extratoMatricula.set(String(item.colaborador.matricula).trim());
+  }
+
+  fecharExtrato(): void {
+    this.extratoMatricula.set(null);
+  }
+
+  diaSemanaCurto(iso: string): string {
+    const [a, m, d] = iso.split('-').map(Number);
+    return ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][new Date(a, m - 1, d).getDay()] + ` ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+  }
+
   rankingHorasApontadasEletrica = computed<HorasTecnicoItem[]>(() => this.calcularHorasPorTecnico(this.tecnicosEletrica()));
   rankingHorasApontadasMecanica = computed<HorasTecnicoItem[]>(() => this.calcularHorasPorTecnico(this.tecnicosMecanica()));
 
   // Tabela do PDF (documento impresso) pula técnico sem nada no período (0h em tudo — afastado, recém
   // contratado sem programação etc.): no papel é só ruído. A tela continua mostrando.
   private semHoras = (t: HorasTecnicoItem) =>
-    !t.horasApontadas && !t.horasProgramadas && !t.horasDisponiveis;
+    !t.horasApontadas && !t.horasProgramadas && !t.horasDisponiveis && !t.horasForaProgramacao;
   horasEletricaImpressao = computed(() => this.rankingHorasApontadasEletrica().filter(t => !this.semHoras(t)));
   horasMecanicaImpressao = computed(() => this.rankingHorasApontadasMecanica().filter(t => !this.semHoras(t)));
 
