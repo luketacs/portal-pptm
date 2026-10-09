@@ -54,6 +54,8 @@ gatilho e copie a URL.
 | `FUNDO_FIXO_FLOW_URL` | URL do gatilho do fluxo |
 | `FUNDO_FIXO_EMAIL_ITALO` | e-mail Microsoft 365 do Italo |
 | `FUNDO_FIXO_EMAIL_JOAO` | e-mail Microsoft 365 do João |
+| `FUNDO_FIXO_EMAIL_COPIA` | (opcional) quem recebe cópia de todos os cards, separados por vírgula. A cópia vem sem os botões de decisão, só com "Abrir no portal" |
+| `FUNDO_FIXO_PORTAL_URL` | (opcional) endereço do portal nos links; padrão `https://portalpptm.vercel.app` |
 
 Sem `FUNDO_FIXO_FLOW_URL`, nada é enviado e tudo funciona como antes (só o Admin aprova).
 Depois de configurar, faça um redeploy.

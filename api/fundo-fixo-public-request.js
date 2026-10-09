@@ -32,8 +32,8 @@ import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import { createRateLimiter } from './_rate-limit-shared.js';
 import {
-  TOKEN_VALIDADE_DIAS, emailDoGestor, gerarToken, portalUrl, gestorDaSolicitacao, hashToken, interpretarDecisao,
-  montarCardConfirmacao, montarCardSolicitacao, tokenValido,
+  TOKEN_VALIDADE_DIAS, emailDoGestor, emailsCopia, gerarToken, portalUrl, gestorDaSolicitacao, hashToken, interpretarDecisao,
+  montarCardConfirmacao, montarCardCopia, montarCardSolicitacao, tokenValido,
 } from './_fundo-fixo-teams-shared.js';
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://portalpptm.com').split(',');
@@ -184,7 +184,9 @@ export async function notificarTeams(supabase, id, env = process.env, fetchImpl 
     if (!marcadas?.length) return 'ja-enviada';
     marcou = true;
 
-    await postarNoTeams(email, montarCardSolicitacao(row, portalUrl(env), token), env, fetchImpl);
+    const card = montarCardSolicitacao(row, portalUrl(env), token);
+    await postarNoTeams(email, card, env, fetchImpl);
+    await enviarCopias(card, gestor, email, env, fetchImpl);
     return 'enviada';
   } catch (err) {
     console.error('[fundo-fixo-teams] Falha ao enviar pro Teams:', err?.message || err);
@@ -195,6 +197,18 @@ export async function notificarTeams(supabase, id, env = process.env, fetchImpl 
         .eq('id', id);
     }
     return 'falhou';
+  }
+}
+
+// Cópia pra quem acompanha (FUNDO_FIXO_EMAIL_COPIA). Falha aqui só loga — não desfaz o
+// envio pro gestor nem a decisão.
+async function enviarCopias(card, gestor, emailGestor, env, fetchImpl) {
+  for (const copia of emailsCopia(env, emailGestor)) {
+    try {
+      await postarNoTeams(copia, montarCardCopia(card, gestor, portalUrl(env)), env, fetchImpl);
+    } catch (err) {
+      console.error('[fundo-fixo-teams] Falha ao enviar cópia:', err?.message || err);
+    }
   }
 }
 
@@ -319,7 +333,9 @@ export async function handleDecisaoConfirmar(req, res, ip, supabase, env = proce
   const email = emailDoGestor(quem, env);
   if (email && env.FUNDO_FIXO_FLOW_URL) {
     try {
-      await postarNoTeams(email, montarCardConfirmacao(salva, d.aprovado, d.comentario), env, fetchImpl);
+      const card = montarCardConfirmacao(salva, d.aprovado, d.comentario);
+      await postarNoTeams(email, card, env, fetchImpl);
+      await enviarCopias(card, quem, email, env, fetchImpl);
     } catch (err) {
       console.error('[fundo-fixo-teams] Falha ao enviar confirmação:', err?.message || err);
     }

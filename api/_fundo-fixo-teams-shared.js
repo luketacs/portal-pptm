@@ -160,3 +160,25 @@ export function interpretarDecisao(body) {
   const comentario = String(body?.comentario ?? '').trim().slice(0, 1000);
   return { token, aprovado: d === 'aprovar', comentario };
 }
+
+// Quem recebe cópia de tudo que vai pros gestores (ex.: o Admin que acompanha o Fundo
+// Fixo). FUNDO_FIXO_EMAIL_COPIA aceita vários e-mails separados por vírgula; o próprio
+// gestor é ignorado pra não receber em dobro.
+export function emailsCopia(env = process.env, excluir = null) {
+  return (env.FUNDO_FIXO_EMAIL_COPIA || '').split(/[,;\s]+/).map(e => e.trim()).filter(Boolean)
+    .filter(e => !excluir || e.toLowerCase() !== excluir.toLowerCase());
+}
+
+// Cópia de um card: mesmo conteúdo, com uma faixa "Cópia — enviado para X" e SEM os
+// botões de decisão (o link é do gestor — se a cópia decidisse, ficaria registrado como
+// decisão dele). Fica só um botão pro portal.
+export function montarCardCopia(card, gestor, baseUrl) {
+  return {
+    ...card,
+    body: [
+      { type: 'TextBlock', text: `Cópia — enviado para ${gestor}`, size: 'Small', isSubtle: true, wrap: true },
+      ...card.body,
+    ],
+    actions: [{ type: 'Action.OpenUrl', title: 'Abrir no portal', url: `${baseUrl}/fundo-fixo` }],
+  };
+}

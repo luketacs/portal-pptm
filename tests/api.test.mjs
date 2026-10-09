@@ -166,3 +166,15 @@ test('Teams: link expirado não decide; decisão do Admin no portal prevalece', 
   assert.equal(sb.rows[0].status, 'aprovado');
   assert.equal(interpretarDecisao({ token, decisao: 'talvez' }).erro, 'Decisão inválida.');
 });
+
+test('Teams: cópia vai pro e-mail de acompanhamento sem os botões de decisão', async () => {
+  const sb = fakeSupabase([novaRow()]);
+  const enviados = [];
+  const envCopia = { ...env, FUNDO_FIXO_EMAIL_COPIA: 'admin@x, joao@x' };
+  await notificarTeams(sb, ID, envCopia, async (url, opts) => { enviados.push(JSON.parse(opts.body)); return { ok: true }; });
+  assert.deepEqual(enviados.map(e => e.aprovadorEmail), ['joao@x', 'admin@x']);
+  const copia = enviados[1].card;
+  assert.match(copia.body[0].text, /Cópia — enviado para João Nunes/);
+  assert.ok(!JSON.stringify(copia).includes('/decisao'));
+  assert.deepEqual(copia.actions.map(a => a.title), ['Abrir no portal']);
+});
