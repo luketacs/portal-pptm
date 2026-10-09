@@ -32,7 +32,7 @@ import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import { createRateLimiter } from './_rate-limit-shared.js';
 import {
-  TOKEN_VALIDADE_DIAS, emailDoGestor, gerarToken, gestorDaSolicitacao, hashToken, interpretarDecisao,
+  TOKEN_VALIDADE_DIAS, emailDoGestor, gerarToken, portalUrl, gestorDaSolicitacao, hashToken, interpretarDecisao,
   montarCardConfirmacao, montarCardSolicitacao, tokenValido,
 } from './_fundo-fixo-teams-shared.js';
 
@@ -184,7 +184,7 @@ export async function notificarTeams(supabase, id, env = process.env, fetchImpl 
     if (!marcadas?.length) return 'ja-enviada';
     marcou = true;
 
-    await postarNoTeams(email, montarCardSolicitacao(row, ALLOWED_ORIGINS[0], token), env, fetchImpl);
+    await postarNoTeams(email, montarCardSolicitacao(row, portalUrl(env), token), env, fetchImpl);
     return 'enviada';
   } catch (err) {
     console.error('[fundo-fixo-teams] Falha ao enviar pro Teams:', err?.message || err);
