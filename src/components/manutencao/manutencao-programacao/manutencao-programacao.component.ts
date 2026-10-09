@@ -2526,11 +2526,23 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Reportado: ao excluir a duplicata de uma OS, a cópia certa do próprio técnico
   // entrava na lista de "vinculadas" e era apagada junto no "Excluir também" — sumiu
   // tudo do Carlos Jr e do Mauro na semana 40.
+  //
+  // E só CÓPIAS DE APOIO (ver ehCopiaDeApoio): reportado na S42/2026 — excluir uma cópia
+  // "MECÂNICA" do Apoio oferecia "Excluir também" pra todo mundo com a mesma OS
+  // (mandante, outros técnicos, TOP ANDAIMES...) e apagou 15 OS da Mecânica. Agora:
+  // excluir uma cópia nunca propaga, e excluir a OS do mandante só oferece apagar as
+  // cópias de apoio dela — nunca a OS de outro técnico lançada por conta própria.
+  private ehCopiaDeApoio(x: ManutencaoOrdem): boolean {
+    if (x.area === 'APOIO') return true;
+    return /Apoio automático \(|Apoio a .+(na OS|\.)|Apoio \(.+\) — vinculado à OS/.test(x.observacoes ?? '');
+  }
+
   private ordensVinculadas(o: ManutencaoOrdem): ManutencaoOrdem[] {
+    if (this.ehCopiaDeApoio(o)) return [];
     const numero = o.numeroOs?.trim();
     const mesmoTecnico = (x: ManutencaoOrdem) => x.tecnicoNome.trim().toUpperCase() === o.tecnicoNome.trim().toUpperCase();
     return this.manutencaoService.ordens().filter(x => {
-      if (x.id === o.id || x.tipo !== 'ordem' || x.semanaInicio !== o.semanaInicio || mesmoTecnico(x)) return false;
+      if (x.id === o.id || x.tipo !== 'ordem' || x.semanaInicio !== o.semanaInicio || mesmoTecnico(x) || !this.ehCopiaDeApoio(x)) return false;
       return numero
         ? !!x.numeroOs?.trim() && normalizarNumeroOs(x.numeroOs) === normalizarNumeroOs(numero)
         : !x.numeroOs?.trim() && x.descricao === o.descricao && x.equipamento === o.equipamento;

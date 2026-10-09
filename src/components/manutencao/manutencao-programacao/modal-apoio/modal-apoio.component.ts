@@ -170,9 +170,9 @@ export class ModalApoioComponent {
         tecnicoMatricula: this.tecnicoMatricula() || undefined,
         diasPrevistos: this.diasSelecionados(),
         status: 'PEND',
-        observacoes: empresa
-          ? [origem.observacoes?.trim(), vinculo].filter(Boolean).join(' — ')
-          : origem.observacoes ?? undefined,
+        // Marca de vínculo também no apoio de técnico (não só de empresa) — é o que
+        // ehCopiaDeApoio() usa pra saber que essa linha é cópia, e não uma OS própria.
+        observacoes: [origem.observacoes?.trim(), vinculo].filter(Boolean).join(' — '),
       });
       this.notificationService.showSuccess(empresa
         ? `OS adicionada na programação do Apoio para ${apoioTecnico}.`
