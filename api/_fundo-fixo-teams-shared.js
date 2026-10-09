@@ -99,11 +99,11 @@ export function montarCardSolicitacao(row, baseUrl, token) {
   facts.push({ title: 'Solicitado em', value: dataBr(row.data_solicitacao) });
 
   const links = (row.link_produto || '').split(/\s+/).filter(l => /^https?:\/\//i.test(l))
-    .map((l, i) => `🔗 [Produto ${i + 1}](${l})`);
-  if (row.orcamento_url) links.push(`📎 [Orçamento](${row.orcamento_url})`);
+    .map((l, i) => `[Produto ${i + 1}](${l})`);
+  if (row.orcamento_url) links.push(`[Orçamento](${row.orcamento_url})`);
 
   const body = [
-    cabecalho('💰 FUNDO FIXO · APROVAÇÃO DE COMPRA', row.material),
+    cabecalho('FUNDO FIXO · APROVAÇÃO DE COMPRA', row.material),
     {
       type: 'ColumnSet', spacing: 'Medium',
       columns: [colunaInfo('Valor estimado', brl(row.valor_estimado), true), colunaInfo('Setor', row.setor)],
@@ -111,9 +111,9 @@ export function montarCardSolicitacao(row, baseUrl, token) {
     { type: 'FactSet', facts, spacing: 'Medium', separator: true },
   ];
   if (row.observacoes) {
-    body.push({ type: 'TextBlock', text: `📝 ${row.observacoes}`, wrap: true, isSubtle: true, spacing: 'Small' });
+    body.push({ type: 'TextBlock', text: `Obs.: ${row.observacoes}`, wrap: true, isSubtle: true, spacing: 'Small' });
   }
-  if (links.length) body.push({ type: 'TextBlock', text: links.join('   '), wrap: true, spacing: 'Small' });
+  if (links.length) body.push({ type: 'TextBlock', text: links.join(' · '), wrap: true, spacing: 'Small' });
   body.push({
     type: 'TextBlock', text: 'Os botões abrem o portal pra você conferir e confirmar.',
     size: 'Small', isSubtle: true, wrap: true, spacing: 'Medium',
@@ -124,8 +124,8 @@ export function montarCardSolicitacao(row, baseUrl, token) {
     ...SCHEMA,
     body,
     actions: [
-      { type: 'Action.OpenUrl', title: '✅ Aprovar', style: 'positive', url: url('aprovar') },
-      { type: 'Action.OpenUrl', title: '❌ Recusar', style: 'destructive', url: url('recusar') },
+      { type: 'Action.OpenUrl', title: 'Aprovar', style: 'positive', url: url('aprovar') },
+      { type: 'Action.OpenUrl', title: 'Recusar', style: 'destructive', url: url('recusar') },
     ],
   };
 }
@@ -133,8 +133,8 @@ export function montarCardSolicitacao(row, baseUrl, token) {
 export function montarCardConfirmacao(row, aprovado, comentario) {
   const body = [
     cabecalho(
-      '💰 FUNDO FIXO',
-      aprovado ? '✅ Aprovação registrada' : '❌ Recusa registrada',
+      'FUNDO FIXO',
+      aprovado ? 'Aprovação registrada' : 'Recusa registrada',
       aprovado ? 'Good' : 'Attention',
     ),
     { type: 'TextBlock', text: row.material, weight: 'Bolder', wrap: true, maxLines: 3, spacing: 'Medium' },

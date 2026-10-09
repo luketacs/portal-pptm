@@ -65,7 +65,7 @@ Depois de configurar, faça um redeploy.
    portal deve mostrar "Aguardando João Nunes no Teams".
 3. Clique em **Recusar**: a página abre com "Recusar" já marcado. Escreva um motivo e
    confirme. O status deve mudar para Recusado, e deve chegar no Teams o card
-   "❌ Recusa registrada no portal".
+   "Recusa registrada".
 4. Abra o mesmo link de novo: a página deve mostrar "Solicitação já recusada".
 5. Volte o e-mail real do João e faça um redeploy.
 
