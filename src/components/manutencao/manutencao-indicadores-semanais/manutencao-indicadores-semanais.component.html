@@ -194,6 +194,20 @@
 
     <section class="pcm-section">
       <h2 class="pcm-section-title">Horas Apontadas por Técnico</h2>
+      @if (isAdmin()) {
+        <div class="pcm-somente-tela no-print flex flex-wrap items-center gap-3 mb-3">
+          <button type="button" (click)="atualizarApontamentos()" [disabled]="apontamentosCarregando()"
+            class="text-sm font-semibold text-blue-600 hover:text-blue-700 border border-blue-200 hover:bg-blue-50 rounded-lg px-3 py-1.5 disabled:opacity-50">
+            @if (apontamentosCarregando()) { Atualizando apontamentos... } @else { ↻ Atualizar apontamentos }
+          </button>
+          @if (apontamentosAtualizadoEm(); as data) {
+            <span class="text-xs text-gray-400">Consultado às {{ data | date: 'HH:mm' }} — o SIGMA é reconsultado no máximo a cada 10 min</span>
+          }
+          @if (apontamentosErro()) {
+            <span class="text-xs text-red-600">{{ apontamentosErro() }}</span>
+          }
+        </div>
+      }
       @if (rankingHorasApontadasEletrica().length === 0 && rankingHorasApontadasMecanica().length === 0) {
         <p class="pcm-empty">Nenhum apontamento de Elétrica/Mecânica nesse período.</p>
       } @else {

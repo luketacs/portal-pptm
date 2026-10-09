@@ -366,14 +366,34 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     return { de: semanas[0], ate, matriculas, chave: `${semanas[0]}|${ate}` };
   });
 
+  // Botão "Atualizar apontamentos" (só Admin): refaz só a consulta acima, sem recarregar
+  // o resto da tela. O proxy guarda o SIGMA em cache por até 10 min (_sigma-shared.js) —
+  // clicar antes disso devolve o mesmo dado.
+  apontamentosCarregando = signal(false);
+  apontamentosErro = signal('');
+  apontamentosAtualizadoEm = signal<Date | null>(null);
+
   private async buscarApontamentosPeriodo(p: { de: string; ate: string; matriculas: string[]; chave: string }): Promise<void> {
+    this.apontamentosCarregando.set(true);
     try {
       const lista = await this.manutencaoService.consultarApontamentosSigmaPeriodo(p.de, p.ate, p.matriculas);
       // Resposta atrasada de um período que já não está na tela é descartada.
-      if (this.periodoApontamentos()?.chave === p.chave) this.apontamentosPeriodo.set({ chave: p.chave, lista });
-    } catch {
+      if (this.periodoApontamentos()?.chave === p.chave) {
+        this.apontamentosPeriodo.set({ chave: p.chave, lista });
+        this.apontamentosAtualizadoEm.set(new Date());
+        this.apontamentosErro.set('');
+      }
+    } catch (err: unknown) {
       // Best-effort, igual buscarExecucaoSigma: sem isso a coluna só fica zerada.
+      this.apontamentosErro.set(err instanceof Error ? err.message : 'Falha ao consultar os apontamentos do SIGMA.');
+    } finally {
+      this.apontamentosCarregando.set(false);
     }
+  }
+
+  async atualizarApontamentos(): Promise<void> {
+    const periodo = this.periodoApontamentos();
+    if (this.isAdmin() && periodo && !this.apontamentosCarregando()) await this.buscarApontamentosPeriodo(periodo);
   }
 
   indicadores = computed<IndicadoresSemana>(() => {
