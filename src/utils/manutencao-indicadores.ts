@@ -4,7 +4,7 @@
 // status daquele relatório e o mesmo critério de "executada" (ordemExecutadaAgrupada,
 // que considera qualquer apontamento do técnico dentro da SEMANA da ordem, não só nos
 // dias originalmente previstos), sem duplicar nenhum dos dois.
-import { CategoriaIndicador, ConsultaSigmaResultado, ManutencaoOrdem } from '../models/manutencao-programacao.model';
+import { CategoriaIndicador, ConsultaSigmaResultado, ManutencaoOrdem, OsApontadaPeriodo } from '../models/manutencao-programacao.model';
 import { ordemExecutadaAgrupada } from './manutencao-dashboard';
 import { inferirCategoriaIndicadorPorTecnico } from './manutencao-planos';
 import { round2 } from './formatacao';
@@ -194,4 +194,88 @@ export function calcularIndicadoresSemana(params: {
   }
 
   return { geral, cumprimentoPlano, porArea, statusGeral };
+}
+
+// ── Ordens fora da programação ───────────────────────────────────────────────
+// Indicador do painel antigo ("ORDENS FORA DE PROGRAMAÇÃO", por área e semana): tudo o
+// que foi executado na semana fora da programação — OS com apontamento no SIGMA na
+// semana que não estava na programação DAQUELA semana (de ninguém, qualquer área).
+// Conta OS distintas por semana; a área vem da "Área Manutenção" da OS no SIGMA.
+
+// Área do SIGMA -> categoria do indicador. Lubrificação e Oficina são da Mecânica;
+// Automação, da Elétrica; Operação/Limpeza = Limpeza Operacional.
+export function categoriaDaAreaSigma(area: string): CategoriaIndicador | null {
+  const s = (area ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+  if (s.startsWith('MEC') || s.startsWith('LUB') || s.startsWith('OFIC')) return 'MECANICA';
+  if (s.startsWith('ELE') || s.startsWith('AUTO')) return 'ELETRICA';
+  if (s.startsWith('REFR')) return 'REFRIGERACAO';
+  if (s.startsWith('SPCI')) return 'SPCI';
+  if (s.startsWith('OPER') || s.startsWith('LIMP')) return 'LIMP_OPERACIONAL';
+  return null;
+}
+
+export interface OrdemForaProgramacao {
+  semanaInicio: string;
+  numeroOs: string;
+  descricao: string;
+  equipamento: string;
+  categoria: CategoriaIndicador | null;
+  tipoServico: string;
+  dias: string[];
+  executantes: string[]; // matrículas
+  horas: number;
+}
+
+function normalizarOs(v: string): string {
+  const s = String(v ?? '').trim();
+  return /^\d+$/.test(s) ? s.padStart(6, '0') : s.toUpperCase();
+}
+
+function domingo(segundaIso: string): string {
+  const [a, m, d] = segundaIso.split('-').map(Number);
+  const x = new Date(a, m - 1, d + 6);
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+}
+
+export function ordensForaDaProgramacao(
+  apontadas: OsApontadaPeriodo[], ordens: ManutencaoOrdem[], semanas: string[],
+): OrdemForaProgramacao[] {
+  const programadas = new Map(semanas.map(s => [s, new Set(ordens
+    .filter(o => o.tipo === 'ordem' && o.semanaInicio === s && o.numeroOs?.trim())
+    .map(o => normalizarOs(o.numeroOs!)))]));
+  const porChave = new Map<string, OrdemForaProgramacao>();
+  for (const a of apontadas) {
+    const semana = semanas.find(s => a.data >= s && a.data <= domingo(s));
+    if (!semana) continue;
+    const numero = normalizarOs(a.numeroOs);
+    if (programadas.get(semana)!.has(numero)) continue;
+    const chave = `${semana}|${numero}`;
+    const item = porChave.get(chave) ?? {
+      semanaInicio: semana, numeroOs: a.numeroOs, descricao: a.descricao, equipamento: a.equipamento,
+      categoria: categoriaDaAreaSigma(a.areaManutencao), tipoServico: a.tipoServico, dias: [], executantes: [], horas: 0,
+    };
+    if (!item.dias.includes(a.data)) item.dias.push(a.data);
+    for (const e of a.executantes) if (!item.executantes.includes(e)) item.executantes.push(e);
+    item.horas += a.horas;
+    porChave.set(chave, item);
+  }
+  return [...porChave.values()]
+    .map(o => ({ ...o, dias: o.dias.sort(), horas: Math.round(o.horas * 100) / 100 }))
+    .sort((x, y) => x.dias[0].localeCompare(y.dias[0]) || x.numeroOs.localeCompare(y.numeroOs));
+}
+
+/** Lista de OS fora da programação pra colar no WhatsApp. */
+export function mensagemOrdensForaProgramacao(
+  titulo: string, periodo: string, itens: OrdemForaProgramacao[], nomeDe: (matricula: string) => string,
+): string {
+  const dia = (iso: string) => {
+    const [a, m, d] = iso.split('-').map(Number);
+    return `${['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][new Date(a, m - 1, d).getDay()]} ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+  };
+  const linhas = [`*${titulo}* (${itens.length})`, `Período: ${periodo}`, ''];
+  if (itens.length === 0) linhas.push('✅ Nenhuma OS executada fora da programação.');
+  for (const o of itens) {
+    linhas.push(`• ${o.dias.map(dia).join(', ')} — OS ${o.numeroOs} — ${o.descricao || '(sem descrição)'}${o.tipoServico ? ` [${o.tipoServico}]` : ''} — ${o.executantes.map(nomeDe).join(', ')} — ${`${o.horas}h`.replace('.', ',')}`);
+  }
+  return linhas.join('\n');
 }

@@ -10,7 +10,7 @@
 // com o endpoint público do Kanban da Oficina, ver kanban-atividades-publico.js) — aqui
 // fica só o que é específico desse proxy: exigir sessão válida e servir os dois formatos
 // de consulta (numeros_os / backlog_area).
-import { ALLOWED_ORIGINS, normalizarNumeroOs, obterCache } from './_sigma-shared.js';
+import { ALLOWED_ORIGINS, normalizarNumeroOs, obterCache, osApontadasNoPeriodo } from './_sigma-shared.js';
 
 async function getCallerUserId({ supabaseUrl, serviceRoleKey, accessToken }) {
   const resp = await fetch(`${supabaseUrl}/auth/v1/user`, {
@@ -84,7 +84,7 @@ export default async function handler(req, res) {
           const os = dados.osPorNumero.get(a.numeroOs);
           return { ...a, descricao: os?.descricao ?? '', equipamento: os?.equipamento ?? '' };
         });
-      return res.status(200).json({ success: true, apontamentos, atualizadoEm: dados.ts });
+      return res.status(200).json({ success: true, apontamentos, osApontadas: osApontadasNoPeriodo(dados, de, ate), atualizadoEm: dados.ts });
     }
 
     const rawNumeros = String(req.query?.numeros_os || '').trim();

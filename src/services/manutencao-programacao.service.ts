@@ -12,6 +12,7 @@ import {
   EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, ParadaPlanta,
   RecursoEspecialItem, SigmaApontamentoPeriodo, SigmaBacklogItem,
   SigmaPreventivaPendente,
+  OsApontadaPeriodo,
 } from '../models/manutencao-programacao.model';
 
 // Timeout do AbortSignal vira um erro genérico ("AbortError"/"signal is aborted") — troca
@@ -684,7 +685,7 @@ export class ManutencaoProgramacaoService {
 
   // Apontamentos do SIGMA num período, de QUALQUER OS (não só as programadas) — usado
   // pelos Indicadores pra mostrar hora apontada fora da programação do técnico.
-  async consultarApontamentosSigmaPeriodo(de: string, ate: string, executantes: string[]): Promise<SigmaApontamentoPeriodo[]> {
+  async consultarApontamentosSigmaPeriodo(de: string, ate: string, executantes: string[]): Promise<{ apontamentos: SigmaApontamentoPeriodo[]; osApontadas: OsApontadaPeriodo[] }> {
     const token = await this.authService.getValidAccessToken();
     const params = new URLSearchParams({ apontamentos_de: de, apontamentos_ate: ate, executantes: executantes.join(',') });
     const resp = await fetch(`/api/sigma-ordens-proxy?${params}`, {
@@ -694,7 +695,7 @@ export class ManutencaoProgramacaoService {
     if (!resp.ok || !body?.success) {
       throw new Error(body?.error || 'Falha ao consultar os apontamentos do SIGMA.');
     }
-    return body.apontamentos as SigmaApontamentoPeriodo[];
+    return { apontamentos: body.apontamentos as SigmaApontamentoPeriodo[], osApontadas: (body.osApontadas ?? []) as OsApontadaPeriodo[] };
   }
 
   // Backlog do SIGMA: OS abertas de uma área, ainda não lançadas na nossa programação —

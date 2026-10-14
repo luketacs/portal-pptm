@@ -20,12 +20,11 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, WritableSignal, computed, effect, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, ManutencaoOrdem, SigmaApontamentoPeriodo } from '../../../models/manutencao-programacao.model';
+import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, ManutencaoOrdem, SigmaApontamentoPeriodo, OsApontadaPeriodo } from '../../../models/manutencao-programacao.model';
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
   META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, STATUS_GERAL_COR, StatusGeralSemana,
-  TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, entraNoFechamentoIndicador, indiceAtingimentoMeta,
-} from '../../../utils/manutencao-indicadores';
+  TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, entraNoFechamentoIndicador, indiceAtingimentoMeta, OrdemForaProgramacao, ordensForaDaProgramacao } from '../../../utils/manutencao-indicadores';
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
 import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApontamento, StatusExecucaoGrupo, apontamentosSobrepostos, calcularKpiExecucao, extratoHorasColaborador, mensagemExtratoWhatsapp, OrdemPendente, ordensPendentes, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
@@ -35,6 +34,7 @@ import {
 } from '../../../utils/manutencao-indicadores-periodo';
 import { VisivelNaTelaDirective } from './visivel-na-tela.directive';
 import { OrdensPendentesModalComponent } from './ordens-pendentes-modal.component';
+import { OrdensForaProgramacaoModalComponent } from './ordens-fora-programacao-modal.component';
 import { RelatorioIndicadoresImpressoComponent } from '../relatorio-indicadores-impresso/relatorio-indicadores-impresso.component';
 import { DadosRelatorioImpresso, montarDadosRelatorioImpresso } from '../../../utils/relatorio-impresso';
 
@@ -207,7 +207,7 @@ const RELOAD_PAGINA_MS = 60 * 60 * 1000;
 @Component({
   selector: 'app-manutencao-indicadores-publico',
   standalone: true,
-  imports: [CommonModule, FormsModule, VisivelNaTelaDirective, RelatorioIndicadoresImpressoComponent, OrdensPendentesModalComponent],
+  imports: [CommonModule, FormsModule, VisivelNaTelaDirective, RelatorioIndicadoresImpressoComponent, OrdensPendentesModalComponent, OrdensForaProgramacaoModalComponent],
   templateUrl: './manutencao-indicadores-publico.component.html',
   styleUrls: ['./manutencao-indicadores-semanais.component.css', './manutencao-indicadores-impressao.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -552,6 +552,8 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   // (/api/indicadores-manutencao-publico?apontamentos_de=...&apontamentos_ate=...), que
   // já devolve só os técnicos de Elétrica/Mecânica.
   private apontamentosPeriodo = signal<{ chave: string; lista: SigmaApontamentoPeriodo[] }>({ chave: '', lista: [] });
+  // OS com apontamento no período (todas as áreas/executantes) — indicador "Fora da Prog.".
+  private osApontadasPeriodo = signal<OsApontadaPeriodo[]>([]);
 
   private periodoApontamentos = computed(() => {
     const semanas = [...this.semanasDoPeriodoSet()].sort();
@@ -567,7 +569,10 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
       const body = await resp.json().catch(() => null);
       if (!resp.ok || !body?.success) return;
       // Resposta atrasada de um período que já não está na tela é descartada.
-      if (this.periodoApontamentos()?.chave === p.chave) this.apontamentosPeriodo.set({ chave: p.chave, lista: body.apontamentos as SigmaApontamentoPeriodo[] });
+      if (this.periodoApontamentos()?.chave === p.chave) {
+        this.apontamentosPeriodo.set({ chave: p.chave, lista: body.apontamentos as SigmaApontamentoPeriodo[] });
+        this.osApontadasPeriodo.set((body.osApontadas ?? []) as OsApontadaPeriodo[]);
+      }
     } catch {
       // Best-effort: sem isso "Fora da prog."/sobrepostos/extrato só ficam vazios.
     }
@@ -626,6 +631,26 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     if (this.extratoCopiadoTimer) clearTimeout(this.extratoCopiadoTimer);
     this.extratoCopiadoTimer = setTimeout(() => this.extratoCopiado.set(null), 2500);
   }
+
+  // ── Ordens fora da programação (indicador do painel antigo, por área) ──
+  // OS executada na semana (apontamento no SIGMA) que não estava na programação da
+  // semana — ver ordensForaDaProgramacao. Coluna "Fora da Prog." da tabela por área;
+  // o número abre a lista.
+  foraProgramacao = computed<OrdemForaProgramacao[]>(() =>
+    ordensForaDaProgramacao(this.osApontadasPeriodo(), this.ordensTipo(), [...this.semanasDoPeriodoSet()].sort()));
+
+  foraProgramacaoDaArea(categoria: CategoriaIndicador | null | 'todas'): number {
+    return categoria === 'todas' ? this.foraProgramacao().length : this.foraProgramacao().filter(o => o.categoria === categoria).length;
+  }
+
+  foraProgramacaoAberto = signal<CategoriaIndicador | 'todas' | null>(null);
+
+  abrirForaProgramacao(categoria: CategoriaIndicador | null | 'todas'): void {
+    this.foraProgramacaoAberto.set(categoria ?? 'todas');
+  }
+
+  readonly nomeDaMatricula = (matricula: string): string =>
+    this.colaboradoresRaw().find(c => String(c.matricula).trim() === String(matricula).trim())?.nome ?? matricula;
 
   // ── OS não executadas ──
   // Geral: clique no número "Não Executadas" da tabela por área abre a lista (mesmo

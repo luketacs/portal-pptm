@@ -405,13 +405,14 @@
             <thead>
               <tr>
                 <th rowspan="2" style="min-width: 150px;">Área</th>
-                <th colspan="5" class="pcm-subheader-atendimento">Atendimento à Programação</th>
+                <th colspan="6" class="pcm-subheader-atendimento">Atendimento à Programação</th>
                 <th colspan="5" class="pcm-subheader-cumprimento">Cumprimento do Plano</th>
               </tr>
               <tr>
                 <th>Programadas</th>
                 <th>Executadas</th>
                 <th>Não Executadas</th>
+                <th title="OS executadas na semana (apontamento no SIGMA) que não estavam na programação">Fora da Prog.</th>
                 <th>Atendimento</th>
                 <th>Status</th>
                 <th>Planejadas</th>
@@ -433,6 +434,7 @@
                   <td>{{ a.programadas }}</td>
                   <td>{{ a.executadas }}</td>
                   <td>@if (a.naoExecutadas > 0) { <button type="button" class="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900" (click)="abrirNaoExecutadas(a.categoria)" title="Ver quais OS">{{ a.naoExecutadas }}</button> } @else { {{ a.naoExecutadas }} }</td>
+                  <td>@if (foraProgramacaoDaArea(a.categoria) > 0) { <button type="button" class="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900" (click)="abrirForaProgramacao(a.categoria)" title="Ver quais OS">{{ foraProgramacaoDaArea(a.categoria) }}</button> } @else { 0 }</td>
                   <td><strong class="pcm-percentage">{{ a.atendimento }}%</strong></td>
                   <td>
                     <span class="pcm-status-indicator" [class.pcm-status-meta]="a.atendimento >= metaAtendimento" [class.pcm-status-alert]="a.atendimento < metaAtendimento">
@@ -457,6 +459,7 @@
                 <td>{{ indicadores().geral.programadas }}</td>
                 <td>{{ indicadores().geral.executadas }}</td>
                 <td>@if (indicadores().geral.naoExecutadas > 0) { <button type="button" class="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900" (click)="abrirNaoExecutadas('todas')" title="Ver quais OS">{{ indicadores().geral.naoExecutadas }}</button> } @else { {{ indicadores().geral.naoExecutadas }} }</td>
+                <td>@if (foraProgramacaoDaArea('todas') > 0) { <button type="button" class="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900" (click)="abrirForaProgramacao('todas')" title="Ver quais OS">{{ foraProgramacaoDaArea('todas') }}</button> } @else { 0 }</td>
                 <td><strong>{{ indicadores().geral.atendimento }}%</strong></td>
                 <td></td>
                 <td>{{ indicadores().cumprimentoPlano.programadas }}</td>
@@ -767,4 +770,8 @@
 
 @if (pendentesAberto(); as p) {
   <app-ordens-pendentes-modal [titulo]="p.titulo" [periodo]="periodoLabel()" [itens]="p.itens" [categoriaInicial]="p.categoria" (fechar)="pendentesAberto.set(null)" />
+}
+
+@if (foraProgramacaoAberto(); as cat) {
+  <app-ordens-fora-programacao-modal [periodo]="periodoLabel()" [itens]="foraProgramacao()" [categoriaInicial]="cat" [nomeDe]="nomeDaMatricula" (fechar)="foraProgramacaoAberto.set(null)" />
 }

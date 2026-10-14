@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { fetchAllRows } from './_pagination-shared.js';
 import { resumirDisponibilidade } from './_indicadores-hh-shared.js';
 import { createClient } from '@supabase/supabase-js';
-import { ALLOWED_ORIGINS, normalizarNumeroOs, obterCache } from './_sigma-shared.js';
+import { ALLOWED_ORIGINS, normalizarNumeroOs, obterCache, osApontadasNoPeriodo } from './_sigma-shared.js';
 
 // Mesmo padrão de kanban-atividades-publico.js: o tracer da Vercel só empacota o JSON
 // quando reconhece a chamada require('...') (a forma inline createRequire(...)('...')
@@ -112,7 +112,7 @@ export default async function handler(req, res) {
           return { ...a, descricao: os?.descricao ?? '', equipamento: os?.equipamento ?? '' };
         });
       res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json({ success: true, apontamentos, atualizadoEm: dados.ts });
+      return res.status(200).json({ success: true, apontamentos, osApontadas: osApontadasNoPeriodo(dados, de, ate), atualizadoEm: dados.ts });
     } catch (error) {
       console.error('[indicadores-manutencao-publico] SIGMA indisponível (apontamentos):', error.message);
       return res.status(200).json({ success: false, error: 'SIGMA indisponível no momento.' });

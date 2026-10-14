@@ -211,3 +211,27 @@ export async function obterCache() {
     .catch(err => { cachePromise = null; throw err; });
   return cachePromise;
 }
+
+// OS com apontamento no período — uma linha por OS e dia, de TODAS as áreas e executantes
+// (agregado: não expõe o apontamento individual). Base do indicador "Ordens fora da
+// programação" (OS executada na semana que não estava na programação da semana, ver
+// ordensForaDaProgramacao em src/utils/manutencao-indicadores.ts).
+export function osApontadasNoPeriodo(dados, de, ate) {
+  const porChave = new Map();
+  for (const a of dados.apontamentosLista) {
+    if (a.data < de || a.data > ate) continue;
+    const chave = `${a.numeroOs}|${a.data}`;
+    let item = porChave.get(chave);
+    if (!item) {
+      const os = dados.osPorNumero.get(a.numeroOs);
+      item = {
+        numeroOs: a.numeroOs, data: a.data, areaManutencao: os?.areaManutencao ?? '', tipoServico: os?.tipoServico ?? '',
+        descricao: os?.descricao ?? '', equipamento: os?.equipamento ?? '', executantes: [], horas: 0,
+      };
+      porChave.set(chave, item);
+    }
+    if (a.executante && !item.executantes.includes(a.executante)) item.executantes.push(a.executante);
+    item.horas += a.horas ?? 0;
+  }
+  return [...porChave.values()];
+}

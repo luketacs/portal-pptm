@@ -8,12 +8,11 @@ import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { ManutencaoIndicadoresHistoricoService } from '../../../services/manutencao-indicadores-historico.service';
 import { ManutencaoIndicadoresManuaisService } from '../../../services/manutencao-indicadores-manuais.service';
-import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, ImportarIndicadorHistoricoItem, ManutencaoOrdem, SigmaApontamentoPeriodo } from '../../../models/manutencao-programacao.model';
+import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, ImportarIndicadorHistoricoItem, ManutencaoOrdem, SigmaApontamentoPeriodo, OsApontadaPeriodo } from '../../../models/manutencao-programacao.model';
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
   META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, STATUS_GERAL_COR, StatusGeralSemana,
-  TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, entraNoFechamentoIndicador, indiceAtingimentoMeta,
-} from '../../../utils/manutencao-indicadores';
+  TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, entraNoFechamentoIndicador, indiceAtingimentoMeta, OrdemForaProgramacao, ordensForaDaProgramacao } from '../../../utils/manutencao-indicadores';
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
@@ -25,6 +24,7 @@ import {
 } from '../../../utils/manutencao-indicadores-periodo';
 import { VisivelNaTelaDirective } from './visivel-na-tela.directive';
 import { OrdensPendentesModalComponent } from './ordens-pendentes-modal.component';
+import { OrdensForaProgramacaoModalComponent } from './ordens-fora-programacao-modal.component';
 import { RelatorioIndicadoresImpressoComponent } from '../relatorio-indicadores-impresso/relatorio-indicadores-impresso.component';
 import { DadosRelatorioImpresso, montarDadosRelatorioImpresso } from '../../../utils/relatorio-impresso';
 
@@ -87,7 +87,7 @@ const INTERVALO_POLL_MS = 3 * 60 * 1000;
 @Component({
   selector: 'app-manutencao-indicadores-semanais',
   standalone: true,
-  imports: [CommonModule, FormsModule, VisivelNaTelaDirective, RelatorioIndicadoresImpressoComponent, OrdensPendentesModalComponent],
+  imports: [CommonModule, FormsModule, VisivelNaTelaDirective, RelatorioIndicadoresImpressoComponent, OrdensPendentesModalComponent, OrdensForaProgramacaoModalComponent],
   templateUrl: './manutencao-indicadores-semanais.component.html',
   styleUrls: ['./manutencao-indicadores-semanais.component.css', './manutencao-indicadores-impressao.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -358,6 +358,8 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // semana (reportado: Anderson Souza com 35h no SIGMA e 28h aqui na S39 — a OS 047666
   // não estava programada pra ele). Fica à parte: não entra na eficiência.
   private apontamentosPeriodo = signal<{ chave: string; lista: SigmaApontamentoPeriodo[] }>({ chave: '', lista: [] });
+  // OS com apontamento no período (todas as áreas/executantes) — indicador "Fora da Prog.".
+  private osApontadasPeriodo = signal<OsApontadaPeriodo[]>([]);
 
   private periodoApontamentos = computed(() => {
     const semanas = [...this.semanasDoPeriodoSet()].sort();
@@ -377,10 +379,11 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   private async buscarApontamentosPeriodo(p: { de: string; ate: string; matriculas: string[]; chave: string }): Promise<void> {
     this.apontamentosCarregando.set(true);
     try {
-      const lista = await this.manutencaoService.consultarApontamentosSigmaPeriodo(p.de, p.ate, p.matriculas);
+      const { apontamentos: lista, osApontadas } = await this.manutencaoService.consultarApontamentosSigmaPeriodo(p.de, p.ate, p.matriculas);
       // Resposta atrasada de um período que já não está na tela é descartada.
       if (this.periodoApontamentos()?.chave === p.chave) {
         this.apontamentosPeriodo.set({ chave: p.chave, lista });
+        this.osApontadasPeriodo.set(osApontadas);
         this.apontamentosAtualizadoEm.set(new Date());
         this.apontamentosErro.set('');
       }
@@ -662,6 +665,26 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       this.notificationService.showError('Não foi possível copiar. Tente de novo.');
     }
   }
+
+  // ── Ordens fora da programação (indicador do painel antigo, por área) ──
+  // OS executada na semana (apontamento no SIGMA) que não estava na programação da
+  // semana — ver ordensForaDaProgramacao. Coluna "Fora da Prog." da tabela por área;
+  // o número abre a lista.
+  foraProgramacao = computed<OrdemForaProgramacao[]>(() =>
+    ordensForaDaProgramacao(this.osApontadasPeriodo(), this.ordensTipo(), [...this.semanasDoPeriodoSet()].sort()));
+
+  foraProgramacaoDaArea(categoria: CategoriaIndicador | null | 'todas'): number {
+    return categoria === 'todas' ? this.foraProgramacao().length : this.foraProgramacao().filter(o => o.categoria === categoria).length;
+  }
+
+  foraProgramacaoAberto = signal<CategoriaIndicador | 'todas' | null>(null);
+
+  abrirForaProgramacao(categoria: CategoriaIndicador | null | 'todas'): void {
+    this.foraProgramacaoAberto.set(categoria ?? 'todas');
+  }
+
+  readonly nomeDaMatricula = (matricula: string): string =>
+    this.apontamentosService.colaboradores().find(c => String(c.matricula).trim() === String(matricula).trim())?.nome ?? matricula;
 
   // ── OS não executadas ──
   // Geral: clique no número "Não Executadas" da tabela por área abre a lista (mesmo

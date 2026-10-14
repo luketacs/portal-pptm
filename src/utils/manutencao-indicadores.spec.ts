@@ -1,5 +1,5 @@
 import { ManutencaoOrdem, ConsultaSigmaResultado } from '../models/manutencao-programacao.model';
-import {
+import { ordensForaDaProgramacao, categoriaDaAreaSigma, mensagemOrdensForaProgramacao,
   calcularIndicadoresSemana, indiceAtingimentoMeta, MatchColaborador, META_ATENDIMENTO, META_CUMPRIMENTO,
   META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META,
   TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META,
@@ -236,5 +236,34 @@ describe('indiceAtingimentoMeta', () => {
       expect(indiceAtingimentoMeta(p * 2, p, m, t)).toBe(0);
       expect(indiceAtingimentoMeta(p * 5, p, m, t)).toBe(0);
     });
+  });
+});
+
+describe('ordensForaDaProgramacao', () => {
+  const ap = (numeroOs: string, data: string, areaManutencao: string, executantes: string[], horas: number) =>
+    ({ numeroOs, data, areaManutencao, tipoServico: 'CORRETIVA', descricao: `OS ${numeroOs}`, equipamento: '', executantes, horas });
+
+  it('conta OS apontada na semana que não estava programada naquela semana, por área do SIGMA', () => {
+    const programada = ordem({ numeroOs: '45203', semanaInicio: '2026-09-07' });
+    const outraSemana = ordem({ id: 'x', numeroOs: '47000', semanaInicio: '2026-08-31' });
+    const apontadas = [
+      ap('045203', '2026-09-08', 'ELET', ['1'], 4),          // programada: fora da conta
+      ap('047666', '2026-09-08', 'MECA', ['1'], 2),          // fora
+      ap('047666', '2026-09-09', 'MECA', ['2'], 3),          // mesma OS, outro dia/pessoa: 1 OS só
+      ap('047000', '2026-09-10', 'LUBR', ['3'], 1),          // programada em OUTRA semana: fora nesta
+      ap('048000', '2026-09-14', 'ELET', ['1'], 1),          // fora do período
+    ];
+    const r = ordensForaDaProgramacao(apontadas, [programada, outraSemana], ['2026-09-07']);
+    expect(r.map(o => [o.numeroOs, o.categoria, o.dias, o.executantes, o.horas])).toEqual([
+      ['047666', 'MECANICA', ['2026-09-08', '2026-09-09'], ['1', '2'], 5],
+      ['047000', 'MECANICA', ['2026-09-10'], ['3'], 1],
+    ]);
+    const msg = mensagemOrdensForaProgramacao('Fora', 'S37', r, m => `Nome ${m}`);
+    expect(msg).toContain('• Ter 08/09, Qua 09/09 — OS 047666 — OS 047666 [CORRETIVA] — Nome 1, Nome 2 — 5h');
+  });
+
+  it('mapeia as áreas do SIGMA pras categorias do indicador', () => {
+    expect(['ELET', 'AUTO', 'MECA', 'LUBR', 'OFIC', 'REFR', 'SPCI', 'OPER', 'LIMP', 'XYZ'].map(categoriaDaAreaSigma))
+      .toEqual(['ELETRICA', 'ELETRICA', 'MECANICA', 'MECANICA', 'MECANICA', 'REFRIGERACAO', 'SPCI', 'LIMP_OPERACIONAL', 'LIMP_OPERACIONAL', null]);
   });
 });

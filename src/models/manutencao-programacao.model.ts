@@ -255,6 +255,19 @@ export interface SigmaApontamentoPeriodo extends SigmaApontamento {
   equipamento?: string;
 }
 
+// OS com apontamento no período, por dia (todas as áreas/executantes) — ver
+// osApontadasNoPeriodo no proxy e ordensForaDaProgramacao.
+export interface OsApontadaPeriodo {
+  numeroOs: string;
+  data: string;
+  areaManutencao: string;
+  tipoServico: string;
+  descricao: string;
+  equipamento: string;
+  executantes: string[]; // matrículas
+  horas: number;
+}
+
 export interface ConsultaSigmaResultado {
   os: SigmaOrdemInfo | null;
   apontamentos: SigmaApontamento[];
