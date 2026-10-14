@@ -1,4 +1,4 @@
-import { apontamentosSobrepostos, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, extratoHorasColaborador, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from './manutencao-dashboard';
+import { apontamentosSobrepostos, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, extratoHorasColaborador, mensagemExtratoWhatsapp, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from './manutencao-dashboard';
 import { ConsultaSigmaResultado, ManutencaoOrdem } from '../models/manutencao-programacao.model';
 
 const DIAS_SEMANA_37 = [
@@ -426,5 +426,40 @@ describe('creditarOsExecutadasPorOutro', () => {
   it('linha de Apoio por empresa (sem colaborador resolvido) não é mexida', () => {
     const apoio = ordem({ id: 'a1', area: 'APOIO', tecnicoNome: 'SERVPLEX', tecnicoMatricula: null });
     expect(creditarOsExecutadasPorOutro([apoio], sigma('20006210'), match)).toEqual([apoio]);
+  });
+});
+
+describe('mensagemExtratoWhatsapp', () => {
+  const ap = (numeroOs: string, data: string, horaInicial: string | undefined, horaFinal: string | undefined, horas: number | null, descricao?: string) =>
+    ({ numeroOs, data, horaInicial, horaFinal, horas, descricao, executante: '20006136', status: 'EXEC' });
+  const base = { nome: 'Antônio Nivaldo', matricula: '20006136', periodo: 'Semana 37', horasProgramadas: 13, hojeIso: '2026-09-14' };
+
+  it('separa cada correção num bloco e lista as OS fora da programação à parte', () => {
+    const lista = [
+      ap('045203', '2026-09-08', '08:00', '15:00', 7, 'Reparar sirene'),
+      ap('045203', '2026-09-08', '14:00', '16:00', 2, 'Reparar sirene'), // sobrepõe 1h
+      ap('047666', '2026-09-09', undefined, undefined, null, 'Mesa de giro'), // sem hora, fora da prog.
+      ap('047700', '2026-09-10', '08:00', '12:00', 4, 'Corretiva extra'),
+    ];
+    const programadas = [ordem({ numeroOs: '45203' }), ordem({ id: 'o2', numeroOs: '49999', descricao: 'Trocar relé', diasPrevistos: ['2026-09-11'] })];
+    const ex = extratoHorasColaborador(programadas, lista, '20006136', ['2026-09-07']);
+    const msg = mensagemExtratoWhatsapp({ ...base, extrato: ex, ordensDoTecnico: programadas });
+    expect(msg).toContain('*Extrato de horas — Antônio Nivaldo* (20006136)');
+    expect(msg).toContain('Total apontado no SIGMA: *13h*');
+    expect(msg).toContain('*1. Horário sobreposto* (1)');
+    expect(msg).toContain('• Ter 08/09 — OS 045203 (08:00–15:00) e OS 045203 (14:00–16:00)');
+    expect(msg).toContain('*2. Apontamento sem hora de início/fim* (1)');
+    expect(msg).toContain('*3. OS programada sem apontamento seu* (1)');
+    expect(msg).toContain('• OS 49999 — Trocar relé (Sex 11/09)');
+    expect(msg).toContain('🔎 *PARA CONFERIR');
+    expect(msg).toContain('• OS 047700 — Corretiva extra — 4h (Qui 10/09)');
+  });
+
+  it('sem pendência: mensagem curta e positiva; OS que ainda não passou não cobra', () => {
+    const programadas = [ordem({ numeroOs: '45203', diasPrevistos: ['2026-09-15'] })];
+    const ex = extratoHorasColaborador(programadas, [], '20006136', ['2026-09-07']);
+    const msg = mensagemExtratoWhatsapp({ ...base, extrato: ex, ordensDoTecnico: programadas });
+    expect(msg).toContain('✅ Nenhuma correção pendente no SIGMA.');
+    expect(msg).not.toContain('PARA CONFERIR');
   });
 });

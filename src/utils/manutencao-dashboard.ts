@@ -321,6 +321,91 @@ export function extratoHorasColaborador(
   return extrato;
 }
 
+function diaCurto(iso: string): string {
+  const [a, m, d] = iso.split('-').map(Number);
+  return `${['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][new Date(a, m - 1, d).getDay()]} ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+}
+
+const horasTexto = (h: number) => `${+h.toFixed(2)}h`.replace('.', ',');
+
+/**
+ * Mensagem do extrato pra colar no WhatsApp do técnico ("Copiar extrato"): resumo das
+ * horas + o que ele precisa corrigir no SIGMA, cada tipo num bloco separado — horário
+ * sobreposto (conta em dobro), apontamento sem hora (conta 0h) e OS programada pra ele
+ * que já passou sem apontamento dele. OS fora da programação vai num bloco "para
+ * conferir" à parte: nem sempre é erro (corretiva de emergência), só pede pra confirmar
+ * o número. Formatação do WhatsApp: *negrito*, uma linha por item.
+ */
+export function mensagemExtratoWhatsapp(p: {
+  nome: string;
+  matricula: string;
+  periodo: string;
+  extrato: ExtratoHoras;
+  ordensDoTecnico: ManutencaoOrdem[];
+  horasProgramadas: number;
+  hojeIso: string;
+}): string {
+  const { extrato: ex } = p;
+  const linhas: string[] = [
+    `*Extrato de horas — ${p.nome}* (${p.matricula})`,
+    `Período: ${p.periodo}`,
+    '',
+    `Total apontado no SIGMA: *${horasTexto(ex.horasProgramadas + ex.horasFora)}*`,
+    `• Em OS programadas: ${horasTexto(ex.horasProgramadas)} (programado: ${horasTexto(p.horasProgramadas)})`,
+    `• Fora da programação: ${horasTexto(ex.horasFora)}`,
+  ];
+
+  const sobrepostos = ex.sobreposicoes.map(s =>
+    `• ${diaCurto(s.data)} — OS ${s.a.numeroOs} (${s.a.horaInicial}–${s.a.horaFinal}) e OS ${s.b.numeroOs} (${s.b.horaInicial}–${s.b.horaFinal})`);
+  const semHora = ex.dias.flatMap(d => d.linhas.filter(l => l.apontamento.horas === null)
+    .map(l => `• ${diaCurto(d.data)} — OS ${l.apontamento.numeroOs}${l.apontamento.descricao ? ` — ${l.apontamento.descricao}` : ''}`));
+  // OS programada pra ele (com número) cujo último dia previsto já passou e que não tem
+  // nenhum apontamento dele no período.
+  const apontadas = new Set(ex.dias.flatMap(d => d.linhas.map(l => normalizarNumeroOs(l.apontamento.numeroOs))));
+  const vistas = new Set<string>();
+  const semApontamento: string[] = [];
+  for (const o of [...p.ordensDoTecnico].sort((a, b) => a.semanaInicio.localeCompare(b.semanaInicio))) {
+    if (o.tipo !== 'ordem' || !o.numeroOs?.trim()) continue;
+    const num = normalizarNumeroOs(o.numeroOs);
+    const ultimoDia = [...o.diasPrevistos].sort().at(-1) ?? domingoDaSemana(o.semanaInicio);
+    if (ultimoDia >= p.hojeIso || apontadas.has(num) || vistas.has(num)) continue;
+    vistas.add(num);
+    semApontamento.push(`• OS ${o.numeroOs.trim()} — ${o.descricao}${o.diasPrevistos.length ? ` (${[...o.diasPrevistos].sort().map(diaCurto).join(', ')})` : ''}`);
+  }
+  const fora = new Map<string, { os: string; descricao?: string; horas: number; dias: Set<string> }>();
+  for (const d of ex.dias) for (const l of d.linhas) {
+    if (l.programada) continue;
+    const k = normalizarNumeroOs(l.apontamento.numeroOs);
+    const item = fora.get(k) ?? { os: l.apontamento.numeroOs, descricao: l.apontamento.descricao, horas: 0, dias: new Set<string>() };
+    item.horas += l.apontamento.horas ?? 0;
+    item.dias.add(diaCurto(d.data));
+    fora.set(k, item);
+  }
+
+  const blocos: [string, string, string[]][] = [
+    ['Horário sobreposto', 'as horas em comum estão contando em dobro; apague o lançamento errado e lance de novo', sobrepostos],
+    ['Apontamento sem hora de início/fim', 'está contando 0h; complete o horário', semHora],
+    ['OS programada sem apontamento seu', 'se fez, aponte; se não fez, avise', semApontamento],
+  ];
+  const comItens = blocos.filter(([, , itens]) => itens.length > 0);
+  linhas.push('');
+  if (comItens.length === 0) {
+    linhas.push('✅ Nenhuma correção pendente no SIGMA.');
+  } else {
+    linhas.push('⚠️ *O QUE PRECISA CORRIGIR NO SIGMA*');
+    comItens.forEach(([titulo, explicacao, itens], i) => {
+      linhas.push('', `*${i + 1}. ${titulo}* (${itens.length})`, `_${explicacao}_`, ...itens);
+    });
+  }
+  if (fora.size > 0) {
+    linhas.push('', '🔎 *PARA CONFERIR — OS fora da sua programação*', '_não é erro se foi serviço extra; só confira se o número da OS está certo_');
+    for (const f of fora.values()) {
+      linhas.push(`• OS ${f.os}${f.descricao ? ` — ${f.descricao}` : ''} — ${horasTexto(f.horas)} (${[...f.dias].join(', ')})`);
+    }
+  }
+  return linhas.join('\n');
+}
+
 export interface KpiExecucao {
   programadas: number;
   executadas: number;

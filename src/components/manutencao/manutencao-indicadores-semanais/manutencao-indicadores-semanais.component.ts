@@ -17,7 +17,7 @@ import {
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
-import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApontamento, StatusExecucaoGrupo, apontamentosSobrepostos, calcularHhTecnico, calcularKpiExecucao, extratoHorasColaborador, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
+import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApontamento, StatusExecucaoGrupo, apontamentosSobrepostos, calcularHhTecnico, calcularKpiExecucao, extratoHorasColaborador, mensagemExtratoWhatsapp, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
 import { encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
@@ -624,13 +624,43 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     return matricula ? this.tecnicosDoExtrato().find(i => String(i.colaborador.matricula).trim() === matricula) ?? null : null;
   });
 
+  private ordensDoExtrato = computed(() => {
+    const item = this.extratoItem();
+    if (!item) return [];
+    const semanas = this.semanasDoPeriodoSet();
+    return this.ordensDoColaborador(this.ordensParaHoras().filter(o => semanas.has(o.semanaInicio)), item.colaborador);
+  });
+
   extrato = computed<ExtratoHoras | null>(() => {
     const item = this.extratoItem();
     if (!item) return null;
     const semanas = [...this.semanasDoPeriodoSet()].sort();
-    const ordens = this.ordensDoColaborador(this.ordensParaHoras().filter(o => semanas.includes(o.semanaInicio)), item.colaborador);
-    return extratoHorasColaborador(ordens, this.apontamentosPeriodo().lista, String(item.colaborador.matricula).trim(), semanas);
+    return extratoHorasColaborador(this.ordensDoExtrato(), this.apontamentosPeriodo().lista, String(item.colaborador.matricula).trim(), semanas);
   });
+
+  // "Copiar extrato": mensagem pronta pro WhatsApp do técnico com o que ele precisa
+  // corrigir no SIGMA (ver mensagemExtratoWhatsapp).
+  async copiarExtrato(): Promise<void> {
+    const item = this.extratoItem();
+    const ex = this.extrato();
+    if (!item || !ex) return;
+    const hoje = new Date();
+    const texto = mensagemExtratoWhatsapp({
+      nome: item.colaborador.nome,
+      matricula: String(item.colaborador.matricula).trim(),
+      periodo: this.periodoLabel(),
+      extrato: ex,
+      ordensDoTecnico: this.ordensDoExtrato(),
+      horasProgramadas: item.horasProgramadas,
+      hojeIso: `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`,
+    });
+    try {
+      await navigator.clipboard.writeText(texto);
+      this.notificationService.showSuccess('Extrato copiado — cole no WhatsApp do técnico.');
+    } catch {
+      this.notificationService.showError('Não foi possível copiar. Tente de novo.');
+    }
+  }
 
   // Apontamentos sobrepostos no período (mesma pessoa/dia, horário que se cruza) —
   // horas contadas em dobro. Agrupado por técnico, pra pedir correção no SIGMA.
