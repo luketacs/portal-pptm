@@ -414,6 +414,20 @@
             @if (preventivasVencendoLabel()) {
               <span class="text-[11px] text-gray-400">{{ preventivasVencendoLabel() }}</span>
             }
+            @if (programadasSemOsResumo().total > 0) {
+              <span class="block text-[11px] font-semibold text-blue-700 mt-0.5">
+                {{ programadasSemOsResumo().total }} preventiva(s) já programada(s) nesta semana sem nº de OS
+                @if (programadasSemOsResumo().comOs.length > 0) {
+                  — {{ programadasSemOsResumo().comOs.length }} com OS PEND no SIGMA
+                  @if (podeEditarSemana()) {
+                    <button type="button" (click)="preencherOsDasProgramadas()" [disabled]="isProcessando()"
+                      class="ml-1 px-2 py-0.5 rounded border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50">Preencher OS</button>
+                  }
+                } @else {
+                  — nenhuma OS PEND do mesmo plano no SIGMA
+                }
+              </span>
+            }
             @if (preventivasSemOs() > 0) {
               <span class="block text-[11px] font-semibold text-amber-700" title="Sem OS da planilha, sem OS PEND do mesmo plano no SIGMA e sem Nº OS reservado — essas ainda precisam ser abertas no SIGMA">{{ preventivasSemOs() }} sem OS no SIGMA — abrir no SIGMA</span>
             }

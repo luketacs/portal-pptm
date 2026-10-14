@@ -1323,10 +1323,71 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     }
   }
 
+  // Preventivas JÁ programadas na semana em exibição, ligadas a um plano mas sem número
+  // de OS (lançadas antes do reaproveitamento existir) — agrupadas por plano (todas as
+  // linhas da mesma preventiva na semana recebem o mesmo número). Têm prioridade sobre
+  // as sugestões novas na hora de escolher a OS do SIGMA.
+  private programadasSemOs = computed(() => {
+    const semana = this.semanaFiltro();
+    const grupos = new Map<string, ManutencaoOrdem[]>();
+    for (const o of this.manutencaoService.ordens()) {
+      if (o.tipo !== 'ordem' || o.semanaInicio !== semana || !o.planoPreventivoId || o.numeroOs?.trim()) continue;
+      if (this.areaFixa && o.area !== this.areaFixa) continue;
+      grupos.set(o.planoPreventivoId, [...(grupos.get(o.planoPreventivoId) ?? []), o]);
+    }
+    return grupos;
+  });
+
+  private osSigmaUsados = computed(() =>
+    new Set(this.manutencaoService.ordens().filter(o => o.numeroOs?.trim()).map(o => normalizarNumeroOs(o.numeroOs!))));
+
+  // Plano das programadas sem OS -> OS PEND do SIGMA escolhida pra elas.
+  private osSigmaDasProgramadas = computed(() => {
+    const planos = [...this.programadasSemOs().keys()]
+      .map(id => this.manutencaoPlanosService.getById(id))
+      .filter((p): p is PlanoManutencao => !!p);
+    return osSigmaDosPlanos(planos, this.preventivasPendentesSigma(), this.osSigmaUsados(), normalizarNumeroOs);
+  });
+
   private osSigmaPorPlano = computed(() => {
-    const usados = new Set(this.manutencaoService.ordens().filter(o => o.numeroOs?.trim()).map(o => normalizarNumeroOs(o.numeroOs!)));
+    const usados = new Set(this.osSigmaUsados());
+    this.osSigmaDasProgramadas().forEach(v => usados.add(normalizarNumeroOs(v.numeroOs)));
     return osSigmaDosPlanos(this.agendaPlanos(), this.preventivasPendentesSigma(), usados, normalizarNumeroOs);
   });
+
+  // Aviso "N preventivas já programadas sem OS" + o que dá pra preencher.
+  programadasSemOsResumo = computed(() => {
+    const achadas = this.osSigmaDasProgramadas();
+    const itens = [...this.programadasSemOs().entries()].map(([planoId, linhas]) => ({
+      planoId, linhas, descricao: linhas[0].descricao, os: achadas.get(planoId) ?? null,
+    }));
+    return { total: itens.length, comOs: itens.filter(i => i.os) };
+  });
+
+  async preencherOsDasProgramadas(): Promise<void> {
+    const { comOs } = this.programadasSemOsResumo();
+    if (comOs.length === 0 || this.isProcessando()) return;
+    const lista = comOs.map(i => `• ${i.descricao} → OS ${i.os!.numeroOs}`).join('\n');
+    if (!(await this.confirmDialogService.confirm(
+      `Preencher o número da OS do SIGMA (PEND mais antiga do mesmo plano) nestas preventivas já programadas?\n\n${lista}`,
+      { confirmLabel: 'Preencher' },
+    ))) return;
+    this.isProcessando.set(true);
+    let feitas = 0;
+    try {
+      for (const item of comOs) {
+        // Linhas da preventiva na semana + cópias de apoio delas (mesma atividade).
+        const ids = new Set(item.linhas.flatMap(l => [l.id, ...this.ordensVinculadas(l).map(v => v.id)]));
+        await this.manutencaoService.atualizarNumeroOsEspelhos([...ids], item.os!.numeroOs);
+        feitas++;
+      }
+      this.notificationService.showSuccess(`Número da OS preenchido em ${feitas} preventiva(s).`);
+    } catch (err: unknown) {
+      this.notificationService.showError(`${feitas} preenchida(s); erro na seguinte: ${err instanceof Error ? err.message : 'falha ao gravar'}.`);
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
 
   osSigmaDoPlano(plano: PlanoComProximaData) {
     return this.osSigmaPorPlano().get(plano.id) ?? null;
