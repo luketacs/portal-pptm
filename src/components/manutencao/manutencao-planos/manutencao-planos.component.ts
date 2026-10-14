@@ -11,6 +11,7 @@ import {
   AtividadeChecklist, CicloManutencao, ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem, PeriodicidadeUnidade,
   PlanoManutencao,
 } from '../../../models/manutencao-programacao.model';
+import { LOTO_OPCOES } from '../../../utils/manutencao-regras';
 import { calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva, proximaDataFixa } from '../../../utils/manutencao-preventivas';
 import {
   diagnosticarPlanos, ProblemaSaude, SeveridadeSaude, TipoProblemaSaude, TITULO_PROBLEMA, validarPlanoParaSalvar,
@@ -74,10 +75,6 @@ function paraIso(d: Date): string {
 function normalizarTexto(v: string): string {
   return v.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
 }
-
-// Mesmas 3 opções de LOTO_OPCOES em manutencao-programacao.component.ts (convenção do
-// projeto: duplicar constante pequena em vez de criar um util só pra isso).
-const LOTO_OPCOES = ['LOTO', 'SEM LOTO', 'FUNCIONANDO'];
 
 interface PeriodicidadePreset {
   label: string;

@@ -153,6 +153,7 @@ const LOTO_COR: Record<string, string> = {
   LOTO: 'bg-red-100 text-red-700',
   'SEM LOTO': 'bg-slate-100 text-slate-600',
   FUNCIONANDO: 'bg-green-100 text-green-700',
+  'DISPONÍVEL': 'bg-violet-100 text-violet-700',
 };
 export function lotoBadgeClass(loto: string): string {
   return LOTO_COR[loto.toUpperCase()] ?? 'bg-slate-100 text-slate-500';

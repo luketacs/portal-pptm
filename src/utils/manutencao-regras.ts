@@ -157,17 +157,33 @@ export function diaMesPadded(dataIso: string): string {
   return `${dia}/${mes}`;
 }
 
-// LOTO (bloqueio do equipamento) tem só essas 3 opções — é o que evita duas equipes
+// LOTO (bloqueio do equipamento) tem só essas 4 opções — é o que evita duas equipes
 // baterem de frente (uma precisando do equipamento rodando, outra precisando parado).
+// "DISPONÍVEL" = o equipamento fica reservado pra uma atividade específica naquele dia:
+// ninguém bloqueia nem liga (ex.: inspeção/teste de terceiro que precisa dele livre).
+export const LOTO_DISPONIVEL = 'DISPONÍVEL';
+export const LOTO_OPCOES = ['LOTO', 'SEM LOTO', 'FUNCIONANDO', LOTO_DISPONIVEL];
 const LOTO_BADGE: Record<string, string> = {
   LOTO: 'bg-red-100 text-red-700',
   'SEM LOTO': 'bg-slate-100 text-slate-600',
   FUNCIONANDO: 'bg-green-100 text-green-700',
+  [LOTO_DISPONIVEL]: 'bg-violet-100 text-violet-700',
 };
 const LOTO_BADGE_PADRAO = 'bg-slate-50 text-slate-400';
 
 export function lotoBadgeClass(loto: string): string {
   return LOTO_BADGE[loto.toUpperCase()] ?? LOTO_BADGE_PADRAO;
+}
+
+// Conflito numa célula do quadro de LOTO (mesmo equipamento, mesmo dia, itens já
+// agrupados por OS). Status diferentes entre OS = conflito (como sempre foi). Além disso,
+// DISPONÍVEL é exclusivo: qualquer outra OS no mesmo equipamento/dia conflita com ele,
+// mesmo que também seja DISPONÍVEL — duas atividades não podem ter o equipamento
+// "reservado" ao mesmo tempo.
+export function celulaLotoEmConflito(itens: { status: string }[]): boolean {
+  if (itens.length < 2) return false;
+  const status = itens.map(i => i.status.toUpperCase());
+  return new Set(status).size > 1 || status.includes(LOTO_DISPONIVEL);
 }
 
 // Dica curta do hover nativo (title) do quadro de LOTO — o detalhe completo fica no

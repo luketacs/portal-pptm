@@ -5,7 +5,7 @@ import {
   bloqueioDoTecnico, calcularCapacidadeSemana, diasDaSemana, encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo,
   encontrarFolgaNoIntervalo, encontrarOrdemDuplicada, ordemDuplicada, paraIso, podeEditarSemanaFechada, recursosParaEspelho,
   tecnicosPorArea, todosTecnicos, bloqueiosDoApoio, resumoGravacaoApoio,
-  indisponibilidadesNaSemana, numerosSigmaParaConsultar, avaliarGravacao,
+  indisponibilidadesNaSemana, numerosSigmaParaConsultar, avaliarGravacao, celulaLotoEmConflito,
 } from './manutencao-regras';
 
 const DIAS_SEMANA_37 = [
@@ -515,5 +515,26 @@ describe('avaliarGravacao', () => {
     const r = avaliarGravacao({ ...base, ms: 300, erro: { name: 'AbortError', message: 'signal is aborted', code: undefined } });
     expect(r?.event_type).toBe('manutencao_programacao_salvar_falha');
     expect(r?.metadata).toMatchObject({ erro_nome: 'AbortError', erro_mensagem: 'signal is aborted' });
+  });
+});
+
+describe('celulaLotoEmConflito', () => {
+  it('uma OS sozinha nunca conflita, nem DISPONÍVEL', () => {
+    expect(celulaLotoEmConflito([{ status: 'DISPONÍVEL' }])).toBe(false);
+    expect(celulaLotoEmConflito([])).toBe(false);
+  });
+
+  it('OS diferentes com o mesmo status (LOTO/FUNCIONANDO) não conflitam', () => {
+    expect(celulaLotoEmConflito([{ status: 'LOTO' }, { status: 'loto' }])).toBe(false);
+    expect(celulaLotoEmConflito([{ status: 'FUNCIONANDO' }, { status: 'FUNCIONANDO' }])).toBe(false);
+  });
+
+  it('status diferentes conflitam', () => {
+    expect(celulaLotoEmConflito([{ status: 'LOTO' }, { status: 'FUNCIONANDO' }])).toBe(true);
+  });
+
+  it('DISPONÍVEL conflita com qualquer outra OS, inclusive outro DISPONÍVEL', () => {
+    expect(celulaLotoEmConflito([{ status: 'DISPONÍVEL' }, { status: 'LOTO' }])).toBe(true);
+    expect(celulaLotoEmConflito([{ status: 'DISPONÍVEL' }, { status: 'DISPONÍVEL' }])).toBe(true);
   });
 });

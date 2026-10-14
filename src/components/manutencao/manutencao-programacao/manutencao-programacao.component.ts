@@ -16,7 +16,7 @@ import {
 } from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, turnoNoDia } from '../../../utils/escala-apoio';
 import {
-  HORAS_TREINAMENTO_DIA_TODO, bloqueioDoTecnico, calcularCapacidadeSemana, conflitoLotoTitle, diaMesPadded, diasDaSemana,
+  HORAS_TREINAMENTO_DIA_TODO, LOTO_DISPONIVEL, LOTO_OPCOES, bloqueioDoTecnico, calcularCapacidadeSemana, celulaLotoEmConflito, conflitoLotoTitle, diaMesPadded, diasDaSemana,
   encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo, encontrarOrdemDuplicada, formatarDataBr,
   lotoBadgeClass, normalizarNumeroOs, normalizarTexto, ordemDuplicada, paraIso, podeEditarSemanaFechada, recursosParaEspelho,
   tecnicosPorArea, todosTecnicos, bloqueiosDoApoio, resumoGravacaoApoio, TipoBloqueio,
@@ -112,7 +112,6 @@ const TIPO_SERVICO_BADGE_PADRAO = 'bg-slate-50 text-slate-500';
 
 // LOTO (bloqueio do equipamento) tem só essas 3 opções — é o que evita duas equipes
 // baterem de frente (uma precisando do equipamento rodando, outra precisando parado).
-const LOTO_OPCOES = ['LOTO', 'SEM LOTO', 'FUNCIONANDO'];
 
 function segundaFeiraDe(d: Date): Date {
   const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -1357,12 +1356,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
             else porOs.set(chave, { status: item.status, descricao: item.descricao, tecnicos: [item.tecnico], numeroOs: item.numeroOs });
           });
           const itens = Array.from(porOs.values());
-          const statusUnicos = new Set(itens.map(i => i.status.toUpperCase()));
-          return { data: dia, itens, conflito: statusUnicos.size > 1 };
+          return { data: dia, itens, conflito: celulaLotoEmConflito(itens) };
         }),
       }))
       // Só vale a pena aparecer no quadro o equipamento que tem algo realmente pra
-      // observar (bloqueio, funcionando marcado, ou conflito entre equipes).
+      // observar (bloqueio, funcionando/disponível marcado, ou conflito entre equipes).
       .filter(linha => linha.dias.some(d => d.itens.length > 0))
       // Equipamento com conflito ativo (em qualquer dia) sobe pro topo — o quadro
       // existe justamente pra chamar atenção pra conflito, não faz sentido ele ficar
@@ -1413,7 +1411,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
           partes.push(`  ⚠️ ${diaTexto} — Conflito: ${texto}`);
         } else {
           for (const item of cel.itens) {
-            const emoji = item.status.toUpperCase() === 'LOTO' ? '🔴' : '🟢';
+            const st = item.status.toUpperCase();
+            const emoji = st === 'LOTO' ? '🔴' : st === LOTO_DISPONIVEL ? '🟣' : '🟢';
             partes.push(`  ${emoji} ${diaTexto} — ${item.status}: ${item.descricao} (${item.tecnicos.join(', ')})`);
           }
         }

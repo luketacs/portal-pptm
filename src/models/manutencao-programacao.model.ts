@@ -125,8 +125,8 @@ export interface PlanoManutencao {
   numeroOsReservado: string | null;
   // Status de LOTO que essa manutenção sempre exige (ex.: teste que precisa do
   // equipamento rodando) — pré-preenche o campo LOTO da Nova OS ao programar (ver
-  // programarDaPreventiva), mesmas opções de LOTO_OPCOES ('LOTO'|'SEM LOTO'|
-  // 'FUNCIONANDO'). null = sem padrão, continua em branco pra escolher na hora.
+  // programarDaPreventiva), mesmas opções de LOTO_OPCOES em manutencao-regras ('LOTO'|
+  // 'SEM LOTO'|'FUNCIONANDO'|'DISPONÍVEL'). null = sem padrão, continua em branco pra escolher na hora.
   lotoPadrao: string | null;
   // Outros equipamentos que devem entrar no Quadro de LOTO junto com o principal
   // sempre que esse plano for programado (ex.: teste que envolve vários equipamentos
