@@ -330,7 +330,7 @@ const horasTexto = (h: number) => `${+h.toFixed(2)}h`.replace('.', ',');
 
 /**
  * Mensagem do extrato pra colar no WhatsApp do técnico ("Copiar extrato"): resumo das
- * horas + o que ele precisa corrigir no SIGMA, cada tipo num bloco separado — horário
+ * horas, apontamentos dia a dia + o que ele precisa corrigir no SIGMA, cada tipo num bloco separado — horário
  * sobreposto (conta em dobro), apontamento sem hora (conta 0h) e OS programada pra ele
  * que já passou sem apontamento dele. OS fora da programação vai num bloco "para
  * conferir" à parte: nem sempre é erro (corretiva de emergência), só pede pra confirmar
@@ -354,6 +354,20 @@ export function mensagemExtratoWhatsapp(p: {
     `• Em OS programadas: ${horasTexto(ex.horasProgramadas)} (programado: ${horasTexto(p.horasProgramadas)})`,
     `• Fora da programação: ${horasTexto(ex.horasFora)}`,
   ];
+
+  // Apontamentos dia a dia (o mesmo da tabela do extrato), pra pessoa conferir o que
+  // está lançado. Marca o que é fora da programação e o que tem horário sobreposto.
+  linhas.push('', '📋 *APONTAMENTOS*');
+  if (ex.dias.length === 0) linhas.push('_nenhum apontamento no SIGMA nesse período_');
+  for (const d of ex.dias) {
+    linhas.push('', `*${diaCurto(d.data)}* — ${horasTexto(d.horas)}`);
+    for (const l of d.linhas) {
+      const a = l.apontamento;
+      const horario = a.horaInicial && a.horaFinal ? `${a.horaInicial}–${a.horaFinal}` : 'sem horário';
+      const marcas = [l.programada ? '' : '(fora da prog.)', l.sobrepostaCom.length ? '⚠️ sobreposto' : ''].filter(Boolean).join(' ');
+      linhas.push(`• ${horario} — OS ${a.numeroOs}${a.descricao ? ` — ${a.descricao}` : ''} — ${a.horas === null ? '0h' : horasTexto(a.horas)}${marcas ? ` ${marcas}` : ''}`);
+    }
+  }
 
   const sobrepostos = ex.sobreposicoes.map(s =>
     `• ${diaCurto(s.data)} — OS ${s.a.numeroOs} (${s.a.horaInicial}–${s.a.horaFinal}) e OS ${s.b.numeroOs} (${s.b.horaInicial}–${s.b.horaFinal})`);

@@ -451,6 +451,10 @@ describe('mensagemExtratoWhatsapp', () => {
     expect(msg).toContain('*2. Apontamento sem hora de início/fim* (1)');
     expect(msg).toContain('*3. OS programada sem apontamento seu* (1)');
     expect(msg).toContain('• OS 49999 — Trocar relé (Sex 11/09)');
+    expect(msg).toContain('📋 *APONTAMENTOS*');
+    expect(msg).toContain('*Ter 08/09* — 9h');
+    expect(msg).toContain('• 08:00–15:00 — OS 045203 — Reparar sirene — 7h ⚠️ sobreposto');
+    expect(msg).toContain('• sem horário — OS 047666 — Mesa de giro — 0h (fora da prog.)');
     expect(msg).toContain('🔎 *PARA CONFERIR');
     expect(msg).toContain('• OS 047700 — Corretiva extra — 4h (Qui 10/09)');
   });
