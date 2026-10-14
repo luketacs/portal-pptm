@@ -414,6 +414,9 @@
             @if (preventivasVencendoLabel()) {
               <span class="text-[11px] text-gray-400">{{ preventivasVencendoLabel() }}</span>
             }
+            @if (preventivasSemOs() > 0) {
+              <span class="block text-[11px] font-semibold text-amber-700" title="Sem OS da planilha, sem OS PEND do mesmo plano no SIGMA e sem Nº OS reservado — essas ainda precisam ser abertas no SIGMA">{{ preventivasSemOs() }} sem OS no SIGMA — abrir no SIGMA</span>
+            }
           </div>
           @if (preventivasGauge().total > 0) {
             <div class="flex flex-col items-center flex-shrink-0 -mt-1">
