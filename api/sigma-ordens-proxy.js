@@ -1,6 +1,8 @@
 // Proxy para as exportações do SIGMA usadas pela Programação de Manutenção:
 //   - Descrição automática ao digitar o número da OS
 //   - Validação se a OS foi apontada (executada) dentro da semana programada
+//   - Preventivas pendentes (PEND) de todas as áreas, pra reaproveitar a OS já aberta
+//     do mesmo plano ao programar (?preventivas_pendentes=1)
 //   - Backlog: OS abertas (não concluídas/canceladas) de uma área, pra ajudar a montar
 //     a semana em vez de digitar OS uma a uma (?backlog_area=ELETRICA|MECANICA)
 //
@@ -52,6 +54,13 @@ export default async function handler(req, res) {
       const dados = await obterCache();
       const backlog = dados.backlogPorArea[backlogArea].slice(0, 300);
       return res.status(200).json({ success: true, backlog, atualizadoEm: dados.ts });
+    }
+
+    // OS preventivas pendentes (PEND) de todas as áreas — reaproveitamento de OS já
+    // aberta do mesmo plano ao programar (?preventivas_pendentes=1).
+    if (req.query?.preventivas_pendentes) {
+      const dados = await obterCache();
+      return res.status(200).json({ success: true, preventivas: dados.preventivasPendentes, atualizadoEm: dados.ts });
     }
 
     // Apontamentos de um período, de qualquer OS (?apontamentos_de=YYYY-MM-DD&

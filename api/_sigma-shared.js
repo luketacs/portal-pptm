@@ -19,7 +19,7 @@ export const CACHE_TTL_MS = 10 * 60 * 1000;
 // em casar o texto do cabeçalho — ele vem em Windows-1252 e alguns nomes têm acento/º).
 // Export "os" (aspas por campo, resposta a exportação inteira do SIGMA):
 export const OS_COL = {
-  numeroOs: 1, areaManutencao: 11, naturezaManutencao: 14, kks: 16, bem: 17, descricao: 18, statusCodigo: 33,
+  numeroOs: 1, data: 7, areaManutencao: 11, naturezaManutencao: 14, kks: 16, bem: 17, descricao: 18, statusCodigo: 33,
 };
 // Export "apontamentos" (sem aspas):
 export const APONT_COL = {
@@ -128,6 +128,10 @@ export async function carregarDados() {
 
   const osPorNumero = new Map();
   const backlogPorArea = { ELETRICA: [], MECANICA: [] };
+  // OS preventivas PEND de todas as áreas, compactas [número, descrição, bem, data] — a
+  // Programação reaproveita a mais antiga do mesmo plano em vez de abrir outra no SIGMA
+  // (ver osSigmaDosPlanos em src/utils/manutencao-planos.ts). Sem corte de quantidade.
+  const preventivasPendentes = [];
   for (let i = 1; i < linhasOs.length; i++) {
     const row = linhasOs[i];
     const numeroOs = normalizarNumeroOs(row[OS_COL.numeroOs]);
@@ -141,6 +145,9 @@ export async function carregarDados() {
       tipoServico: (row[OS_COL.naturezaManutencao] || '').toUpperCase(),
     };
     osPorNumero.set(numeroOs, info);
+    if (statusCodigo === 'PEND' && info.tipoServico === 'PREVENTIVA') {
+      preventivasPendentes.push([numeroOs, info.descricao, (row[OS_COL.bem] || '').trim(), (row[OS_COL.data] || '').trim()]);
+    }
 
     const area = normalizarAreaManutencao(info.areaManutencao);
     if ((area === 'ELETRICA' || area === 'MECANICA') && !STATUS_FORA_DO_BACKLOG.has(statusCodigo)) {
@@ -192,7 +199,7 @@ export async function carregarDados() {
   }
   apontamentosLista.sort((a, b) => a.data.localeCompare(b.data));
 
-  return { ts: Date.now(), osPorNumero, apontamentosPorOs, apontamentosLista, backlogPorArea };
+  return { ts: Date.now(), osPorNumero, apontamentosPorOs, apontamentosLista, backlogPorArea, preventivasPendentes };
 }
 
 export async function obterCache() {

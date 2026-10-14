@@ -2,7 +2,7 @@ import { ManutencaoOrdem, PlanoManutencao } from '../models/manutencao-programac
 import {
   agendaDosPlanos, alinharDatasPorEquipamento, EQUIPE_APOIO_NAO_CLASSIFICADA, gerarGradeMensal, inferirCategoriaIndicador,
   inferirCategoriaIndicadorPorTecnico, janelaAlinhamentoDaArea, limitarPorEquipeApoio, nomeBaseDoPlano, ocorrenciasNoIntervalo,
-  semanasIsoDoAno, siglaPeriodicidade, planosAtrasados, planosComProximaExecucao, datasProgramadasPorPlano,
+  semanasIsoDoAno, siglaPeriodicidade, planosAtrasados, planosComProximaExecucao, datasProgramadasPorPlano, osSigmaDosPlanos,
   planosComProximaExecucaoFixa, proximaExecucaoPlano, resumoPorEquipeApoio, sugestoesDaSemana, dataCicloAoProgramar,
 } from './manutencao-planos';
 
@@ -697,5 +697,44 @@ describe('datasProgramadasPorPlano', () => {
     const p = plano({ id: 'p1', dataInicial: '2026-10-05', periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)' });
     const datas = datasProgramadasPorPlano([p], new Map(), [ordem({ descricao: p.nome, diasPrevistos: ['2026-10-06'] })]);
     expect(planosAtrasados([{ ...p, proximaData: '2026-10-12' }], datas, '2026-10-12', false)).toEqual([]);
+  });
+});
+
+describe('osSigmaDosPlanos', () => {
+  const norm = (v: string) => (/^\d+$/.test(v.trim()) ? v.trim().padStart(6, '0') : v.trim().toUpperCase());
+  const os = (numeroOs: string, descricao: string, bem: string, data: string) => ({ numeroOs, descricao, bem, data });
+
+  it('pega a PEND mais antiga do mesmo nome, ignorando acento/espaço e as já programadas', () => {
+    const p = plano({ id: 'p1', codigo: 'PM-1', nome: 'I-E-6M INSPEÇÃO SPDA  EAC31', tagKks: null });
+    const pend = [
+      os('011736', 'I-E-6M INSPECAO SPDA EAC31', 'TC91EAC31AF001', '2025-09-18'),
+      os('011735', 'I-E-6M INSPECAO SPDA EAC31', 'TC91EAC31AF001', '2025-03-22'),
+      os('011700', 'I-E-6M INSPECAO SPDA EAC31', 'TC91EAC31AF001', '2025-01-02'), // já programada
+      os('099999', 'OUTRA COISA', 'TC91EAC31AF001', '2024-01-01'),
+    ];
+    const r = osSigmaDosPlanos([p], pend, new Set(['011700']), norm);
+    expect(r.get('p1')).toEqual({ numeroOs: '011735', outras: 1 });
+  });
+
+  it('desempata pelo Bem = tag_kks e não dá a mesma OS pra dois planos', () => {
+    const a = plano({ id: 'a', codigo: 'PM-1', nome: 'P-R-6M SPLIT', tagKks: 'AC01' });
+    const b = plano({ id: 'b', codigo: 'PM-2', nome: 'P-R-6M SPLIT', tagKks: 'AC02' });
+    const c = plano({ id: 'c', codigo: 'PM-3', nome: 'P-R-6M SPLIT', tagKks: 'AC09' }); // Bem não bate e sobram 2 equipamentos: ambíguo
+    const pend = [os('000010', 'P-R-6M SPLIT', 'AC02', '2025-01-01'), os('000011', 'P-R-6M SPLIT', 'AC01', '2025-02-01'),
+      os('000012', 'P-R-6M SPLIT', 'AC03', '2025-03-01'), os('000013', 'P-R-6M SPLIT', 'AC04', '2025-03-01')];
+    const r = osSigmaDosPlanos([c, b, a], pend, new Set(), norm);
+    expect(r.get('a')?.numeroOs).toBe('000011');
+    expect(r.get('b')?.numeroOs).toBe('000010');
+    expect(r.get('c')).toBeUndefined();
+  });
+
+  it('Bem escrito diferente mas um equipamento só: usa', () => {
+    const p = plano({ id: 'p1', codigo: 'PM-1', nome: 'I-E-6M SPDA EAC31', tagKks: 'TC91EAC31AF001' });
+    const r = osSigmaDosPlanos([p], [os('000020', 'I-E-6M SPDA EAC31', 'COR91EAC31AF001', '2025-01-01')], new Set(), norm);
+    expect(r.get('p1')?.numeroOs).toBe('000020');
+  });
+
+  it('sem OS com o mesmo nome, o plano fica sem sugestão', () => {
+    expect(osSigmaDosPlanos([plano({ id: 'p1', nome: 'X' })], [os('1', 'Y', '', '2025-01-01')], new Set(), norm).size).toBe(0);
   });
 });

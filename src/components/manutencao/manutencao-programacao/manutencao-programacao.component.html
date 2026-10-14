@@ -444,7 +444,7 @@
                   <th class="py-1 pr-3">Tarefa</th>
                   <th class="py-1 pr-3">Periodicidade</th>
                   <th class="py-1 pr-3">Vencimento</th>
-                  <th class="py-1 pr-3">Nº OS reservado</th>
+                  <th class="py-1 pr-3">Nº OS</th>
                   <th class="py-1 pr-3"></th>
                 </tr>
               </thead>
@@ -470,6 +470,9 @@
                       @if (osDaOcorrencia(plano); as osPlanilha) {
                         <span class="inline-block w-24 rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-semibold text-green-800"
                           title="OS já aberta no SIGMA pra esta data (planilha da Operação) — entra sozinha ao programar">{{ osPlanilha }}</span>
+                      } @else if (osSigmaDoPlano(plano); as osSigma) {
+                        <span class="inline-block w-24 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-800"
+                          [title]="'OS pendente (PEND) mais antiga do mesmo plano no SIGMA — entra sozinha ao programar' + (osSigma.outras ? '. Ainda há mais ' + osSigma.outras + ' pendente(s) desse plano.' : '')">{{ osSigma.numeroOs }}<span class="ml-1 text-[9px] font-bold text-blue-500">SIGMA</span></span>
                       } @else {
                         <input type="text" [value]="plano.numeroOsReservado ?? ''" (change)="salvarNumeroOsReservado(plano, $any($event.target).value)"
                           placeholder="Nº OS" class="w-24 rounded-lg border border-slate-300 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -504,7 +507,7 @@
                   <th class="py-1 pr-3">Periodicidade</th>
                   <th class="py-1 pr-3">Ocorrência</th>
                   <th class="py-1 pr-3">Prazo c/ tolerância</th>
-                  <th class="py-1 pr-3">Nº OS reservado</th>
+                  <th class="py-1 pr-3">Nº OS</th>
                   <th class="py-1 pr-3"></th>
                 </tr>
               </thead>
@@ -533,6 +536,9 @@
                       @if (osDaOcorrencia(plano); as osPlanilha) {
                         <span class="inline-block w-24 rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-semibold text-green-800"
                           title="OS já aberta no SIGMA pra esta data (planilha da Operação) — entra sozinha ao programar">{{ osPlanilha }}</span>
+                      } @else if (osSigmaDoPlano(plano); as osSigma) {
+                        <span class="inline-block w-24 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-800"
+                          [title]="'OS pendente (PEND) mais antiga do mesmo plano no SIGMA — entra sozinha ao programar' + (osSigma.outras ? '. Ainda há mais ' + osSigma.outras + ' pendente(s) desse plano.' : '')">{{ osSigma.numeroOs }}<span class="ml-1 text-[9px] font-bold text-blue-500">SIGMA</span></span>
                       } @else {
                         <input type="text" [value]="plano.numeroOsReservado ?? ''" (change)="salvarNumeroOsReservado(plano, $any($event.target).value)"
                           placeholder="Nº OS" class="w-24 rounded-lg border border-slate-300 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />

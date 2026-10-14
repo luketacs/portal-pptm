@@ -11,6 +11,7 @@ import {
   AtestadoTecnico, AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest,
   EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, ParadaPlanta,
   RecursoEspecialItem, SigmaApontamentoPeriodo, SigmaBacklogItem,
+  SigmaPreventivaPendente,
 } from '../models/manutencao-programacao.model';
 
 // Timeout do AbortSignal vira um erro genérico ("AbortError"/"signal is aborted") — troca
@@ -666,6 +667,19 @@ export class ManutencaoProgramacaoService {
       throw new Error(body?.error || 'Falha ao consultar o SIGMA.');
     }
     return body.data as Record<string, ConsultaSigmaResultado>;
+  }
+
+  // OS preventivas pendentes (PEND) do SIGMA, todas as áreas — ver osSigmaDosPlanos.
+  async consultarPreventivasPendentesSigma(): Promise<SigmaPreventivaPendente[]> {
+    const token = await this.authService.getValidAccessToken();
+    const resp = await fetch('/api/sigma-ordens-proxy?preventivas_pendentes=1', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const body = await resp.json().catch(() => null);
+    if (!resp.ok || !body?.success) {
+      throw new Error(body?.error || 'Falha ao consultar as preventivas pendentes do SIGMA.');
+    }
+    return (body.preventivas as [string, string, string, string][]).map(([numeroOs, descricao, bem, data]) => ({ numeroOs, descricao, bem, data }));
   }
 
   // Apontamentos do SIGMA num período, de QUALQUER OS (não só as programadas) — usado

@@ -224,6 +224,15 @@ export interface SigmaOrdemInfo {
   tipoServico: string;
 }
 
+// OS preventiva PEND do SIGMA (ver ?preventivas_pendentes no proxy) — candidata a ser
+// reaproveitada por um plano ao programar (osSigmaDosPlanos).
+export interface SigmaPreventivaPendente {
+  numeroOs: string;
+  descricao: string;
+  bem: string;  // coluna "Bem" do SIGMA — bate com tag_kks do plano
+  data: string; // 'YYYY-MM-DD' de abertura
+}
+
 export interface SigmaApontamento {
   data: string; // 'YYYY-MM-DD'
   status: string;

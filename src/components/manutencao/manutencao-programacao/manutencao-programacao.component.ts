@@ -13,6 +13,7 @@ import { AlmoxarifadoService, Movimentacao, Solicitacao } from '../../../service
 import {
   AtestadoTecnico, AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, CreateManutencaoOrdemRequest, FeriasTecnico, ManutencaoArea, ManutencaoOrdem,
   ManutencaoTipo, OperadorEscalaApoio, PlanoManutencao, SigmaBacklogItem,
+  SigmaPreventivaPendente,
 } from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, turnoNoDia } from '../../../utils/escala-apoio';
 import {
@@ -27,6 +28,7 @@ import {
   inferirCategoriaIndicadorPorTecnico, limitarPorEquipeApoio, LimitePorEquipeApoio, PlanoComProximaData,
   planosAtrasados, primeiraSemanaAberta, datasProgramadasPorPlano,
   resumoPorEquipeApoio, sugestoesDaSemana,
+  osSigmaDosPlanos,
 } from '../../../utils/manutencao-planos';
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
 import { EscalaTurnoTabelaComponent } from './escala-turno-tabela/escala-turno-tabela.component';
@@ -1277,8 +1279,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     // Número da OS: primeiro a OS já aberta no SIGMA pra ESSA ocorrência (planilha anual
     // da Operação, migration 067 — cada semana tem a sua); senão o número reservado com
     // antecedência no plano (ver salvarNumeroOsReservado abaixo).
+    // Depois dela, a OS PEND mais antiga do mesmo plano no SIGMA (osSigmaDoPlano).
     const osDaSemana = this.osDaOcorrencia(plano);
+    const osSigma = this.osSigmaDoPlano(plano);
     if (osDaSemana) this.formNumeroOs.set(osDaSemana);
+    else if (osSigma) this.formNumeroOs.set(osSigma.numeroOs);
     else if (plano.numeroOsReservado) this.formNumeroOs.set(plano.numeroOsReservado);
     // Ocorrência com data fixa da planilha: já marca o dia dela, se cair na semana.
     if (osDaSemana && this.diasDaSemanaAtual().some(d => d.data === dataCicloAoProgramar(plano))) {
@@ -1304,6 +1309,33 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   osDaOcorrencia(plano: PlanoComProximaData): string | null {
     return this.manutencaoPlanosService.osPrevista(plano.id, dataCicloAoProgramar(plano));
   }
+
+  // OS preventiva PEND do SIGMA reaproveitada pelo plano (a mais antiga, mesma descrição,
+  // ainda não programada no portal — ver osSigmaDosPlanos). Carrega sozinha ao abrir a
+  // tela; se o SIGMA não responder, só não sugere (vale o Nº OS reservado).
+  private preventivasPendentesSigma = signal<SigmaPreventivaPendente[]>([]);
+
+  private async carregarPreventivasPendentesSigma(): Promise<void> {
+    try {
+      this.preventivasPendentesSigma.set(await this.manutencaoService.consultarPreventivasPendentesSigma());
+    } catch (err) {
+      console.warn('[ManutencaoProgramacao] Preventivas pendentes do SIGMA indisponíveis:', err);
+    }
+  }
+
+  private osSigmaPorPlano = computed(() => {
+    const usados = new Set(this.manutencaoService.ordens().filter(o => o.numeroOs?.trim()).map(o => normalizarNumeroOs(o.numeroOs!)));
+    return osSigmaDosPlanos(this.agendaPlanos(), this.preventivasPendentesSigma(), usados, normalizarNumeroOs);
+  });
+
+  osSigmaDoPlano(plano: PlanoComProximaData) {
+    return this.osSigmaPorPlano().get(plano.id) ?? null;
+  }
+
+  // Preventivas da semana sem nenhuma OS pra usar (planilha, SIGMA ou reservada) — só
+  // essas ainda precisam ser abertas no SIGMA.
+  preventivasSemOs = computed(() => this.preventivasVencendo().filter(p =>
+    !this.osDaOcorrencia(p) && !this.osSigmaDoPlano(p) && !p.numeroOsReservado?.trim()).length);
 
   // Edição inline do número de OS reservado direto na lista de "Preventivas da
   // semana"/"atrasadas" — deixa anotar o número assim que a OS é aberta/reservada no
@@ -2014,6 +2046,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       complementar('semanas fechadas', this.manutencaoService.loadSemanasFechadas()),
     ]);
     void this.carregarMateriaisDisponiveis();
+    void this.carregarPreventivasPendentesSigma();
   }
 
   // Pessoas que saíram da equipe numa semana CONHECIDA — ficam fora do seletor de

@@ -3,7 +3,7 @@ import {
   periodicidadeEmDias, preventivaVencendo, primeiroIndiceAPartirDe, proximaDataFixa, PeriodicidadeUnidade, somarDias,
   somarPeriodos,
 } from './manutencao-preventivas';
-import { CategoriaIndicador, ManutencaoArea, ManutencaoOrdem, PlanoManutencao } from '../models/manutencao-programacao.model';
+import { CategoriaIndicador, ManutencaoArea, ManutencaoOrdem, PlanoManutencao, SigmaPreventivaPendente } from '../models/manutencao-programacao.model';
 
 // Deriva a categoria do indicador semanal (ver CategoriaIndicador) a partir do que já
 // existe no plano — Mecânica/Elétrica não têm ambiguidade; Apoio precisa olhar
@@ -535,4 +535,51 @@ export function gerarGradeMensal(ano: number, mes: number): DiaGradeMensal[][] {
     semanas.push(semana);
   }
   return semanas;
+}
+
+// ── OS do SIGMA reaproveitada pelo plano ─────────────────────────────────────
+
+export interface OsSigmaDoPlano {
+  numeroOs: string;
+  outras: number; // quantas OUTRAS pendentes do mesmo plano ainda sobram
+}
+
+/**
+ * Pra cada plano, a OS preventiva PEND mais antiga do SIGMA com a MESMA descrição (nome
+ * do plano, sem acento/maiúscula/espaço duplo) que ainda não está na programação do
+ * portal — o que hoje o planejador procura à mão antes de abrir OS nova. Desempate pelo
+ * equipamento: se alguma candidata tem o "Bem" igual ao tag_kks do plano, só elas
+ * contam (planos de mesmo nome em equipamentos diferentes, ex. splits do Prédio 25);
+ * senão só se todas forem do mesmo equipamento.
+ * Uma OS vai pra um plano só. Mais antiga = data de abertura, depois número.
+ */
+export function osSigmaDosPlanos(
+  planos: Pick<PlanoManutencao, 'id' | 'codigo' | 'nome' | 'tagKks'>[],
+  pendentes: SigmaPreventivaPendente[],
+  numerosJaUsados: ReadonlySet<string>,
+  normalizarNumeroOs: (v: string) => string,
+): Map<string, OsSigmaDoPlano> {
+  const normalizar = (v: string) => (v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+  const porDescricao = new Map<string, SigmaPreventivaPendente[]>();
+  for (const os of pendentes) {
+    if (numerosJaUsados.has(normalizarNumeroOs(os.numeroOs))) continue;
+    const k = normalizar(os.descricao);
+    porDescricao.set(k, [...(porDescricao.get(k) ?? []), os]);
+  }
+  porDescricao.forEach(lista => lista.sort((a, b) => a.data.localeCompare(b.data) || a.numeroOs.localeCompare(b.numeroOs)));
+  const usadas = new Set<string>();
+  const resultado = new Map<string, OsSigmaDoPlano>();
+  for (const p of [...planos].sort((a, b) => a.codigo.localeCompare(b.codigo))) {
+    const livres = (porDescricao.get(normalizar(p.nome)) ?? []).filter(os => !usadas.has(os.numeroOs));
+    const kks = (p.tagKks ?? '').trim().toUpperCase();
+    const doBem = kks ? livres.filter(os => os.bem.trim().toUpperCase() === kks) : [];
+    // Nenhuma do mesmo Bem: só usa se todas são de UM equipamento só (cadastro com KKS
+    // escrito diferente); de equipamentos diferentes é ambíguo e o plano fica sem sugestão.
+    const umEquipamento = new Set(livres.map(os => os.bem.trim().toUpperCase())).size === 1;
+    const pool = doBem.length ? doBem : umEquipamento ? livres : [];
+    if (!pool.length) continue;
+    usadas.add(pool[0].numeroOs);
+    resultado.set(p.id, { numeroOs: pool[0].numeroOs, outras: pool.length - 1 });
+  }
+  return resultado;
 }
