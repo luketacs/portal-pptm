@@ -173,14 +173,17 @@ export function desalinhadoNoGrupo(p: PlanoParaValidar, todos: PlanoManutencao[]
     return `${mesmoPeriodo.codigo} (mesmo período, mesmo grupo de visita) segue o calendário de ${dataBr(mesmoPeriodo.dataInicial)} `
       + `e este o de ${dataBr(p.dataInicial)} — saem em visitas separadas. Use a mesma data inicial.`;
   }
-  const dias = periodicidadeEmDias(p.periodicidadeValor, p.periodicidadeUnidade);
-  const base = grupo
-    .filter(o => o.periodicidadeUnidade === p.periodicidadeUnidade && o.periodicidadeValor > 0
-      && periodicidadeEmDias(o.periodicidadeValor, o.periodicidadeUnidade) < dias && p.periodicidadeValor % o.periodicidadeValor === 0)
-    .sort((a, b) => a.periodicidadeValor - b.periodicidadeValor)[0];
-  if (base && !mesmoCalendario(base.dataInicial, p.dataInicial, base.periodicidadeValor, base.periodicidadeUnidade)) {
-    return `Fora do dia de visita do grupo: ${base.codigo} (${base.periodicidadeValor} ${base.periodicidadeUnidade}) segue o `
-      + `calendário de ${dataBr(base.dataInicial)} e este plano não cai em nenhuma data dele. Use uma data desse calendário.`;
+  // Todo período menor que divide o deste tem que coincidir: 6M sai junto com um 3M e um
+  // 1M do grupo (pedido do usuário: "a 6M tem que sair junto com a próxima 3M").
+  const divisores = grupo.filter(o => o.periodicidadeUnidade === p.periodicidadeUnidade && o.periodicidadeValor > 0
+    && o.periodicidadeValor < p.periodicidadeValor && p.periodicidadeValor % o.periodicidadeValor === 0);
+  const valores = [...new Set(divisores.map(o => o.periodicidadeValor))].sort((a, b) => b - a);
+  for (const valor of valores) {
+    const doPeriodo = divisores.filter(o => o.periodicidadeValor === valor);
+    if (doPeriodo.some(o => mesmoCalendario(o.dataInicial, p.dataInicial, valor, p.periodicidadeUnidade))) continue;
+    const ref = doPeriodo[0];
+    return `Fora da visita do grupo: ${ref.codigo} (${valor} ${p.periodicidadeUnidade}) segue o calendário de `
+      + `${dataBr(ref.dataInicial)} e este plano não cai em nenhuma data dele — saem em visitas separadas. Use uma data desse calendário.`;
   }
   return null;
 }

@@ -158,7 +158,7 @@ describe('desalinhadoNoGrupo', () => {
 
   it('período múltiplo fora do dia do plano-base alerta', () => {
     const fora = { ...seis1, dataInicial: '2026-12-09' };
-    expect(desalinhadoNoGrupo(fora, [base1, fora])).toContain('Fora do dia de visita do grupo');
+    expect(desalinhadoNoGrupo(fora, [base1, fora])).toContain('Fora da visita do grupo');
   });
 
   it('Mecânica/Elétrica e plano sem KKS ficam de fora', () => {
@@ -179,5 +179,21 @@ describe('desalinhadoNoGrupo — Operação segue a planilha', () => {
     const a = op({ id: 'a', codigo: 'PM-1', dataInicial: '2026-10-05' });
     const b = op({ id: 'b', codigo: 'PM-2', dataInicial: '2026-10-15' });
     expect(desalinhadoNoGrupo(a, [a, b])).toBeNull();
+  });
+});
+
+describe('desalinhadoNoGrupo — 6M sai junto com o 3M', () => {
+  const apoio = (o: Partial<PlanoManutencao>) => plano({ area: 'APOIO', responsavel: 'SERVPLEX', tagKks: '90SAA05AH616', ...o });
+  const m1 = apoio({ id: '1', codigo: 'PM-0020', periodicidadeValor: 1, dataInicial: '2026-09-21' });
+  const m3 = apoio({ id: '3', codigo: 'PM-0019', periodicidadeValor: 3, dataInicial: '2026-11-21' });
+
+  it('6M no dia do 1M mas fora do calendário do 3M alerta', () => {
+    const m6 = apoio({ id: '6', codigo: 'PM-0021', periodicidadeValor: 6, dataInicial: '2026-10-21' });
+    expect(desalinhadoNoGrupo(m6, [m1, m3, m6])).toContain('PM-0019');
+  });
+
+  it('6M junto com o 3M não alerta', () => {
+    const m6 = apoio({ id: '6', codigo: 'PM-0021', periodicidadeValor: 6, dataInicial: '2026-11-21' });
+    expect(desalinhadoNoGrupo(m6, [m1, m3, m6])).toBeNull();
   });
 });
