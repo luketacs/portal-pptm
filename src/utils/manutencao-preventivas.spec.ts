@@ -80,7 +80,7 @@ describe('proximaDataFixa', () => {
   });
 
   it('ciclo mais de 21 dias antes da ocorrência não cobre ela', () => {
-    expect(proximaDataFixa('2026-10-05', 6, 'Mes(es)', '2026-09-07', '2026-09-07')).toBe('2026-10-05');
+    expect(proximaDataFixa('2026-10-05', 1, 'Mes(es)', '2026-09-07', '2026-09-07')).toBe('2026-10-05');
   });
 
   it('agenda rígida não tem folga: ciclo de 21/09 não cobre a ocorrência de 06/10', () => {
@@ -199,5 +199,25 @@ describe('mês com dia 29-31 e âncora antiga', () => {
 
   it('proximaDataFixa pula ciclo muito à frente sem andar ciclo a ciclo', () => {
     expect(proximaDataFixa('2026-01-05', 1, 'Semana(s)', '2026-10-12', '2030-01-07', true)).toBe('2030-01-14');
+  });
+});
+
+describe('intervalo mínimo desde a última execução (2/3 do período)', () => {
+  it('6M feito fora do dia da data inicial não volta antes de 4 meses', () => {
+    // Data inicial 21/10 (6M), mas foi feito em 21/09: antes voltava em 21/10.
+    expect(proximaDataFixa('2026-10-21', 6, 'Mes(es)', '2026-10-19', '2026-09-21')).toBe('2027-04-21');
+  });
+
+  it('6M feito no dia certo volta só 6 meses depois', () => {
+    expect(proximaDataFixa('2026-09-21', 6, 'Mes(es)', '2026-10-19', '2026-09-21')).toBe('2027-03-21');
+  });
+
+  it('feito até 1/3 atrasado não empurra a ocorrência seguinte', () => {
+    // 3M com data inicial 01/09, feito em 25/09 (24 dias atrasado): próxima segue 01/12.
+    expect(proximaDataFixa('2026-09-01', 3, 'Mes(es)', '2026-10-19', '2026-09-25')).toBe('2026-12-01');
+  });
+
+  it('agenda rígida não usa o intervalo mínimo', () => {
+    expect(proximaDataFixa('2026-10-21', 6, 'Mes(es)', '2026-10-19', '2026-09-21', true)).toBe('2026-10-21');
   });
 });

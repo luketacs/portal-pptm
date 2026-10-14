@@ -79,6 +79,12 @@ export function primeiroIndiceAPartirDe(ancora: string, valor: number, unidade: 
 // X+2...) — ex. P-R-6M do Prédio 25 saindo 3 semanas seguidas. Um ciclo registrado até
 // `folga` dias ANTES da ocorrência também conta como cobrindo ela.
 //
+// Intervalo mínimo desde a última execução (regra do usuário: "6M só a cada 6M"): a
+// próxima ocorrência nunca fica a menos de 2/3 do período do último ciclo — só dá pra
+// antecipar até 1/3. Antes só a folga (≤ 21 dias) protegia: plano com data inicial fora
+// do dia em que foi feito (feito fora da data, data inicial mudada depois por migration
+// ou na tela, OS remarcada) voltava 22 dias depois, mesmo sendo 6M.
+//
 // `agendaRigida`: plano que nunca é antecipado (ver PlanoManutencao.agendaRigida) não
 // precisa de folga — sem ela, o ciclo de uma ocorrência não engole a seguinte quando as
 // duas estão perto (ex. teste RETOMA dia 21/09 e o próximo dia 06/10).
@@ -90,8 +96,11 @@ export function proximaDataFixa(
   const folga = agendaRigida ? 0 : folgaCoberturaCiclo(valor, unidade);
   let k = primeiroIndiceAPartirDe(dataAncora, valor, unidade, referenciaIso);
   if (ultimoCicloIso !== null) {
-    // Primeira ocorrência DEPOIS da cobertura do último ciclo (ciclo + folga).
-    const depoisDaCobertura = somarDias(ultimoCicloIso, folga + 1);
+    // Primeira ocorrência DEPOIS da cobertura do último ciclo (ciclo + folga) e, fora da
+    // agenda rígida, a pelo menos 2/3 do período dele.
+    const dias = periodicidadeEmDias(valor, unidade);
+    const intervaloMinimo = agendaRigida ? 0 : dias - Math.round(dias / 3);
+    const depoisDaCobertura = somarDias(ultimoCicloIso, Math.max(folga + 1, intervaloMinimo));
     k = Math.max(k, primeiroIndiceAPartirDe(dataAncora, valor, unidade, depoisDaCobertura));
   }
   return somarPeriodos(dataAncora, k, valor, unidade);
