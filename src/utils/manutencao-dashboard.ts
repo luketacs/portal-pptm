@@ -56,11 +56,11 @@ function domingoDaSemana(segundaIso: string): string {
 // OS onde ninguém apontou nada ainda.
 export type StatusExecucaoGrupo = 'executada' | 'parcial' | 'nao-executada';
 
-export function ordemExecutadaAgrupada(
-  ordens: ManutencaoOrdem[],
-  sigmaPorOs: Record<string, ConsultaSigmaResultado>,
-  matchColaborador: (matricula: string | null, nome: string) => { matricula: string } | null,
-): StatusExecucaoGrupo[] {
+type MatchColaboradorFn = (matricula: string | null, nome: string) => { matricula: string } | null;
+
+// Mesma OS na mesma semana = um grupo (uma linha por técnico); OS sem número = um grupo
+// por linha. Ordem de inserção preservada.
+function gruposPorOs(ordens: ManutencaoOrdem[]): ManutencaoOrdem[][] {
   const porOs = new Map<string, ManutencaoOrdem[]>();
   let semOsIdx = 0;
   for (const o of ordens) {
@@ -69,26 +69,115 @@ export function ordemExecutadaAgrupada(
     if (lista) lista.push(o);
     else porOs.set(chave, [o]);
   }
-  return [...porOs.values()].map(linhas => {
-    if (!linhas[0].numeroOs?.trim()) return 'nao-executada';
-    const resultado = sigmaPorOs[normalizarNumeroOs(linhas[0].numeroOs!)];
-    if (!resultado) return 'nao-executada';
-    const apontou = linhas.map(o => {
-      const domingo = domingoDaSemana(o.semanaInicio);
-      const dentroDaSemana = (a: { data: string }) => a.data >= o.semanaInicio && a.data <= domingo;
-      const colaborador = matchColaborador(o.tecnicoMatricula, o.tecnicoNome ?? '');
-      if (!colaborador) return o.area === 'APOIO' && resultado.apontamentos.some(dentroDaSemana);
-      return resultado.apontamentos.some(a => a.executante === colaborador.matricula && dentroDaSemana(a));
-    });
-    if (apontou.every(Boolean)) return 'executada';
-    if (apontou.some(Boolean)) return 'parcial';
-    // Ninguém programado apontou, mas outro técnico apontou a OS dentro da semana —
-    // pedido do usuário: o serviço foi feito, conta como executada (caso real S40: OS do
-    // Moacir/Claudiney executadas e apontadas pelo Rafael Bruno).
-    const domingo = domingoDaSemana(linhas[0].semanaInicio);
-    if (resultado.apontamentos.some(a => a.data >= linhas[0].semanaInicio && a.data <= domingo)) return 'executada';
-    return 'nao-executada';
+  return [...porOs.values()];
+}
+
+// Status do grupo + quem dele apontou (uma posição por linha de `linhas`).
+function execucaoDoGrupo(
+  linhas: ManutencaoOrdem[], sigmaPorOs: Record<string, ConsultaSigmaResultado>, matchColaborador: MatchColaboradorFn,
+): { status: StatusExecucaoGrupo; apontou: boolean[] } {
+  const nenhum = linhas.map(() => false);
+  if (!linhas[0].numeroOs?.trim()) return { status: 'nao-executada', apontou: nenhum };
+  const resultado = sigmaPorOs[normalizarNumeroOs(linhas[0].numeroOs!)];
+  if (!resultado) return { status: 'nao-executada', apontou: nenhum };
+  const apontou = linhas.map(o => {
+    const domingo = domingoDaSemana(o.semanaInicio);
+    const dentroDaSemana = (a: { data: string }) => a.data >= o.semanaInicio && a.data <= domingo;
+    const colaborador = matchColaborador(o.tecnicoMatricula, o.tecnicoNome ?? '');
+    if (!colaborador) return o.area === 'APOIO' && resultado.apontamentos.some(dentroDaSemana);
+    return resultado.apontamentos.some(a => a.executante === colaborador.matricula && dentroDaSemana(a));
   });
+  if (apontou.every(Boolean)) return { status: 'executada', apontou };
+  if (apontou.some(Boolean)) return { status: 'parcial', apontou };
+  // Ninguém programado apontou, mas outro técnico apontou a OS dentro da semana —
+  // pedido do usuário: o serviço foi feito, conta como executada (caso real S40: OS do
+  // Moacir/Claudiney executadas e apontadas pelo Rafael Bruno).
+  const domingo = domingoDaSemana(linhas[0].semanaInicio);
+  if (resultado.apontamentos.some(a => a.data >= linhas[0].semanaInicio && a.data <= domingo)) return { status: 'executada', apontou };
+  return { status: 'nao-executada', apontou };
+}
+
+export function ordemExecutadaAgrupada(
+  ordens: ManutencaoOrdem[],
+  sigmaPorOs: Record<string, ConsultaSigmaResultado>,
+  matchColaborador: MatchColaboradorFn,
+): StatusExecucaoGrupo[] {
+  return gruposPorOs(ordens).map(linhas => execucaoDoGrupo(linhas, sigmaPorOs, matchColaborador).status);
+}
+
+export interface ExecutanteOrdemPendente {
+  nome: string;
+  matricula: string | null; // casada via matchColaborador (null = não achou no cadastro)
+  apontou: boolean;
+}
+
+export interface OrdemPendente {
+  numeroOs: string | null;
+  descricao: string;
+  equipamento: string | null;
+  categoria: ManutencaoOrdem['categoriaIndicador'];
+  tipoServico: string | null;
+  semanaInicio: string;
+  dias: string[];       // dias previstos (todas as linhas), ordenados
+  atrasada: boolean;    // último dia previsto (ou o domingo da semana, se sem dia) já passou
+  status: StatusExecucaoGrupo; // 'nao-executada' ou 'parcial'
+  executantes: ExecutanteOrdemPendente[];
+}
+
+/**
+ * OS programadas que ainda não estão executadas — mesmo agrupamento e critério de
+ * ordemExecutadaAgrupada, então as 'nao-executada' daqui batem com a coluna "Não
+ * Executadas" do indicador. Inclui também as 'parcial' (o indicador conta como
+ * executada, mas pra cobrar por técnico interessa quem ainda não apontou).
+ */
+export function ordensPendentes(
+  ordens: ManutencaoOrdem[],
+  sigmaPorOs: Record<string, ConsultaSigmaResultado>,
+  matchColaborador: MatchColaboradorFn,
+  hojeIso: string,
+): OrdemPendente[] {
+  const pendentes: OrdemPendente[] = [];
+  for (const linhas of gruposPorOs(ordens)) {
+    const { status, apontou } = execucaoDoGrupo(linhas, sigmaPorOs, matchColaborador);
+    if (status === 'executada') continue;
+    const o = linhas[0];
+    const dias = [...new Set(linhas.flatMap(l => l.diasPrevistos))].sort();
+    const ultimo = dias.at(-1) ?? domingoDaSemana(o.semanaInicio);
+    pendentes.push({
+      numeroOs: o.numeroOs?.trim() || null,
+      descricao: o.descricao,
+      equipamento: o.equipamento,
+      categoria: o.categoriaIndicador,
+      tipoServico: o.tipoServico,
+      semanaInicio: o.semanaInicio,
+      dias,
+      atrasada: ultimo < hojeIso,
+      status,
+      executantes: linhas.map((l, i) => ({
+        nome: l.tecnicoNome ?? '',
+        matricula: matchColaborador(l.tecnicoMatricula, l.tecnicoNome ?? '')?.matricula ?? null,
+        apontou: apontou[i],
+      })),
+    });
+  }
+  return pendentes.sort((a, b) => (a.dias[0] ?? a.semanaInicio).localeCompare(b.dias[0] ?? b.semanaInicio)
+    || (a.numeroOs ?? '').localeCompare(b.numeroOs ?? ''));
+}
+
+/** Lista de OS pendentes pra colar no WhatsApp: atrasadas primeiro, depois as no prazo. */
+export function mensagemOrdensNaoExecutadas(titulo: string, periodo: string, itens: OrdemPendente[]): string {
+  const linha = (o: OrdemPendente) => {
+    const dias = o.dias.length ? o.dias.map(diaCurto).join(', ') : 'sem dia';
+    const quem = o.executantes.map(e => e.nome + (o.status === 'parcial' && !e.apontou ? ' (falta apontar)' : '')).join(', ');
+    return `• ${dias} — OS ${o.numeroOs ?? 's/ nº'} — ${o.descricao} — ${quem}`;
+  };
+  const atrasadas = itens.filter(o => o.atrasada);
+  const noPrazo = itens.filter(o => !o.atrasada);
+  const linhas = [`*${titulo}* (${itens.length})`, `Período: ${periodo}`];
+  if (itens.length === 0) linhas.push('', '✅ Nenhuma OS pendente.');
+  if (atrasadas.length) linhas.push('', `🔴 *Atrasadas* (${atrasadas.length}) — o dia previsto já passou`, ...atrasadas.map(linha));
+  if (noPrazo.length) linhas.push('', `🟡 *Ainda no prazo* (${noPrazo.length})`, ...noPrazo.map(linha));
+  return linhas.join('\n');
 }
 
 // Card de horas (pedido do usuário): OS que NENHUM técnico programado apontou, mas

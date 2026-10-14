@@ -17,13 +17,14 @@ import {
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
-import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApontamento, StatusExecucaoGrupo, apontamentosSobrepostos, calcularHhTecnico, calcularKpiExecucao, extratoHorasColaborador, mensagemExtratoWhatsapp, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
+import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApontamento, StatusExecucaoGrupo, apontamentosSobrepostos, calcularHhTecnico, calcularKpiExecucao, extratoHorasColaborador, mensagemExtratoWhatsapp, OrdemPendente, ordensPendentes, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
 import { encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
   paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem,
 } from '../../../utils/manutencao-indicadores-periodo';
 import { VisivelNaTelaDirective } from './visivel-na-tela.directive';
+import { OrdensPendentesModalComponent } from './ordens-pendentes-modal.component';
 import { RelatorioIndicadoresImpressoComponent } from '../relatorio-indicadores-impresso/relatorio-indicadores-impresso.component';
 import { DadosRelatorioImpresso, montarDadosRelatorioImpresso } from '../../../utils/relatorio-impresso';
 
@@ -86,7 +87,7 @@ const INTERVALO_POLL_MS = 3 * 60 * 1000;
 @Component({
   selector: 'app-manutencao-indicadores-semanais',
   standalone: true,
-  imports: [CommonModule, FormsModule, VisivelNaTelaDirective, RelatorioIndicadoresImpressoComponent],
+  imports: [CommonModule, FormsModule, VisivelNaTelaDirective, RelatorioIndicadoresImpressoComponent, OrdensPendentesModalComponent],
   templateUrl: './manutencao-indicadores-semanais.component.html',
   styleUrls: ['./manutencao-indicadores-semanais.component.css', './manutencao-indicadores-impressao.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -661,6 +662,43 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       this.notificationService.showError('Não foi possível copiar. Tente de novo.');
     }
   }
+
+  // ── OS não executadas ──
+  // Geral: clique no número "Não Executadas" da tabela por área abre a lista (mesmo
+  // critério da coluna). Por técnico: contador no card + seção no extrato com as OS
+  // dele ainda sem apontamento DELE (não executada, ou parcial faltando a parte dele).
+  private pendentesSemana = computed(() => {
+    const hoje = new Date();
+    const hojeIso = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+    return ordensPendentes(this.ordensDaSemanaParaFechamento(), this.sigmaPorOs(), this.matchColaborador, hojeIso);
+  });
+
+  pendentesAberto = signal<{ titulo: string; itens: OrdemPendente[]; categoria: CategoriaIndicador | null | 'todas' } | null>(null);
+
+  abrirNaoExecutadas(categoria: CategoriaIndicador | null | 'todas', soPlano = false): void {
+    const itens = this.pendentesSemana().filter(o => o.status === 'nao-executada'
+      && (!soPlano || o.tipoServico?.trim().toUpperCase() === 'PREVENTIVA'));
+    this.pendentesAberto.set({ titulo: soPlano ? 'Preventivas do plano não executadas' : 'OS não executadas', itens, categoria });
+  }
+
+  private pendentesPorMatricula = computed(() => {
+    const mapa = new Map<string, OrdemPendente[]>();
+    for (const o of this.pendentesSemana()) {
+      for (const mat of new Set(o.executantes.filter(e => e.matricula && !e.apontou).map(e => String(e.matricula).trim()))) {
+        mapa.set(mat, [...(mapa.get(mat) ?? []), o]);
+      }
+    }
+    return mapa;
+  });
+
+  pendentesDoTecnico(item: HorasTecnicoItem): OrdemPendente[] {
+    return this.pendentesPorMatricula().get(String(item.colaborador.matricula).trim()) ?? [];
+  }
+
+  pendentesDoExtrato = computed(() => {
+    const item = this.extratoItem();
+    return item ? this.pendentesDoTecnico(item) : [];
+  });
 
   // Apontamentos sobrepostos no período (mesma pessoa/dia, horário que se cruza) —
   // horas contadas em dobro. Agrupado por técnico, pra pedir correção no SIGMA.

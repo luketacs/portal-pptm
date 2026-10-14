@@ -28,12 +28,13 @@ import {
 } from '../../../utils/manutencao-indicadores';
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
-import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApontamento, StatusExecucaoGrupo, apontamentosSobrepostos, calcularKpiExecucao, extratoHorasColaborador, mensagemExtratoWhatsapp, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
+import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApontamento, StatusExecucaoGrupo, apontamentosSobrepostos, calcularKpiExecucao, extratoHorasColaborador, mensagemExtratoWhatsapp, OrdemPendente, ordensPendentes, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
   paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem,
 } from '../../../utils/manutencao-indicadores-periodo';
 import { VisivelNaTelaDirective } from './visivel-na-tela.directive';
+import { OrdensPendentesModalComponent } from './ordens-pendentes-modal.component';
 import { RelatorioIndicadoresImpressoComponent } from '../relatorio-indicadores-impresso/relatorio-indicadores-impresso.component';
 import { DadosRelatorioImpresso, montarDadosRelatorioImpresso } from '../../../utils/relatorio-impresso';
 
@@ -206,7 +207,7 @@ const RELOAD_PAGINA_MS = 60 * 60 * 1000;
 @Component({
   selector: 'app-manutencao-indicadores-publico',
   standalone: true,
-  imports: [CommonModule, FormsModule, VisivelNaTelaDirective, RelatorioIndicadoresImpressoComponent],
+  imports: [CommonModule, FormsModule, VisivelNaTelaDirective, RelatorioIndicadoresImpressoComponent, OrdensPendentesModalComponent],
   templateUrl: './manutencao-indicadores-publico.component.html',
   styleUrls: ['./manutencao-indicadores-semanais.component.css', './manutencao-indicadores-impressao.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -625,6 +626,43 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     if (this.extratoCopiadoTimer) clearTimeout(this.extratoCopiadoTimer);
     this.extratoCopiadoTimer = setTimeout(() => this.extratoCopiado.set(null), 2500);
   }
+
+  // ── OS não executadas ──
+  // Geral: clique no número "Não Executadas" da tabela por área abre a lista (mesmo
+  // critério da coluna). Por técnico: contador no card + seção no extrato com as OS
+  // dele ainda sem apontamento DELE (não executada, ou parcial faltando a parte dele).
+  private pendentesSemana = computed(() => {
+    const hoje = new Date();
+    const hojeIso = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+    return ordensPendentes(this.ordensDaSemanaParaFechamento(), this.sigmaPorOs(), this.matchColaboradorFn, hojeIso);
+  });
+
+  pendentesAberto = signal<{ titulo: string; itens: OrdemPendente[]; categoria: CategoriaIndicador | null | 'todas' } | null>(null);
+
+  abrirNaoExecutadas(categoria: CategoriaIndicador | null | 'todas', soPlano = false): void {
+    const itens = this.pendentesSemana().filter(o => o.status === 'nao-executada'
+      && (!soPlano || o.tipoServico?.trim().toUpperCase() === 'PREVENTIVA'));
+    this.pendentesAberto.set({ titulo: soPlano ? 'Preventivas do plano não executadas' : 'OS não executadas', itens, categoria });
+  }
+
+  private pendentesPorMatricula = computed(() => {
+    const mapa = new Map<string, OrdemPendente[]>();
+    for (const o of this.pendentesSemana()) {
+      for (const mat of new Set(o.executantes.filter(e => e.matricula && !e.apontou).map(e => String(e.matricula).trim()))) {
+        mapa.set(mat, [...(mapa.get(mat) ?? []), o]);
+      }
+    }
+    return mapa;
+  });
+
+  pendentesDoTecnico(item: HorasTecnicoItem): OrdemPendente[] {
+    return this.pendentesPorMatricula().get(String(item.colaborador.matricula).trim()) ?? [];
+  }
+
+  pendentesDoExtrato = computed(() => {
+    const item = this.extratoItem();
+    return item ? this.pendentesDoTecnico(item) : [];
+  });
 
   // Apontamentos sobrepostos no período (mesma pessoa/dia, horário que se cruza) —
   // horas contadas em dobro. Agrupado por técnico.

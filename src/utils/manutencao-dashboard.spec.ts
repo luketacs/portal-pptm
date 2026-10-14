@@ -1,4 +1,4 @@
-import { apontamentosSobrepostos, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, extratoHorasColaborador, mensagemExtratoWhatsapp, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from './manutencao-dashboard';
+import { apontamentosSobrepostos, calcularHhTecnico, calcularKpiExecucao, hhPorAtividade, hhPorEquipamento, extratoHorasColaborador, mensagemExtratoWhatsapp, ordensPendentes, mensagemOrdensNaoExecutadas, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from './manutencao-dashboard';
 import { ConsultaSigmaResultado, ManutencaoOrdem } from '../models/manutencao-programacao.model';
 
 const DIAS_SEMANA_37 = [
@@ -465,5 +465,37 @@ describe('mensagemExtratoWhatsapp', () => {
     const msg = mensagemExtratoWhatsapp({ ...base, extrato: ex, ordensDoTecnico: programadas });
     expect(msg).toContain('✅ Nenhuma correção pendente no SIGMA.');
     expect(msg).not.toContain('PARA CONFERIR');
+  });
+});
+
+describe('ordensPendentes', () => {
+  const match = (matricula: string | null) => (matricula ? { matricula } : null);
+  const sigma = (os: string, executante: string, data = '2026-09-09'): Record<string, ConsultaSigmaResultado> =>
+    ({ [os]: { os: null, apontamentos: [{ data, status: 'EXEC', executante, horas: 2 }] } });
+
+  it('não executada, parcial (com quem falta) e executada fica de fora', () => {
+    const naoExec = ordem({ id: 'a', numeroOs: '1', descricao: 'Sem apontamento', diasPrevistos: ['2026-09-10'] });
+    const parcialA = ordem({ id: 'b', numeroOs: '2', tecnicoMatricula: '111', tecnicoNome: 'Ana' });
+    const parcialB = ordem({ id: 'c', numeroOs: '2', tecnicoMatricula: '222', tecnicoNome: 'Beto' });
+    const exec = ordem({ id: 'd', numeroOs: '3' });
+    const sig = { ...sigma('000002', '111'), ...sigma('000003', '20006136') };
+    const r = ordensPendentes([naoExec, parcialA, parcialB, exec], sig, match, '2026-09-09');
+    expect(r.map(o => [o.numeroOs, o.status, o.atrasada])).toEqual([['2', 'parcial', true], ['1', 'nao-executada', false]]);
+    expect(r[0].executantes.map(e => [e.nome, e.apontou])).toEqual([['Ana', true], ['Beto', false]]);
+    // as 'nao-executada' batem com o indicador
+    expect(r.filter(o => o.status === 'nao-executada').length)
+      .toBe(ordemExecutadaAgrupada([naoExec, parcialA, parcialB, exec], sig, match).filter(s => s === 'nao-executada').length);
+  });
+
+  it('mensagem separa atrasadas e no prazo', () => {
+    const r = ordensPendentes([
+      ordem({ id: 'a', numeroOs: '1', descricao: 'Atrasada', diasPrevistos: ['2026-09-08'], tecnicoNome: 'Ana' }),
+      ordem({ id: 'b', numeroOs: '2', descricao: 'No prazo', diasPrevistos: ['2026-09-11'], tecnicoNome: 'Beto' }),
+    ], {}, match, '2026-09-10');
+    const msg = mensagemOrdensNaoExecutadas('OS não executadas — Elétrica', 'Semana 37', r);
+    expect(msg).toContain('*OS não executadas — Elétrica* (2)');
+    expect(msg).toContain('🔴 *Atrasadas* (1)');
+    expect(msg).toContain('• Ter 08/09 — OS 1 — Atrasada — Ana');
+    expect(msg).toContain('🟡 *Ainda no prazo* (1)');
   });
 });
