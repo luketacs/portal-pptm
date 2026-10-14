@@ -28,7 +28,7 @@ import {
 } from '../../../utils/manutencao-indicadores';
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
-import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApontamento, StatusExecucaoGrupo, apontamentosSobrepostos, calcularKpiExecucao, extratoHorasColaborador, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
+import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApontamento, StatusExecucaoGrupo, apontamentosSobrepostos, calcularKpiExecucao, extratoHorasColaborador, mensagemExtratoWhatsapp, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
   paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem,
@@ -297,6 +297,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   }
 
   ngOnDestroy(): void {
+    if (this.extratoCopiadoTimer) clearTimeout(this.extratoCopiadoTimer);
     if (this.pollId !== null) clearInterval(this.pollId);
     if (this.reloadId !== null) clearTimeout(this.reloadId);
   }
@@ -582,13 +583,48 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     return matricula ? this.tecnicosDoExtrato().find(i => String(i.colaborador.matricula).trim() === matricula) ?? null : null;
   });
 
+  private ordensDoExtrato = computed(() => {
+    const item = this.extratoItem();
+    if (!item) return [];
+    const semanas = this.semanasDoPeriodoSet();
+    return this.ordensDoColaborador(this.ordensParaHoras().filter(o => semanas.has(o.semanaInicio)), item.colaborador);
+  });
+
   extrato = computed<ExtratoHoras | null>(() => {
     const item = this.extratoItem();
     if (!item) return null;
     const semanas = [...this.semanasDoPeriodoSet()].sort();
-    const ordens = this.ordensDoColaborador(this.ordensParaHoras().filter(o => semanas.includes(o.semanaInicio)), item.colaborador);
-    return extratoHorasColaborador(ordens, this.apontamentosPeriodo().lista, String(item.colaborador.matricula).trim(), semanas);
+    return extratoHorasColaborador(this.ordensDoExtrato(), this.apontamentosPeriodo().lista, String(item.colaborador.matricula).trim(), semanas);
   });
+
+  // "Copiar extrato" — mesma mensagem da tela interna (ver mensagemExtratoWhatsapp). Sem
+  // NotificationService aqui (página pública), o retorno é o próprio texto do botão.
+  extratoCopiado = signal<'ok' | 'erro' | null>(null);
+  private extratoCopiadoTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async copiarExtrato(): Promise<void> {
+    const item = this.extratoItem();
+    const ex = this.extrato();
+    if (!item || !ex) return;
+    const hoje = new Date();
+    const texto = mensagemExtratoWhatsapp({
+      nome: item.colaborador.nome,
+      matricula: String(item.colaborador.matricula).trim(),
+      periodo: this.periodoLabel(),
+      extrato: ex,
+      ordensDoTecnico: this.ordensDoExtrato(),
+      horasProgramadas: item.horasProgramadas,
+      hojeIso: `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`,
+    });
+    try {
+      await navigator.clipboard.writeText(texto);
+      this.extratoCopiado.set('ok');
+    } catch {
+      this.extratoCopiado.set('erro');
+    }
+    if (this.extratoCopiadoTimer) clearTimeout(this.extratoCopiadoTimer);
+    this.extratoCopiadoTimer = setTimeout(() => this.extratoCopiado.set(null), 2500);
+  }
 
   // Apontamentos sobrepostos no período (mesma pessoa/dia, horário que se cruza) —
   // horas contadas em dobro. Agrupado por técnico.
