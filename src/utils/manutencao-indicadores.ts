@@ -200,7 +200,10 @@ export function calcularIndicadoresSemana(params: {
 // Indicador do painel antigo ("ORDENS FORA DE PROGRAMAÇÃO", por área e semana): tudo o
 // que foi executado na semana fora da programação — OS com apontamento no SIGMA na
 // semana que não estava na programação DAQUELA semana (de ninguém, qualquer área).
-// Conta OS distintas por semana; a área vem da "Área Manutenção" da OS no SIGMA.
+// Conta OS distintas por semana; a área vem da "Área Manutenção" da OS no SIGMA. A data
+// é a de EXECUÇÃO do apontamento (coluna "Data" do export), não a de registro ("Data/Hora
+// Registro") — lançamento atrasado conta na semana em que o serviço foi feito. OS
+// programada em outra semana e não reprogramada pra esta conta como fora (pedido do usuário).
 
 // Área do SIGMA -> categoria do indicador. Lubrificação e Oficina são da Mecânica;
 // Automação, da Elétrica; Operação/Limpeza = Limpeza Operacional.
