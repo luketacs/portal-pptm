@@ -159,10 +159,12 @@ function mesmoCalendario(a: string, b: string, valor: number, unidade: Periodici
  * período é múltiplo do plano-base (o mais curto do grupo) e cai fora do dia dele. Foi o
  * que fez os 6M da SERVPLEX saírem quase toda semana: cada split da mesma sala com 6M num
  * mês diferente (migrations 040/060 acertaram só o dia do mês). Mecânica/Elétrica ficam de
- * fora (muitos planos por KKS, balanceamento da migration 058).
+ * fora (muitos planos por KKS, balanceamento da migration 058), e a Operação também: a
+ * agenda dela é a da planilha de OS (migration 067), não a da visita do grupo.
  */
 export function desalinhadoNoGrupo(p: PlanoParaValidar, todos: PlanoManutencao[]): string | null {
   if (p.area !== 'APOIO' || !p.ativo || !p.tagKks?.trim()) return null;
+  if (inferirCategoriaIndicadorPorTecnico(p.responsavel ?? '') === 'LIMP_OPERACIONAL') return null;
   const chave = chaveEquipamento({ area: p.area, tagKks: p.tagKks, id: p.id ?? '' });
   const grupo = todos.filter(o => o.ativo && !o.agendaRigida && o.id !== p.id && o.area === 'APOIO' && chaveEquipamento(o) === chave);
   const mesmoPeriodo = grupo.find(o => o.periodicidadeValor === p.periodicidadeValor && o.periodicidadeUnidade === p.periodicidadeUnidade

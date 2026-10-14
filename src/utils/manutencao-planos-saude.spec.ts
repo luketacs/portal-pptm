@@ -172,3 +172,12 @@ describe('desalinhadoNoGrupo', () => {
     expect(desalinhadoNoGrupo(self, [sup1, self])).toContain('PM-0097');
   });
 });
+
+describe('desalinhadoNoGrupo — Operação segue a planilha', () => {
+  it('plano da OPERAÇÃO nunca alerta', () => {
+    const op = (o: Partial<PlanoManutencao>) => plano({ area: 'APOIO', responsavel: 'OPERAÇÃO', tagKks: 'TC91ECA41AF001', periodicidadeValor: 1, ...o });
+    const a = op({ id: 'a', codigo: 'PM-1', dataInicial: '2026-10-05' });
+    const b = op({ id: 'b', codigo: 'PM-2', dataInicial: '2026-10-15' });
+    expect(desalinhadoNoGrupo(a, [a, b])).toBeNull();
+  });
+});
