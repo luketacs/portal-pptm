@@ -213,9 +213,10 @@ export function alinharDatasPorEquipamento(
         // Abre bloco novo: este plano é o mais cedo dele.
         dataAlvo = data;
         limiteBloco = somarDias(data, janelaDias);
-      } else if (data !== dataAlvo && data <= somarDias(dataAlvo, folgaCoberturaCiclo(planos[i].periodicidadeValor, planos[i].periodicidadeUnidade))) {
-        // Antecipa no máximo a folga de cobertura DO PRÓPRIO plano (semanal 5 dias,
-        // quinzenal 10, mensal+ 21). Reportado: L-OP-1S TRIPPERS (semanal) já programada
+      } else if (data !== dataAlvo && data <= somarDias(dataAlvo, antecipacaoMaxima(planos[i].periodicidadeValor, planos[i].periodicidadeUnidade))) {
+        // Antecipa no máximo 1/3 do período DO PRÓPRIO plano, limitado à folga de cobertura
+        // (semanal 2 dias, quinzenal 5, mensal 10, trimestral+ 21) — regra do usuário:
+        // preventiva só pode ser antecipada até 1/3 do período. Reportado: L-OP-1S TRIPPERS (semanal) já programada
         // na S41 voltava pra S41 — a ocorrência seguinte (12/10) era puxada pra 05/10 pelo
         // vizinho quinzenal pendente, e a cada programação a próxima era puxada de novo.
         // Fora da folga, o plano fica na própria data (não faz sentido adiantar uma
@@ -225,6 +226,13 @@ export function alinharDatasPorEquipamento(
     }
   }
   return resultado;
+}
+
+// Quanto o alinhamento por equipamento pode antecipar um plano: 1/3 do período (mesma
+// tolerância do atraso, ver dataLimiteComTolerancia), nunca além da folga de cobertura —
+// senão o plano antecipado voltaria na semana da data original.
+export function antecipacaoMaxima(valor: number, unidade: PeriodicidadeUnidade): number {
+  return Math.min(folgaCoberturaCiclo(valor, unidade), Math.round(periodicidadeEmDias(valor, unidade) / 3));
 }
 
 /**

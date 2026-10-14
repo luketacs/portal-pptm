@@ -188,9 +188,9 @@ describe('alinharDatasPorEquipamento', () => {
 
   it('3+ planos do mesmo KKS dentro da janela alinham todos pra data mais cedo entre eles', () => {
     const planos = [
-      comProxima({ id: 'p1', tagKks: 'M01' }, '2026-09-12'),
-      comProxima({ id: 'p2', tagKks: 'M01' }, '2026-09-03'),
-      comProxima({ id: 'p3', tagKks: 'M01' }, '2026-09-24'),
+      comProxima({ id: 'p1', tagKks: 'M01', periodicidadeValor: 180 }, '2026-09-12'),
+      comProxima({ id: 'p2', tagKks: 'M01', periodicidadeValor: 180 }, '2026-09-03'),
+      comProxima({ id: 'p3', tagKks: 'M01', periodicidadeValor: 180 }, '2026-09-24'),
     ];
     const resultado = alinharDatasPorEquipamento(planos);
     expect(resultado.map(p => p.proximaData)).toEqual(['2026-09-03', '2026-09-03', '2026-09-03']);
@@ -198,9 +198,9 @@ describe('alinharDatasPorEquipamento', () => {
 
   it('plano fora da janela do bloco abre um bloco novo com os seguintes', () => {
     const planos = [
-      comProxima({ id: 'p1', tagKks: 'M01' }, '2026-09-03'),
-      comProxima({ id: 'p2', tagKks: 'M01' }, '2026-09-28'),
-      comProxima({ id: 'p3', tagKks: 'M01' }, '2026-10-10'),
+      comProxima({ id: 'p1', tagKks: 'M01', periodicidadeValor: 180 }, '2026-09-03'),
+      comProxima({ id: 'p2', tagKks: 'M01', periodicidadeValor: 180 }, '2026-09-28'),
+      comProxima({ id: 'p3', tagKks: 'M01', periodicidadeValor: 180 }, '2026-10-10'),
     ];
     const resultado = alinharDatasPorEquipamento(planos);
     expect(resultado.map(p => p.proximaData)).toEqual(['2026-09-03', '2026-09-28', '2026-09-28']);
@@ -210,10 +210,10 @@ describe('alinharDatasPorEquipamento', () => {
   // mês partia o grupo no meio.
   it('grupo vizinho com datas atravessando a virada do mês sai todo junto', () => {
     const planos = [
-      comProxima({ id: 'a', area: 'APOIO', tagKks: '90SAA05AH616' }, '2026-09-21'),
-      comProxima({ id: 'b', area: 'APOIO', tagKks: '90SAA05AH617' }, '2026-09-28'),
-      comProxima({ id: 'c', area: 'APOIO', tagKks: '90SAA05AH618' }, '2026-10-05'),
-      comProxima({ id: 'd', area: 'APOIO', tagKks: '90SAA05AH619' }, '2026-10-12'),
+      comProxima({ id: 'a', area: 'APOIO', tagKks: '90SAA05AH616', periodicidadeValor: 180 }, '2026-09-21'),
+      comProxima({ id: 'b', area: 'APOIO', tagKks: '90SAA05AH617', periodicidadeValor: 180 }, '2026-09-28'),
+      comProxima({ id: 'c', area: 'APOIO', tagKks: '90SAA05AH618', periodicidadeValor: 180 }, '2026-10-05'),
+      comProxima({ id: 'd', area: 'APOIO', tagKks: '90SAA05AH619', periodicidadeValor: 180 }, '2026-10-12'),
     ];
     const resultado = alinharDatasPorEquipamento(planos);
     expect(resultado.map(p => p.proximaData)).toEqual(['2026-09-21', '2026-09-21', '2026-09-21', '2026-09-21']);
@@ -250,8 +250,8 @@ describe('alinharDatasPorEquipamento', () => {
   });
 
   it('ignora espaço extra no KKS (trim) na hora de casar', () => {
-    const comEspaco = comProxima({ id: 'a', tagKks: ' M01 ' }, '2026-09-20');
-    const semEspaco = comProxima({ id: 'b', tagKks: 'M01' }, '2026-09-05');
+    const comEspaco = comProxima({ id: 'a', tagKks: ' M01 ', periodicidadeValor: 180 }, '2026-09-20');
+    const semEspaco = comProxima({ id: 'b', tagKks: 'M01', periodicidadeValor: 180 }, '2026-09-05');
     const resultado = alinharDatasPorEquipamento([comEspaco, semEspaco]);
     expect(resultado.find(p => p.id === 'a')!.proximaData).toBe('2026-09-05');
     expect(resultado.find(p => p.id === 'b')!.proximaData).toBe('2026-09-05');
@@ -261,8 +261,8 @@ describe('alinharDatasPorEquipamento', () => {
   // devem sair sempre juntos, mesmo sendo KKS diferentes — "aproveitar a viagem" (ver
   // GRUPOS_EQUIPAMENTO_VIZINHO). Usa 2 KKS reais de um grupo confirmado (Prédio 25).
   it('KKS de salas vizinhas confirmadas (GRUPOS_EQUIPAMENTO_VIZINHO) alinham entre si mesmo sendo KKS diferentes', () => {
-    const a = comProxima({ id: 'a', area: 'APOIO', tagKks: '90SAA05AH616' }, '2026-09-20');
-    const b = comProxima({ id: 'b', area: 'APOIO', tagKks: '90SAA05AH617' }, '2026-09-05');
+    const a = comProxima({ id: 'a', area: 'APOIO', tagKks: '90SAA05AH616', periodicidadeValor: 180 }, '2026-09-20');
+    const b = comProxima({ id: 'b', area: 'APOIO', tagKks: '90SAA05AH617', periodicidadeValor: 180 }, '2026-09-05');
     const resultado = alinharDatasPorEquipamento([a, b]);
     expect(resultado.find(p => p.id === 'a')!.proximaData).toBe('2026-09-05');
     expect(resultado.find(p => p.id === 'b')!.proximaData).toBe('2026-09-05');
@@ -663,10 +663,16 @@ describe('alinhamento não antecipa mais que a folga do próprio plano', () => {
     expect(a.find(p => p.id === '0208')!.proximaData).toBe('2026-10-12');
   });
 
-  it('mensal continua saindo junto com o vizinho dentro de 21 dias', () => {
-    const m = plano({ id: 'm', ...kks, periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)', dataInicial: '2026-10-20' });
+  it('mensal sai junto com o vizinho se a antecipação for até 1/3 do período (10 dias)', () => {
+    const m = plano({ id: 'm', ...kks, periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)', dataInicial: '2026-10-15' });
     const a = agendaDosPlanos([m, quinzenal], new Map([['0209', '2026-09-21']]), false, '2026-09-28', new Map());
     expect(a.find(p => p.id === 'm')!.proximaData).toBe('2026-10-05');
+  });
+
+  it('mensal não antecipa mais que 1/3 do período', () => {
+    const m = plano({ id: 'm', ...kks, periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)', dataInicial: '2026-10-20' });
+    const a = agendaDosPlanos([m, quinzenal], new Map([['0209', '2026-09-21']]), false, '2026-09-28', new Map());
+    expect(a.find(p => p.id === 'm')!.proximaData).toBe('2026-10-20');
   });
 });
 
