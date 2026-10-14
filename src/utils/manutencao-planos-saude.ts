@@ -9,7 +9,7 @@
 
 import { CicloManutencao, EditarPlanoManutencaoRequest, ManutencaoArea, ManutencaoOrdem, PlanoManutencao } from '../models/manutencao-programacao.model';
 import { periodicidadeEmDias, PeriodicidadeUnidade } from './manutencao-preventivas';
-import { inferirCategoriaIndicadorPorTecnico } from './manutencao-planos';
+import { chaveEquipamento, inferirCategoriaIndicadorPorTecnico, ocorrenciasNoIntervalo } from './manutencao-planos';
 
 export type SeveridadeSaude = 'erro' | 'aviso' | 'info';
 
@@ -20,7 +20,8 @@ export type TipoProblemaSaude =
   | 'apoio_sem_equipe'
   | 'sem_kks'
   | 'inativo_com_os_futura'
-  | 'ciclo_desalinhado';
+  | 'ciclo_desalinhado'
+  | 'grupo_desalinhado';
 
 export interface ProblemaSaude {
   tipo: TipoProblemaSaude;
@@ -60,6 +61,7 @@ export const TITULO_PROBLEMA: Record<TipoProblemaSaude, string> = {
   sem_kks: 'Sem TAG/KKS',
   inativo_com_os_futura: 'Inativo com OS em semanas seguintes',
   ciclo_desalinhado: 'Ciclo gravado à frente da OS',
+  grupo_desalinhado: 'Fora da visita do grupo',
 };
 
 const SEVERIDADE: Record<TipoProblemaSaude, SeveridadeSaude> = {
@@ -69,6 +71,7 @@ const SEVERIDADE: Record<TipoProblemaSaude, SeveridadeSaude> = {
   duplicado: 'aviso',
   inativo_com_os_futura: 'aviso',
   apoio_sem_equipe: 'aviso',
+  grupo_desalinhado: 'aviso',
   sem_kks: 'info',
 };
 
@@ -144,6 +147,42 @@ export function apoioSemEquipe(p: Pick<PlanoParaValidar, 'area' | 'responsavel'>
     + `do limite semanal por equipe e cai em "Não classificado".`;
 }
 
+// Duas âncoras caem no mesmo calendário (uma é ocorrência da sequência da outra).
+function mesmoCalendario(a: string, b: string, valor: number, unidade: PeriodicidadeUnidade): boolean {
+  const [ini, fim] = a <= b ? [a, b] : [b, a];
+  return ocorrenciasNoIntervalo(ini, valor, unidade, fim, fim).length > 0;
+}
+
+/**
+ * Apoio: plano fora da visita do seu grupo (mesmo KKS ou salas vizinhas, ver
+ * chaveEquipamento) — outro plano de MESMO período no grupo segue outro calendário, ou o
+ * período é múltiplo do plano-base (o mais curto do grupo) e cai fora do dia dele. Foi o
+ * que fez os 6M da SERVPLEX saírem quase toda semana: cada split da mesma sala com 6M num
+ * mês diferente (migrations 040/060 acertaram só o dia do mês). Mecânica/Elétrica ficam de
+ * fora (muitos planos por KKS, balanceamento da migration 058).
+ */
+export function desalinhadoNoGrupo(p: PlanoParaValidar, todos: PlanoManutencao[]): string | null {
+  if (p.area !== 'APOIO' || !p.ativo || !p.tagKks?.trim()) return null;
+  const chave = chaveEquipamento({ area: p.area, tagKks: p.tagKks, id: p.id ?? '' });
+  const grupo = todos.filter(o => o.ativo && !o.agendaRigida && o.id !== p.id && o.area === 'APOIO' && chaveEquipamento(o) === chave);
+  const mesmoPeriodo = grupo.find(o => o.periodicidadeValor === p.periodicidadeValor && o.periodicidadeUnidade === p.periodicidadeUnidade
+    && !mesmoCalendario(o.dataInicial, p.dataInicial, p.periodicidadeValor, p.periodicidadeUnidade));
+  if (mesmoPeriodo) {
+    return `${mesmoPeriodo.codigo} (mesmo período, mesmo grupo de visita) segue o calendário de ${dataBr(mesmoPeriodo.dataInicial)} `
+      + `e este o de ${dataBr(p.dataInicial)} — saem em visitas separadas. Use a mesma data inicial.`;
+  }
+  const dias = periodicidadeEmDias(p.periodicidadeValor, p.periodicidadeUnidade);
+  const base = grupo
+    .filter(o => o.periodicidadeUnidade === p.periodicidadeUnidade && o.periodicidadeValor > 0
+      && periodicidadeEmDias(o.periodicidadeValor, o.periodicidadeUnidade) < dias && p.periodicidadeValor % o.periodicidadeValor === 0)
+    .sort((a, b) => a.periodicidadeValor - b.periodicidadeValor)[0];
+  if (base && !mesmoCalendario(base.dataInicial, p.dataInicial, base.periodicidadeValor, base.periodicidadeUnidade)) {
+    return `Fora do dia de visita do grupo: ${base.codigo} (${base.periodicidadeValor} ${base.periodicidadeUnidade}) segue o `
+      + `calendário de ${dataBr(base.dataInicial)} e este plano não cai em nenhuma data dele. Use uma data desse calendário.`;
+  }
+  return null;
+}
+
 // ── 1. Validação no formulário ─────────────────────────────────────────────
 
 export interface ResultadoValidacao {
@@ -166,6 +205,8 @@ export function validarPlanoParaSalvar(
   if (dup.length) avisos.push(`Já existe plano ativo com o mesmo nome e KKS: ${dup.map(d => d.codigo).join(', ')}.`);
   const apoio = apoioSemEquipe(p);
   if (apoio) avisos.push(apoio);
+  const grupo = desalinhadoNoGrupo(p, todos);
+  if (grupo) avisos.push(grupo);
   return { bloqueios, avisos };
 }
 
@@ -207,6 +248,8 @@ export function diagnosticarPlanos(
       }
       const apoio = apoioSemEquipe(p);
       if (apoio) add('apoio_sem_equipe', p, apoio);
+      const grupo = p.agendaRigida ? null : desalinhadoNoGrupo(p, planos);
+      if (grupo) add('grupo_desalinhado', p, grupo);
       if (!p.tagKks?.trim()) add('sem_kks', p, 'Sem TAG/KKS: não agrupa com outros planos do mesmo equipamento na programação.');
     } else if (osFuturaPorPlano.has(p.id)) {
       const os = osFuturaPorPlano.get(p.id)!.sort((a, b) => a.semanaInicio.localeCompare(b.semanaInicio));

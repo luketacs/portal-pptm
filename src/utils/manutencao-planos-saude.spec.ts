@@ -1,7 +1,7 @@
 import { CicloManutencao, ManutencaoOrdem, PlanoManutencao } from '../models/manutencao-programacao.model';
 import {
   ancoraFutura, apoioSemEquipe, cicloCoerenteComOrdem, diagnosticarPlanos, diferencasPlano, nomeDivergeDaPeriodicidade,
-  planosDuplicados, validarPlanoParaSalvar,
+  planosDuplicados, validarPlanoParaSalvar, desalinhadoNoGrupo,
 } from './manutencao-planos-saude';
 
 function plano(o: Partial<PlanoManutencao> = {}): PlanoManutencao {
@@ -137,5 +137,38 @@ describe('diferencasPlano', () => {
       { campo: 'Periodicidade', antes: '1 Mes(es)', depois: '3 Mes(es)' },
       { campo: 'Checklist', antes: '1 passo(s)', depois: '1 passo(s) + 2 sub-passo(s)' },
     ]);
+  });
+});
+
+describe('desalinhadoNoGrupo', () => {
+  const apoio = (o: Partial<PlanoManutencao>) => plano({ area: 'APOIO', responsavel: 'SERVPLEX', ...o });
+  // Salas elétricas STK01/02 são grupo de vizinhos (AC90EAD01AH015/017).
+  const base1 = apoio({ id: 'b1', codigo: 'PM-0076', tagKks: 'AC90EAD01AH015', periodicidadeValor: 1, dataInicial: '2026-10-12' });
+  const seis1 = apoio({ id: 's1', codigo: 'PM-0078', tagKks: 'AC90EAD01AH015', periodicidadeValor: 6, dataInicial: '2026-12-12' });
+  const seis2 = apoio({ id: 's2', codigo: 'PM-0079', tagKks: 'AC90EAD01AH017', periodicidadeValor: 6, dataInicial: '2026-11-12' });
+
+  it('mesmo período no grupo em meses diferentes = desalinhado', () => {
+    expect(desalinhadoNoGrupo(seis1, [base1, seis1, seis2])).toContain('PM-0079');
+  });
+
+  it('mesmo calendário (âncoras diferentes, mesma sequência) não alerta', () => {
+    const seis2Junto = { ...seis2, dataInicial: '2027-06-12' };
+    expect(desalinhadoNoGrupo(seis1, [base1, seis1, seis2Junto])).toBeNull();
+  });
+
+  it('período múltiplo fora do dia do plano-base alerta', () => {
+    const fora = { ...seis1, dataInicial: '2026-12-09' };
+    expect(desalinhadoNoGrupo(fora, [base1, fora])).toContain('Fora do dia de visita do grupo');
+  });
+
+  it('Mecânica/Elétrica e plano sem KKS ficam de fora', () => {
+    expect(desalinhadoNoGrupo({ ...seis1, area: 'MECANICA' }, [base1, seis1, seis2])).toBeNull();
+    expect(desalinhadoNoGrupo({ ...seis1, tagKks: null }, [base1, seis1, seis2])).toBeNull();
+  });
+
+  it('Sala 46 (SUP1/SUP2/Self) agora é um grupo', () => {
+    const sup1 = apoio({ id: 'a', codigo: 'PM-0097', tagKks: 'AC90SAG03AH501', periodicidadeValor: 6, dataInicial: '2026-10-26' });
+    const self = apoio({ id: 'c', codigo: 'PM-0104', tagKks: 'AC90SAG03AH503', periodicidadeValor: 6, dataInicial: '2026-12-09' });
+    expect(desalinhadoNoGrupo(self, [sup1, self])).toContain('PM-0097');
   });
 });

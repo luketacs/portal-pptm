@@ -137,6 +137,7 @@ const GRUPOS_EQUIPAMENTO_VIZINHO: readonly (readonly string[])[] = [
   ['AC90SAS21AH507', 'AC90SAS21AH508', 'AC90SAS21AH509'], // Cofre, Planejamento/Supervisão, Oficina Elétrica
   ['AC91EAC01AH012', 'AC91EAC01AH013', 'AC91EAC01AH014'], // Salas Elétricas TC 05/06/07 (Self)
   ['SRC91EAD10AH004', 'SRC91EAD20AH004'], // Cabines Stacker 01/02 (refrigeração)
+  ['AC90SAG03AH501', 'AC90SAG03AH502', 'AC90SAG03AH503'], // Sala 46 — SUP1/SUP2 pátio carvão + Self (confirmado em 2026-10-14)
   // BMS
   ['TCLD91EAC05AF001', 'TCLD91EAC06AF001', 'SPCI91EAC07'], // Torres de Transferência 05/06/07
   [
@@ -159,7 +160,7 @@ const CHAVE_GRUPO_POR_KKS: ReadonlyMap<string, string> = new Map(
 // arriscar juntar equipamentos diferentes por engano quando não dá pra confirmar que
 // são o mesmo. Exceção: KKS que faz parte de um GRUPOS_EQUIPAMENTO_VIZINHO agrupa com
 // os outros do mesmo grupo, não só consigo mesmo.
-function chaveEquipamento(p: PlanoManutencao): string {
+export function chaveEquipamento(p: Pick<PlanoManutencao, 'area' | 'tagKks' | 'id'>): string {
   const kks = p.tagKks?.trim();
   if (!kks) return `${p.area}||SEM_KKS:${p.id}`;
   const grupo = CHAVE_GRUPO_POR_KKS.get(kks);
