@@ -5,7 +5,7 @@ import {
   bloqueioDoTecnico, calcularCapacidadeSemana, diasDaSemana, encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo,
   encontrarFolgaNoIntervalo, encontrarOrdemDuplicada, ordemDuplicada, paraIso, podeEditarSemanaFechada, recursosParaEspelho,
   tecnicosPorArea, todosTecnicos, bloqueiosDoApoio, resumoGravacaoApoio,
-  indisponibilidadesNaSemana, numerosSigmaParaConsultar, avaliarGravacao, celulaLotoEmConflito,
+  indisponibilidadesNaSemana, numerosSigmaParaConsultar, avaliarGravacao, celulaLotoEmConflito, conflitosLotoDisponivel,
 } from './manutencao-regras';
 
 const DIAS_SEMANA_37 = [
@@ -536,5 +536,42 @@ describe('celulaLotoEmConflito', () => {
   it('DISPONÍVEL conflita com qualquer outra OS, inclusive outro DISPONÍVEL', () => {
     expect(celulaLotoEmConflito([{ status: 'DISPONÍVEL' }, { status: 'LOTO' }])).toBe(true);
     expect(celulaLotoEmConflito([{ status: 'DISPONÍVEL' }, { status: 'DISPONÍVEL' }])).toBe(true);
+  });
+});
+
+describe('conflitosLotoDisponivel', () => {
+  const os = (id: string, extra: Partial<ManutencaoOrdem>): ManutencaoOrdem => ({
+    id, tipo: 'ordem', semanaInicio: '2026-09-07', numeroOs: null, equipamento: 'STACKER 1', equipamentosRelacionados: null,
+    loto: 'LOTO', diasPrevistos: ['2026-09-08'], descricao: 'x', tecnicoNome: 'A', ...extra,
+  } as ManutencaoOrdem);
+  const nova = { semanaInicio: '2026-09-07', numeroOs: null, equipamentos: ['stacker 1'], dias: ['2026-09-08'], loto: 'DISPONÍVEL', idsExcluir: [] as string[] };
+
+  it('DISPONÍVEL novo encontra outra OS no mesmo equipamento/dia', () => {
+    expect(conflitosLotoDisponivel([os('1', {})], nova).map(o => o.id)).toEqual(['1']);
+  });
+
+  it('OS nova LOTO encontra DISPONÍVEL já lançado, inclusive via equipamento relacionado', () => {
+    const ordens = [os('1', { loto: 'DISPONÍVEL', equipamento: 'OUTRO', equipamentosRelacionados: 'Stacker 1, Esteira' })];
+    expect(conflitosLotoDisponivel(ordens, { ...nova, loto: 'LOTO' })).toHaveLength(1);
+  });
+
+  it('sem DISPONÍVEL em nenhum lado não avisa (o quadro já cuida de LOTO x FUNCIONANDO)', () => {
+    expect(conflitosLotoDisponivel([os('1', { loto: 'FUNCIONANDO' })], { ...nova, loto: 'LOTO' })).toEqual([]);
+  });
+
+  it('ignora SEM LOTO, outro dia, outra semana, outro equipamento, mesma OS e ids excluídos', () => {
+    const ordens = [
+      os('1', { loto: 'SEM LOTO' }),
+      os('2', { diasPrevistos: ['2026-09-09'] }),
+      os('3', { semanaInicio: '2026-09-14' }),
+      os('4', { equipamento: 'MOEGA' }),
+      os('5', { numeroOs: '123' }),
+      os('6', {}),
+    ];
+    expect(conflitosLotoDisponivel(ordens, { ...nova, numeroOs: '000123', idsExcluir: ['6'] })).toEqual([]);
+  });
+
+  it('OS sem dia marcado vale a semana toda', () => {
+    expect(conflitosLotoDisponivel([os('1', { diasPrevistos: [] })], nova)).toHaveLength(1);
   });
 });

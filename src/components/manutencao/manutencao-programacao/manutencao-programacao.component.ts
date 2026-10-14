@@ -16,7 +16,7 @@ import {
 } from '../../../models/manutencao-programacao.model';
 import { EquipeApoio, Turno, turnoNoDia } from '../../../utils/escala-apoio';
 import {
-  HORAS_TREINAMENTO_DIA_TODO, LOTO_DISPONIVEL, LOTO_OPCOES, bloqueioDoTecnico, calcularCapacidadeSemana, celulaLotoEmConflito, conflitoLotoTitle, diaMesPadded, diasDaSemana,
+  HORAS_TREINAMENTO_DIA_TODO, LOTO_DISPONIVEL, LOTO_OPCOES, bloqueioDoTecnico, calcularCapacidadeSemana, celulaLotoEmConflito, conflitoLotoTitle, conflitosLotoDisponivel, diaMesPadded, diasDaSemana,
   encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo, encontrarFolgaNoIntervalo, encontrarOrdemDuplicada, formatarDataBr,
   lotoBadgeClass, normalizarNumeroOs, normalizarTexto, ordemDuplicada, paraIso, podeEditarSemanaFechada, recursosParaEspelho,
   tecnicosPorArea, todosTecnicos, bloqueiosDoApoio, resumoGravacaoApoio, TipoBloqueio,
@@ -2195,6 +2195,41 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return formatarDataBr(dataIso);
   }
 
+  // Equipamento DISPONÍVEL (reservado pra uma atividade) — avisa antes de gravar outra
+  // OS no mesmo equipamento/dia, ou de marcar DISPONÍVEL onde já tem outra atividade.
+  // Só aviso (pode lançar mesmo assim): às vezes a outra OS nem mexe no equipamento.
+  private async confirmarConflitoDisponivel(): Promise<boolean> {
+    if (this.formTipo() !== 'ordem') return true;
+    const idEdicao = this.formIdEdicao();
+    const original = idEdicao ? this.manutencaoService.getById(idEdicao) : undefined;
+    const vinculadas = original?.tipo === 'ordem' ? this.ordensVinculadas(original).map(o => o.id) : [];
+    const conflitos = conflitosLotoDisponivel(this.manutencaoService.ordens(), {
+      semanaInicio: original?.semanaInicio ?? this.semanaFiltro(),
+      numeroOs: this.formSemOs() ? null : (this.formNumeroOs().trim() || null),
+      equipamentos: [this.formEquipamento(), ...this.formEquipamentosRelacionadosLista()],
+      dias: this.formDiasSelecionados(),
+      loto: this.formLoto(),
+      idsExcluir: idEdicao ? [idEdicao, ...vinculadas] : [],
+    });
+    if (conflitos.length === 0) return true;
+    // Mesma OS em vários técnicos (apoio) vira uma linha só.
+    const porOs = new Map<string, ManutencaoOrdem[]>();
+    conflitos.forEach(o => {
+      const chave = o.numeroOs?.trim() ? normalizarNumeroOs(o.numeroOs) : o.id;
+      porOs.set(chave, [...(porOs.get(chave) ?? []), o]);
+    });
+    const linhas = Array.from(porOs.values()).map(grupo => {
+      const o = grupo[0];
+      const os = o.numeroOs?.trim() ? `OS ${o.numeroOs.trim()} — ` : '';
+      const dias = o.diasPrevistos.length > 0 ? o.diasPrevistos.map(d => this.diaMesPadded(d)).join(', ') : 'semana toda';
+      return `• ${o.loto}: ${os}${o.descricao} (${grupo.map(g => g.tecnicoNome).join(', ')}) — ${dias}`;
+    });
+    const titulo = this.formLoto().trim().toUpperCase() === LOTO_DISPONIVEL
+      ? 'Você marcou o equipamento como DISPONÍVEL, mas já tem outra atividade nele nesse(s) dia(s):'
+      : 'Esse equipamento está reservado (DISPONÍVEL) pra outra atividade nesse(s) dia(s):';
+    return this.confirmDialogService.confirm(`${titulo}\n\n${linhas.join('\n')}\n\nLançar mesmo assim?`, { confirmLabel: 'Lançar mesmo assim' });
+  }
+
   canConfirmarForm(): boolean {
     if (this.isProcessando() || !this.formTecnicoNome().trim()) return false;
     if (this.formOrdemDuplicada()) return false;
@@ -2213,6 +2248,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   async confirmarForm(): Promise<void> {
     if (!this.canConfirmarForm()) return;
+    if (!(await this.confirmarConflitoDisponivel())) return;
     // Se sobrou texto digitado no campo Recursos sem ter apertado Enter/"+", adiciona
     // como chip agora — sem isso, quem digita e vai direto pra "Adicionar" perde o
     // recurso digitado (e o espelhamento pro técnico) sem nenhum aviso.

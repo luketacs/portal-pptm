@@ -186,6 +186,34 @@ export function celulaLotoEmConflito(itens: { status: string }[]): boolean {
   return new Set(status).size > 1 || status.includes(LOTO_DISPONIVEL);
 }
 
+// Aviso ao lançar/editar OS: outras OS da semana no mesmo equipamento (principal ou
+// relacionado) e em dia em comum, quando uma das duas é DISPONÍVEL — mesma regra do
+// quadro (celulaLotoEmConflito), só que antes de gravar. SEM LOTO não diz nada sobre o
+// equipamento, então não entra. Mesma OS (número) em outro técnico é a mesma
+// atividade, não conta; espelhos sem número vêm em idsExcluir. OS sem dia marcado vale
+// a semana toda (igual ao quadro).
+export function conflitosLotoDisponivel(
+  ordens: ManutencaoOrdem[],
+  nova: { semanaInicio: string; numeroOs: string | null; equipamentos: string[]; dias: string[]; loto: string; idsExcluir: string[] },
+): ManutencaoOrdem[] {
+  const loto = nova.loto.trim().toUpperCase();
+  if (!loto || loto === 'SEM LOTO') return [];
+  const equipamentos = new Set(nova.equipamentos.map(e => e.trim().toUpperCase()).filter(Boolean));
+  if (equipamentos.size === 0) return [];
+  const numero = nova.numeroOs?.trim() ? normalizarNumeroOs(nova.numeroOs) : null;
+  return ordens.filter(o => {
+    if (o.tipo !== 'ordem' || o.semanaInicio !== nova.semanaInicio || nova.idsExcluir.includes(o.id)) return false;
+    const outroLoto = o.loto?.trim().toUpperCase();
+    if (!outroLoto || outroLoto === 'SEM LOTO') return false;
+    if (loto !== LOTO_DISPONIVEL && outroLoto !== LOTO_DISPONIVEL) return false;
+    if (numero && o.numeroOs?.trim() && normalizarNumeroOs(o.numeroOs) === numero) return false;
+    const eqs = [o.equipamento, ...(o.equipamentosRelacionados ?? '').split(',')].map(e => e?.trim().toUpperCase() ?? '');
+    if (!eqs.some(e => e && equipamentos.has(e))) return false;
+    if (nova.dias.length === 0 || o.diasPrevistos.length === 0) return true;
+    return o.diasPrevistos.some(d => nova.dias.includes(d));
+  });
+}
+
 // Dica curta do hover nativo (title) do quadro de LOTO — o detalhe completo fica no
 // painel de clique, não faz sentido duplicar tudo aqui também.
 export function conflitoLotoTitle(itens: { status: string; descricao: string; tecnicos: string[] }[]): string {
