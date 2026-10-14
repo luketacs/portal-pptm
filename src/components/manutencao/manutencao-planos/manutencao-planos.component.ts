@@ -17,7 +17,7 @@ import {
   diagnosticarPlanos, ProblemaSaude, SeveridadeSaude, TipoProblemaSaude, TITULO_PROBLEMA, validarPlanoParaSalvar,
 } from '../../../utils/manutencao-planos-saude';
 import {
-  agendaDosPlanos, DiaGradeMensal, gerarGradeMensal, nomeBaseDoPlano, ocorrenciasNoIntervalo, planosAtrasados, primeiraSemanaAberta, SemanaIso,
+  agendaDosPlanos, DiaGradeMensal, gerarGradeMensal, nomeBaseDoPlano, ocorrenciasNoIntervalo, planosAtrasados, primeiraSemanaAberta, SemanaIso, datasProgramadasPorPlano,
   semanasIsoDoAno, siglaPeriodicidade,
 } from '../../../utils/manutencao-planos';
 
@@ -168,7 +168,8 @@ export class ManutencaoPlanosComponent implements OnInit {
 
   // Ocorrências de semanas passadas que não viraram OS (ver planosAtrasados).
   private planosAtrasadosTodos = computed(() =>
-    planosAtrasados(this.planosComProximaTodos(), this.manutencaoPlanosService.ciclosPorPlano(),
+    planosAtrasados(this.planosComProximaTodos(), datasProgramadasPorPlano(this.manutencaoPlanosService.planos(),
+      this.manutencaoPlanosService.ciclosPorPlano(), this.manutencaoProgramacaoService.ordens()),
       primeiraSemanaAberta(this.hojeInicioSemanaIso, this.manutencaoProgramacaoService.semanasFechadas()),
       this.manutencaoProgramacaoService.paradaAtual() !== null));
 

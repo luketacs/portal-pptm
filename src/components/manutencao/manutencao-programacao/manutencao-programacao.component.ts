@@ -25,7 +25,7 @@ import {
 import {
   agendaDosPlanos, ChaveEquipeApoio, dataCicloAoProgramar, EQUIPE_APOIO_NAO_CLASSIFICADA, inferirCategoriaIndicador,
   inferirCategoriaIndicadorPorTecnico, limitarPorEquipeApoio, LimitePorEquipeApoio, PlanoComProximaData,
-  planosAtrasados, primeiraSemanaAberta,
+  planosAtrasados, primeiraSemanaAberta, datasProgramadasPorPlano,
   resumoPorEquipeApoio, sugestoesDaSemana,
 } from '../../../utils/manutencao-planos';
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
@@ -1233,7 +1233,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Ocorrências de semanas passadas que não viraram OS (ver planosAtrasados) — a agenda
   // só olha pra frente, então sem essa lista a preventiva perdida sumia sem rastro.
   preventivasAtrasadas = computed(() =>
-    planosAtrasados(this.planosComProximaDaArea(), this.manutencaoPlanosService.ciclosPorPlano(),
+    planosAtrasados(this.planosComProximaDaArea(), datasProgramadasPorPlano(this.planosComProximaDaArea(),
+      this.manutencaoPlanosService.ciclosPorPlano(), this.manutencaoService.ordens()),
       primeiraSemanaAberta(this.hojeInicioSemanaIso, this.manutencaoService.semanasFechadas()), this.plantaParadaAtiva()));
 
   // Abre "Novo lançamento" já preenchido a partir de um plano preventivo vencendo —

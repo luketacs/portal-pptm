@@ -1,8 +1,8 @@
-import { PlanoManutencao } from '../models/manutencao-programacao.model';
+import { ManutencaoOrdem, PlanoManutencao } from '../models/manutencao-programacao.model';
 import {
   agendaDosPlanos, alinharDatasPorEquipamento, EQUIPE_APOIO_NAO_CLASSIFICADA, gerarGradeMensal, inferirCategoriaIndicador,
   inferirCategoriaIndicadorPorTecnico, janelaAlinhamentoDaArea, limitarPorEquipeApoio, nomeBaseDoPlano, ocorrenciasNoIntervalo,
-  semanasIsoDoAno, siglaPeriodicidade, planosAtrasados, planosComProximaExecucao,
+  semanasIsoDoAno, siglaPeriodicidade, planosAtrasados, planosComProximaExecucao, datasProgramadasPorPlano,
   planosComProximaExecucaoFixa, proximaExecucaoPlano, resumoPorEquipeApoio, sugestoesDaSemana, dataCicloAoProgramar,
 } from './manutencao-planos';
 
@@ -667,5 +667,29 @@ describe('alinhamento não antecipa mais que a folga do próprio plano', () => {
     const m = plano({ id: 'm', ...kks, periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)', dataInicial: '2026-10-20' });
     const a = agendaDosPlanos([m, quinzenal], new Map([['0209', '2026-09-21']]), false, '2026-09-28', new Map());
     expect(a.find(p => p.id === 'm')!.proximaData).toBe('2026-10-05');
+  });
+});
+
+describe('datasProgramadasPorPlano', () => {
+  const ordem = (o: Partial<ManutencaoOrdem>) => ({
+    id: 'o', tipo: 'ordem', area: 'MECANICA', descricao: '', semanaInicio: '2026-10-05', diasPrevistos: [], planoPreventivoId: null, ...o,
+  } as ManutencaoOrdem);
+
+  it('junta ciclos, OS vinculada e OS lançada à parte com o mesmo nome na mesma área', () => {
+    const p = plano({ id: 'p1', nome: 'Inspeção do Motor M01' });
+    const ordens = [
+      ordem({ planoPreventivoId: 'p1', diasPrevistos: ['2026-10-08', '2026-10-07'] }),
+      ordem({ descricao: 'INSPECAO DO MOTOR M01 ', semanaInicio: '2026-10-12' }),
+      ordem({ descricao: 'Inspeção do Motor M01', area: 'ELETRICA', semanaInicio: '2026-10-19' }),
+      ordem({ descricao: 'Inspeção do Motor M01', tipo: 'folga' }),
+    ];
+    const r = datasProgramadasPorPlano([p], new Map([['p1', ['2026-09-28']]]), ordens);
+    expect(r.get('p1')).toEqual(['2026-09-28', '2026-10-07', '2026-10-12']);
+  });
+
+  it('OS lançada à parte tira a ocorrência das não programadas', () => {
+    const p = plano({ id: 'p1', dataInicial: '2026-10-05', periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)' });
+    const datas = datasProgramadasPorPlano([p], new Map(), [ordem({ descricao: p.nome, diasPrevistos: ['2026-10-06'] })]);
+    expect(planosAtrasados([{ ...p, proximaData: '2026-10-12' }], datas, '2026-10-12', false)).toEqual([]);
   });
 });

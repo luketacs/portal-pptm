@@ -3,7 +3,7 @@ import {
   periodicidadeEmDias, preventivaVencendo, primeiroIndiceAPartirDe, proximaDataFixa, PeriodicidadeUnidade, somarDias,
   somarPeriodos,
 } from './manutencao-preventivas';
-import { CategoriaIndicador, ManutencaoArea, PlanoManutencao } from '../models/manutencao-programacao.model';
+import { CategoriaIndicador, ManutencaoArea, ManutencaoOrdem, PlanoManutencao } from '../models/manutencao-programacao.model';
 
 // Deriva a categoria do indicador semanal (ver CategoriaIndicador) a partir do que já
 // existe no plano — Mecânica/Elétrica não têm ambiguidade; Apoio precisa olhar
@@ -346,12 +346,39 @@ export function resumoPorEquipeApoio(
 // passou sem virar OS sumia sem rastro, e a antiga lista de "atrasadas" (próxima data +
 // tolerância < hoje) nunca acendia, porque a próxima data nunca fica no passado.
 // Agora: ocorrência de semana já passada (antes da primeira semana aberta) sem ciclo
-// registrado que a cubra = não programada. Olha só as últimas
+// nem OS que a cubra (ver datasProgramadasPorPlano) = não programada. Olha só as últimas
 // JANELA_NAO_PROGRAMADAS_SEMANAS semanas e nada antes de INICIO_CONTROLE_NAO_PROGRAMADAS
 // (agenda rebalanceada pela migration 058 vale a partir de 05/10/2026 — antes disso o
 // histórico não tem ciclo confiável e tudo apareceria como perdido).
 export const INICIO_CONTROLE_NAO_PROGRAMADAS = '2026-10-05';
 export const JANELA_NAO_PROGRAMADAS_SEMANAS = 8;
+
+// Datas que contam como "programado" no controle de não programadas: ciclos com OS mais
+// OS lançada à parte, sem ciclo — vinculada pelo planoPreventivoId ou com a descrição
+// igual ao nome do plano na mesma área (mesmo critério do Mapa de 52 semanas), pela 1ª
+// data prevista da OS. Sem isso, preventiva lançada "na mão" aparecia como perdida.
+export function datasProgramadasPorPlano(
+  planos: PlanoManutencao[], ciclosPorPlano: ReadonlyMap<string, readonly string[]>, ordens: ManutencaoOrdem[],
+): Map<string, string[]> {
+  const normalizar = (v: string) => v.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase();
+  const porPlanoId = new Map<string, string[]>();
+  const porNome = new Map<string, string[]>();
+  const anexar = (mapa: Map<string, string[]>, chave: string, data: string) => {
+    const lista = mapa.get(chave);
+    if (lista) lista.push(data); else mapa.set(chave, [data]);
+  };
+  for (const o of ordens) {
+    if (o.tipo !== 'ordem') continue;
+    const data = o.diasPrevistos.length ? [...o.diasPrevistos].sort()[0] : o.semanaInicio;
+    if (o.planoPreventivoId) anexar(porPlanoId, o.planoPreventivoId, data);
+    anexar(porNome, `${o.area}|${normalizar(o.descricao)}`, data);
+  }
+  return new Map(planos.map(p => [p.id, [
+    ...(ciclosPorPlano.get(p.id) ?? []),
+    ...(porPlanoId.get(p.id) ?? []),
+    ...(porNome.get(`${p.area}|${normalizar(p.nome)}`) ?? []),
+  ]]));
+}
 
 export interface PlanoAtrasado extends PlanoAlinhadoPorEquipamento {
   prazoLimite: string; // ocorrência + tolerância de 1/3 do período (só informativo)
@@ -365,7 +392,7 @@ export interface PlanoAtrasado extends PlanoAlinhadoPorEquipamento {
 // da data, quando o plano saiu junto com o vizinho) e qualquer data até a próxima
 // (OS programada com atraso, ciclo ajustado pela data da OS — migration 063).
 export function planosAtrasados(
-  agenda: PlanoComProximaData[], ciclosPorPlano: ReadonlyMap<string, readonly string[]>,
+  agenda: PlanoComProximaData[], datasProgramadas: ReadonlyMap<string, readonly string[]>,
   semanaAberta: string, plantaParada: boolean,
 ): PlanoAtrasado[] {
   const janela = somarDias(semanaAberta, -7 * JANELA_NAO_PROGRAMADAS_SEMANAS);
@@ -377,7 +404,7 @@ export function planosAtrasados(
       const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, plantaParada, p.area);
       if (efetiva.valor <= 0) return [];
       const folga = p.agendaRigida ? 0 : folgaCoberturaCiclo(efetiva.valor, efetiva.unidade);
-      const ciclos = ciclosPorPlano.get(p.id) ?? [];
+      const ciclos = datasProgramadas.get(p.id) ?? [];
       const perdidas: string[] = [];
       let k = primeiroIndiceAPartirDe(p.dataInicial, efetiva.valor, efetiva.unidade, inicio);
       for (let data = somarPeriodos(p.dataInicial, k, efetiva.valor, efetiva.unidade); data <= fim;) {
