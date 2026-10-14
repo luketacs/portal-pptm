@@ -677,6 +677,9 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     return [...grupos.values()].sort((a, b) => a.item.colaborador.nome.localeCompare(b.item.colaborador.nome, 'pt-BR'));
   });
 
+  // Card dos sobrepostos começa recolhido (só o aviso); abre pra ver os casos.
+  sobrepostosAberto = signal(false);
+
   totalSobrepostos = computed(() => this.sobrepostosPorTecnico().reduce((s, g) => s + g.pares.length, 0));
 
   formatarMinutos(min: number): string {
