@@ -160,6 +160,16 @@ function domingoDaSemana(segundaIso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+// "Área Manutenção" do SIGMA vem abreviada de jeitos diferentes (MEC/MECA, ELE/ELET) —
+// mesmo critério por prefixo do proxy (normalizarAreaManutencao em api/_sigma-shared.js).
+// null = outra área (ou vazio): não dá pra afirmar que é de outra equipe.
+function areaManutencaoSigma(v: string): ManutencaoArea | null {
+  const s = (v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+  if (s.startsWith('MEC')) return 'MECANICA';
+  if (s.startsWith('ELE')) return 'ELETRICA';
+  return null;
+}
+
 @Component({
   selector: 'app-manutencao-programacao',
   standalone: true,
@@ -835,60 +845,64 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // qualquer material (mesmo que só um dos vários), ela não aparece aqui ainda. Vale só
   // a partir da semana 39/2026 (mesmo corte de "regrasNovasValemNaSemana" já usado nas
   // preventivas), a pedido do usuário.
-  materiaisDisponiveisAberto = signal(false);
+  // Card fixo (pedido do usuário: "tem que ficar aparecendo sempre") — carrega sozinho
+  // ao abrir a tela; dá pra recolher, mas não some.
+  materiaisDisponiveisAberto = signal(true);
   materiaisDisponiveisCarregando = signal(false);
   materiaisDisponiveisErro = signal('');
+  // SIGMA não respondeu: a lista aparece mesmo assim (só com o que o Almoxarifado sabe).
+  materiaisDisponiveisAvisoSigma = signal('');
   private almoxSasAbertas = signal<Solicitacao[]>([]);
   private almoxMovimentacoes = signal<Movimentacao[]>([]);
-  private materiaisDisponiveisSigma = signal<SigmaBacklogItem[]>([]);
+  // Info do SIGMA de CADA OS pronta, consultada pelo número (consultarOrdensSigma). Antes
+  // vinha do backlog da área, que o proxy corta nas 300 OS mais recentes — OS esperando
+  // material costuma ser antiga, ficava fora do corte e nenhuma casava (reportado:
+  // "14 OSs têm material 100% disponível... o SIGMA não confirmou nenhuma").
+  private materiaisDisponiveisOsSigma = signal<Record<string, ConsultaSigmaResultado>>({});
   materiaisDisponiveisAtualizadoEm = signal<number | null>(null);
 
-  // BUG CORRIGIDO: essa lógica antes vivia num computed só (materiaisDisponiveisFiltrado)
-  // que escrevia num signal (.set()) de dentro da própria função de derivação — Angular
-  // não permite escrever em signal de dentro de computed/effect. Em dev isso lança
-  // NG0600 (erro visível); em produção a checagem é removida e vira corrupção SILENCIOSA
-  // do grafo reativo — reportado: trocar a semana no filtro não atualizava os dados, e o
-  // modal de Novo Lançamento abria com campos vazios (Tipo/Dias previstos), mesmo depois
-  // de recarregar a página. Corrigido calculando os DOIS resultados (lista final + quantas
-  // OS's prontas ficaram sem match no SIGMA) num único computed puro, sem escrita nenhuma
-  // — os dois computeds públicos abaixo só leem cada pedaço dele.
-  private materiaisDisponiveisResultado = computed<{
-    lista: Array<OrdemComMaterialDisponivel & { descricao: string; equipamento: string; tipoServico: string; statusCodigo: string }>;
-    semMatchSigma: number;
-  }>(() => {
-    if (!this.areaFixa || this.areaFixa === 'APOIO') return { lista: [], semMatchSigma: 0 };
-    if (!this.regrasNovasValemNaSemana()) return { lista: [], semMatchSigma: 0 };
+  private materiaisProntas = computed(() => {
     const { comSA } = this.almoxarifadoService.calcularAguardandoRetirada(this.almoxMovimentacoes(), this.almoxSasAbertas());
-    const prontas = ordensComMaterialTotalmenteDisponivel(this.almoxSasAbertas(), comSA, normalizarNumeroOs);
-    if (prontas.length === 0) return { lista: [], semMatchSigma: 0 };
-    const sigmaPorNumero = new Map(this.materiaisDisponiveisSigma().map(item => [normalizarNumeroOs(item.numeroOs), item]));
+    return ordensComMaterialTotalmenteDisponivel(this.almoxSasAbertas(), comSA, normalizarNumeroOs);
+  });
+
+  // Computed puro (sem escrita em signal — ver histórico do NG0600 neste arquivo).
+  private materiaisDisponiveisResultado = computed<{
+    lista: Array<OrdemComMaterialDisponivel & { descricao: string; equipamento: string; tipoServico: string; statusCodigo: string; noSigma: boolean }>;
+    encerradas: number;
+  }>(() => {
+    if (!this.areaFixa || this.areaFixa === 'APOIO') return { lista: [], encerradas: 0 };
+    if (!this.regrasNovasValemNaSemana()) return { lista: [], encerradas: 0 };
+    const osSigma = this.materiaisDisponiveisOsSigma();
     const jaProgramados = this.numerosOsJaProgramados();
-    const lista: Array<OrdemComMaterialDisponivel & { descricao: string; equipamento: string; tipoServico: string; statusCodigo: string }> = [];
-    let semMatchSigma = 0;
-    for (const p of prontas) {
+    const lista: Array<OrdemComMaterialDisponivel & { descricao: string; equipamento: string; tipoServico: string; statusCodigo: string; noSigma: boolean }> = [];
+    let encerradas = 0;
+    for (const p of this.materiaisProntas()) {
       if (jaProgramados.has(p.numeroOs)) continue;
-      // Sem match no backlog aberto do SIGMA = já concluída/cancelada, ou de outra
-      // área/empresa — o material chegou, mas não é mais (ou nunca foi) uma OS
-      // programável por aqui, então não faz sentido sugerir. Mas também acontece se a
-      // consulta ao backlog do SIGMA falhar/vier incompleta (ver materiaisDisponiveisErro)
-      // ou se o número de OS do Almoxarifado não normalizar igual ao do SIGMA — por
-      // isso conta em vez de só descartar, pra dar pra distinguir dos dois casos na tela.
-      const sigma = sigmaPorNumero.get(p.numeroOs);
-      if (!sigma) { semMatchSigma++; continue; }
-      lista.push({ ...p, descricao: sigma.descricao, equipamento: sigma.equipamento, tipoServico: sigma.tipoServico, statusCodigo: sigma.statusCodigo });
+      const info = osSigma[p.numeroOs]?.os ?? null;
+      if (info) {
+        // OS de outra área (Elétrica x Mecânica) fica na lista da área dela; já
+        // concluída/cancelada/executada no SIGMA não tem mais o que programar.
+        const area = areaManutencaoSigma(info.areaManutencao);
+        if (area && area !== this.areaFixa) continue;
+        if (['CONC', 'CANC', 'EXEC'].includes(info.statusCodigo.toUpperCase())) { encerradas++; continue; }
+      }
+      // Sem info do SIGMA (não achou a OS, ou o SIGMA não respondeu) a OS aparece
+      // mesmo assim — o material está lá esperando, melhor mostrar do que esconder.
+      lista.push({
+        ...p,
+        descricao: info?.descricao ?? '',
+        equipamento: info?.equipamento ?? '',
+        tipoServico: info?.tipoServico ?? '',
+        statusCodigo: info?.statusCodigo ?? '',
+        noSigma: !!info,
+      });
     }
-    return { lista, semMatchSigma };
+    return { lista, encerradas };
   });
 
   materiaisDisponiveisFiltrado = computed(() => this.materiaisDisponiveisResultado().lista);
-
-  // Mensagem pro caso "tinha OS pronta, mas nenhuma bateu com o SIGMA" — só faz sentido
-  // quando a lista final está vazia mesmo assim (senão a tabela já aparece normalmente).
-  materiaisDisponiveisMensagemSemMatch(): string | null {
-    const semMatch = this.materiaisDisponiveisResultado().semMatchSigma;
-    if (semMatch === 0 || this.materiaisDisponiveisFiltrado().length > 0) return null;
-    return `${semMatch} OS${semMatch > 1 ? 's têm' : ' tem'} material 100% disponível no Almoxarifado, mas o SIGMA não confirmou nenhuma como aberta — pode ser instabilidade na consulta ao SIGMA (tente "Atualizar") ou o número de OS não bater entre as duas fontes.`;
-  }
+  materiaisDisponiveisEncerradas = computed(() => this.materiaisDisponiveisResultado().encerradas);
 
   // Texto explicando por que a lista está vazia quando é por causa do corte de semana
   // (não confundir com "nenhuma OS pronta ainda", que é uma situação normal do dia a
@@ -903,28 +917,31 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   }
 
-  async toggleMateriaisDisponiveis(): Promise<void> {
-    const abrir = !this.materiaisDisponiveisAberto();
-    this.materiaisDisponiveisAberto.set(abrir);
-    if (abrir) {
-      await this.carregarMateriaisDisponiveis();
-    }
-  }
-
   async carregarMateriaisDisponiveis(): Promise<void> {
     if (!this.areaFixa || this.areaFixa === 'APOIO') return;
     this.materiaisDisponiveisCarregando.set(true);
     this.materiaisDisponiveisErro.set('');
+    this.materiaisDisponiveisAvisoSigma.set('');
     try {
-      const [sas, movs, backlog] = await Promise.all([
+      const [sas, movs] = await Promise.all([
         this.almoxarifadoService.getSolicitacoes(),
         this.almoxarifadoService.getMovimentacoes(),
-        this.manutencaoService.consultarBacklogSigma(this.areaFixa),
       ]);
       this.almoxSasAbertas.set(sas);
       this.almoxMovimentacoes.set(movs);
-      this.materiaisDisponiveisSigma.set(backlog.itens);
-      this.materiaisDisponiveisAtualizadoEm.set(backlog.atualizadoEm);
+      const numeros = this.materiaisProntas().map(p => p.numeroOs);
+      try {
+        // O proxy aceita até 200 números por consulta.
+        const partes: Record<string, ConsultaSigmaResultado>[] = [];
+        for (let i = 0; i < numeros.length; i += 150) {
+          partes.push(await this.manutencaoService.consultarOrdensSigma(numeros.slice(i, i + 150)));
+        }
+        this.materiaisDisponiveisOsSigma.set(Object.assign({}, ...partes));
+      } catch {
+        this.materiaisDisponiveisOsSigma.set({});
+        this.materiaisDisponiveisAvisoSigma.set('O SIGMA não respondeu — a lista mostra só o que o Almoxarifado tem (sem descrição). Tente "Atualizar" em alguns minutos.');
+      }
+      this.materiaisDisponiveisAtualizadoEm.set(Date.now());
     } catch (err: unknown) {
       this.materiaisDisponiveisErro.set(err instanceof Error ? err.message : 'Erro ao consultar materiais disponíveis.');
     } finally {
@@ -1994,6 +2011,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       complementar('status de parada da planta', this.manutencaoService.loadParadaAtual()),
       complementar('semanas fechadas', this.manutencaoService.loadSemanasFechadas()),
     ]);
+    void this.carregarMateriaisDisponiveis();
   }
 
   // Pessoas que saíram da equipe numa semana CONHECIDA — ficam fora do seletor de
