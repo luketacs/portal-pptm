@@ -162,7 +162,7 @@ function domingoDaSemana(segundaIso: string): string {
 
 // "Área Manutenção" do SIGMA vem abreviada de jeitos diferentes (MEC/MECA, ELE/ELET) —
 // mesmo critério por prefixo do proxy (normalizarAreaManutencao em api/_sigma-shared.js).
-// null = outra área (ou vazio): não dá pra afirmar que é de outra equipe.
+// null = qualquer outra área (SPCI, refrigeração...) ou vazio.
 function areaManutencaoSigma(v: string): ManutencaoArea | null {
   const s = (v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
   if (s.startsWith('MEC')) return 'MECANICA';
@@ -881,10 +881,12 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       if (jaProgramados.has(p.numeroOs)) continue;
       const info = osSigma[p.numeroOs]?.os ?? null;
       if (info) {
-        // OS de outra área (Elétrica x Mecânica) fica na lista da área dela; já
-        // concluída/cancelada/executada no SIGMA não tem mais o que programar.
-        const area = areaManutencaoSigma(info.areaManutencao);
-        if (area && area !== this.areaFixa) continue;
+        // Só entra OS cuja "Área Manutenção" no SIGMA é a desta tela — qualquer outra
+        // (a outra equipe, SPCI, refrigeração...) fica de fora. Reportado: OS de SPCI
+        // aparecendo pra Mecânica (antes só Elétrica x Mecânica era filtrado). Área
+        // vazia no SIGMA não dá pra afirmar, então fica. Já concluída/cancelada/
+        // executada no SIGMA não tem mais o que programar.
+        if (info.areaManutencao?.trim() && areaManutencaoSigma(info.areaManutencao) !== this.areaFixa) continue;
         if (['CONC', 'CANC', 'EXEC'].includes(info.statusCodigo.toUpperCase())) { encerradas++; continue; }
       }
       // Sem info do SIGMA (não achou a OS, ou o SIGMA não respondeu) a OS aparece
