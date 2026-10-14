@@ -1,6 +1,7 @@
 import {
   calcularProximaData, dataLimiteComTolerancia, folgaCoberturaCiclo, JANELA_ALINHAMENTO_DIAS, periodicidadeEfetiva,
-  periodicidadeEmDias, preventivaVencendo, proximaDataFixa, PeriodicidadeUnidade, somarDias,
+  periodicidadeEmDias, preventivaVencendo, primeiroIndiceAPartirDe, proximaDataFixa, PeriodicidadeUnidade, somarDias,
+  somarPeriodos,
 } from './manutencao-preventivas';
 import { CategoriaIndicador, ManutencaoArea, PlanoManutencao } from '../models/manutencao-programacao.model';
 
@@ -58,18 +59,21 @@ export function agendaDosPlanos(
   planos: PlanoManutencao[], ultimoCicloPorPlano: Map<string, string | null>,
   plantaParada: boolean, hojeInicioSemana: string, semanasFechadas: ReadonlyMap<string, unknown>,
 ): PlanoComProximaData[] {
-  let referencia = hojeInicioSemana;
-  while (semanasFechadas.has(referencia)) {
-    const data = new Date(referencia + 'T00:00:00');
-    data.setDate(data.getDate() + 7);
-    referencia = paraIsoLocal(data);
-  }
+  const referencia = primeiraSemanaAberta(hojeInicioSemana, semanasFechadas);
   return (['ELETRICA', 'MECANICA', 'APOIO'] as const).flatMap(area => {
     const agenda = planosComProximaExecucaoFixa(
       planos.filter(p => p.area === area), plantaParada, referencia, ultimoCicloPorPlano,
     );
     return hojeInicioSemana >= '2026-09-21' ? alinharDatasPorEquipamento(agenda, janelaAlinhamentoDaArea(area)) : agenda;
   });
+}
+
+// Segunda-feira da primeira semana ainda aberta a partir de hoje — semana fechada não
+// recebe mais programação, então a agenda (e o controle de não programadas) começa depois.
+export function primeiraSemanaAberta(hojeInicioSemana: string, semanasFechadas: ReadonlyMap<string, unknown>): string {
+  let referencia = hojeInicioSemana;
+  while (semanasFechadas.has(referencia)) referencia = somarDias(referencia, 7);
+  return referencia;
 }
 
 // Janela do alinhamento por equipamento, por área. Apoio: 21 dias (grupos de salas
@@ -337,22 +341,61 @@ export function resumoPorEquipeApoio(
     .sort((a, b) => b.total - a.total);
 }
 
-export interface PlanoAtrasado extends PlanoComProximaData {
-  prazoLimite: string;
+// Controle de preventivas NÃO programadas. A agenda é por calendário fixo e sempre
+// olha da semana aberta pra frente (ver proximaDataFixa) — então uma ocorrência que
+// passou sem virar OS sumia sem rastro, e a antiga lista de "atrasadas" (próxima data +
+// tolerância < hoje) nunca acendia, porque a próxima data nunca fica no passado.
+// Agora: ocorrência de semana já passada (antes da primeira semana aberta) sem ciclo
+// registrado que a cubra = não programada. Olha só as últimas
+// JANELA_NAO_PROGRAMADAS_SEMANAS semanas e nada antes de INICIO_CONTROLE_NAO_PROGRAMADAS
+// (agenda rebalanceada pela migration 058 vale a partir de 05/10/2026 — antes disso o
+// histórico não tem ciclo confiável e tudo apareceria como perdido).
+export const INICIO_CONTROLE_NAO_PROGRAMADAS = '2026-10-05';
+export const JANELA_NAO_PROGRAMADAS_SEMANAS = 8;
+
+export interface PlanoAtrasado extends PlanoAlinhadoPorEquipamento {
+  prazoLimite: string; // ocorrência + tolerância de 1/3 do período (só informativo)
+  ocorrenciasPerdidas: number; // quantas ocorrências da janela ficaram sem OS
 }
 
-// Planos cuja próxima execução já passou da tolerância (1/3 do período, ver
-// dataLimiteComTolerancia) além da semana atual de verdade — independente da semana
-// selecionada no filtro (ver preventivasAtrasadas no componente).
+// Um item por plano, com a ocorrência perdida MAIS ANTIGA em proximaData — "Programar"
+// grava o ciclo nessa data (dataCicloAoProgramar), o que tira essa ocorrência da lista.
+// Ocorrência coberta = existe ciclo entre (ocorrência - folga de cobertura) e a
+// ocorrência seguinte: mesma folga do alinhamento por equipamento (ciclo gravado antes
+// da data, quando o plano saiu junto com o vizinho) e qualquer data até a próxima
+// (OS programada com atraso, ciclo ajustado pela data da OS — migration 063).
 export function planosAtrasados(
-  planos: PlanoComProximaData[], hojeInicioSemanaIso: string, plantaParada: boolean,
+  agenda: PlanoComProximaData[], ciclosPorPlano: ReadonlyMap<string, readonly string[]>,
+  semanaAberta: string, plantaParada: boolean,
 ): PlanoAtrasado[] {
-  return planos
-    .map(p => {
+  const janela = somarDias(semanaAberta, -7 * JANELA_NAO_PROGRAMADAS_SEMANAS);
+  const inicio = janela > INICIO_CONTROLE_NAO_PROGRAMADAS ? janela : INICIO_CONTROLE_NAO_PROGRAMADAS;
+  const fim = somarDias(semanaAberta, -1);
+  if (inicio > fim) return [];
+  return agenda
+    .flatMap(p => {
       const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, plantaParada, p.area);
-      return { ...p, prazoLimite: dataLimiteComTolerancia(p.proximaData, efetiva.valor, efetiva.unidade) };
+      if (efetiva.valor <= 0) return [];
+      const folga = p.agendaRigida ? 0 : folgaCoberturaCiclo(efetiva.valor, efetiva.unidade);
+      const ciclos = ciclosPorPlano.get(p.id) ?? [];
+      const perdidas: string[] = [];
+      let k = primeiroIndiceAPartirDe(p.dataInicial, efetiva.valor, efetiva.unidade, inicio);
+      for (let data = somarPeriodos(p.dataInicial, k, efetiva.valor, efetiva.unidade); data <= fim;) {
+        const seguinte = somarPeriodos(p.dataInicial, ++k, efetiva.valor, efetiva.unidade);
+        const desde = somarDias(data, -folga);
+        if (!ciclos.some(c => c >= desde && c < seguinte)) perdidas.push(data);
+        data = seguinte;
+      }
+      if (perdidas.length === 0) return [];
+      return [{
+        ...p,
+        proximaData: perdidas[0],
+        // Data perdida é a ocorrência REAL — não herda a antecipação do alinhamento.
+        proximaDataOriginal: null,
+        prazoLimite: dataLimiteComTolerancia(perdidas[0], efetiva.valor, efetiva.unidade)!,
+        ocorrenciasPerdidas: perdidas.length,
+      }];
     })
-    .filter((p): p is PlanoAtrasado => p.prazoLimite !== null && p.prazoLimite < hojeInicioSemanaIso)
     .sort((a, b) => a.proximaData.localeCompare(b.proximaData));
 }
 
@@ -399,11 +442,12 @@ export function semanasIsoDoAno(ano: number): SemanaIso[] {
 export function ocorrenciasNoIntervalo(
   dataAncora: string, valor: number, unidade: PeriodicidadeUnidade, inicio: string, fim: string,
 ): string[] {
+  if (valor <= 0) return [];
   const datas: string[] = [];
-  let atual = dataAncora;
-  for (let i = 0; i < 2000 && atual <= fim; i++) {
-    if (atual >= inicio) datas.push(atual);
-    atual = calcularProximaData(atual, valor, unidade)!;
+  for (let k = primeiroIndiceAPartirDe(dataAncora, valor, unidade, inicio); ; k++) {
+    const data = somarPeriodos(dataAncora, k, valor, unidade);
+    if (data > fim) break;
+    datas.push(data);
   }
   return datas;
 }

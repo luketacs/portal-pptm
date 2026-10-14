@@ -12,11 +12,39 @@ export function calcularProximaData(
   ultimaExecucao: string | null, valor: number, unidade: PeriodicidadeUnidade,
 ): string | null {
   if (!ultimaExecucao) return null;
-  const d = new Date(ultimaExecucao + 'T00:00:00');
-  if (unidade === 'Dia(s)') d.setDate(d.getDate() + valor);
-  else if (unidade === 'Semana(s)') d.setDate(d.getDate() + valor * 7);
-  else d.setMonth(d.getMonth() + valor); // Mes(es)
-  return d.toISOString().slice(0, 10);
+  return somarPeriodos(ultimaExecucao, 1, valor, unidade);
+}
+
+// k-ésima ocorrência da sequência (k=0 é a própria âncora). Mês sempre contado a partir
+// da ÂNCORA, com o dia limitado ao último dia do mês: o setMonth do JS transbordava
+// (31/01 + 1 mês = 03/03) e, encadeando ocorrência a ocorrência, o plano ficava preso no
+// dia 3 pra sempre. Agora 31/01 mensal = 28/02, 31/03, 30/04, 31/05...
+export function somarPeriodos(ancora: string, k: number, valor: number, unidade: PeriodicidadeUnidade): string {
+  if (unidade !== 'Mes(es)') return somarDias(ancora, k * (unidade === 'Semana(s)' ? valor * 7 : valor));
+  const [ano, mes, dia] = ancora.split('-').map(Number);
+  const totalMeses = (mes - 1) + k * valor;
+  const anoAlvo = ano + Math.floor(totalMeses / 12);
+  const mesAlvo = ((totalMeses % 12) + 12) % 12; // 0-11
+  const ultimoDia = new Date(anoAlvo, mesAlvo + 1, 0).getDate();
+  return `${anoAlvo}-${String(mesAlvo + 1).padStart(2, '0')}-${String(Math.min(dia, ultimoDia)).padStart(2, '0')}`;
+}
+
+function diasEntre(deIso: string, ateIso: string): number {
+  const [a1, m1, d1] = deIso.split('-').map(Number);
+  const [a2, m2, d2] = ateIso.split('-').map(Number);
+  return Math.round((Date.UTC(a2, m2 - 1, d2) - Date.UTC(a1, m1 - 1, d1)) / 86400000);
+}
+
+// Índice k da primeira ocorrência >= referenciaIso. Pula direto pra perto da referência
+// (estimativa por baixo: mês conta como 31 dias) em vez de andar ciclo a ciclo desde a
+// âncora — antes um laço com teto de 2000 voltas devolvia data no passado pra plano
+// diário com âncora de mais de ~5 anos.
+export function primeiroIndiceAPartirDe(ancora: string, valor: number, unidade: PeriodicidadeUnidade, referenciaIso: string): number {
+  if (referenciaIso <= ancora) return 0;
+  const diasPorPeriodo = unidade === 'Mes(es)' ? valor * 31 : periodicidadeEmDias(valor, unidade);
+  let k = Math.max(0, Math.floor(diasEntre(ancora, referenciaIso) / diasPorPeriodo) - 1);
+  while (somarPeriodos(ancora, k, valor, unidade) < referenciaIso) k++;
+  return k;
 }
 
 // Agenda TIME-BASED (âncora fixa) — usada só pro Apoio (SERVPLEX/OPERAÇÃO/BMS, ver
@@ -58,14 +86,15 @@ export function proximaDataFixa(
   dataAncora: string, valor: number, unidade: PeriodicidadeUnidade, referenciaIso: string,
   ultimoCicloIso: string | null = null, agendaRigida = false,
 ): string {
+  if (valor <= 0) return dataAncora;
   const folga = agendaRigida ? 0 : folgaCoberturaCiclo(valor, unidade);
-  const coberturaAte = ultimoCicloIso === null ? null : somarDias(ultimoCicloIso, folga);
-  let atual = dataAncora;
-  // Bound de segurança — nenhuma âncora realista fica milhares de ciclos atrás.
-  for (let i = 0; i < 2000 && (atual < referenciaIso || (coberturaAte !== null && atual <= coberturaAte)); i++) {
-    atual = calcularProximaData(atual, valor, unidade)!;
+  let k = primeiroIndiceAPartirDe(dataAncora, valor, unidade, referenciaIso);
+  if (ultimoCicloIso !== null) {
+    // Primeira ocorrência DEPOIS da cobertura do último ciclo (ciclo + folga).
+    const depoisDaCobertura = somarDias(ultimoCicloIso, folga + 1);
+    k = Math.max(k, primeiroIndiceAPartirDe(dataAncora, valor, unidade, depoisDaCobertura));
   }
-  return atual;
+  return somarPeriodos(dataAncora, k, valor, unidade);
 }
 
 // Máximo de dias que alinharDatasPorEquipamento pode antecipar um plano — planos do
@@ -114,10 +143,7 @@ export function dataLimiteComTolerancia(
   proximaData: string | null, valor: number, unidade: PeriodicidadeUnidade,
 ): string | null {
   if (!proximaData) return null;
-  const dias = Math.round(periodicidadeEmDias(valor, unidade) / 3);
-  const d = new Date(proximaData + 'T00:00:00');
-  d.setDate(d.getDate() + dias);
-  return d.toISOString().slice(0, 10);
+  return somarDias(proximaData, Math.round(periodicidadeEmDias(valor, unidade) / 3));
 }
 
 // A empresa não opera 24h/dia — às vezes a planta fica meses parada, e nesses períodos

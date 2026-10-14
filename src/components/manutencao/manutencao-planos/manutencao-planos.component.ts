@@ -12,12 +12,12 @@ import {
   PlanoManutencao,
 } from '../../../models/manutencao-programacao.model';
 import { LOTO_OPCOES } from '../../../utils/manutencao-regras';
-import { calcularProximaData, dataLimiteComTolerancia, periodicidadeEfetiva, proximaDataFixa } from '../../../utils/manutencao-preventivas';
+import { dataLimiteComTolerancia, periodicidadeEfetiva, proximaDataFixa, somarPeriodos } from '../../../utils/manutencao-preventivas';
 import {
   diagnosticarPlanos, ProblemaSaude, SeveridadeSaude, TipoProblemaSaude, TITULO_PROBLEMA, validarPlanoParaSalvar,
 } from '../../../utils/manutencao-planos-saude';
 import {
-  agendaDosPlanos, DiaGradeMensal, gerarGradeMensal, nomeBaseDoPlano, ocorrenciasNoIntervalo, planosAtrasados, SemanaIso,
+  agendaDosPlanos, DiaGradeMensal, gerarGradeMensal, nomeBaseDoPlano, ocorrenciasNoIntervalo, planosAtrasados, primeiraSemanaAberta, SemanaIso,
   semanasIsoDoAno, siglaPeriodicidade,
 } from '../../../utils/manutencao-planos';
 
@@ -166,8 +166,11 @@ export class ManutencaoPlanosComponent implements OnInit {
     return new Map(planos.map(p => [p.id, this.manutencaoPlanosService.ultimoCicloDoPlano(p.id)]));
   });
 
+  // Ocorrências de semanas passadas que não viraram OS (ver planosAtrasados).
   private planosAtrasadosTodos = computed(() =>
-    planosAtrasados(this.planosComProximaTodos(), this.hojeInicioSemanaIso, this.manutencaoProgramacaoService.paradaAtual() !== null));
+    planosAtrasados(this.planosComProximaTodos(), this.manutencaoPlanosService.ciclosPorPlano(),
+      primeiraSemanaAberta(this.hojeInicioSemanaIso, this.manutencaoProgramacaoService.semanasFechadas()),
+      this.manutencaoProgramacaoService.paradaAtual() !== null));
 
   private planosAtrasadosIds = computed(() => new Set(this.planosAtrasadosTodos().map(p => p.id)));
 
@@ -224,7 +227,8 @@ export class ManutencaoPlanosComponent implements OnInit {
   // da semana atual.
   kpiOrdensGeradasNaSemana = computed(() => {
     const { inicio, fim } = this.inicioFimSemana(0);
-    return this.manutencaoPlanosService.ciclos().filter(c => c.dataPrevista >= inicio && c.dataPrevista <= fim).length;
+    // Só ciclo com OS: os órfãos do script antigo (ordem_id nulo) não são OS gerada.
+    return this.manutencaoPlanosService.ciclos().filter(c => !!c.ordemId && c.dataPrevista >= inicio && c.dataPrevista <= fim).length;
   });
 
   // ── Filtros ───────────────────────────────────────────────────────────────
@@ -1078,23 +1082,20 @@ export class ManutencaoPlanosComponent implements OnInit {
   });
 
   // Projeção das próximas ocorrências — nenhuma delas é ordem de verdade ainda (só
-  // aparece em manutencao_ciclos quando alguém programa de fato). Encadeia
-  // calcularProximaData a partir da mesma "próxima execução" já usada na tabela/KPIs,
-  // só que continua avançando N vezes pra dar uma prévia do que vem depois dela também.
+  // aparece em manutencao_ciclos quando alguém programa de fato). Começa na mesma
+  // "próxima execução" já usada na tabela/KPIs e segue a sequência da âncora (não
+  // encadeia a partir dela: mês com dia 29-31 escorregaria).
   private readonly QTD_PREVISOES_FUTURAS = 5;
 
   previsoesFuturas = computed(() => {
     const plano = this.historicoAberto();
     if (!plano) return [];
-    let data = this.planosComExecucaoPorId().get(plano.id)?.proximaData;
-    if (!data) return [];
+    const proxima = this.planosComExecucaoPorId().get(plano.id)?.proximaData;
+    if (!proxima) return [];
     const periodo = periodicidadeEfetiva(plano.periodicidadeValor, plano.periodicidadeUnidade, this.manutencaoProgramacaoService.paradaAtual() !== null, plano.area);
-    const previsoes: { data: string; semana: number }[] = [];
-    for (let i = 0; i < this.QTD_PREVISOES_FUTURAS; i++) {
-      previsoes.push({ data, semana: this.numeroSemanaISO(data) });
-      data = calcularProximaData(data, periodo.valor, periodo.unidade)!;
-    }
-    return previsoes;
+    const ate = somarPeriodos(proxima, this.QTD_PREVISOES_FUTURAS, periodo.valor, periodo.unidade);
+    const seguintes = ocorrenciasNoIntervalo(plano.dataInicial, periodo.valor, periodo.unidade, proxima, ate).filter(d => d > proxima);
+    return [proxima, ...seguintes].slice(0, this.QTD_PREVISOES_FUTURAS).map(data => ({ data, semana: this.numeroSemanaISO(data) }));
   });
 
   // Alterações do cadastro (quem mudou o quê) — só Admin lê o audit_logs.

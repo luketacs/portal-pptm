@@ -28,6 +28,7 @@ function plano(overrides: Partial<PlanoManutencao> = {}): PlanoManutencao {
     numeroOsReservado: null,
     lotoPadrao: null,
     equipamentosRelacionados: null,
+    recursosApoio: null,
     criadoPorId: null,
     criadoPorNome: 'Teste',
     createdAt: new Date('2026-08-01'),
@@ -470,18 +471,40 @@ describe('resumoPorEquipeApoio', () => {
   });
 });
 
-describe('planosAtrasados', () => {
-  it('não entra na lista quando ainda dentro da tolerância (1/3 do período)', () => {
-    // Mensal (30 dias efetivos) vence em 2026-08-01, tolerância de 10 dias -> prazo 2026-08-11.
-    const planos = planosComProximaExecucao([plano({ id: 'p1', dataInicial: '2026-08-01', periodicidadeValor: 30, periodicidadeUnidade: 'Dia(s)' })], new Map(), false);
-    const resultado = planosAtrasados(planos, '2026-08-10', false);
-    expect(resultado).toEqual([]);
+describe('planosAtrasados (preventivas não programadas)', () => {
+  // Semanal com âncora 05/10 (segunda); semana aberta = 19/10 -> olha 05/10..18/10.
+  const semanal = plano({ id: 'p1', dataInicial: '2026-10-05', periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)' });
+
+  it('ocorrência passada sem ciclo entra, com a mais antiga e a contagem', () => {
+    const r = planosAtrasados([{ ...semanal, proximaData: '2026-10-19' }], new Map(), '2026-10-19', false);
+    expect(r.map(p => [p.id, p.proximaData, p.ocorrenciasPerdidas])).toEqual([['p1', '2026-10-05', 2]]);
+    expect(r[0].proximaDataOriginal).toBeNull();
   });
 
-  it('entra na lista quando já passou do prazo com tolerância', () => {
-    const planos = planosComProximaExecucao([plano({ id: 'p1', dataInicial: '2026-08-01', periodicidadeValor: 30, periodicidadeUnidade: 'Dia(s)' })], new Map(), false);
-    const resultado = planosAtrasados(planos, '2026-08-15', false);
-    expect(resultado.map(p => p.id)).toEqual(['p1']);
+  it('ciclo dentro da folga antes ou até a ocorrência seguinte cobre', () => {
+    const ciclos = new Map([['p1', ['2026-10-01', '2026-10-16']]]); // 05/10 - 4 dias; 12/10 + 4 dias
+    expect(planosAtrasados([{ ...semanal, proximaData: '2026-10-19' }], ciclos, '2026-10-19', false)).toEqual([]);
+  });
+
+  it('nada antes do início do controle nem da semana aberta em diante', () => {
+    const antigo = plano({ id: 'p2', dataInicial: '2026-08-03', periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)' });
+    const r = planosAtrasados([{ ...antigo, proximaData: '2026-10-12' }], new Map(), '2026-10-12', false);
+    expect(r.map(p => [p.proximaData, p.ocorrenciasPerdidas])).toEqual([['2026-10-05', 1]]);
+  });
+
+  it('semana aberta no início do controle não tem nada pra trás', () => {
+    expect(planosAtrasados([{ ...semanal, proximaData: '2026-10-05' }], new Map(), '2026-10-05', false)).toEqual([]);
+  });
+});
+
+describe('sequência mensal com dia 29-31 não escorrega', () => {
+  it('ocorrenciasNoIntervalo limita ao último dia do mês, sempre a partir da âncora', () => {
+    expect(ocorrenciasNoIntervalo('2026-01-31', 1, 'Mes(es)', '2026-01-01', '2026-06-30'))
+      .toEqual(['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31', '2026-06-30']);
+  });
+
+  it('ocorrenciasNoIntervalo começa direto perto do início, mesmo com âncora antiga', () => {
+    expect(ocorrenciasNoIntervalo('2010-01-01', 1, 'Dia(s)', '2026-10-14', '2026-10-15')).toEqual(['2026-10-14', '2026-10-15']);
   });
 });
 

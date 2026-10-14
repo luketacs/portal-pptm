@@ -81,7 +81,7 @@
               @if (areaFixa && podeEditar()) {
                 <button (click)="toggleAtrasadas(); menuAcoesAberto.set(false)"
                   class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between gap-2">
-                  <span>Preventivas atrasadas</span>
+                  <span>Preventivas não programadas</span>
                   @if (preventivasAtrasadas().length > 0) {
                     <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">{{ preventivasAtrasadas().length }}</span>
                   }
@@ -483,10 +483,10 @@
     @if (areaFixa && podeEditar() && atrasadasAberto()) {
       <div class="app-card p-3">
         <div class="flex items-center justify-between mb-2">
-          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Preventivas atrasadas — passaram do prazo com tolerância (1/3 do período além do vencimento)</p>
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Preventivas não programadas — ocorrências de semanas passadas que não viraram OS</p>
         </div>
         @if (preventivasAtrasadas().length === 0) {
-          <p class="text-sm text-gray-400 py-1">Nenhuma preventiva atrasada pra essa área.</p>
+          <p class="text-sm text-gray-400 py-1">Nenhuma preventiva não programada pra essa área.</p>
         } @else {
           <div class="overflow-x-auto max-h-64 overflow-y-auto">
             <table class="min-w-full text-sm">
@@ -495,7 +495,7 @@
                   <th class="py-1 pr-3">Equipamento</th>
                   <th class="py-1 pr-3">Tarefa</th>
                   <th class="py-1 pr-3">Periodicidade</th>
-                  <th class="py-1 pr-3">Venceu em</th>
+                  <th class="py-1 pr-3">Ocorrência</th>
                   <th class="py-1 pr-3">Prazo c/ tolerância</th>
                   <th class="py-1 pr-3">Nº OS reservado</th>
                   <th class="py-1 pr-3"></th>
@@ -514,10 +514,13 @@
                     </td>
                     <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">{{ plano.periodicidadeValor }} {{ plano.periodicidadeUnidade }}</td>
                     <td class="py-1.5 pr-3 whitespace-nowrap">
-                      <span class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700">{{ plano.proximaData }}</span>
+                      <span class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700">{{ formatarDataBr(plano.proximaData) }}</span>
+                      @if (plano.ocorrenciasPerdidas > 1) {
+                        <span class="ml-1 text-[11px] font-semibold text-red-600" title="Ocorrências sem OS na janela de controle — Programar cobre a mais antiga">+{{ plano.ocorrenciasPerdidas - 1 }}</span>
+                      }
                     </td>
                     <td class="py-1.5 pr-3 whitespace-nowrap">
-                      <span class="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-700">{{ plano.prazoLimite }}</span>
+                      <span class="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-700">{{ formatarDataBr(plano.prazoLimite) }}</span>
                     </td>
                     <td class="py-1.5 pr-3 whitespace-nowrap">
                       @if (osDaOcorrencia(plano); as osPlanilha) {

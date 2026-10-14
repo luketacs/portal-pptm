@@ -1,5 +1,5 @@
 import { fetchAllRows } from '../utils/supabase-pagination';
-import { Injectable, signal } from '@angular/core';
+import { Injectable, computed, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
@@ -165,9 +165,23 @@ export class ManutencaoPlanosService {
   // SERVPLEX/OPERAÇÃO da semana 39 sumiam inteiros da lista de sugestões sem nenhuma OS
   // ter sido criada.
   ultimoCicloDoPlano(planoId: string): string | null {
-    const datas = this._ciclos().filter(c => c.planoId === planoId && !!c.ordemId).map(c => c.dataPrevista);
-    return datas.length > 0 ? datas.sort().at(-1)! : null;
+    return this.ciclosPorPlano().get(planoId)?.at(-1) ?? null;
   }
+
+  // Datas dos ciclos COM OS (mesmo filtro de ultimoCicloDoPlano), ordenadas, por plano —
+  // insumo do controle de não programadas (planosAtrasados). Indexado uma vez: antes
+  // ultimoCicloDoPlano varria o ledger inteiro pra cada um dos ~750 planos.
+  ciclosPorPlano = computed(() => {
+    const mapa = new Map<string, string[]>();
+    for (const c of this._ciclos()) {
+      if (!c.ordemId) continue;
+      const lista = mapa.get(c.planoId);
+      if (lista) lista.push(c.dataPrevista);
+      else mapa.set(c.planoId, [c.dataPrevista]);
+    }
+    mapa.forEach(lista => lista.sort());
+    return mapa;
+  });
 
   private garantirAdmin(mensagem: string): { id: string; name: string } {
     const user = this.authService.currentUser();

@@ -9,7 +9,7 @@ function plano(o: Partial<PlanoManutencao> = {}): PlanoManutencao {
     id: 'p1', codigo: 'PM-0001', nome: 'I-M-1M INSPECAO M01', equipamento: 'M01', tagKks: 'M01', area: 'MECANICA',
     especialidade: null, descricao: '', atividades: [], periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)',
     dataInicial: '2026-09-21', responsavel: null, tempoEstimadoHoras: null, hhEstimado: null, observacoes: null,
-    ativo: true, numeroOsReservado: null, lotoPadrao: null, equipamentosRelacionados: null, criadoPorId: null,
+    ativo: true, numeroOsReservado: null, lotoPadrao: null, equipamentosRelacionados: null, recursosApoio: null, criadoPorId: null,
     criadoPorNome: 't', createdAt: new Date(), atualizadoPorId: null, atualizadoPorNome: null, atualizadoEm: new Date(),
     ...o,
   };

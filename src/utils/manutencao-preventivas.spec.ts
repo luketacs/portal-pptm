@@ -181,3 +181,23 @@ describe('dataLimiteComTolerancia', () => {
     expect(dataLimiteComTolerancia('2026-09-16', 1, 'Dia(s)')).toBe('2026-09-16');
   });
 });
+
+describe('mês com dia 29-31 e âncora antiga', () => {
+  it('calcularProximaData limita ao último dia do mês', () => {
+    expect(calcularProximaData('2026-01-31', 1, 'Mes(es)')).toBe('2026-02-28');
+    expect(calcularProximaData('2028-01-31', 1, 'Mes(es)')).toBe('2028-02-29');
+    expect(calcularProximaData('2026-11-30', 3, 'Mes(es)')).toBe('2027-02-28');
+  });
+
+  it('proximaDataFixa conta da âncora: 31/01 mensal volta pro dia 31 em março', () => {
+    expect(proximaDataFixa('2026-01-31', 1, 'Mes(es)', '2026-03-01')).toBe('2026-03-31');
+  });
+
+  it('proximaDataFixa com âncora diária de mais de 5 anos não devolve data no passado', () => {
+    expect(proximaDataFixa('2015-01-01', 1, 'Dia(s)', '2026-10-12')).toBe('2026-10-12');
+  });
+
+  it('proximaDataFixa pula ciclo muito à frente sem andar ciclo a ciclo', () => {
+    expect(proximaDataFixa('2026-01-05', 1, 'Semana(s)', '2026-10-12', '2030-01-07', true)).toBe('2030-01-14');
+  });
+});

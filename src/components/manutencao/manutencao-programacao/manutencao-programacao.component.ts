@@ -25,7 +25,7 @@ import {
 import {
   agendaDosPlanos, ChaveEquipeApoio, dataCicloAoProgramar, EQUIPE_APOIO_NAO_CLASSIFICADA, inferirCategoriaIndicador,
   inferirCategoriaIndicadorPorTecnico, limitarPorEquipeApoio, LimitePorEquipeApoio, PlanoComProximaData,
-  planosAtrasados,
+  planosAtrasados, primeiraSemanaAberta,
   resumoPorEquipeApoio, sugestoesDaSemana,
 } from '../../../utils/manutencao-planos';
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
@@ -1230,11 +1230,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   private readonly hojeInicioSemanaIso = paraIso(segundaFeiraDe(new Date()));
 
-  // Regra combinada: só conta como atrasada de verdade depois de passar a tolerância de
-  // 1/3 do período além da próxima data (ver dataLimiteComTolerancia) — um plano mensal
-  // vencido há 3 dias ainda está dentro do prazo aceitável, não é "atrasado" ainda.
+  // Ocorrências de semanas passadas que não viraram OS (ver planosAtrasados) — a agenda
+  // só olha pra frente, então sem essa lista a preventiva perdida sumia sem rastro.
   preventivasAtrasadas = computed(() =>
-    planosAtrasados(this.planosComProximaDaArea(), this.hojeInicioSemanaIso, this.plantaParadaAtiva()));
+    planosAtrasados(this.planosComProximaDaArea(), this.manutencaoPlanosService.ciclosPorPlano(),
+      primeiraSemanaAberta(this.hojeInicioSemanaIso, this.manutencaoService.semanasFechadas()), this.plantaParadaAtiva()));
 
   // Abre "Novo lançamento" já preenchido a partir de um plano preventivo vencendo —
   // mesma ideia do programarDoBacklog, mas o "Nome Bem" do plano mestre quase nunca
