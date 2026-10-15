@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, OnDestroy, signal
 import { RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../services/auth.service';
+import { LayoutService } from '../services/layout.service';
 import { HeaderComponent } from '../components/header/header.component';
 import { SidebarComponent } from '../components/sidebar/sidebar.component';
 import { NotificationComponent } from '../components/notification/notification.component';
@@ -39,6 +40,7 @@ export class AppComponent implements OnDestroy {
 
   constructor(
     public authService: AuthService,
+    public layout: LayoutService,
     private requestService: RequestService,
     private userService: UserService,
     private notificationService: NotificationService,

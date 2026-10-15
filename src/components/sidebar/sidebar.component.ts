@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, OnDestroy, computed, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { AuthService } from '../../services/auth.service';
+import { LayoutService } from '../../services/layout.service';
 import { UserRole } from '../../models/user.model';
 import { SafeHtmlPipe } from '../../pipes/safe-html.pipe';
 
@@ -157,7 +158,7 @@ export class SidebarComponent implements OnDestroy {
     profile: false,
   });
 
-  constructor(public authService: AuthService, private router: Router) {
+  constructor(public authService: AuthService, private router: Router, public layout: LayoutService) {
     this.currentUser = this.authService.currentUser;
     this.currentUrl.set(this.router.url || '/');
 
@@ -165,6 +166,7 @@ export class SidebarComponent implements OnDestroy {
       if (event instanceof NavigationEnd) {
         const url = event.urlAfterRedirects || event.url;
         this.currentUrl.set(url);
+        this.layout.closeSidebar();
       }
     });
   }
@@ -274,6 +276,11 @@ export class SidebarComponent implements OnDestroy {
       }))
       .filter(group => group.links.length > 0);
   });
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    this.layout.closeSidebar();
+  }
 
   ngOnDestroy(): void {
     this.routerSubscription?.unsubscribe();

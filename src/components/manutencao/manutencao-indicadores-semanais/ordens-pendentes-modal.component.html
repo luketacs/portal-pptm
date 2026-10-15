@@ -33,7 +33,7 @@
     <div class="mt-4 overflow-y-auto flex-1 space-y-4">
       @for (grupo of [{ nome: 'Atrasadas', sub: 'o dia previsto já passou', itens: atrasadas(), cor: 'red' }, { nome: 'Ainda no prazo', sub: 'dia previsto hoje ou mais pra frente', itens: noPrazo(), cor: 'amber' }]; track grupo.nome) {
         @if (grupo.itens.length > 0) {
-          <div class="border border-slate-200 rounded-lg overflow-hidden">
+          <div class="border border-slate-200 rounded-lg overflow-x-auto">
             <div class="px-3 py-2 text-sm font-semibold" [class]="grupo.cor === 'red' ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-800'">
               {{ grupo.nome }} ({{ grupo.itens.length }}) <span class="font-normal text-xs">— {{ grupo.sub }}</span>
             </div>

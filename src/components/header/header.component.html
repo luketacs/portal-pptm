@@ -1,6 +1,9 @@
-<header class="app-header px-4 py-3 flex justify-end items-center">
+<header class="app-header px-3 sm:px-4 py-2 sm:py-3 flex justify-between lg:justify-end items-center gap-2">
+  <button type="button" (click)="layout.toggleSidebar()" class="lg:hidden p-2 -ml-1 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Abrir menu" [attr.aria-expanded]="layout.sidebarOpen()">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+  </button>
   @if(currentUser(); as user) {
-    <div class="flex items-center space-x-4">
+    <div class="flex items-center gap-2 sm:gap-4 min-w-0">
       <!-- Notificações -->
       <div class="relative">
         <button 
@@ -19,7 +22,7 @@
 
         <!-- Dropdown de Notificações -->
         @if (showNotifications()) {
-          <div class="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-[32rem] overflow-hidden flex flex-col">
+          <div class="fixed sm:absolute left-2 right-2 top-14 sm:top-auto sm:left-auto sm:right-0 mt-2 sm:w-96 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-[70vh] sm:max-h-[32rem] overflow-hidden flex flex-col">
             <!-- Header -->
             <div class="px-4 py-3 border-b border-gray-200 flex justify-between items-center bg-gray-50">
               <h3 class="font-semibold text-gray-800">Notificações</h3>
@@ -66,9 +69,9 @@
       </div>
 
       <!-- User Info -->
-      <div class="text-right">
-        <p class="font-semibold text-slate-800 text-sm">{{ user.name }}</p>
-        <p class="text-xs text-slate-500">{{ user.position }}</p>
+      <div class="text-right min-w-0 hidden sm:block">
+        <p class="font-semibold text-slate-800 text-sm truncate">{{ user.name }}</p>
+        <p class="text-xs text-slate-500 truncate">{{ user.position }}</p>
       </div>
 
       <!-- Logout Button -->

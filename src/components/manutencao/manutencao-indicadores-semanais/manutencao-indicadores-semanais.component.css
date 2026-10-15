@@ -425,3 +425,20 @@
 .pcm-horas-tecnico-card--clicavel { cursor: pointer; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
 .pcm-horas-tecnico-card--clicavel:hover { border-color: #93c5fd; box-shadow: 0 1px 6px rgba(37, 99, 235, 0.12); }
 .pcm-horas-tecnico-card--clicavel:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+/* Celular: cabeçalho empilha sem cortar o selo de status, seções com menos respiro
+   lateral e os cards de KPI em 2 colunas (1 por linha deixava a página enorme). */
+@media screen and (max-width: 640px) {
+  .pcm-header { padding: 16px 16px 24px; gap: 12px; }
+  .pcm-company-info { min-width: 0; padding-left: 12px; }
+  .pcm-company-name { font-size: 1.1rem; }
+  .pcm-report-info { min-width: 0; width: 100%; text-align: left; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .pcm-report-info > * { margin-top: 0; }
+  .pcm-status-badge { padding: 5px 12px; font-size: 0.8rem; }
+  .pcm-section { padding: 18px 14px; }
+  .pcm-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .pcm-card { padding: 12px; }
+  .pcm-card-title { font-size: 0.78rem; margin-bottom: 6px; }
+  .pcm-card-value { font-size: 1.35rem; }
+  .pcm-card-meta { font-size: 0.75rem; }
+}

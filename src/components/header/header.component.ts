@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, signal, HostListener } from '@angul
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
+import { LayoutService } from '../../services/layout.service';
 import { NotificationRealtimeService } from '../../services/notification-realtime.service';
 import { NotificationService } from '../../services/notification.service';
 import { Notification } from '../../models/notification.model';
@@ -22,7 +23,8 @@ export class HeaderComponent {
     private router: Router,
     public authService: AuthService,
     public notificationService: NotificationRealtimeService,
-    private toast: NotificationService
+    private toast: NotificationService,
+    public layout: LayoutService
   ) {
     this.currentUser = this.authService.currentUser;
   }
