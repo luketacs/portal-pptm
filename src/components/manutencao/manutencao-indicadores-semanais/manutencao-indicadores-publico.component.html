@@ -429,7 +429,7 @@
     </section>
 
     <section class="pcm-section">
-      <h2 class="pcm-section-title">Consolidado do Ano</h2>
+      <h2 class="pcm-section-title">Consolidado do Ano @if (consolidadoAteLabel()) { <span class="text-sm font-normal text-gray-500">— até {{ consolidadoAteLabel() }}</span> }</h2>
       <div class="pcm-cards">
         @for (c of cardsConsolidadoAno(); track c.titulo) {
           <div class="pcm-card" [class]="'pcm-card--' + c.cor">

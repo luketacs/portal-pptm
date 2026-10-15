@@ -948,6 +948,14 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
 
   statusAnoCor = computed(() => this.statusAnoSimplificado() === 'Acima da Meta' ? '#4CAF50' : '#F44336');
 
+  // Até onde vai o Consolidado do Ano (segue o filtro, limitado a hoje) — mostrado no
+  // título da seção pra ninguém comparar acumulados de períodos diferentes sem perceber.
+  consolidadoAteLabel = computed(() => {
+    const ultima = semanasConsolidadoAno(this.semanasHistoricoIso().at(-1)!).at(-1);
+    if (!ultima) return '';
+    return this.modoPeriodo() === 'mes' ? formatarMesLabel(mesDaSemana(ultima)) : `Semana ${numeroSemanaISO(ultima)}`;
+  });
+
   // ── Evolução ao Longo do Ano + Consolidado do Ano ──────────────────────
 
   // Toda semana desde a S37/2026 (início do uso nativo da Programação) até a semana
@@ -1179,16 +1187,15 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   // - Semanas de antes disso: não têm ordem real no Portal, só as contagens brutas
   //   importadas da planilha (ver "Importar histórico").
   //
-  // Semanas ao vivo vão da S37/2026 até a semana de HOJE — independente do filtro
-  // Semana/Mês. Antes reaproveitava semanasHistoricoIso (que acompanha a seleção), então
-  // o "Consolidado do Ano" mudava conforme a semana/mês escolhido: no modo Mês entravam
-  // até as semanas futuras do mês (já programadas, 0 executadas), e cada pessoa via um
-  // número diferente dependendo do filtro (reportado: "o meu está diferente").
+  // Semanas ao vivo vão da S37/2026 até o fim do período do filtro (acumulado até a
+  // semana/mês selecionado — consolidadoAteLabel mostra até onde), limitado à semana de
+  // hoje: no modo Mês o mês corrente trazia semanas futuras já programadas e sem
+  // execução, que puxavam o consolidado pra baixo.
   consolidadoAno = computed<IndicadoresSemana>(() => {
     const anoAtual = new Date().getFullYear();
     const sigmaPorOs = this.sigmaPorOs();
     const ordens = this.ordensParaFechamento();
-    const aoVivo = semanasConsolidadoAno()
+    const aoVivo = semanasConsolidadoAno(this.semanasHistoricoIso().at(-1)!)
       .filter(s => anoDaSemana(s) === anoAtual)
       .map(semana => ({
         semana,

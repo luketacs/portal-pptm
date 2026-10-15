@@ -476,7 +476,7 @@
 
     <section class="pcm-section">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h2 class="pcm-section-title">Consolidado do Ano</h2>
+        <h2 class="pcm-section-title">Consolidado do Ano @if (consolidadoAteLabel()) { <span class="text-sm font-normal text-gray-500">— até {{ consolidadoAteLabel() }}</span> }</h2>
         @if (isAdmin()) {
           <button type="button" (click)="abrirEditarManuais()" class="no-print text-xs text-slate-600 hover:text-slate-800 font-semibold">
             Editar Disponibilidade/Dias-Navio

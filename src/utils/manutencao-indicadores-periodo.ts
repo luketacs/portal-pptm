@@ -64,10 +64,13 @@ export function semanasDoMes(mesIso: string): string[] {
 }
 
 // Semanas (segundas) que entram no Consolidado do Ano ao vivo: da S37/2026 (início da
-// Programação nativa) até a semana de HOJE. Fixo, não segue o filtro Semana/Mês da
-// tela — senão cada pessoa vê um consolidado diferente conforme o que selecionou.
-export function semanasConsolidadoAno(hoje = new Date()): string[] {
-  const fimIso = paraIso(segundaFeiraDe(hoje));
+// Programação nativa) até o fim do período selecionado (pedido do usuário: setembro
+// selecionado = acumulado até setembro), mas NUNCA além da semana de hoje — no modo Mês
+// o mês corrente traz semanas futuras já programadas e sem execução, que puxavam o
+// consolidado pra baixo.
+export function semanasConsolidadoAno(fimPeriodoIso: string, hoje = new Date()): string[] {
+  const hojeIso = paraIso(segundaFeiraDe(hoje));
+  const fimIso = fimPeriodoIso < hojeIso ? fimPeriodoIso : hojeIso;
   const resultado: string[] = [];
   const cursor = segundaDaSemanaISO(2026, 37);
   while (paraIso(cursor) <= fimIso) {

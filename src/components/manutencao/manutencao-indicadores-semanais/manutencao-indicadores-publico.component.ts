@@ -863,6 +863,14 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
 
   statusAnoCor = computed(() => this.statusAnoSimplificado() === 'Acima da Meta' ? '#4CAF50' : '#F44336');
 
+  // Até onde vai o Consolidado do Ano (segue o filtro, limitado a hoje) — mostrado no
+  // título da seção pra ninguém comparar acumulados de períodos diferentes sem perceber.
+  consolidadoAteLabel = computed(() => {
+    const ultima = semanasConsolidadoAno(this.semanasHistoricoIso().at(-1)!).at(-1);
+    if (!ultima) return '';
+    return this.modoPeriodo() === 'mes' ? formatarMesLabel(mesDaSemana(ultima)) : `Semana ${numeroSemanaISO(ultima)}`;
+  });
+
   private semanasHistoricoIso = computed(() => {
     let fimIso: string;
     if (this.modoPeriodo() === 'mes') {
@@ -1040,13 +1048,13 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     });
   });
 
-  // Independente do filtro Semana/Mês — ver semanasConsolidadoAno() e o comentário de
-  // consolidadoAno na tela autenticada.
+  // Acumulado até o fim do período do filtro (limitado a hoje) — ver
+  // semanasConsolidadoAno() e o comentário de consolidadoAno na tela autenticada.
   consolidadoAno = computed<IndicadoresSemana>(() => {
     const anoAtual = new Date().getFullYear();
     const sigmaPorOs = this.sigmaPorOs();
     const ordens = this.ordensParaFechamento();
-    const aoVivo = semanasConsolidadoAno()
+    const aoVivo = semanasConsolidadoAno(this.semanasHistoricoIso().at(-1)!)
       .filter(s => anoDaSemana(s) === anoAtual)
       .map(semana => ({
         semana,
