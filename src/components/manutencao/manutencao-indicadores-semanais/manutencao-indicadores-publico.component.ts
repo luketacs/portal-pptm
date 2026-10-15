@@ -23,14 +23,14 @@ import { FormsModule } from '@angular/forms';
 import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, ManutencaoOrdem, SigmaApontamentoPeriodo, OsApontadaPeriodo } from '../../../models/manutencao-programacao.model';
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
-  META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, STATUS_GERAL_COR, StatusGeralSemana,
+  META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, STATUS_GERAL_COR,
   TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, entraNoFechamentoIndicador, indiceAtingimentoMeta, OrdemForaProgramacao, ordensForaDaProgramacao } from '../../../utils/manutencao-indicadores';
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
 import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApontamento, StatusExecucaoGrupo, apontamentosSobrepostos, calcularKpiExecucao, extratoHorasColaborador, mensagemExtratoWhatsapp, OrdemPendente, ordensPendentes, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
-  paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem,
+  paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasConsolidadoAno, semanasDoHistorico, anoDaSemana, semanasDoMes, somarContagem, consolidarAnoPorMediaMensal,
 } from '../../../utils/manutencao-indicadores-periodo';
 import { VisivelNaTelaDirective } from './visivel-na-tela.directive';
 import { OrdensPendentesModalComponent } from './ordens-pendentes-modal.component';
@@ -1040,47 +1040,27 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     });
   });
 
+  // Independente do filtro Semana/Mês — ver semanasConsolidadoAno() e o comentário de
+  // consolidadoAno na tela autenticada.
   consolidadoAno = computed<IndicadoresSemana>(() => {
     const anoAtual = new Date().getFullYear();
-    const semanasAoVivoDoAno = new Set(this.semanasHistoricoIso().filter(s => Number(s.slice(0, 4)) === anoAtual));
+    const sigmaPorOs = this.sigmaPorOs();
+    const ordens = this.ordensParaFechamento();
+    const aoVivo = semanasConsolidadoAno()
+      .filter(s => anoDaSemana(s) === anoAtual)
+      .map(semana => ({
+        semana,
+        ind: calcularIndicadoresSemana({ ordens: ordens.filter(o => o.semanaInicio === semana), sigmaPorOs, matchColaborador: this.matchColaboradorFn }),
+      }));
 
-    const aoVivo = calcularIndicadoresSemana({
-      ordens: this.ordensParaFechamento().filter(o => semanasAoVivoDoAno.has(o.semanaInicio)),
-      sigmaPorOs: this.sigmaPorOs(),
-      matchColaborador: this.matchColaboradorFn,
-    });
-
+    // Histórico só de ANTES do início do uso ao vivo (S37/2026) — a planilha às vezes já
+    // vem com semanas futuras preenchidas (planejamento adiantado, 0 executadas), que
+    // puxariam o consolidado pra baixo à toa.
     const inicioAoVivoIso = paraIso(segundaDaSemanaISO(2026, 37));
     const historicoDoAno = this.historicoRaw().filter(item =>
-      Number(item.semanaInicio.slice(0, 4)) === anoAtual && item.semanaInicio < inicioAoVivoIso);
+      anoDaSemana(item.semanaInicio) === anoAtual && item.semanaInicio < inicioAoVivoIso);
 
-    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 };
-    const somarHistorico = (categoria: CategoriaIndicador | 'GERAL', plano: boolean) => historicoDoAno
-      .filter(i => i.categoria === categoria)
-      .reduce((acc, i) => somarContagem(acc, plano
-        ? { programadas: i.planejadasPlano, executadas: i.executadasPlano, naoExecutadas: i.naoExecutadasPlano, atendimento: 0 }
-        : { programadas: i.programadas, executadas: i.executadas, naoExecutadas: i.naoExecutadas, atendimento: 0 }), zero);
-
-    const geral = somarContagem(aoVivo.geral, somarHistorico('GERAL', false));
-    const cumprimentoPlano = somarContagem(aoVivo.cumprimentoPlano, somarHistorico('GERAL', true));
-
-    const porArea: IndicadorArea[] = CATEGORIAS_INDICADOR
-      .map((categoria): IndicadorArea => {
-        const areaAoVivo = aoVivo.porArea.find(a => a.categoria === categoria);
-        return {
-          categoria,
-          ...somarContagem(areaAoVivo ?? zero, somarHistorico(categoria, false)),
-          cumprimentoPlano: somarContagem(areaAoVivo?.cumprimentoPlano ?? zero, somarHistorico(categoria, true)),
-        };
-      })
-      .filter(a => a.programadas > 0);
-
-    let statusGeral: StatusGeralSemana;
-    if (geral.atendimento >= META_ATENDIMENTO && cumprimentoPlano.atendimento >= META_CUMPRIMENTO) statusGeral = 'Dentro da Meta';
-    else if (geral.atendimento >= META_ATENDIMENTO * 0.9 || cumprimentoPlano.atendimento >= META_CUMPRIMENTO * 0.9) statusGeral = 'Próximo da Meta';
-    else statusGeral = 'Abaixo da Meta';
-
-    return { geral, cumprimentoPlano, porArea, statusGeral };
+    return consolidarAnoPorMediaMensal([...semanasDoHistorico(historicoDoAno), ...aoVivo]);
   });
 
   statusCor(status: IndicadoresSemana['statusGeral']): string {

@@ -11,7 +11,7 @@ import { ManutencaoIndicadoresManuaisService } from '../../../services/manutenca
 import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, ImportarIndicadorHistoricoItem, ManutencaoOrdem, SigmaApontamentoPeriodo, OsApontadaPeriodo } from '../../../models/manutencao-programacao.model';
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
-  META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, STATUS_GERAL_COR, StatusGeralSemana,
+  META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, STATUS_GERAL_COR,
   TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, entraNoFechamentoIndicador, indiceAtingimentoMeta, OrdemForaProgramacao, ordensForaDaProgramacao } from '../../../utils/manutencao-indicadores';
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
@@ -20,7 +20,7 @@ import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApon
 import { encontrarAtestadoNoIntervalo, encontrarFeriasNoIntervalo } from '../../../utils/manutencao-regras';
 import {
   diasDaSemana, formatarDiaMes, formatarMesLabel, mesDaSemana, normalizarTexto, numeroSemanaISO,
-  paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasDoMes, somarContagem,
+  paraIso, segundaDaSemanaISO, segundaFeiraDe, semanasConsolidadoAno, semanasDoHistorico, anoDaSemana, semanasDoMes, somarContagem, consolidarAnoPorMediaMensal,
 } from '../../../utils/manutencao-indicadores-periodo';
 import { VisivelNaTelaDirective } from './visivel-na-tela.directive';
 import { OrdensPendentesModalComponent } from './ordens-pendentes-modal.component';
@@ -1171,64 +1171,38 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
     });
   });
 
-  // Soma todas as semanas do ano corrente (não o histórico inteiro, que pode cruzar
-  // virada de ano), pra bater com o total anual da planilha antiga. Duas fontes, sem
-  // sobreposição na prática (semanasHistoricoIso só começa na S37/2026, quando a
-  // Programação nativa passou a existir):
-  // - Semanas ao vivo (S37/2026 em diante): recalcula a partir das ordens reais, igual
-  //   sempre foi (reaproveita calcularIndicadoresSemana direto).
-  // - Semanas de antes disso: não têm ordem real no Portal, só o que foi importado da
-  //   planilha (ver "Importar histórico") — soma direto as contagens brutas gravadas na
-  //   importação. Antes, essas semanas ficavam de fora inteiramente (só tinha % agregado
-  //   guardado, sem contagem por trás pra somar), o que deixava o Consolidado do Ano bem
-  //   abaixo do valor real da planilha.
+  // Todas as semanas do ano corrente (não o histórico inteiro, que pode cruzar virada de
+  // ano), consolidadas pela MÉDIA SIMPLES dos % mensais — mesmo critério da planilha do
+  // PCM, ver consolidarAnoPorMediaMensal(). Duas fontes, sem sobreposição:
+  // - Semanas ao vivo (S37/2026 em diante): recalcula a partir das ordens reais
+  //   (calcularIndicadoresSemana, semana a semana).
+  // - Semanas de antes disso: não têm ordem real no Portal, só as contagens brutas
+  //   importadas da planilha (ver "Importar histórico").
+  //
+  // Semanas ao vivo vão da S37/2026 até a semana de HOJE — independente do filtro
+  // Semana/Mês. Antes reaproveitava semanasHistoricoIso (que acompanha a seleção), então
+  // o "Consolidado do Ano" mudava conforme a semana/mês escolhido: no modo Mês entravam
+  // até as semanas futuras do mês (já programadas, 0 executadas), e cada pessoa via um
+  // número diferente dependendo do filtro (reportado: "o meu está diferente").
   consolidadoAno = computed<IndicadoresSemana>(() => {
     const anoAtual = new Date().getFullYear();
-    const semanasAoVivoDoAno = new Set(this.semanasHistoricoIso().filter(s => Number(s.slice(0, 4)) === anoAtual));
+    const sigmaPorOs = this.sigmaPorOs();
+    const ordens = this.ordensParaFechamento();
+    const aoVivo = semanasConsolidadoAno()
+      .filter(s => anoDaSemana(s) === anoAtual)
+      .map(semana => ({
+        semana,
+        ind: calcularIndicadoresSemana({ ordens: ordens.filter(o => o.semanaInicio === semana), sigmaPorOs, matchColaborador: this.matchColaborador }),
+      }));
 
-    const aoVivo = calcularIndicadoresSemana({
-      ordens: this.ordensParaFechamento().filter(o => semanasAoVivoDoAno.has(o.semanaInicio)),
-      sigmaPorOs: this.sigmaPorOs(),
-      matchColaborador: this.matchColaborador,
-    });
-
-    // Só semanas de ANTES do início do uso ao vivo (S37/2026) — não basta checar "fora
-    // de semanasAoVivoDoAno", porque isso deixaria passar um item do histórico pra uma
-    // semana FUTURA (além de "hoje"): a planilha às vezes já vem com a coluna de
-    // semanas futuras preenchida (planejamento adiantado, 0 executadas porque a semana
-    // ainda nem chegou), e isso puxava o Consolidado do Ano pra baixo à toa (mesmo bug
-    // do "ponto atual" preso em 0% na Evolução ao Longo do Ano, ver pontosEvolucaoGeral).
+    // Histórico só de ANTES do início do uso ao vivo (S37/2026) — a planilha às vezes já
+    // vem com semanas futuras preenchidas (planejamento adiantado, 0 executadas), que
+    // puxariam o consolidado pra baixo à toa.
     const inicioAoVivoIso = paraIso(segundaDaSemanaISO(2026, 37));
     const historicoDoAno = this.historicoService.itens().filter(item =>
-      Number(item.semanaInicio.slice(0, 4)) === anoAtual && item.semanaInicio < inicioAoVivoIso);
+      anoDaSemana(item.semanaInicio) === anoAtual && item.semanaInicio < inicioAoVivoIso);
 
-    const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 };
-    const somarHistorico = (categoria: CategoriaIndicador | 'GERAL', plano: boolean) => historicoDoAno
-      .filter(i => i.categoria === categoria)
-      .reduce((acc, i) => somarContagem(acc, plano
-        ? { programadas: i.planejadasPlano, executadas: i.executadasPlano, naoExecutadas: i.naoExecutadasPlano, atendimento: 0 }
-        : { programadas: i.programadas, executadas: i.executadas, naoExecutadas: i.naoExecutadas, atendimento: 0 }), zero);
-
-    const geral = somarContagem(aoVivo.geral, somarHistorico('GERAL', false));
-    const cumprimentoPlano = somarContagem(aoVivo.cumprimentoPlano, somarHistorico('GERAL', true));
-
-    const porArea: IndicadorArea[] = CATEGORIAS_INDICADOR
-      .map((categoria): IndicadorArea => {
-        const areaAoVivo = aoVivo.porArea.find(a => a.categoria === categoria);
-        return {
-          categoria,
-          ...somarContagem(areaAoVivo ?? zero, somarHistorico(categoria, false)),
-          cumprimentoPlano: somarContagem(areaAoVivo?.cumprimentoPlano ?? zero, somarHistorico(categoria, true)),
-        };
-      })
-      .filter(a => a.programadas > 0);
-
-    let statusGeral: StatusGeralSemana;
-    if (geral.atendimento >= META_ATENDIMENTO && cumprimentoPlano.atendimento >= META_CUMPRIMENTO) statusGeral = 'Dentro da Meta';
-    else if (geral.atendimento >= META_ATENDIMENTO * 0.9 || cumprimentoPlano.atendimento >= META_CUMPRIMENTO * 0.9) statusGeral = 'Próximo da Meta';
-    else statusGeral = 'Abaixo da Meta';
-
-    return { geral, cumprimentoPlano, porArea, statusGeral };
+    return consolidarAnoPorMediaMensal([...semanasDoHistorico(historicoDoAno), ...aoVivo]);
   });
 
   // Mesmas cores do badge "STATUS GERAL" do Relatório Semanal/Mensal PCM — STATUS_GERAL_COR

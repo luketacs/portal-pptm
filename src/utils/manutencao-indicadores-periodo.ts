@@ -4,7 +4,10 @@
 // precisa deles: em vez de duplicar, as duas telas importam a mesma implementação.
 // `semanasDoMes` em especial tem uma regra sutil (evitar vazar a última semana do mês
 // anterior) já corrigida numa rodada anterior — vale ficar num lugar só.
-import { ContagemExecucao } from './manutencao-indicadores';
+import { ImportarIndicadorHistoricoItem } from '../models/manutencao-programacao.model';
+import {
+  CATEGORIAS_INDICADOR, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO, StatusGeralSemana,
+} from './manutencao-indicadores';
 import { MESES_ABREV, MESES_COMPLETO } from './relatorio-mensal-pcm';
 
 const DIAS_SEMANA_LABEL = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB', 'DOM'];
@@ -60,6 +63,20 @@ export function semanasDoMes(mesIso: string): string[] {
   return resultado;
 }
 
+// Semanas (segundas) que entram no Consolidado do Ano ao vivo: da S37/2026 (início da
+// Programação nativa) até a semana de HOJE. Fixo, não segue o filtro Semana/Mês da
+// tela — senão cada pessoa vê um consolidado diferente conforme o que selecionou.
+export function semanasConsolidadoAno(hoje = new Date()): string[] {
+  const fimIso = paraIso(segundaFeiraDe(hoje));
+  const resultado: string[] = [];
+  const cursor = segundaDaSemanaISO(2026, 37);
+  while (paraIso(cursor) <= fimIso) {
+    resultado.push(paraIso(cursor));
+    cursor.setDate(cursor.getDate() + 7);
+  }
+  return resultado;
+}
+
 export function formatarMesLabel(mesIso: string): string {
   const [ano, mes] = mesIso.split('-');
   const abrev = MESES_ABREV[Number(mes) - 1];
@@ -96,4 +113,82 @@ export function somarContagem(a: ContagemExecucao, b: ContagemExecucao): Contage
     programadas, executadas, naoExecutadas: programadas - executadas,
     atendimento: programadas > 0 ? Math.round((executadas / programadas) * 10000) / 100 : 100,
   };
+}
+
+// Ano ISO da semana (ano da quinta-feira) — a S1/2026 começa na segunda 29/12/2025, e
+// pelo ano da segunda ela ficava fora do Consolidado de 2026.
+export function anoDaSemana(semanaInicioIso: string): number {
+  const [a, m, d] = semanaInicioIso.split('-').map(Number);
+  return new Date(a, m - 1, d + 3).getFullYear();
+}
+
+// Mês da semana pro Consolidado do Ano: mês da segunda-feira (mesDaSemana), exceto a
+// semana que começa em dezembro mas pertence ao ano seguinte (S1) — essa vai pra
+// janeiro, como na planilha do PCM.
+function mesDaSemanaNoAno(semanaInicioIso: string): string {
+  const ano = anoDaSemana(semanaInicioIso);
+  return Number(semanaInicioIso.slice(0, 4)) < ano ? `${ano}-01` : mesDaSemana(semanaInicioIso);
+}
+
+type IndicadoresConsolidaveis =Pick<IndicadoresSemana, 'geral' | 'cumprimentoPlano' | 'porArea'>;
+
+// Semanas do histórico importado (planilha, antes da S37/2026) no mesmo formato do
+// cálculo ao vivo — GERAL vira geral/cumprimentoPlano, cada área vira um porArea.
+export function semanasDoHistorico(itens: ImportarIndicadorHistoricoItem[]): { semana: string; ind: IndicadoresConsolidaveis }[] {
+  const contagem = (programadas: number, executadas: number): ContagemExecucao =>
+    somarContagem({ programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 }, { programadas, executadas, naoExecutadas: 0, atendimento: 0 });
+  const porSemana = new Map<string, IndicadoresConsolidaveis>();
+  for (const i of itens) {
+    const ind = porSemana.get(i.semanaInicio) ?? { geral: contagem(0, 0), cumprimentoPlano: contagem(0, 0), porArea: [] };
+    const geral = contagem(i.programadas, i.executadas);
+    const plano = contagem(i.planejadasPlano, i.executadasPlano);
+    if (i.categoria === 'GERAL') { ind.geral = geral; ind.cumprimentoPlano = plano; }
+    else ind.porArea.push({ categoria: i.categoria, ...geral, cumprimentoPlano: plano });
+    porSemana.set(i.semanaInicio, ind);
+  }
+  return [...porSemana.entries()].map(([semana, ind]) => ({ semana, ind }));
+}
+
+// Consolidado do Ano no critério da planilha do PCM (pedido do usuário): o % do ano é a
+// MÉDIA SIMPLES dos % de cada mês — todo mês pesa igual, tenha 800 ou 300 ordens — e não
+// o total de ordens do ano dividido uma vez. Mês = mês da segunda-feira (mesDaSemanaNoAno),
+// mesmo agrupamento do modo Mês da tela; o % de cada mês sai da soma das contagens das
+// suas semanas. Mês sem nenhuma ordem prevista fica fora da média (não entra como 100%).
+// As contagens devolvidas (executadas/programadas) continuam sendo o total do ano — só
+// pra exibição ("X de Y executadas no ano").
+export function consolidarAnoPorMediaMensal(semanas: { semana: string; ind: IndicadoresConsolidaveis }[]): IndicadoresSemana {
+  const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 };
+  const consolidar = (pegar: (ind: IndicadoresConsolidaveis) => ContagemExecucao | undefined): ContagemExecucao => {
+    const porMes = new Map<string, ContagemExecucao>();
+    for (const { semana, ind } of semanas) {
+      const c = pegar(ind);
+      if (!c) continue;
+      const mes = mesDaSemanaNoAno(semana);
+      porMes.set(mes, somarContagem(porMes.get(mes) ?? zero, c));
+    }
+    const meses = [...porMes.values()];
+    const total = meses.reduce((acc, m) => somarContagem(acc, m), zero);
+    const comOrdem = meses.filter(m => m.programadas > 0);
+    const media = comOrdem.length > 0
+      ? Math.round((comOrdem.reduce((s, m) => s + m.atendimento, 0) / comOrdem.length) * 100) / 100
+      : 100;
+    return { ...total, atendimento: media };
+  };
+
+  const geral = consolidar(i => i.geral);
+  const cumprimentoPlano = consolidar(i => i.cumprimentoPlano);
+  const porArea: IndicadorArea[] = CATEGORIAS_INDICADOR
+    .map((categoria): IndicadorArea => ({
+      categoria,
+      ...consolidar(i => i.porArea.find(a => a.categoria === categoria)),
+      cumprimentoPlano: consolidar(i => i.porArea.find(a => a.categoria === categoria)?.cumprimentoPlano),
+    }))
+    .filter(a => a.programadas > 0);
+
+  let statusGeral: StatusGeralSemana;
+  if (geral.atendimento >= META_ATENDIMENTO && cumprimentoPlano.atendimento >= META_CUMPRIMENTO) statusGeral = 'Dentro da Meta';
+  else if (geral.atendimento >= META_ATENDIMENTO * 0.9 || cumprimentoPlano.atendimento >= META_CUMPRIMENTO * 0.9) statusGeral = 'Próximo da Meta';
+  else statusGeral = 'Abaixo da Meta';
+
+  return { geral, cumprimentoPlano, porArea, statusGeral };
 }
