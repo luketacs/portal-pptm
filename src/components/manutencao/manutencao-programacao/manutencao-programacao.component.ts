@@ -48,6 +48,8 @@ type AreaFiltro = 'todos' | ManutencaoArea;
 // ficaram de fora por férias/atestado/folga nos dias marcados pra eles.
 interface PlanoEspelhos {
   espelhos: { req: CreateManutencaoOrdemRequest; nome: string }[];
+  // Espelhos que já existiam, mas com dias diferentes dos marcados agora no recurso.
+  ajustesDias: { id: string; nome: string; dias: string[] }[];
   naoProgramados: { nome: string; tipo: TipoBloqueio }[];
 }
 
@@ -2386,7 +2388,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       const espelhosExistentes = ehOrdem && original?.tipo === 'ordem' ? this.ordensVinculadas(original) : [];
       // Cópias de apoio planejadas ANTES de gravar, com o formulário ainda preenchido —
       // assim ele pode fechar logo depois da OS principal (ver planejarEspelhos).
-      const espelhos: PlanoEspelhos = ehOrdem ? this.planejarEspelhos(espelhosExistentes) : { espelhos: [], naoProgramados: [] };
+      const espelhos: PlanoEspelhos = ehOrdem ? this.planejarEspelhos(espelhosExistentes) : { espelhos: [], ajustesDias: [], naoProgramados: [] };
       const numeroNovo = ehOrdem && !this.formSemOs() ? (this.formNumeroOs().trim() || null) : null;
       const chaveOs = (n: string | null | undefined) => n?.trim() ? normalizarNumeroOs(n) : null;
       const espelhosComNumeroAntigo = espelhosExistentes.filter(x => chaveOs(x.numeroOs) !== chaveOs(numeroNovo)).map(x => x.id);
@@ -2541,6 +2543,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // — a checagem de duplicata evita criar de novo pra quem já tem essa OS nesses dias.
   private planejarEspelhos(espelhosExistentes: ManutencaoOrdem[] = []): PlanoEspelhos {
     const espelhos: { req: CreateManutencaoOrdemRequest; nome: string }[] = [];
+    const ajustesDias: { id: string; nome: string; dias: string[] }[] = [];
     const naoProgramados: { nome: string; tipo: TipoBloqueio }[] = [];
     const bloqueios = this.formApoioBloqueios();
     const mandante = this.formTecnicoNome().trim();
@@ -2565,6 +2568,18 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       && (numeroNorm
         ? !!x.numeroOs?.trim() && normalizarNumeroOs(x.numeroOs) === numeroNorm
         : !x.numeroOs?.trim() && x.descricao === descricao && (x.equipamento || null) === equipamento));
+    // Espelho desta OS que já existia (só os vinculados a ela, nunca uma OS lançada à
+    // parte): os dias marcados no recurso vieram dele ao abrir "Editar" — se mudaram,
+    // ajusta o espelho. Antes ele era só pulado e o dia novo se perdia sem aviso.
+    const ajustarEspelhoExistente = (nome: string, dias: string[]): boolean => {
+      const existente = espelhosExistentes.find(x => x.tecnicoNome.trim().toUpperCase() === nome.trim().toUpperCase());
+      if (!existente) return false;
+      const atuais = [...existente.diasPrevistos].sort();
+      if (atuais.length !== dias.length || atuais.some((d, i) => d !== dias[i])) {
+        ajustesDias.push({ id: existente.id, nome: existente.tecnicoNome, dias });
+      }
+      return true;
+    };
     const base = {
       tipo: 'ordem' as const,
       // Mesma categoria da OS principal (ver comentário equivalente em confirmarApoio())
@@ -2597,7 +2612,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       for (const [empresa, recursosDaEmpresa] of recursosPorEmpresa) {
         const dias = [...new Set(recursosDaEmpresa.flatMap(r => this.apoioDiasDoRecurso(r)))].sort();
         if (dias.length === 0) continue;
-        if (jaTemEssaOs(empresa)) continue;
+        if (ajustarEspelhoExistente(empresa, dias) || jaTemEssaOs(empresa)) continue;
         espelhos.push({
           nome: `${empresa} (Apoio)`,
           req: {
@@ -2619,7 +2634,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     for (const recurso of recursos) {
       const tecnico = this.todosTecnicos().find(t => t.nome.toUpperCase() === recurso.toUpperCase());
       if (!tecnico || tecnico.nome === mandante) continue;
-      const dias = this.apoioDiasDoRecurso(recurso);
+      const dias = [...this.apoioDiasDoRecurso(recurso)].sort();
       if (dias.length === 0) continue;
       const bloqueio = bloqueios[recurso];
       if (bloqueio) {
@@ -2628,7 +2643,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       }
       // Já tem a cópia (de uma edição anterior, ou lançada à parte): silencioso — é o
       // caso normal ao reabrir e salvar a OS do responsável.
-      if (jaTemEssaOs(tecnico.nome)) continue;
+      if (ajustarEspelhoExistente(tecnico.nome, dias) || jaTemEssaOs(tecnico.nome)) continue;
       espelhos.push({
         nome: tecnico.nome,
         req: {
@@ -2645,17 +2660,18 @@ export class ManutencaoProgramacaoComponent implements OnInit {
         },
       });
     }
-    return { espelhos, naoProgramados };
+    return { espelhos, ajustesDias, naoProgramados };
   }
 
   // Grava as cópias de apoio e devolve o que aconteceu — a mensagem pro usuário sai UMA
   // vez só, no fim do confirmarForm (ver resumoGravacaoApoio): o toast só mostra uma
   // mensagem por vez e os avisos soltos se apagavam uns aos outros.
   private async gravarEspelhos(plano: PlanoEspelhos): Promise<{ programados: string[]; erro: { nomes: string[]; mensagem: string } | null }> {
-    if (plano.espelhos.length === 0) return { programados: [], erro: null };
-    const nomes = plano.espelhos.map(e => e.nome);
+    if (plano.espelhos.length === 0 && plano.ajustesDias.length === 0) return { programados: [], erro: null };
+    const nomes = [...plano.espelhos.map(e => e.nome), ...plano.ajustesDias.map(a => a.nome)];
     try {
-      await this.manutencaoService.criarOrdensEmLote(plano.espelhos.map(e => e.req));
+      if (plano.espelhos.length > 0) await this.manutencaoService.criarOrdensEmLote(plano.espelhos.map(e => e.req));
+      await this.manutencaoService.atualizarDiasEspelhos(plano.ajustesDias);
       return { programados: nomes, erro: null };
     } catch (err: unknown) {
       return { programados: [], erro: { nomes, mensagem: err instanceof Error ? err.message : 'erro desconhecido' } };

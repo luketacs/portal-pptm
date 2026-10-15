@@ -547,6 +547,34 @@ export class ManutencaoProgramacaoService {
     this.incluirNaLista((data ?? []) as ManutencaoOrdemRow[]);
   }
 
+  // Ajusta os dias dos espelhos de apoio que já existiam quando o responsável muda os dias
+  // de um recurso na própria OS (ver planejarEspelhos no componente). Reportado S43: OS
+  // 048013 do Micael, apoio do Romário (Fontebras) de TER → TER+QUA; salvava sem erro,
+  // mas o espelho continuava só com TER — o espelho existente era só pulado.
+  async atualizarDiasEspelhos(ajustes: { id: string; dias: string[] }[]): Promise<void> {
+    if (ajustes.length === 0) return;
+    const user = this.authService.currentUser();
+    if (!user) throw new Error('Sessão expirada.');
+    const resultados = await Promise.all(ajustes.map(a => this.executarGravacao('editar', () => this.supabaseService.client
+      .from('manutencao_programacao')
+      .update({ dias_previstos: a.dias })
+      .eq('id', a.id)
+      .select('*')
+      .abortSignal(AbortSignal.timeout(this.TIMEOUT_GRAVACAO_MS)))));
+    const erro = resultados.find(r => r.error)?.error;
+    this.incluirNaLista(resultados.flatMap(r => (r.data ?? []) as ManutencaoOrdemRow[]));
+    if (erro) throw new Error(mensagemErroGravacao(erro));
+
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'manutencao_programacao_editada',
+      resource_type: 'manutencao_programacao',
+      resource_id: ajustes[0].id,
+      description: `${user.name} ajustou os dias de ${ajustes.length} apoio(s) vinculado(s)`,
+    });
+  }
+
   async excluir(id: string): Promise<void> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
