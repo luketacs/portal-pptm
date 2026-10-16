@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "ng serve",
+    "prebuild": "node scripts/gerar-versao.mjs",
     "build": "ng build",
     "preview": "ng serve --configuration=production",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",

@@ -19,6 +19,9 @@ npm-debug.log*
 # Dependencies
 node_modules/
 
+# Versão do deploy, gerada no build (scripts/gerar-versao.mjs)
+public/version.json
+
 # Angular build cache
 .angular/cache/
 

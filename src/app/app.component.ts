@@ -11,6 +11,7 @@ import { RequestService } from '../services/request.service';
 import { UserService } from '../services/user.service';
 import { NotificationService } from '../services/notification.service';
 import { SessionTimeoutService } from '../services/session-timeout.service';
+import { VersaoAppService } from '../services/versao-app.service';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -45,8 +46,10 @@ export class AppComponent implements OnDestroy {
     private userService: UserService,
     private notificationService: NotificationService,
     private sessionTimeoutService: SessionTimeoutService,
-    private router: Router
+    private router: Router,
+    public versaoApp: VersaoAppService,
   ) {
+    this.versaoApp.iniciar();
     this.currentUser = this.authService.currentUser;
     this.isInitializing = this.authService.isInitializing;
     // Usa window.location.pathname como fonte verdadeira no carregamento inicial

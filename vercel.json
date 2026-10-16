@@ -11,6 +11,12 @@
     "api/kanban-atividades-publico.js": { "maxDuration": 30, "includeFiles": "public/matriculas.json" },
     "api/indicadores-manutencao-publico.js": { "maxDuration": 30, "includeFiles": "public/matriculas.json" }
   },
+  "headers": [
+    {
+      "source": "/version.json",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
