@@ -1,6 +1,7 @@
 import { bloqueioDoTecnico, ordemDuplicada } from '../utils/manutencao-regras';
 import { fetchAllRows } from '../utils/supabase-pagination';
 import { Injectable, signal } from '@angular/core';
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
@@ -61,6 +62,18 @@ interface ManutencaoOrdemRow {
   criado_por_id: string | null;
   criado_por_nome: string;
   created_at: string;
+  // Migration 076 — preenchido por trigger. Fica fora do mapRow (não entra na comparação
+  // da lista local, ver avaliarAlteracao), só serve pra dizer quem alterou.
+  atualizado_por_nome?: string | null;
+}
+
+// Alteração de outro usuário ainda não carregada na tela. semana '*' = não dá pra saber
+// qual (a conexão caiu e voltou, eventos podem ter se perdido no meio). nome null =
+// gravação sem usuário identificado (SQL Editor, ou migration 076 ainda não rodada).
+export interface AlteracaoExterna {
+  semana: string;
+  nome: string | null;
+  em: Date;
 }
 
 const AREA_LABEL_LOG: Record<ManutencaoArea, string> = {
@@ -102,6 +115,11 @@ function mapRow(r: ManutencaoOrdemRow): ManutencaoOrdem {
   };
 }
 
+// createdAt fica de fora: o mesmo timestamp pode vir formatado diferente pela API e pelo realtime.
+function mesmoConteudo(a: ManutencaoOrdem, b: ManutencaoOrdem): boolean {
+  return JSON.stringify({ ...a, createdAt: null }) === JSON.stringify({ ...b, createdAt: null });
+}
+
 @Injectable({ providedIn: 'root' })
 export class ManutencaoProgramacaoService {
   private readonly TIMEOUT_GRAVACAO_MS = 20_000;
@@ -112,6 +130,15 @@ export class ManutencaoProgramacaoService {
   private _ordens = signal<ManutencaoOrdem[]>([]);
   ordens = this._ordens.asReadonly();
   isLoading = signal(false);
+
+  // Alterações de outros usuários desde o último load() — a tela mostra o aviso
+  // "tela desatualizada" quando alguma é da semana em exibição.
+  private _alteracoesExternas = signal<readonly AlteracaoExterna[]>([]);
+  alteracoesExternas = this._alteracoesExternas.asReadonly();
+  private canalAlteracoes: RealtimeChannel | null = null;
+  // Espera antes de comparar o evento com a lista local: o evento da própria gravação
+  // pode chegar antes da resposta HTTP que atualiza a lista (incluirNaLista).
+  private readonly ESPERA_COMPARACAO_MS = 2_000;
 
   // Catálogo fixo de equipamentos (public/equipamentos.json, mesmo padrão do
   // matriculas.json) — usado como sugestão no campo Equipamento e pra montar o
@@ -178,9 +205,67 @@ export class ManutencaoProgramacaoService {
         .order('semana_inicio', { ascending: false }).order('id').range(from, to));
       if (error) throw new Error(error.message);
       this._ordens.set((data ?? []).map(mapRow));
+      this._alteracoesExternas.set([]);
     } finally {
       this.isLoading.set(false);
     }
+  }
+
+  // Avisa (sem recarregar sozinho — quem está no meio de um lançamento não perde nada)
+  // quando outro usuário cria/edita/exclui algo em manutencao_programacao. Não existe
+  // coluna de "quem alterou": o evento conta como externo quando não bate com a lista
+  // local, já que toda gravação feita por esta tela atualiza a lista com a linha
+  // devolvida pelo banco. Precisa da tabela na publicação supabase_realtime (migration 075);
+  // quem alterou vem de atualizado_por_nome (migration 076). O DELETE do realtime só traz
+  // o id, então quem exclui avisa o próprio nome por broadcast (ver excluir).
+  iniciarMonitoramentoAlteracoes(): void {
+    if (this.canalAlteracoes) return;
+    let jaConectou = false;
+    this.canalAlteracoes = this.supabaseService.client
+      .channel('manutencao-programacao-alteracoes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'manutencao_programacao' },
+        (payload: RealtimePostgresChangesPayload<ManutencaoOrdemRow>) =>
+          setTimeout(() => this.avaliarAlteracao(payload), this.ESPERA_COMPARACAO_MS))
+      .on('broadcast', { event: 'exclusao' }, ({ payload }) => {
+        const { semana, nome } = (payload ?? {}) as { semana?: string; nome?: string };
+        if (semana) this.registrarAlteracoes([semana], nome ?? null);
+      })
+      .subscribe(status => {
+        if (status !== 'SUBSCRIBED') return;
+        // Reconexão (rede caiu, aba ficou suspensa): o que mudou nesse meio-tempo não
+        // chega como evento — melhor avisar à toa do que deixar a tela velha calada.
+        if (jaConectou) this.registrarAlteracoes(['*'], null);
+        jaConectou = true;
+      });
+  }
+
+  pararMonitoramentoAlteracoes(): void {
+    if (!this.canalAlteracoes) return;
+    void this.supabaseService.client.removeChannel(this.canalAlteracoes);
+    this.canalAlteracoes = null;
+  }
+
+  private avaliarAlteracao(payload: RealtimePostgresChangesPayload<ManutencaoOrdemRow>): void {
+    if (this.isLoading()) return; // o load() em andamento já vai trazer a mudança
+    if (payload.eventType === 'DELETE') {
+      // Com RLS o DELETE só traz a PK. Já fora da lista = foi esta tela que excluiu.
+      const local = this.getById((payload.old as Partial<ManutencaoOrdemRow>).id ?? '');
+      // O nome de quem excluiu chega pelo broadcast; este aqui cobre exclusão feita
+      // fora da tela (fica como "Outro usuário" se o broadcast não vier).
+      if (local) this.registrarAlteracoes([local.semanaInicio], null);
+      return;
+    }
+    const linha = payload.new as ManutencaoOrdemRow;
+    const remota = mapRow(linha);
+    const local = this.getById(remota.id);
+    if (local && mesmoConteudo(local, remota)) return;
+    this.registrarAlteracoes(local ? [remota.semanaInicio, local.semanaInicio] : [remota.semanaInicio], linha.atualizado_por_nome ?? null);
+  }
+
+  private registrarAlteracoes(semanas: string[], nome: string | null): void {
+    const em = new Date();
+    const novas = [...new Set(semanas)].map(semana => ({ semana, nome, em }));
+    this._alteracoesExternas.update(atual => [...atual, ...novas]);
   }
 
   getById(id: string): ManutencaoOrdem | undefined {
@@ -603,6 +688,9 @@ export class ManutencaoProgramacaoService {
     });
 
     this._ordens.update(lista => lista.filter(o => o.id !== id));
+    if (item && this.canalAlteracoes) {
+      void this.canalAlteracoes.send({ type: 'broadcast', event: 'exclusao', payload: { semana: item.semanaInicio, nome: user.name } });
+    }
   }
 
   // Leva o ciclo de um plano pra data da ordem que o cobre (painel Saúde dos planos).

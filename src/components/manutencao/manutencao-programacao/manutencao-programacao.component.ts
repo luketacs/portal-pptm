@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, effect, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -419,6 +419,51 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const role = this.authService.currentUser()?.role;
     return role === 'Admin' || role === 'Solicitante';
   });
+
+  // Outro usuário mexeu na semana em exibição (ver iniciarMonitoramentoAlteracoes) —
+  // mostra o aviso com "Atualizar agora" em vez de recarregar sozinho.
+  private alteracoesDaSemana = computed(() => {
+    const semana = this.semanaFiltro();
+    return this.manutencaoService.alteracoesExternas().filter(a => a.semana === '*' || a.semana === semana);
+  });
+  telaDesatualizada = computed(() => this.alteracoesDaSemana().length > 0);
+
+  // "João Silva alterou a programação desta semana (última às 14:32)." — os nomes vêm de
+  // atualizado_por_nome (migration 076) e do broadcast de exclusão. Sem nenhum nome
+  // conhecido, cai pro genérico "Outro usuário".
+  avisoDesatualizada = computed(() => {
+    const alteracoes = this.alteracoesDaSemana();
+    if (alteracoes.length === 0) return '';
+    const ultima = alteracoes.reduce((max, a) => (a.em > max ? a.em : max), alteracoes[0].em);
+    const hora = ultima.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const nomes = [...new Set(alteracoes.map(a => a.nome).filter((n): n is string => !!n))];
+    if (nomes.length === 0) {
+      return alteracoes.every(a => a.semana === '*')
+        ? `A conexão caiu e voltou às ${hora} — pode ter havido alterações nesse meio-tempo.`
+        : `Outro usuário alterou a programação desta semana (às ${hora}).`;
+    }
+    const quem = nomes.length === 1 ? nomes[0]
+      : nomes.length === 2 ? `${nomes[0]} e ${nomes[1]}`
+      : `${nomes[0]}, ${nomes[1]} e mais ${nomes.length - 2}`;
+    return `${quem} ${nomes.length === 1 ? 'alterou' : 'alteraram'} a programação desta semana (última às ${hora}).`;
+  });
+
+  async atualizarTela(): Promise<void> {
+    try {
+      await this.manutencaoService.load();
+    } catch {
+      this.notificationService.showError('Não foi possível atualizar a programação. Tente de novo.');
+    }
+  }
+
+  // Antes de gravar com a tela desatualizada: a pessoa pode estar editando em cima de
+  // algo que outro usuário acabou de mudar.
+  private async confirmarGravarDesatualizada(): Promise<boolean> {
+    if (!this.telaDesatualizada()) return true;
+    return this.confirmDialogService.confirm(
+      `${this.avisoDesatualizada()}\n\nO recomendado é cancelar, clicar em "Atualizar agora" e conferir antes de salvar.`,
+      { confirmLabel: 'Salvar mesmo assim' });
+  }
 
   private ordensDaSemanaCalc(semana: string): ManutencaoOrdem[] {
     return this.manutencaoService.ordens().filter(o => o.semanaInicio === semana);
@@ -1842,6 +1887,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       this.pageTitle = `Programação ${AREA_LABEL[area]}`;
     }
 
+    this.manutencaoService.iniciarMonitoramentoAlteracoes();
+    inject(DestroyRef).onDestroy(() => this.manutencaoService.pararMonitoramentoAlteracoes());
+
     // Consulta ao SIGMA: semana nova (ou liga/desliga o horizonte) = todas as OS visíveis;
     // mesma semana = só número de OS que ainda não tem resultado. Antes, cada salvar
     // refazia a consulta da semana inteira (~3,5 s com o spinner girando) mesmo sem número
@@ -2365,6 +2413,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   async confirmarForm(): Promise<void> {
     if (!this.canConfirmarForm()) return;
+    if (!(await this.confirmarGravarDesatualizada())) return;
     if (!(await this.confirmarConflitoDisponivel())) return;
     // Se sobrou texto digitado no campo Recursos sem ter apertado Enter/"+", adiciona
     // como chip agora — sem isso, quem digita e vai direto pra "Adicionar" perde o
@@ -2717,6 +2766,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   async excluir(o: ManutencaoOrdem): Promise<void> {
     if (this.isProcessando()) return;
+    if (!(await this.confirmarGravarDesatualizada())) return;
     if (!(await this.confirmDialogService.confirm(`Excluir "${o.descricao}" (${o.tecnicoNome})?\n\nEsta ação não pode ser desfeita.`, { confirmLabel: 'Excluir', danger: true }))) return;
 
     const vinculadas = this.ordensVinculadas(o);
