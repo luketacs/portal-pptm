@@ -55,8 +55,13 @@ export interface Material {
   released_at?: string | null;
 }
 
-/** Cadastro de novos materiais bloqueado durante a migração para o sistema SENIOR. */
-export const MATERIAL_CREATION_DISABLED = true;
+/**
+ * Liga/desliga o cadastro de novos materiais (bloqueado de 22/09 a 16/10/2026 durante a
+ * migração para o SENIOR). Com `true`, o formulário, a Lista e Meus Materiais mostram o
+ * aviso abaixo e o service recusa createMaterial — lembrar de tirar também o link
+ * "Cadastrar Material" do menu (sidebar.component.ts).
+ */
+export const MATERIAL_CREATION_DISABLED = false;
 export const MATERIAL_CREATION_DISABLED_MESSAGE =
   'O cadastro de novos materiais está desabilitado por conta da migração para o sistema SENIOR.';
 
