@@ -1448,7 +1448,11 @@
               <div class="flex items-center justify-between gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 mb-2">
                 <div class="min-w-0">
                   <p class="text-xs font-semibold text-amber-800 truncate">Essa descrição bate com o plano "{{ sugestao.nome }}"</p>
-                  <p class="text-[11px] text-amber-600">Vincular pra contar essa execução e avançar o ciclo dele — sem isso, ele pode voltar a sugerir a mesma tarefa em breve.</p>
+                  @if (formVinculoAutomatico()) {
+                    <p class="text-[11px] text-amber-600">Ele vence nesta semana — a OS vai ser vinculada a ele automaticamente ao salvar, e sai de "Preventivas da semana".</p>
+                  } @else {
+                    <p class="text-[11px] text-amber-600">Vincular pra contar essa execução e avançar o ciclo dele — sem isso, ele pode voltar a sugerir a mesma tarefa em breve.</p>
+                  }
                 </div>
                 <button type="button" (click)="vincularPlano(sugestao)"
                   class="flex-shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700">Vincular</button>

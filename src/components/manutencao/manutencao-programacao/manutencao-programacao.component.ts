@@ -30,6 +30,7 @@ import {
   resumoPorEquipeApoio, sugestoesDaSemana,
   osSigmaDosPlanos,
 } from '../../../utils/manutencao-planos';
+import { preventivaVencendo } from '../../../utils/manutencao-preventivas';
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
 import { EscalaTurnoTabelaComponent } from './escala-turno-tabela/escala-turno-tabela.component';
 import { FichaImpressaoComponent } from './ficha-impressao/ficha-impressao.component';
@@ -1733,6 +1734,40 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       .find(p => p.ativo && p.area === area && normalizarTexto(p.nome) === descricao) ?? null;
   });
 
+  // Vínculo que o salvar faz sozinho, sem precisar clicar em "Vincular" na sugestão acima —
+  // reportado: I-M-2M PREV TALHAS MANUAIS (PM-0633) lançada por "Novo lançamento" com a OS
+  // 003214, sem vínculo, e o plano continuou em "Preventivas da semana" como se faltasse
+  // programar (corrigido na migration 077). Só quando não há dúvida de qual ciclo a OS
+  // cumpre: o plano vence na semana da OS, ou outra cópia dessa OS na semana (outro
+  // técnico) já está vinculada a ele — o 2º técnico entra depois do 1º já ter coberto o
+  // ciclo, aí o plano nem aparece mais como vencendo. Fora disso, segue só a sugestão.
+  formVinculoAutomatico = computed<{ plano: PlanoManutencao; dataCiclo: string } | null>(() => {
+    if (this.formTipo() !== 'ordem') return null;
+    const plano = this.formSugestaoVinculoPorDescricao();
+    if (!plano) return null;
+    const idEdicao = this.formIdEdicao();
+    const semana = (idEdicao ? this.manutencaoService.getById(idEdicao)?.semanaInicio : null) ?? this.semanaFiltro();
+    const copia = this.manutencaoService.ordens().find(o =>
+      o.id !== idEdicao && o.semanaInicio === semana && o.planoPreventivoId === plano.id && !!o.cicloDataPrevista);
+    if (copia?.cicloDataPrevista) return { plano, dataCiclo: copia.cicloDataPrevista };
+    const naAgenda = this.agendaPlanos().find(p => p.id === plano.id);
+    if (naAgenda && preventivaVencendo(naAgenda.proximaData, semana, domingoDaSemana(semana))) {
+      return { plano, dataCiclo: dataCicloAoProgramar(naAgenda) };
+    }
+    return null;
+  });
+
+  // Sem os efeitos de vincularPlano em LOTO/Recursos: no salvar, mexer nos Recursos
+  // criaria espelho de apoio que a pessoa não viu no formulário.
+  private aplicarVinculoAutomatico(): void {
+    const vinculo = this.formVinculoAutomatico();
+    if (!vinculo) return;
+    this.formPlanoPreventivoId.set(vinculo.plano.id);
+    this.formPlanoPreventivoDataPrevista.set(vinculo.dataCiclo);
+    if (this.formChecklist().length === 0) this.formChecklist.set(vinculo.plano.atividades);
+    if (!this.formTipoServico().trim()) this.formTipoServico.set('PREVENTIVA');
+  }
+
   vincularPlano(plano: PlanoManutencao): void {
     this.formPlanoPreventivoId.set(plano.id);
     const naAgenda = this.agendaPlanos().find(p => p.id === plano.id);
@@ -2421,6 +2456,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     if (this.formRecursosDigitando().trim()) {
       this.adicionarRecurso(this.formRecursosDigitando());
     }
+    this.aplicarVinculoAutomatico();
     this.isProcessando.set(true);
     try {
       const tipo = this.formTipo();
