@@ -8,4 +8,6 @@ export interface UserProfile {
   position: string;
   role: UserRole;
   must_change_password: boolean;
+  // Pode atualizar o status das Solicitações de Reparo Externo (menu Elétrica).
+  supervisor_eletrica?: boolean;
 }

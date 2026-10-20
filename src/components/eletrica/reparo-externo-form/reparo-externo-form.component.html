@@ -1,0 +1,238 @@
+<div class="max-w-3xl mx-auto space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-800">Solicitação de Reparo Externo</h1>
+    <p class="text-sm text-gray-500 mt-1">
+      Relatório de falha do equipamento que vai para conserto fora. Ao enviar, o portal gera o PDF do relatório
+      e avisa o supervisor de elétrica no Teams.
+    </p>
+  </div>
+
+  <form (ngSubmit)="onSubmit()" class="space-y-5">
+    <div class="app-card p-4 flex flex-wrap gap-x-8 gap-y-1 text-sm">
+      <div><span class="text-gray-500">Responsável pelo relatório:</span> <span class="font-semibold text-gray-800">{{ responsavel() }}</span></div>
+      <div><span class="text-gray-500">Data:</span> <span class="font-semibold text-gray-800">{{ hoje | date:'dd/MM/yyyy' }}</span></div>
+    </div>
+
+    <!-- 1. Identificação -->
+    <section class="app-card p-6 space-y-4">
+      <h2 class="text-base font-bold text-blue-900">1. Identificação do equipamento</h2>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Equipamento <span class="text-red-500">*</span></label>
+        <input type="text" [ngModel]="equipamento()" (ngModelChange)="equipamento.set($event)" name="equipamento" required
+          placeholder="Ex: PanelView Plus 7"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Fabricante / Modelo</label>
+          <input type="text" [ngModel]="fabricanteModelo()" (ngModelChange)="fabricanteModelo.set($event)" name="fabricanteModelo"
+            placeholder="Ex: Allen-Bradley"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Nº de série</label>
+          <input type="text" [ngModel]="numeroSerie()" (ngModelChange)="numeroSerie.set($event)" name="numeroSerie"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">TAG / Código SAP</label>
+          <input type="text" [ngModel]="tagSap()" (ngModelChange)="tagSap.set($event)" name="tagSap"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Localização</label>
+          <input type="text" [ngModel]="localizacao()" (ngModelChange)="localizacao.set($event)" name="localizacao"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Tempo de operação (aprox.)</label>
+          <input type="text" [ngModel]="tempoOperacao()" (ngModelChange)="tempoOperacao.set($event)" name="tempoOperacao"
+            placeholder="Ex: 8 anos"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Resumo -->
+    <section class="app-card p-6 space-y-2">
+      <h2 class="text-base font-bold text-blue-900">2. Resumo da ocorrência <span class="text-red-500">*</span></h2>
+      <textarea [ngModel]="resumo()" (ngModelChange)="resumo.set($event)" name="resumo" rows="3" required
+        placeholder="O que aconteceu com o equipamento e como ele está agora."
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+    </section>
+
+    <!-- 3. Defeitos -->
+    <section class="app-card p-6 space-y-4">
+      <h2 class="text-base font-bold text-blue-900">3. Descrição dos defeitos</h2>
+      @for (d of defeitos(); track $index; let i = $index) {
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-sm font-semibold text-slate-700">Defeito {{ i + 1 }}</span>
+            @if (defeitos().length > 1) {
+              <button type="button" (click)="removerDefeito(i)" class="text-xs font-semibold text-red-600 hover:text-red-700">Remover</button>
+            }
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Defeito <span class="text-red-500">*</span></label>
+            <input type="text" [ngModel]="d.titulo" (ngModelChange)="atualizarDefeito(i, 'titulo', $event)" [name]="'titulo' + i"
+              placeholder="Ex: Display com manchas"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Sintoma</label>
+              <textarea [ngModel]="d.sintoma" (ngModelChange)="atualizarDefeito(i, 'sintoma', $event)" [name]="'sintoma' + i" rows="2"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"></textarea>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Evolução</label>
+              <textarea [ngModel]="d.evolucao" (ngModelChange)="atualizarDefeito(i, 'evolucao', $event)" [name]="'evolucao' + i" rows="2"
+                placeholder="Como o defeito foi piorando (se for o caso)"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"></textarea>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Situação atual</label>
+              <textarea [ngModel]="d.situacaoAtual" (ngModelChange)="atualizarDefeito(i, 'situacaoAtual', $event)" [name]="'situacao' + i" rows="2"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"></textarea>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Causa provável</label>
+              <textarea [ngModel]="d.causaProvavel" (ngModelChange)="atualizarDefeito(i, 'causaProvavel', $event)" [name]="'causa' + i" rows="2"
+                placeholder="Em branco = não identificada em campo"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"></textarea>
+            </div>
+          </div>
+        </div>
+      }
+      <button type="button" (click)="adicionarDefeito()" class="text-sm font-semibold text-blue-600 hover:text-blue-700">+ Adicionar defeito</button>
+    </section>
+
+    <!-- 4. Verificações -->
+    <section class="app-card p-6 space-y-3">
+      <h2 class="text-base font-bold text-blue-900">4. Verificações realizadas em campo</h2>
+      @for (v of verificacoesPadrao; track v) {
+        <label class="flex items-start gap-2 text-sm text-gray-700">
+          <input type="checkbox" class="mt-0.5 h-4 w-4 rounded border-slate-300"
+            [checked]="verificacoesMarcadas().includes(v)" (change)="alternarVerificacao(v, $any($event.target).checked)" />
+          {{ v }}
+        </label>
+      }
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Outra verificação</label>
+        <input type="text" [ngModel]="outraVerificacao()" (ngModelChange)="outraVerificacao.set($event)" name="outraVerificacao"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Resultado</label>
+        <textarea [ngModel]="verificacaoResultado()" (ngModelChange)="verificacaoResultado.set($event)" name="verificacaoResultado" rows="2"
+          placeholder="Ex: verificações feitas, sem alteração no status de falha."
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+      </div>
+    </section>
+
+    <!-- 5. Histórico -->
+    <section class="app-card p-6 space-y-4">
+      <h2 class="text-base font-bold text-blue-900">5. Histórico</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Início dos sintomas</label>
+          <input type="date" [ngModel]="dataInicioSintomas()" (ngModelChange)="dataInicioSintomas.set($event)" name="dataInicioSintomas"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Data da falha total</label>
+          <input type="date" [ngModel]="dataFalhaTotal()" (ngModelChange)="dataFalhaTotal.set($event)" name="dataFalhaTotal"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Intervenções anteriores / reparos</label>
+        <textarea [ngModel]="intervencoesAnteriores()" (ngModelChange)="intervencoesAnteriores.set($event)" name="intervencoesAnteriores" rows="2"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+      </div>
+      <div>
+        <span class="block text-sm font-medium text-slate-700 mb-1">Garantia</span>
+        <div class="flex flex-wrap gap-4 text-sm text-gray-700">
+          <label class="flex items-center gap-2"><input type="radio" name="garantia" value="vigente" [ngModel]="garantia()" (ngModelChange)="garantia.set($event)" /> Vigente</label>
+          <label class="flex items-center gap-2"><input type="radio" name="garantia" value="expirada" [ngModel]="garantia()" (ngModelChange)="garantia.set($event)" /> Expirada</label>
+          <label class="flex items-center gap-2"><input type="radio" name="garantia" value="nao_sei" [ngModel]="garantia()" (ngModelChange)="garantia.set($event)" /> Não sei</label>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. Serviço -->
+    <section class="app-card p-6 space-y-2">
+      <h2 class="text-base font-bold text-blue-900">6. Serviço solicitado <span class="text-red-500">*</span></h2>
+      <textarea [ngModel]="servicoSolicitado()" (ngModelChange)="servicoSolicitado.set($event)" name="servicoSolicitado" rows="4" required
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+      <p class="text-xs text-gray-400">Já vem com o texto padrão — ajuste pro que esse equipamento precisa (ex.: substituir o display).</p>
+    </section>
+
+    <!-- 7. Contato -->
+    <section class="app-card p-6 space-y-4">
+      <h2 class="text-base font-bold text-blue-900">7. Dados para contato e retorno</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Nome</label>
+          <input type="text" [ngModel]="contatoNome()" (ngModelChange)="contatoNome.set($event)" name="contatoNome"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Telefone</label>
+          <input type="tel" [ngModel]="contatoTelefone()" (ngModelChange)="contatoTelefone.set($event)" name="contatoTelefone"
+            placeholder="(85) 9 0000-0000"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
+          <input type="email" [ngModel]="contatoEmail()" (ngModelChange)="contatoEmail.set($event)" name="contatoEmail"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+      <p class="text-sm text-gray-600"><span class="text-gray-500">Endereço:</span> {{ endereco }}</p>
+    </section>
+
+    <!-- 8. Fotos -->
+    <section class="app-card p-6 space-y-4">
+      <div>
+        <h2 class="text-base font-bold text-blue-900">8. Fotos do equipamento</h2>
+        <p class="text-xs text-gray-400 mt-1">Pode tirar direto pelo celular. As fotos são reduzidas antes de enviar.</p>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        @for (f of fotos(); track $index; let i = $index) {
+          <div class="space-y-1.5">
+            @if (f.preview) {
+              <div class="relative aspect-[4/3] rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
+                <img [src]="f.preview" [alt]="f.legenda" class="w-full h-full object-cover" />
+                <button type="button" (click)="removerFoto(i)" title="Remover foto"
+                  class="absolute top-1 right-1 rounded-full bg-white/90 px-2 text-xs font-bold text-red-600 shadow">✕</button>
+              </div>
+            } @else {
+              <label class="flex aspect-[4/3] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 text-xs text-slate-500 hover:border-blue-400 hover:text-blue-600">
+                <span class="text-2xl leading-none">+</span>
+                <span>Adicionar foto</span>
+                <input type="file" accept="image/*" class="hidden" (change)="selecionarFoto(i, $event)" />
+              </label>
+            }
+            <input type="text" [ngModel]="f.legenda" (ngModelChange)="atualizarLegenda(i, $event)" [name]="'legenda' + i"
+              placeholder="Legenda"
+              class="w-full rounded-lg border border-slate-300 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        }
+      </div>
+      <button type="button" (click)="adicionarFotoExtra()" class="text-sm font-semibold text-blue-600 hover:text-blue-700">+ Adicionar outra foto</button>
+    </section>
+
+    @if (errorMessage()) {
+      <div class="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{{ errorMessage() }}</div>
+    }
+
+    <div class="flex justify-end gap-3">
+      <a routerLink="/eletrica/reparos" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancelar</a>
+      <button type="submit" [disabled]="isSubmitting()"
+        class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+        {{ isSubmitting() ? 'Enviando...' : 'Enviar solicitação' }}
+      </button>
+    </div>
+  </form>
+</div>

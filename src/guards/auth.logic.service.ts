@@ -39,8 +39,11 @@ export class AuthLogicService {
 
     if (!currentUser) {
       // If no user and initialization is complete, redirect to login.
+      // Leva o destino junto (ex.: link do card do Teams pro relatório de reparo) pra
+      // voltar pra ele depois de entrar.
       const router = this.injector.get(Router);
-      return router.createUrlTree(['/login']);
+      const destino = '/' + route.pathFromRoot.flatMap(r => r.url.map(s => s.path)).join('/');
+      return router.createUrlTree(['/login'], destino.length > 1 ? { queryParams: { returnUrl: destino } } : {});
     }
 
     // Se o usuário precisa trocar a senha, redirecionar para a tela de troca

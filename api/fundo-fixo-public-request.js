@@ -27,6 +27,11 @@
 // os botões do card abrem. A autorização é o token do link (só o hash fica no banco),
 // que vale só pra aquela solicitação, expira e só grava se ainda estiver pendente — se o
 // Admin já decidiu no portal, vale a dele.
+//
+// 'eletrica-reparo-notificar' não é do Fundo Fixo: avisa o supervisor de elétrica no
+// Teams quando abrem uma Solicitação de Reparo Externo (ver _eletrica-reparo-teams-shared.js).
+// Mora aqui só porque api/ já está no limite de 12 functions do plano Hobby. Mesmas
+// garantias do 'teams-notificar': sem login, mas envia uma vez só por solicitação.
 
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
@@ -35,6 +40,7 @@ import {
   TOKEN_VALIDADE_DIAS, emailDoGestor, emailsCopia, gerarToken, portalUrl, gestorDaSolicitacao, hashToken, interpretarDecisao,
   montarCardConfirmacao, montarCardCopia, montarCardSolicitacao, numeroFundoFixo, tokenValido,
 } from './_fundo-fixo-teams-shared.js';
+import { notificarReparo } from './_eletrica-reparo-teams-shared.js';
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://portalpptm.com').split(',');
 const BUCKET = 'fundo-fixo-anexos';
@@ -228,6 +234,16 @@ async function postarNoTeams(email, card, env, fetchImpl) {
   }
 }
 
+async function handleReparoNotificar(req, res, ip, supabase) {
+  if (!checkRateLimitTeams(ip)) {
+    return res.status(429).json({ success: false, error: 'Muitas requisições. Tente novamente em instantes.' });
+  }
+  const id = String(req.body?.id || '');
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ success: false, error: 'id inválido.' });
+  const resultado = await notificarReparo(supabase, id);
+  return res.status(200).json({ success: true, resultado });
+}
+
 async function handleTeamsNotificar(req, res, ip, supabase) {
   if (!checkRateLimitTeams(ip)) {
     return res.status(429).json({ success: false, error: 'Muitas requisições. Tente novamente em instantes.' });
@@ -388,6 +404,7 @@ export default async function handler(req, res) {
 
   if (req.body?.action === 'upload-url') return handleUploadUrl(req, res, ip, supabase);
   if (req.body?.action === 'teams-notificar') return handleTeamsNotificar(req, res, ip, supabase);
+  if (req.body?.action === 'eletrica-reparo-notificar') return handleReparoNotificar(req, res, ip, supabase);
   if (req.body?.action === 'decisao-ver') return handleDecisaoVer(req, res, ip, supabase);
   if (req.body?.action === 'decisao-confirmar') return handleDecisaoConfirmar(req, res, ip, supabase);
   return handleRequest(req, res, ip, supabase);

@@ -128,6 +128,40 @@ export const APP_ROUTES: Routes = [
   // rotas 'apontamentos' e 'publico/apontamentos' apontando para
   // ApontamentosComponent, e o grupo do menu em sidebar.component.ts.
 
+  // ── Elétrica ──
+  {
+    path: 'eletrica/reparo-externo/novo',
+    loadComponent: () =>
+      import('../components/eletrica/reparo-externo-form/reparo-externo-form.component').then(m => m.ReparoExternoFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Solicitação de Reparo Externo',
+  },
+  {
+    path: 'eletrica/reparos',
+    loadComponent: () =>
+      import('../components/eletrica/reparo-externo-lista/reparo-externo-lista.component').then(m => m.ReparoExternoListaComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'], mode: 'meus' },
+    title: 'Meus Reparos Externos',
+  },
+  {
+    path: 'eletrica/reparos/:id',
+    loadComponent: () =>
+      import('../components/eletrica/reparo-externo-detalhe/reparo-externo-detalhe.component').then(m => m.ReparoExternoDetalheComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Reparo Externo',
+  },
+  {
+    path: 'eletrica/controle',
+    loadComponent: () =>
+      import('../components/eletrica/reparo-externo-lista/reparo-externo-lista.component').then(m => m.ReparoExternoListaComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'], mode: 'controle' },
+    title: 'Controle de Reparos Externos',
+  },
+
   {
     path: 'fundo-fixo',
     loadComponent: () =>

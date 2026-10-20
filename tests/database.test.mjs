@@ -17,6 +17,7 @@ before(async () => {
   // Fixtures representam os pré-requisitos legados; não são um baseline de produção.
   await db.exec(`
     CREATE ROLE authenticated; CREATE ROLE anon; CREATE ROLE service_role BYPASSRLS;
+    CREATE PUBLICATION supabase_realtime;
     CREATE SCHEMA auth;
     CREATE SCHEMA storage;
     CREATE TABLE storage.buckets(id text PRIMARY KEY, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
@@ -36,6 +37,9 @@ before(async () => {
     if ((n >= 6 && n <= 32) || prerequisites.has(n) || n >= 54) {
       try { await db.exec(await readFile(`supabase/migrations/${file}`, 'utf8')); }
       catch (error) { throw new Error(`${file}: ${error.message}`); }
+      // Cada migration roda numa sessão nova do SQL Editor; sem isso, funções pg_temp
+      // de uma (ex.: 060) vazam pra próxima e ela falha ao recriar.
+      await db.exec('DISCARD TEMP');
     }
   }
   await db.exec(`GRANT USAGE ON SCHEMA public, auth TO authenticated, anon, service_role;
@@ -141,4 +145,29 @@ test('fundo fixo: cada solicitação nova recebe o próximo número de chamado',
   const { rows: [b] } = await inserir();
   assert.ok(Number(a.numero) > 0);
   assert.equal(Number(b.numero), Number(a.numero) + 1);
+});
+
+test('reparo externo: qualquer um abre em nome próprio; só supervisor de elétrica muda status, com histórico', async () => {
+  await db.exec('RESET ROLE');
+  await db.query("SELECT set_config('request.jwt.claim.sub', '', false)"); // como no SQL Editor: sem usuário
+  await db.query("UPDATE profiles SET supervisor_eletrica = true WHERE id = $1", [visualizador]);
+  const abrir = (dono, extra = '') => db.query(`INSERT INTO eletrica_reparos(solicitante_id,solicitante_nome,equipamento,resumo,servico_solicitado${extra ? ',status' : ''})
+    VALUES ($1,'Teste','PanelView','Não liga','Reparo'${extra ? `,'${extra}'` : ''}) RETURNING id, numero, status`, [dono]);
+
+  await login(solicitante);
+  const { rows: [r] } = await abrir(solicitante);
+  assert.equal(r.status, 'aberto');
+  assert.ok(Number(r.numero) > 0);
+  await assert.rejects(abrir(admin), /row-level security/);
+  await assert.rejects(abrir(solicitante, 'concluido'), /aberta/);
+  // Quem abriu não muda o status (RLS: 0 linhas, sem erro).
+  const { rows: nada } = await db.query("UPDATE eletrica_reparos SET status='concluido' WHERE id=$1 RETURNING id", [r.id]);
+  assert.equal(nada.length, 0);
+
+  await login(visualizador);
+  await db.query("UPDATE eletrica_reparos SET status='em_reparo', status_observacao='Enviado', fornecedor='Rockwell' WHERE id=$1", [r.id]);
+  const { rows: hist } = await db.query('SELECT status, observacao FROM eletrica_reparos_historico WHERE reparo_id=$1 ORDER BY created_at, status', [r.id]);
+  assert.deepEqual(hist.map(h => h.status).sort(), ['aberto', 'em_reparo']);
+  assert.equal(hist.find(h => h.status === 'em_reparo').observacao, 'Enviado');
+  await assert.rejects(db.query("INSERT INTO eletrica_reparos_historico(reparo_id,status) VALUES ($1,'concluido')", [r.id]), /row-level security/);
 });

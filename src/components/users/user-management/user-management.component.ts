@@ -84,6 +84,7 @@ export class UserManagementComponent {
       department: userData.department,
       position: userData.position,
       role: userData.role,
+      supervisor_eletrica: !!userData.supervisor_eletrica,
     };
 
     try {

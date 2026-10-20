@@ -188,3 +188,40 @@ test('Teams: cópia vai pro e-mail de acompanhamento sem os botões de decisão'
   assert.ok(!JSON.stringify(copia).includes('/decisao'));
   assert.deepEqual(copia.actions.map(a => a.title), ['Abrir no portal']);
 });
+
+// ── Elétrica: aviso de Reparo Externo no Teams ──────────────────────────
+import { montarCardReparo, notificarReparo, numeroReparo } from '../api/_eletrica-reparo-teams-shared.js';
+
+const reparoRow = extra => ({
+  id: ID, numero: 7, solicitante_nome: 'Neucivan', equipamento: 'PanelView Plus 7', resumo: 'Não inicializa',
+  defeitos: [{ titulo: 'Display com manchas' }, { titulo: 'Falha de inicialização' }], teams_enviado_em: null, ...extra,
+});
+const envReparo = { FUNDO_FIXO_FLOW_URL: 'https://flow', ELETRICA_SUPERVISOR_EMAIL: 'sup@x', FUNDO_FIXO_PORTAL_URL: 'https://portal' };
+
+test('Reparo externo: card leva RE-007, equipamento, defeitos e link pro relatório', () => {
+  assert.equal(numeroReparo(7), 'RE-007');
+  assert.equal(numeroReparo(null), '');
+  const card = montarCardReparo(reparoRow(), 'https://portal');
+  const texto = JSON.stringify(card);
+  assert.match(card.body[0].items[0].text, /RE-007/);
+  assert.match(texto, /PanelView Plus 7/);
+  assert.match(texto, /Display com manchas; Falha de inicialização/);
+  assert.equal(card.actions.length, 1);
+  assert.equal(card.actions[0].url, `https://portal/eletrica/reparos/${ID}`);
+});
+
+test('Reparo externo: avisa o supervisor uma vez só; falha desmarca; sem e-mail não envia', async () => {
+  const sb = fakeSupabase([reparoRow()]);
+  const enviados = [];
+  assert.equal(await notificarReparo(sb, ID, envReparo, async (url, opts) => { enviados.push(JSON.parse(opts.body)); return { ok: true }; }), 'enviada');
+  assert.equal(enviados.length, 1);
+  assert.equal(enviados[0].aprovadorEmail, 'sup@x');
+  assert.ok(sb.rows[0].teams_enviado_em);
+  assert.equal(await notificarReparo(sb, ID, envReparo, async () => assert.fail('não devia reenviar')), 'ja-enviada');
+
+  const sbFalha = fakeSupabase([reparoRow()]);
+  assert.equal(await notificarReparo(sbFalha, ID, envReparo, async () => ({ ok: false, status: 500 })), 'falhou');
+  assert.equal(sbFalha.rows[0].teams_enviado_em, null);
+
+  assert.equal(await notificarReparo(sb, ID, { FUNDO_FIXO_FLOW_URL: 'https://flow' }, async () => assert.fail('sem e-mail')), 'sem-supervisor');
+});

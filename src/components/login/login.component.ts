@@ -2,7 +2,7 @@
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../services/auth.service';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NotificationService } from '../../services/notification.service';
 
 @Component({
@@ -24,7 +24,8 @@ export class LoginComponent {
   constructor(
     public authService: AuthService,
     private router: Router,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private route: ActivatedRoute,
   ) {}
 
   async onLogin() {
@@ -73,7 +74,11 @@ export class LoginComponent {
         return;
       }
 
-      const targetUrl = currentUser?.role === 'Solicitante' ? '/requests/new' : '/dashboard';
+      // returnUrl vem do authGuard; só aceita caminho interno (nada de "//site" ou URL externa).
+      const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl') ?? '';
+      const targetUrl = /^\/[A-Za-z0-9]/.test(returnUrl) && !returnUrl.startsWith('/login')
+        ? returnUrl
+        : currentUser?.role === 'Solicitante' ? '/requests/new' : '/dashboard';
       await this.router.navigateByUrl(targetUrl, { replaceUrl: true });
     } catch {
       const message = 'Erro ao tentar fazer login. Tente novamente.';
