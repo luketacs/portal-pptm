@@ -53,7 +53,7 @@ describe('PDF do reparo externo', () => {
     const texto = [...bruto.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)]
       .map(m => { try { return inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1'); } catch { return ''; } })
       .join('\n');
-    ['Reparo Externo', 'RE-007', 'DESCRIÇÃO DOS DEFEITOS', 'Display com manchas', 'Medição com osciloscópio']
+    ['Reparo Externo', 'RE-007', 'Descrição dos defeitos', 'Display com manchas', 'Medição com osciloscópio']
       .forEach(t => expect(texto).toContain(t));
   });
 

@@ -143,7 +143,7 @@ export const APP_ROUTES: Routes = [
       import('../components/eletrica/reparo-externo-lista/reparo-externo-lista.component').then(m => m.ReparoExternoListaComponent),
     canActivate: [authGuard],
     data: { roles: ['Admin', 'Solicitante', 'Visualizador'], mode: 'meus' },
-    title: 'Meus Reparos Externos',
+    title: 'Reparos Externos',
   },
   {
     path: 'eletrica/reparos/:id',

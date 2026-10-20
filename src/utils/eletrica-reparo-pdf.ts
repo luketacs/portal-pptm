@@ -5,30 +5,29 @@ import {
 } from './eletrica-reparo';
 
 // PDF do "Relatório de Falha para Reparo Externo": mesmas 8 seções do Word que a Elétrica
-// usava, com a identidade da Diamante (logo + cores da marca) pra ir pro fornecedor.
+// usava, no formato de ficha técnica (tabelas com linhas finas, rótulo à esquerda), com o
+// logo da Diamante — é o documento que vai pro fornecedor.
 // Gerado no navegador (jsPDF, carregado só quando alguém baixa) — sem function na Vercel.
 
 type Rgb = [number, number, number];
-const NAVY: Rgb = [43, 57, 144];
-const AZUL_CLARO: Rgb = [59, 175, 227];
-const LARANJA: Rgb = [238, 118, 35];
-const TEXTO: Rgb = [30, 41, 59];
-const CINZA: Rgb = [100, 116, 139];
-const BORDA: Rgb = [226, 232, 240];
-const FUNDO: Rgb = [248, 250, 252];
-const FUNDO_AZUL: Rgb = [239, 246, 255];
+const TITULO: Rgb = [31, 45, 110];
+const TEXTO: Rgb = [33, 33, 33];
+const ROTULO: Rgb = [80, 80, 80];
+const SUAVE: Rgb = [120, 120, 120];
+const LINHA_TABELA: Rgb = [185, 185, 185];
+const FUNDO_ROTULO: Rgb = [243, 243, 243];
 
 const MARGEM = 15;
 const LARGURA = 210 - MARGEM * 2;
-const LIMITE_Y = 278; // abaixo disso é o rodapé
-const TOPO_CONTINUACAO = 24;
-const LINHA = 4.4; // altura de uma linha de texto 9,5pt
+const LIMITE_Y = 280; // abaixo disso é o rodapé
+const TOPO_CONTINUACAO = 22;
+const LINHA = 4.3; // altura de uma linha de texto 9pt
 const RODAPE = 'Diamante Geração de Energia · Complexo Termoelétrico do Pecém';
 
 interface Campo {
   rotulo: string;
   valor: string | null | undefined;
-  largo?: boolean; // ocupa a linha inteira
+  largo?: boolean; // ocupa a linha inteira da tabela
 }
 
 interface Imagem {
@@ -49,128 +48,112 @@ class Escritor {
     }
   }
 
-  private fonte(estilo: 'normal' | 'bold' | 'italic', tamanho: number, cor: Rgb): void {
+  private fonte(estilo: 'normal' | 'bold', tamanho: number, cor: Rgb): void {
     this.doc.setFont('helvetica', estilo).setFontSize(tamanho).setTextColor(...cor);
   }
 
-  private linhas(texto: string, largura: number): string[] {
-    this.fonte('normal', 9.5, TEXTO);
+  private quebrar(texto: string, largura: number, estilo: 'normal' | 'bold' = 'normal', tamanho = 9): string[] {
+    this.doc.setFont('helvetica', estilo).setFontSize(tamanho);
     return this.doc.splitTextToSize(texto, largura) as string[];
   }
 
-  // Título de seção: quadrado com o número + título em caixa alta + fio até a margem.
-  secao(numero: number, titulo: string): void {
-    this.garantirEspaco(32); // título nunca fica sozinho no pé da página
-    this.y += 4;
-    const doc = this.doc;
-    doc.setFillColor(...NAVY).roundedRect(MARGEM, this.y - 4.6, 6.2, 6.2, 1, 1, 'F');
-    this.fonte('bold', 9, [255, 255, 255]);
-    doc.text(String(numero), MARGEM + 3.1, this.y - 0.4, { align: 'center' });
-    this.fonte('bold', 10.5, NAVY);
-    const t = titulo.toUpperCase();
-    doc.text(t, MARGEM + 9, this.y);
-    const fim = MARGEM + 9 + doc.getTextWidth(t) + 3;
-    doc.setDrawColor(...BORDA).setLineWidth(0.3).line(fim, this.y - 1.5, MARGEM + LARGURA, this.y - 1.5);
-    this.y += 6;
+  secao(titulo: string): void {
+    this.garantirEspaco(26); // título nunca fica sozinho no pé da página
+    this.y += 5;
+    this.fonte('bold', 10.5, TITULO);
+    this.doc.text(titulo, MARGEM, this.y);
+    this.doc.setDrawColor(...TITULO).setLineWidth(0.3).line(MARGEM, this.y + 1.6, MARGEM + LARGURA, this.y + 1.6);
+    this.y += 5;
   }
 
-  // Grade "rótulo pequeno em cima, valor embaixo", em N colunas.
-  private montarLinhas(campos: Campo[], colunas: number, largura: number) {
-    const gap = 6;
-    const larguraCol = (largura - gap * (colunas - 1)) / colunas;
-    const linhasGrade: { celulas: { campo: Campo; x: number; texto: string[] }[]; altura: number }[] = [];
+  subtitulo(texto: string): void {
+    this.garantirEspaco(18);
+    this.fonte('bold', 9.5, TEXTO);
+    this.doc.text(texto, MARGEM, this.y + 3.5);
+    this.y += 5.5;
+  }
+
+  paragrafo(texto: string): void {
+    const linhas = this.quebrar(texto, LARGURA);
+    for (const l of linhas) {
+      this.garantirEspaco(LINHA);
+      this.fonte('normal', 9, TEXTO);
+      this.doc.text(l, MARGEM, this.y + 3.2);
+      this.y += LINHA;
+    }
+    this.y += 1.5;
+  }
+
+  // Tabela rótulo | valor, com 1 ou 2 pares por linha. Rótulo em célula cinza-clara.
+  tabela(campos: Campo[], paresPorLinha: 1 | 2, larguraRotulo = 40): void {
+    const linhas: Campo[][] = [];
     let atual: Campo[] = [];
-    const fechar = (grupo: Campo[]) => {
-      if (!grupo.length) return;
-      const celulas = grupo.map((campo, i) => {
-        const w = campo.largo ? largura : larguraCol;
-        return { campo, x: i * (larguraCol + gap), texto: this.linhas(campo.valor?.trim() || '—', w) };
-      });
-      const maxLinhas = Math.max(...celulas.map(c => c.texto.length));
-      linhasGrade.push({ celulas, altura: 7.6 + (maxLinhas - 1) * LINHA + 3.5 });
-    };
-    for (const campo of campos) {
-      if (campo.largo) { fechar(atual); atual = []; fechar([campo]); continue; }
-      atual.push(campo);
-      if (atual.length === colunas) { fechar(atual); atual = []; }
-    }
-    fechar(atual);
-    return linhasGrade;
-  }
-
-  medirGrade(campos: Campo[], colunas: number, largura = LARGURA): number {
-    return this.montarLinhas(campos, colunas, largura).reduce((s, l) => s + l.altura, 0);
-  }
-
-  grade(campos: Campo[], colunas: number, x = MARGEM, largura = LARGURA, quebraPagina = true): void {
-    for (const linha of this.montarLinhas(campos, colunas, largura)) {
-      if (quebraPagina) this.garantirEspaco(linha.altura);
-      for (const c of linha.celulas) {
-        this.fonte('bold', 7, CINZA);
-        this.doc.text(c.campo.rotulo.toUpperCase(), x + c.x, this.y + 3);
-        this.fonte('normal', 9.5, TEXTO);
-        c.texto.forEach((t, i) => this.doc.text(t, x + c.x, this.y + 7.6 + i * LINHA));
+    for (const c of campos) {
+      if (c.largo || paresPorLinha === 1) {
+        if (atual.length) linhas.push(atual);
+        linhas.push([c]);
+        atual = [];
+        continue;
       }
-      this.y += linha.altura;
+      atual.push(c);
+      if (atual.length === paresPorLinha) { linhas.push(atual); atual = []; }
     }
-  }
+    if (atual.length) linhas.push(atual);
 
-  // Texto corrido dentro de uma caixa com fio colorido à esquerda.
-  caixaTexto(texto: string, fundo: Rgb, fio: Rgb): void {
-    const linhas = this.linhas(texto, LARGURA - 10);
-    const altura = linhas.length * LINHA + 6;
-    if (altura > LIMITE_Y - TOPO_CONTINUACAO) {
-      // Texto enorme: sem caixa, quebrando página normalmente.
-      linhas.forEach(l => { this.garantirEspaco(LINHA); this.fonte('normal', 9.5, TEXTO); this.doc.text(l, MARGEM, this.y + 3); this.y += LINHA; });
-      this.y += 3;
-      return;
+    const larguraPar = LARGURA / paresPorLinha;
+    for (const linha of linhas) {
+      const celulas = linha.map((c, i) => {
+        const larguraTotal = linha.length === 1 ? LARGURA : larguraPar;
+        const x = MARGEM + i * larguraPar;
+        const larguraValor = larguraTotal - larguraRotulo;
+        return {
+          x, larguraTotal, larguraValor,
+          rotulo: this.quebrar(c.rotulo, larguraRotulo - 3, 'normal', 8.5),
+          valor: this.quebrar(c.valor?.trim() || '—', larguraValor - 3),
+        };
+      });
+      const n = Math.max(...celulas.flatMap(c => [c.rotulo.length, c.valor.length]));
+      const altura = n * LINHA + 3.2;
+      this.garantirEspaco(altura);
+      const doc = this.doc;
+      doc.setDrawColor(...LINHA_TABELA).setLineWidth(0.2);
+      for (const c of celulas) {
+        doc.setFillColor(...FUNDO_ROTULO).rect(c.x, this.y, larguraRotulo, altura, 'FD');
+        doc.rect(c.x + larguraRotulo, this.y, c.larguraValor, altura, 'S');
+        this.fonte('normal', 8.5, ROTULO);
+        c.rotulo.forEach((t, i) => doc.text(t, c.x + 1.8, this.y + 4.8 + i * LINHA));
+        this.fonte('normal', 9, TEXTO);
+        c.valor.forEach((t, i) => doc.text(t, c.x + larguraRotulo + 1.8, this.y + 4.8 + i * LINHA));
+      }
+      this.y += altura;
     }
-    this.garantirEspaco(altura);
-    this.doc.setFillColor(...fundo).rect(MARGEM, this.y, LARGURA, altura, 'F');
-    this.doc.setFillColor(...fio).rect(MARGEM, this.y, 1.2, altura, 'F');
-    this.fonte('normal', 9.5, TEXTO);
-    linhas.forEach((l, i) => this.doc.text(l, MARGEM + 6, this.y + 6.5 + i * LINHA));
-    this.y += altura + 3;
+    this.y += 2;
   }
 
-  // Cartão de um defeito: faixa laranja à esquerda, título e os 4 campos em 2 colunas.
-  defeito(numero: number, titulo: string, campos: Campo[]): void {
-    const larguraInterna = LARGURA - 12;
-    const alturaGrade = this.medirGrade(campos, 2, larguraInterna);
-    const altura = 12 + alturaGrade + 1;
-    this.garantirEspaco(altura);
-    const doc = this.doc;
-    doc.setFillColor(...FUNDO).setDrawColor(...BORDA).setLineWidth(0.25).roundedRect(MARGEM, this.y, LARGURA, altura, 1.5, 1.5, 'FD');
-    doc.setFillColor(...LARANJA).rect(MARGEM, this.y, 1.4, altura, 'F');
-    this.fonte('bold', 7, LARANJA);
-    doc.text(`DEFEITO ${numero}`, MARGEM + 6, this.y + 5.5);
-    this.fonte('bold', 10.5, TEXTO);
-    doc.text(doc.splitTextToSize(titulo || '—', larguraInterna - 22)[0] as string, MARGEM + 6 + 20, this.y + 5.6);
-    const topo = this.y;
-    this.y += 9;
-    this.grade(campos, 2, MARGEM + 6, larguraInterna, false);
-    this.y = topo + altura + 3;
-  }
-
-  // Item de checklist: caixa azul preenchida com ✓ quando feito, contorno cinza quando não.
-  marcacao(texto: string, marcado: boolean): void {
-    const linhas = this.linhas(texto, LARGURA - 8);
-    this.garantirEspaco(linhas.length * LINHA + 1.5);
-    caixaMarcacao(this.doc, MARGEM, this.y, marcado);
-    this.fonte('normal', 9.5, marcado ? TEXTO : CINZA);
-    linhas.forEach((l, i) => this.doc.text(l, MARGEM + 7, this.y + 3.2 + i * LINHA));
-    this.y += linhas.length * LINHA + 1.5;
-  }
-}
-
-function caixaMarcacao(doc: jsPDF, x: number, yTopo: number, marcado: boolean): void {
-  if (marcado) {
-    doc.setFillColor(...NAVY).roundedRect(x, yTopo, 4, 4, 0.7, 0.7, 'F');
-    doc.setDrawColor(255, 255, 255).setLineWidth(0.55)
-      .line(x + 0.9, yTopo + 2.1, x + 1.7, yTopo + 3)
-      .line(x + 1.7, yTopo + 3, x + 3.2, yTopo + 1.1);
-  } else {
-    doc.setDrawColor(...CINZA).setLineWidth(0.3).roundedRect(x, yTopo, 4, 4, 0.7, 0.7, 'S');
+  // Tabela com cabeçalho e colunas fixas (verificações).
+  tabelaColunas(cabecalho: string[], larguras: number[], linhas: string[][], alinharCentro: boolean[]): void {
+    const desenharLinha = (valores: string[], cabeca: boolean) => {
+      const textos = valores.map((v, i) => this.quebrar(v, larguras[i] - 3.6, cabeca ? 'bold' : 'normal', cabeca ? 8.5 : 9));
+      const altura = Math.max(...textos.map(t => t.length)) * LINHA + 3.2;
+      this.garantirEspaco(altura);
+      const doc = this.doc;
+      let x = MARGEM;
+      doc.setDrawColor(...LINHA_TABELA).setLineWidth(0.2);
+      textos.forEach((t, i) => {
+        if (cabeca) doc.setFillColor(...FUNDO_ROTULO).rect(x, this.y, larguras[i], altura, 'FD');
+        else doc.rect(x, this.y, larguras[i], altura, 'S');
+        this.fonte(cabeca ? 'bold' : 'normal', cabeca ? 8.5 : 9, cabeca ? ROTULO : TEXTO);
+        t.forEach((l, j) => {
+          if (alinharCentro[i]) doc.text(l, x + larguras[i] / 2, this.y + 4.8 + j * LINHA, { align: 'center' });
+          else doc.text(l, x + 1.8, this.y + 4.8 + j * LINHA);
+        });
+        x += larguras[i];
+      });
+      this.y += altura;
+    };
+    desenharLinha(cabecalho, true);
+    linhas.forEach(l => desenharLinha(l, false));
+    this.y += 2;
   }
 }
 
@@ -229,56 +212,36 @@ function imagemContida(doc: jsPDF, img: Imagem, x: number, y: number, w: number,
   doc.addImage(img.dataUrl, img.formato, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
 }
 
-function cabecalho(doc: jsPDF, r: ReparoExterno, logo: Imagem | null, abertura: string): number {
+function cabecalho(doc: jsPDF, r: ReparoExterno, logo: Imagem | null): number {
   if (logo) {
-    imagemContida(doc, logo, MARGEM, 9, 72, 15);
+    imagemContida(doc, logo, MARGEM, 10, 62, 13);
   } else {
-    doc.setFont('helvetica', 'bold').setFontSize(13).setTextColor(...NAVY).text('DIAMANTE', MARGEM, 19);
+    doc.setFont('helvetica', 'bold').setFontSize(13).setTextColor(...TITULO).text('DIAMANTE', MARGEM, 19);
   }
   const direita = MARGEM + LARGURA;
-  doc.setFont('helvetica', 'bold').setFontSize(7.5).setTextColor(...CINZA).text('RELATÓRIO DE FALHA PARA', direita, 14, { align: 'right' });
-  doc.setFontSize(17).setTextColor(...NAVY).text('Reparo Externo', direita, 21.5, { align: 'right' });
-
-  // Fio da marca: laranja + azul-claro + marinho.
-  doc.setFillColor(...LARANJA).rect(MARGEM, 27, 18, 1.1, 'F');
-  doc.setFillColor(...AZUL_CLARO).rect(MARGEM + 18, 27, 18, 1.1, 'F');
-  doc.setFillColor(...NAVY).rect(MARGEM + 36, 27, LARGURA - 36, 1.1, 'F');
-
-  // Faixa de dados do chamado.
-  const yFaixa = 32;
-  doc.setFillColor(...FUNDO).setDrawColor(...BORDA).setLineWidth(0.25).roundedRect(MARGEM, yFaixa, LARGURA, 15, 1.5, 1.5, 'FD');
-  const itens: [string, string, boolean][] = [
-    ['Nº do chamado', numeroReparo(r.numero), true],
-    ['Data de abertura', abertura, false],
-    ['Responsável pelo relatório', r.solicitanteNome, false],
-    ['Garantia', r.garantia === 'vigente' || r.garantia === 'expirada' ? REPARO_GARANTIA_LABEL[r.garantia] : 'Não informada', false],
-  ];
-  const larguras = [30, 32, 78, LARGURA - 140];
-  let x = MARGEM + 5;
-  itens.forEach(([rotulo, valor, destaque], i) => {
-    doc.setFont('helvetica', 'bold').setFontSize(6.8).setTextColor(...CINZA).text(rotulo.toUpperCase(), x, yFaixa + 5.5);
-    doc.setFont('helvetica', 'bold').setFontSize(destaque ? 12 : 9.5).setTextColor(...(destaque ? NAVY : TEXTO));
-    doc.text(doc.splitTextToSize(valor, larguras[i] - 4)[0] as string, x, yFaixa + 11.5);
-    x += larguras[i];
-  });
-  return yFaixa + 15 + 2;
+  doc.setFont('helvetica', 'bold').setFontSize(12.5).setTextColor(...TITULO);
+  doc.text('Relatório de Falha para Reparo Externo', direita, 15.5, { align: 'right' });
+  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...ROTULO);
+  doc.text(`Nº ${numeroReparo(r.numero)}`, direita, 21, { align: 'right' });
+  doc.setDrawColor(...TITULO).setLineWidth(0.5).line(MARGEM, 27, direita, 27);
+  return 31;
 }
 
-function moldurasDePagina(doc: jsPDF, r: ReparoExterno, geradoEm: string): void {
+function moldurasDePagina(doc: jsPDF, r: ReparoExterno): void {
   const total = doc.getNumberOfPages();
   const direita = MARGEM + LARGURA;
   for (let p = 1; p <= total; p++) {
     doc.setPage(p);
     if (p > 1) {
-      doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(...NAVY).text('Relatório de Falha para Reparo Externo', MARGEM, 13);
-      doc.setTextColor(...CINZA).text(`${numeroReparo(r.numero)} · ${r.equipamento}`.slice(0, 70), direita, 13, { align: 'right' });
-      doc.setDrawColor(...BORDA).setLineWidth(0.3).line(MARGEM, 16, direita, 16);
+      doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...SUAVE);
+      doc.text('Relatório de Falha para Reparo Externo', MARGEM, 12);
+      doc.text(`${numeroReparo(r.numero)} · ${r.equipamento}`.slice(0, 70), direita, 12, { align: 'right' });
+      doc.setDrawColor(...LINHA_TABELA).setLineWidth(0.2).line(MARGEM, 14.5, direita, 14.5);
     }
-    doc.setDrawColor(...BORDA).setLineWidth(0.3).line(MARGEM, 284, direita, 284);
-    doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...CINZA);
-    doc.text(RODAPE, MARGEM, 289);
-    doc.text(`Gerado pelo Portal PPTM em ${geradoEm}`, MARGEM, 292.5);
-    doc.setFont('helvetica', 'bold').setTextColor(...NAVY).text(`Página ${p} de ${total}`, direita, 289, { align: 'right' });
+    doc.setDrawColor(...LINHA_TABELA).setLineWidth(0.2).line(MARGEM, 285, direita, 285);
+    doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...SUAVE);
+    doc.text(RODAPE, MARGEM, 289.5);
+    doc.text(`${numeroReparo(r.numero)}  ·  Página ${p} de ${total}`, direita, 289.5, { align: 'right' });
   }
 }
 
@@ -293,84 +256,98 @@ export async function gerarPdfReparo(r: ReparoExterno): Promise<Blob> {
     ...r.fotos.map(f => carregarImagem(f.url, { maxLado: 1400 })),
   ]);
 
-  const fuso = { timeZone: 'America/Sao_Paulo' } as const;
   const e = new Escritor(doc);
-  e.y = cabecalho(doc, r, logo, r.createdAt.toLocaleDateString('pt-BR', fuso));
+  e.y = cabecalho(doc, r, logo);
 
-  e.secao(1, 'Identificação do equipamento');
-  e.grade([
+  // Mesma linha do Word: "Responsável pelo relatório: ...   Data: ..."
+  e.tabela([
+    { rotulo: 'Responsável', valor: r.solicitanteNome },
+    { rotulo: 'Data', valor: r.createdAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) },
+  ], 2, 28);
+
+  e.secao('1. Identificação do equipamento');
+  e.tabela([
     { rotulo: 'Equipamento', valor: r.equipamento },
     { rotulo: 'Fabricante / Modelo', valor: r.fabricanteModelo },
     { rotulo: 'Nº de série', valor: r.numeroSerie },
     { rotulo: 'TAG / Código', valor: r.tagSap },
     { rotulo: 'Localização', valor: r.localizacao },
-    { rotulo: 'Tempo de operação (aprox.)', valor: r.tempoOperacao },
-  ], 3);
+    { rotulo: 'Tempo de operação', valor: r.tempoOperacao },
+  ], 2);
 
-  e.secao(2, 'Resumo da ocorrência');
-  e.caixaTexto(r.resumo, FUNDO, AZUL_CLARO);
+  e.secao('2. Resumo da ocorrência');
+  e.paragrafo(r.resumo);
 
-  e.secao(3, 'Descrição dos defeitos');
-  if (!r.defeitos.length) e.caixaTexto('Nenhum defeito detalhado.', FUNDO, BORDA);
-  r.defeitos.forEach((d, i) => e.defeito(i + 1, d.titulo, [
-    { rotulo: 'Sintoma', valor: d.sintoma },
-    { rotulo: 'Evolução', valor: d.evolucao },
-    { rotulo: 'Situação atual', valor: d.situacaoAtual },
-    { rotulo: 'Causa provável', valor: d.causaProvavel || 'Não identificada em campo.' },
-  ]));
+  e.secao('3. Descrição dos defeitos');
+  if (!r.defeitos.length) e.paragrafo('Nenhum defeito detalhado.');
+  r.defeitos.forEach((d, i) => {
+    e.subtitulo(`Defeito ${i + 1} – ${d.titulo || 'sem título'}`);
+    e.tabela([
+      ...(d.sintoma ? [{ rotulo: 'Sintoma', valor: d.sintoma }] : []),
+      ...(d.evolucao ? [{ rotulo: 'Evolução', valor: d.evolucao }] : []),
+      ...(d.situacaoAtual ? [{ rotulo: 'Situação atual', valor: d.situacaoAtual }] : []),
+      { rotulo: 'Causa provável', valor: d.causaProvavel || 'Não identificada em campo.' },
+    ], 1);
+  });
 
-  e.secao(4, 'Verificações realizadas em campo');
-  REPARO_VERIFICACOES_PADRAO.forEach(v => e.marcacao(v, r.verificacoes.includes(v)));
-  r.verificacoes.filter(v => !REPARO_VERIFICACOES_PADRAO.includes(v)).forEach(v => e.marcacao(v, true));
-  e.y += 1;
-  e.grade([{ rotulo: 'Resultado', valor: r.verificacaoResultado, largo: true }], 1);
+  e.secao('4. Verificações realizadas em campo');
+  const extras = r.verificacoes.filter(v => !REPARO_VERIFICACOES_PADRAO.includes(v));
+  e.tabelaColunas(
+    ['Verificação', 'Realizada'],
+    [LARGURA - 26, 26],
+    [
+      ...REPARO_VERIFICACOES_PADRAO.map(v => [v, r.verificacoes.includes(v) ? 'Sim' : 'Não']),
+      ...extras.map(v => [v, 'Sim']),
+    ],
+    [false, true],
+  );
+  if (r.verificacaoResultado) e.tabela([{ rotulo: 'Resultado', valor: r.verificacaoResultado }], 1);
 
-  e.secao(5, 'Histórico');
-  e.grade([
+  e.secao('5. Histórico');
+  e.tabela([
     { rotulo: 'Início dos sintomas', valor: dataBr(r.dataInicioSintomas) },
-    { rotulo: 'Data da falha total', valor: dataBr(r.dataFalhaTotal) },
-    { rotulo: 'Garantia', valor: r.garantia ? REPARO_GARANTIA_LABEL[r.garantia] : null },
-    { rotulo: 'Intervenções anteriores / reparos', valor: r.intervencoesAnteriores, largo: true },
-  ], 3);
+    { rotulo: 'Falha total', valor: dataBr(r.dataFalhaTotal) },
+    { rotulo: 'Garantia', valor: r.garantia ? REPARO_GARANTIA_LABEL[r.garantia] : null, largo: true },
+    { rotulo: 'Intervenções anteriores', valor: r.intervencoesAnteriores, largo: true },
+  ], 2);
 
-  e.secao(6, 'Serviço solicitado');
-  e.caixaTexto(r.servicoSolicitado, FUNDO_AZUL, NAVY);
+  e.secao('6. Serviço solicitado');
+  e.paragrafo(r.servicoSolicitado);
 
-  e.garantirEspaco(40); // título + contato + endereço na mesma página
-  e.secao(7, 'Dados para contato e retorno');
-  // 2 colunas: e-mail corporativo é longo e quebrava no meio em 3 colunas.
-  e.grade([
+  e.secao('7. Dados para contato e retorno');
+  e.tabela([
     { rotulo: 'Contato', valor: r.contatoNome },
     { rotulo: 'Telefone', valor: r.contatoTelefone },
-    { rotulo: 'E-mail', valor: r.contatoEmail },
-    { rotulo: 'Endereço', valor: REPARO_ENDERECO },
+    { rotulo: 'E-mail', valor: r.contatoEmail, largo: true },
+    { rotulo: 'Endereço', valor: REPARO_ENDERECO, largo: true },
   ], 2);
 
   if (r.fotos.length) {
-    e.secao(8, 'Fotos do equipamento');
-    const gap = 6;
+    e.secao('8. Fotos do equipamento');
+    const gap = 5;
     const w = (LARGURA - gap) / 2;
-    const hImg = 64;
-    const hCelula = hImg + 8;
+    const hImg = 66;
+    const hCelula = hImg + 7;
     for (let i = 0; i < r.fotos.length; i += 2) {
-      e.garantirEspaco(hCelula + 3);
+      e.garantirEspaco(hCelula + 2);
       for (let j = 0; j < 2 && i + j < r.fotos.length; j++) {
         const x = MARGEM + j * (w + gap);
         const img = fotos[i + j];
-        doc.setFillColor(...FUNDO).setDrawColor(...BORDA).setLineWidth(0.25).roundedRect(x, e.y, w, hImg, 1.5, 1.5, 'FD');
+        doc.setDrawColor(...LINHA_TABELA).setLineWidth(0.2).rect(x, e.y, w, hImg, 'S');
         if (img) {
-          imagemContida(doc, img, x + 2, e.y + 2, w - 4, hImg - 4);
+          imagemContida(doc, img, x + 1.5, e.y + 1.5, w - 3, hImg - 3);
         } else {
-          doc.setFont('helvetica', 'italic').setFontSize(8.5).setTextColor(...CINZA).text('(foto indisponível)', x + w / 2, e.y + hImg / 2, { align: 'center' });
+          doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...SUAVE).text('Foto indisponível', x + w / 2, e.y + hImg / 2, { align: 'center' });
         }
-        doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(...TEXTO);
-        doc.text(doc.splitTextToSize(r.fotos[i + j].legenda || `Foto ${i + j + 1}`, w)[0] as string, x + w / 2, e.y + hImg + 5, { align: 'center' });
+        const legenda = `Foto ${i + j + 1}${r.fotos[i + j].legenda ? ` – ${r.fotos[i + j].legenda}` : ''}`;
+        doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...ROTULO);
+        doc.text(doc.splitTextToSize(legenda, w)[0] as string, x, e.y + hImg + 4.5);
       }
-      e.y += hCelula + 3;
+      e.y += hCelula + 2;
     }
   }
 
-  moldurasDePagina(doc, r, new Date().toLocaleString('pt-BR', { ...fuso, dateStyle: 'short', timeStyle: 'short' }));
+  moldurasDePagina(doc, r);
   return doc.output('blob');
 }
 

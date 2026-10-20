@@ -35,9 +35,13 @@ export class ReparoExternoListaComponent implements OnInit {
   isLoading = this.reparoService.isLoading;
   podeControlar = this.reparoService.podeControlar;
 
+  // Na lista geral todo mundo vê todos os reparos (sugestão de usuário); "Só os meus"
+  // filtra pelos que a pessoa abriu.
+  soMeus = signal(false);
+
   private base = computed(() => {
     const todos = this.reparoService.reparos();
-    if (this.mode === 'controle') return todos;
+    if (this.mode === 'controle' || !this.soMeus()) return todos;
     const uid = this.authService.currentUser()?.id;
     return todos.filter(r => r.solicitanteId === uid);
   });

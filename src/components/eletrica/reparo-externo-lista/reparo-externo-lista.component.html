@@ -1,12 +1,12 @@
 <div class="space-y-6">
   <div class="flex flex-wrap items-end justify-between gap-3">
     <div>
-      <h1 class="text-2xl font-bold text-gray-800">{{ mode === 'controle' ? 'Controle de Reparos Externos' : 'Meus Reparos Externos' }}</h1>
+      <h1 class="text-2xl font-bold text-gray-800">{{ mode === 'controle' ? 'Controle de Reparos Externos' : 'Reparos Externos' }}</h1>
       <p class="text-sm text-gray-500 mt-1">
         @if (mode === 'controle') {
           Todas as solicitações de reparo externo. Abra uma para ver o relatório e atualizar o status.
         } @else {
-          Solicitações de reparo externo que você abriu e em que pé estão.
+          Todas as solicitações de reparo externo e em que pé estão. Use "Só os meus" para ver as que você abriu.
         }
       </p>
     </div>
@@ -42,9 +42,15 @@
     </button>
   </div>
 
-  <div class="max-w-md">
+  <div class="flex flex-wrap items-center gap-4">
     <input type="text" [ngModel]="busca()" (ngModelChange)="busca.set($event)" placeholder="Buscar por Nº, equipamento, TAG, série, solicitante..."
-      class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      class="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    @if (mode !== 'controle') {
+      <label class="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer select-none">
+        <input type="checkbox" class="h-4 w-4 rounded border-slate-300" [checked]="soMeus()" (change)="soMeus.set($any($event.target).checked)" />
+        Só os meus
+      </label>
+    }
   </div>
 
   @if (isLoading() && lista().length === 0) {
@@ -59,9 +65,7 @@
             <th class="px-3 py-3 text-center font-semibold">Nº</th>
             <th class="px-3 py-3 text-center font-semibold">Abertura</th>
             <th class="px-3 py-3 text-left font-semibold">Equipamento</th>
-            @if (mode === 'controle') {
-              <th class="px-3 py-3 text-center font-semibold">Solicitante</th>
-            }
+            <th class="px-3 py-3 text-center font-semibold">Solicitante</th>
             <th class="px-3 py-3 text-center font-semibold">Fornecedor</th>
             <th class="px-3 py-3 text-center font-semibold">Prev. retorno</th>
             <th class="px-3 py-3 text-center font-semibold">Status</th>
@@ -78,9 +82,7 @@
                   <div class="text-xs text-gray-400">{{ r.fabricanteModelo }}{{ r.fabricanteModelo && r.tagSap ? ' · ' : '' }}{{ r.tagSap }}</div>
                 }
               </td>
-              @if (mode === 'controle') {
-                <td class="px-3 py-2 text-center text-gray-600">{{ r.solicitanteNome }}</td>
-              }
+              <td class="px-3 py-2 text-center text-gray-600">{{ r.solicitanteNome }}</td>
               <td class="px-3 py-2 text-center text-gray-600">{{ r.fornecedor || '—' }}</td>
               <td class="px-3 py-2 text-center text-gray-600 whitespace-nowrap">{{ dataBr(r.previsaoRetorno) || '—' }}</td>
               <td class="px-3 py-2 text-center">
