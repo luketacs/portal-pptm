@@ -132,3 +132,13 @@ test('ordem e ciclo são atômicos; trocar/desvincular plano remove o ciclo ante
   await db.query('UPDATE manutencao_programacao SET plano_preventivo_id=null WHERE id=$1', [ordem.id]);
   assert.deepEqual(await ciclos(), []);
 });
+
+test('fundo fixo: cada solicitação nova recebe o próximo número de chamado', async () => {
+  await login(solicitante);
+  const inserir = () => db.query(`INSERT INTO fundo_fixo_solicitacoes(solicitante_id,solicitante_nome,setor,material,mes_referencia)
+    VALUES ($1,'Teste','Manutenção','Material','2026-10') RETURNING numero`, [solicitante]);
+  const { rows: [a] } = await inserir();
+  const { rows: [b] } = await inserir();
+  assert.ok(Number(a.numero) > 0);
+  assert.equal(Number(b.numero), Number(a.numero) + 1);
+});

@@ -4,6 +4,8 @@ export type FundoFixoFormaPagamento = 'cartao' | 'dinheiro_caixa' | 'reembolso';
 
 export interface FundoFixoSolicitacao {
   id: string;
+  // Número sequencial do chamado (gerado pelo banco), exibido como FF-001 — ver numeroFundoFixo.
+  numero: number;
   solicitanteId: string | null;
   solicitanteNome: string;
   setor: FundoFixoSetor;

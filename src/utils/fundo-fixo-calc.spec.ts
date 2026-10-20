@@ -20,6 +20,7 @@ function saque(overrides: Partial<FundoFixoSaque> = {}): FundoFixoSaque {
 function solicitacao(overrides: Partial<FundoFixoSolicitacao> = {}): FundoFixoSolicitacao {
   return {
     id: 'r1',
+    numero: 1,
     solicitanteId: 'user-1',
     solicitanteNome: 'João',
     setor: 'Manutenção',

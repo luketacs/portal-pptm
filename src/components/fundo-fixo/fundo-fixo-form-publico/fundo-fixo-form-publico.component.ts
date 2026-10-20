@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { SupabaseService } from '../../../services/supabase.service';
 import { FUNDO_FIXO_LIMITE_POR_COMPRA, FUNDO_FIXO_SETORES } from '../../../services/fundo-fixo.service';
 import { FundoFixoSetor } from '../../../models/fundo-fixo.model';
+import { numeroFundoFixo } from '../../../utils/fundo-fixo-calc';
 
 const ORCAMENTO_MAX_BYTES = 15 * 1024 * 1024; // 15 MB — igual ao formulário interno
 const ORCAMENTO_ACCEPT: Record<string, string> = {
@@ -40,6 +41,8 @@ export class FundoFixoFormPublicoComponent {
   isSubmitting = signal(false);
   errorMessage = signal('');
   enviado = signal(false);
+  // Número do chamado devolvido pela API (ex.: FF-012), pra pessoa anotar.
+  chamado = signal('');
 
   constructor(private supabaseService: SupabaseService) {}
 
@@ -130,6 +133,7 @@ export class FundoFixoFormPublicoComponent {
         return;
       }
 
+      this.chamado.set(numeroFundoFixo(data.numero));
       this.enviado.set(true);
     } catch {
       this.errorMessage.set('Erro de conexão. Verifique sua internet e tente novamente.');
@@ -166,5 +170,6 @@ export class FundoFixoFormPublicoComponent {
     this.orcamento.set(null);
     this.errorMessage.set('');
     this.enviado.set(false);
+    this.chamado.set('');
   }
 }

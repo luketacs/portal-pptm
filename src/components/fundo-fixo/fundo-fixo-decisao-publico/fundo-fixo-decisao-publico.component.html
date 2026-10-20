@@ -16,6 +16,12 @@
 
     <div class="app-card p-6 space-y-4">
       <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+        @if (chamado()) {
+          <div class="sm:col-span-2">
+            <dt class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Chamado</dt>
+            <dd class="text-gray-800 font-bold">{{ chamado() }}</dd>
+          </div>
+        }
         <div>
           <dt class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Solicitante</dt>
           <dd class="text-gray-800">{{ s.solicitanteNome }}</dd>

@@ -1,5 +1,11 @@
 import { FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSolicitacao } from '../models/fundo-fixo.model';
 
+// Número do chamado como as pessoas falam: 12 → "FF-012". Precisa ficar em sincronia com
+// numeroFundoFixo em api/_fundo-fixo-teams-shared.js
+export function numeroFundoFixo(numero: number | null | undefined): string {
+  return numero ? `FF-${String(numero).padStart(3, '0')}` : '';
+}
+
 // Quanto de uma compra já finalizada foi pago numa forma de pagamento específica —
 // soma a forma principal e a secundária (quando a compra foi dividida entre duas
 // formas) que baterem com `forma`. Pra compra não dividida (formaPagamentoSecundaria

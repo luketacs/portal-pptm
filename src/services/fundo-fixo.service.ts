@@ -7,7 +7,7 @@ import {
   CreateFundoFixoRequest, CreateFundoFixoSaque, FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSaqueTipo,
   FundoFixoSetor, FundoFixoSolicitacao, FundoFixoStatus,
 } from '../models/fundo-fixo.model';
-import { calcularSaldoCaixa, calcularTotalComprometidoMes, proximoMes } from '../utils/fundo-fixo-calc';
+import { calcularSaldoCaixa, calcularTotalComprometidoMes, numeroFundoFixo, proximoMes } from '../utils/fundo-fixo-calc';
 
 export const FUNDO_FIXO_LIMITE_MENSAL = 3000;
 export const FUNDO_FIXO_LIMITE_POR_COMPRA = 500;
@@ -27,6 +27,7 @@ export const FUNDO_FIXO_GESTOR_POR_SETOR: Partial<Record<FundoFixoSetor, string>
 
 interface FundoFixoRow {
   id: string;
+  numero: number;
   solicitante_id: string | null;
   solicitante_nome: string;
   setor: string;
@@ -78,6 +79,7 @@ function mesAtual(): string {
 function mapRow(r: FundoFixoRow): FundoFixoSolicitacao {
   return {
     id: r.id,
+    numero: Number(r.numero) || 0,
     solicitanteId: r.solicitante_id,
     solicitanteNome: r.solicitante_nome,
     setor: r.setor as FundoFixoSetor,
@@ -288,7 +290,8 @@ export class FundoFixoService {
     await this.load();
   }
 
-  async criarSolicitacao(req: CreateFundoFixoRequest, orcamento: File | null): Promise<void> {
+  // Devolve o número do chamado (FF-001...) pra mostrar pra quem solicitou.
+  async criarSolicitacao(req: CreateFundoFixoRequest, orcamento: File | null): Promise<number | null> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
 
@@ -321,7 +324,7 @@ export class FundoFixoService {
     };
 
     const { data: inserted, error } = await this.supabaseService.client
-      .from('fundo_fixo_solicitacoes').insert(payload).select('id').single();
+      .from('fundo_fixo_solicitacoes').insert(payload).select('id, numero').single();
     if (error) throw new Error(error.message);
 
     // Manda pra aprovação no Teams do gestor do setor. Fire-and-forget: se falhar, a
@@ -340,11 +343,13 @@ export class FundoFixoService {
       user_name: user.name,
       event_type: 'fundo_fixo_solicitado',
       resource_type: 'fundo_fixo',
-      description: `${user.name} solicitou compra via Fundo Fixo${descricaoEmNomeDe}: ${req.material} (R$ ${req.valorEstimado.toFixed(2)})`,
-      metadata: { setor: req.setor, valor_estimado: req.valorEstimado, comprador_id: payload.comprador_id },
+      resource_id: inserted?.id,
+      description: `${user.name} solicitou compra via Fundo Fixo (${numeroFundoFixo(inserted?.numero)})${descricaoEmNomeDe}: ${req.material} (R$ ${req.valorEstimado.toFixed(2)})`,
+      metadata: { setor: req.setor, valor_estimado: req.valorEstimado, comprador_id: payload.comprador_id, numero: inserted?.numero ?? null },
     });
 
     await this.load();
+    return inserted?.numero ?? null;
   }
 
   async atribuirComprador(id: string, compradorId: string, compradorNome: string): Promise<void> {

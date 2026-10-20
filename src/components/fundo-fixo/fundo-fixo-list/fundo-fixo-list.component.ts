@@ -9,7 +9,7 @@ import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { UserService } from '../../../services/user.service';
 import { ExcelExportService, FechamentoFundoFixoLinha } from '../../../services/excel-export.service';
 import { FundoFixoFormaPagamento, FundoFixoSaque, FundoFixoSetor, FundoFixoSolicitacao, FundoFixoStatus } from '../../../models/fundo-fixo.model';
-import { calcularSaldoCaixaFimDoMes, calcularSaldoCaixaMesAnterior, proximoMes, valorPagoNaForma } from '../../../utils/fundo-fixo-calc';
+import { calcularSaldoCaixaFimDoMes, calcularSaldoCaixaMesAnterior, numeroFundoFixo, proximoMes, valorPagoNaForma } from '../../../utils/fundo-fixo-calc';
 import { createClientPageItems, createPageNavigation } from '../../../utils/pagination';
 
 type StatusFiltro = 'todos' | FundoFixoStatus;
@@ -47,6 +47,7 @@ export class FundoFixoListComponent implements OnInit {
   readonly setores = FUNDO_FIXO_SETORES;
   readonly gestores = FUNDO_FIXO_GESTORES;
   readonly statusLabel = STATUS_LABEL;
+  readonly numeroChamado = numeroFundoFixo;
   readonly statusBadge = STATUS_BADGE;
   readonly formaPagamentoLabel = FORMA_PAGAMENTO_LABEL;
 
@@ -228,7 +229,8 @@ export class FundoFixoListComponent implements OnInit {
       if (status !== 'todos' && s.status !== status) return false;
       if (setor !== 'todos' && s.setor !== setor) return false;
       if (termo) {
-        const texto = `${s.material} ${s.solicitanteNome} ${s.fornecedor ?? ''} ${s.gestorAprovador ?? ''} ${s.compradorNome ?? ''}`.toLowerCase();
+        // Número entra como "ff-012" e "12" — dá pra buscar dos dois jeitos.
+        const texto = `${numeroFundoFixo(s.numero)} ${s.numero} ${s.material} ${s.solicitanteNome} ${s.fornecedor ?? ''} ${s.gestorAprovador ?? ''} ${s.compradorNome ?? ''}`.toLowerCase();
         if (!texto.includes(termo)) return false;
       }
       return true;
@@ -847,6 +849,7 @@ export class FundoFixoListComponent implements OnInit {
         mesLabel,
         cartao: [
           ...cartao.map(s => ({
+            chamado: numeroFundoFixo(s.numero),
             fornecedor: s.fornecedor ?? '—',
             solicitante: s.solicitanteNome,
             setor: s.setor,
@@ -857,6 +860,7 @@ export class FundoFixoListComponent implements OnInit {
           ...linhasSaque,
         ],
         reembolsos: reembolsos.map(s => ({
+          chamado: numeroFundoFixo(s.numero),
           fornecedor: s.fornecedor ?? '—',
           solicitante: s.solicitanteNome,
           setor: s.setor,

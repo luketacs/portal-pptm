@@ -33,7 +33,7 @@ import { randomUUID } from 'crypto';
 import { createRateLimiter } from './_rate-limit-shared.js';
 import {
   TOKEN_VALIDADE_DIAS, emailDoGestor, emailsCopia, gerarToken, portalUrl, gestorDaSolicitacao, hashToken, interpretarDecisao,
-  montarCardConfirmacao, montarCardCopia, montarCardSolicitacao, tokenValido,
+  montarCardConfirmacao, montarCardCopia, montarCardSolicitacao, numeroFundoFixo, tokenValido,
 } from './_fundo-fixo-teams-shared.js';
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://portalpptm.com').split(',');
@@ -124,7 +124,7 @@ async function handleRequest(req, res, ip, supabase) {
       status: 'pendente',
       mes_referencia: mesAtual(),
     })
-    .select('id')
+    .select('id, numero')
     .single();
 
   if (error) {
@@ -139,8 +139,8 @@ async function handleRequest(req, res, ip, supabase) {
     event_type: 'fundo_fixo_solicitado_publico',
     resource_type: 'fundo_fixo',
     resource_id: inserted?.id ?? null,
-    description: `${nomeSolicitante} solicitou compra via link público do Fundo Fixo: ${material} (R$ ${valorEstimado.toFixed(2)})`,
-    metadata: { setor, valor_estimado: valorEstimado },
+    description: `${nomeSolicitante} solicitou compra via link público do Fundo Fixo (${numeroFundoFixo(inserted?.numero)}): ${material} (R$ ${valorEstimado.toFixed(2)})`,
+    metadata: { setor, valor_estimado: valorEstimado, numero: inserted?.numero ?? null },
   }).then(({ error: logError }) => {
     if (logError) console.error('[fundo-fixo-public-request] Audit log error:', logError.message);
   });
@@ -148,7 +148,7 @@ async function handleRequest(req, res, ip, supabase) {
   // Antes de responder: a Vercel pode congelar a function depois do res.json.
   if (inserted?.id) await notificarTeams(supabase, inserted.id);
 
-  return res.status(200).json({ success: true });
+  return res.status(200).json({ success: true, numero: inserted?.numero ?? null });
 }
 
 // Envia a solicitação pro fluxo do Teams (card com os links de Aprovar/Recusar). Devolve
@@ -241,6 +241,7 @@ async function handleTeamsNotificar(req, res, ip, supabase) {
 // Só o que a página de decisão precisa mostrar — nada de ids de usuário ou do token.
 function solicitacaoPublica(row) {
   return {
+    numero: row.numero ?? null,
     solicitanteNome: row.solicitante_nome,
     setor: row.setor,
     fornecedor: row.fornecedor,
@@ -324,7 +325,7 @@ export async function handleDecisaoConfirmar(req, res, ip, supabase, env = proce
     event_type: d.aprovado ? 'fundo_fixo_aprovado' : 'fundo_fixo_recusado',
     resource_type: 'fundo_fixo',
     resource_id: salva.id,
-    description: `${quem} ${d.aprovado ? 'aprovou' : 'recusou'} pelo Teams a solicitação de Fundo Fixo de ${salva.solicitante_nome}: ${salva.material}`,
+    description: `${quem} ${d.aprovado ? 'aprovou' : 'recusou'} pelo Teams a solicitação de Fundo Fixo ${numeroFundoFixo(salva.numero)} de ${salva.solicitante_nome}: ${salva.material}`,
     metadata: { origem: 'teams', gestor_aprovador: quem, comentario: d.comentario || null },
   });
   if (logError) console.error('[fundo-fixo-teams] Audit log error:', logError.message);

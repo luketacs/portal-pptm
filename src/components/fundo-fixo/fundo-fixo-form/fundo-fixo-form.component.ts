@@ -7,6 +7,7 @@ import { NotificationService } from '../../../services/notification.service';
 import { AuthService } from '../../../services/auth.service';
 import { UserService } from '../../../services/user.service';
 import { FundoFixoSetor } from '../../../models/fundo-fixo.model';
+import { numeroFundoFixo } from '../../../utils/fundo-fixo-calc';
 
 @Component({
   selector: 'app-fundo-fixo-form',
@@ -81,7 +82,7 @@ export class FundoFixoFormComponent implements OnInit {
       const solicitante = this.usuarios().find(u => u.id === this.solicitanteId());
       const comprador = this.usuarios().find(u => u.id === this.compradorId());
 
-      await this.fundoFixoService.criarSolicitacao(
+      const numero = await this.fundoFixoService.criarSolicitacao(
         {
           setor: this.setor(),
           fornecedor: this.fornecedor() || undefined,
@@ -96,7 +97,9 @@ export class FundoFixoFormComponent implements OnInit {
         },
         this.orcamento(),
       );
-      this.notificationService.showSuccess('Solicitação enviada! Aguarde a aprovação.');
+      const chamado = numeroFundoFixo(numero);
+      this.notificationService.showSuccess(
+        chamado ? `Solicitação ${chamado} enviada! Aguarde a aprovação.` : 'Solicitação enviada! Aguarde a aprovação.');
       await this.router.navigateByUrl('/fundo-fixo/lista');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao enviar solicitação.';

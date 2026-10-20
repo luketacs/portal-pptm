@@ -6,6 +6,7 @@ import type { MaterialComSAs, Movimentacao, SaldoReal } from './almoxarifado.ser
 import { custoUnitarioMov, valorEntradaMov, valorSaidaMov } from './almoxarifado.service';
 
 export interface FechamentoFundoFixoLinha {
+  chamado?: string; // FF-012 — vazio nas linhas de saque/tarifa, que não são chamado
   fornecedor: string;
   solicitante: string;
   setor: string;
@@ -597,7 +598,7 @@ export class ExcelExportService {
 
     linhas.forEach((linha, i) => {
       const even = i % 2 === 1;
-      this.n(ws, row, 0, i + 1,           this.sData('center', even), '#,##0');
+      this.s(ws, row, 0, linha.chamado || '—', this.sData('center', even));
       this.s(ws, row, 1, linha.fornecedor, this.sData('left', even));
       this.s(ws, row, 2, linha.solicitante, this.sData('left', even));
       this.s(ws, row, 3, linha.setor,      this.sData('center', even));
@@ -683,7 +684,7 @@ export class ExcelExportService {
       { s: { r: linhaSub, c: 0 }, e: { r: linhaSub, c: NC - 1 } },
     ];
     ws['!cols'] = [
-      { wch: 5  }, { wch: 24 }, { wch: 16 }, { wch: 14 }, { wch: 34 },
+      { wch: 9  }, { wch: 24 }, { wch: 16 }, { wch: 14 }, { wch: 34 },
       { wch: 14 }, { wch: 14 }, { wch: 22 },
     ];
 

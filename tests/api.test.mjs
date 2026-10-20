@@ -44,7 +44,7 @@ test('resumo público preserva HH, conta ausências sobrepostas uma vez e omite 
 
 // ── Fundo Fixo: aprovação pelo Teams ────────────────────────────────────
 import { notificarTeams, handleDecisaoVer, handleDecisaoConfirmar } from '../api/fundo-fixo-public-request.js';
-import { gestorDaSolicitacao, hashToken, interpretarDecisao } from '../api/_fundo-fixo-teams-shared.js';
+import { gestorDaSolicitacao, hashToken, interpretarDecisao, montarCardConfirmacao, montarCardSolicitacao, numeroFundoFixo } from '../api/_fundo-fixo-teams-shared.js';
 
 // Supabase falso, só o suficiente pros filtros usados (eq/is/gt + select/update/insert).
 function fakeSupabase(rows) {
@@ -94,6 +94,16 @@ test('Teams: gestor por setor — Operação João, Manutenção/Infra Italo, Ou
   assert.equal(gestorDaSolicitacao({ setor: 'Infraestrutura' }), 'Italo Rosse');
   assert.equal(gestorDaSolicitacao({ setor: 'Outros', gestor_aprovador: null }), null);
   assert.equal(gestorDaSolicitacao({ setor: 'Outros', gestor_aprovador: 'João Nunes' }), 'João Nunes');
+});
+
+test('Fundo Fixo: número do chamado vira FF-001 e aparece nos cards do Teams', () => {
+  assert.equal(numeroFundoFixo(7), 'FF-007');
+  assert.equal(numeroFundoFixo(1234), 'FF-1234');
+  assert.equal(numeroFundoFixo(null), '');
+  const row = novaRow({ numero: 7 });
+  assert.match(montarCardSolicitacao(row, 'https://p', 'tok').body[0].items[0].text, /FF-007/);
+  assert.match(montarCardConfirmacao(row, true, '').body[0].items[0].text, /FF-007/);
+  assert.doesNotMatch(montarCardSolicitacao(novaRow(), 'https://p', 'tok').body[0].items[0].text, /FF-/);
 });
 
 test('Teams: envia uma vez só, pro gestor do setor, com links de decisão; banco guarda só o hash', async () => {

@@ -2,8 +2,10 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@a
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
+import { numeroFundoFixo } from '../../../utils/fundo-fixo-calc';
 
 interface SolicitacaoDecisao {
+  numero: number | null;
   solicitanteNome: string;
   setor: string;
   fornecedor: string | null;
@@ -45,6 +47,7 @@ export class FundoFixoDecisaoPublicoComponent implements OnInit {
   errorMessage = signal('');
   // Decisão feita agora, nesta tela (pra mostrar o "pronto" em vez do "já decidida").
   decididaAgora = signal(false);
+  chamado = computed(() => numeroFundoFixo(this.solicitacao()?.numero));
 
   links = computed(() =>
     (this.solicitacao()?.linkProduto ?? '').split(/\s+/).filter(l => /^https?:\/\//i.test(l)));

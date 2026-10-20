@@ -54,6 +54,16 @@ export function tokenValido(token) {
   return typeof token === 'string' && /^[A-Za-z0-9_-]{43}$/.test(token);
 }
 
+// Número do chamado como as pessoas falam: 12 → "FF-012". Precisa ficar em sincronia com
+// numeroFundoFixo em src/utils/fundo-fixo-calc.ts
+export function numeroFundoFixo(numero) {
+  return numero ? `FF-${String(numero).padStart(3, '0')}` : '';
+}
+
+function comNumero(rotulo, row) {
+  return row.numero ? `${rotulo} · ${numeroFundoFixo(row.numero)}` : rotulo;
+}
+
 function brl(v) {
   return `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`;
 }
@@ -103,7 +113,7 @@ export function montarCardSolicitacao(row, baseUrl, token) {
   if (row.orcamento_url) links.push(`[Orçamento](${row.orcamento_url})`);
 
   const body = [
-    cabecalho('FUNDO FIXO · APROVAÇÃO DE COMPRA', row.material),
+    cabecalho(comNumero('FUNDO FIXO · APROVAÇÃO DE COMPRA', row), row.material),
     {
       type: 'ColumnSet', spacing: 'Medium',
       columns: [colunaInfo('Valor estimado', brl(row.valor_estimado), true), colunaInfo('Setor', row.setor)],
@@ -133,7 +143,7 @@ export function montarCardSolicitacao(row, baseUrl, token) {
 export function montarCardConfirmacao(row, aprovado, comentario) {
   const body = [
     cabecalho(
-      'FUNDO FIXO',
+      comNumero('FUNDO FIXO', row),
       aprovado ? 'Aprovação registrada' : 'Recusa registrada',
       aprovado ? 'Good' : 'Attention',
     ),
