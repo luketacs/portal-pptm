@@ -245,6 +245,30 @@ export class EletricaReparoService {
     await this.load();
   }
 
+  // Só Admin (RLS portal_admin_excluir). O histórico sai junto (ON DELETE CASCADE).
+  async excluir(id: string): Promise<void> {
+    const admin = this.authService.currentUser();
+    if (!admin) throw new Error('Sessão expirada.');
+    if (admin.role !== 'Admin') throw new Error('Apenas administradores podem excluir.');
+
+    const { data, error } = await this.supabaseService.client
+      .from('eletrica_reparos').delete().eq('id', id).select('numero, equipamento');
+    if (error) throw new Error(error.message);
+    // RLS barra sem erro: 0 linhas = nada foi excluído.
+    if (!data?.length) throw new Error('Não foi possível excluir (permissão do banco).');
+
+    this.auditLogService.log({
+      user_id: admin.id,
+      user_name: admin.name,
+      event_type: 'eletrica_reparo_excluido',
+      resource_type: 'eletrica_reparo',
+      resource_id: id,
+      description: `${admin.name} excluiu o reparo externo ${numeroReparo(data[0].numero)}: ${data[0].equipamento}`,
+    });
+
+    await this.load();
+  }
+
   private async uploadFoto(file: File): Promise<string | null> {
     try {
       const blob = await comprimirImagem(file);

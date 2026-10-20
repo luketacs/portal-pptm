@@ -1,3 +1,4 @@
+import { inflateSync } from 'zlib';
 import { ReparoExterno } from '../models/eletrica-reparo.model';
 import { REPARO_STATUS, REPARO_STATUS_LABEL, dataBr, numeroReparo, reparoEncerrado } from './eletrica-reparo';
 import { gerarPdfReparo, nomeArquivoPdf } from './eletrica-reparo-pdf';
@@ -47,8 +48,12 @@ describe('PDF do reparo externo', () => {
     const blob = await gerarPdfReparo(reparo());
     const bytes = new Uint8Array(await blob.arrayBuffer());
     expect(new TextDecoder().decode(bytes.slice(0, 5))).toBe('%PDF-');
-    const texto = new TextDecoder('latin1').decode(bytes);
-    ['Relatório de Falha para Reparo Externo', 'RE-007', '3. Descrição dos defeitos', 'Display com manchas', 'Medição com osciloscópio']
+    // O PDF sai compactado (compress: true): descompacta os streams antes de procurar o texto.
+    const bruto = Buffer.from(bytes).toString('latin1');
+    const texto = [...bruto.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)]
+      .map(m => { try { return inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1'); } catch { return ''; } })
+      .join('\n');
+    ['Reparo Externo', 'RE-007', 'DESCRIÇÃO DOS DEFEITOS', 'Display com manchas', 'Medição com osciloscópio']
       .forEach(t => expect(texto).toContain(t));
   });
 

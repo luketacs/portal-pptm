@@ -18,10 +18,18 @@
         </div>
         <p class="text-sm text-gray-500 mt-1">Aberto por {{ r.solicitanteNome }} em {{ r.createdAt | date:'dd/MM/yyyy HH:mm' }}</p>
       </div>
-      <button type="button" (click)="baixarPdf()" [disabled]="gerandoPdf()"
-        class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-        {{ gerandoPdf() ? 'Gerando PDF...' : 'Baixar relatório (PDF)' }}
-      </button>
+      <div class="flex flex-wrap gap-2">
+        @if (isAdmin()) {
+          <button type="button" (click)="excluir()" [disabled]="excluindo()"
+            class="rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">
+            {{ excluindo() ? 'Excluindo...' : 'Excluir' }}
+          </button>
+        }
+        <button type="button" (click)="baixarPdf()" [disabled]="gerandoPdf()"
+          class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+          {{ gerandoPdf() ? 'Gerando PDF...' : 'Baixar relatório (PDF)' }}
+        </button>
+      </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -33,7 +41,7 @@
             <div><dt class="text-xs text-gray-400">Equipamento</dt><dd class="text-gray-800">{{ r.equipamento }}</dd></div>
             <div><dt class="text-xs text-gray-400">Fabricante / Modelo</dt><dd class="text-gray-800">{{ r.fabricanteModelo || '—' }}</dd></div>
             <div><dt class="text-xs text-gray-400">Nº de série</dt><dd class="text-gray-800">{{ r.numeroSerie || '—' }}</dd></div>
-            <div><dt class="text-xs text-gray-400">TAG / Código SAP</dt><dd class="text-gray-800">{{ r.tagSap || '—' }}</dd></div>
+            <div><dt class="text-xs text-gray-400">TAG / Código</dt><dd class="text-gray-800">{{ r.tagSap || '—' }}</dd></div>
             <div><dt class="text-xs text-gray-400">Localização</dt><dd class="text-gray-800">{{ r.localizacao || '—' }}</dd></div>
             <div><dt class="text-xs text-gray-400">Tempo de operação</dt><dd class="text-gray-800">{{ r.tempoOperacao || '—' }}</dd></div>
           </dl>

@@ -25,7 +25,7 @@ const SCHEMA = { type: 'AdaptiveCard', $schema: 'http://adaptivecards.io/schemas
 export function montarCardReparo(row, baseUrl) {
   const facts = [{ title: 'Aberto por', value: row.solicitante_nome }];
   if (row.fabricante_modelo) facts.push({ title: 'Fabricante / Modelo', value: row.fabricante_modelo });
-  if (row.tag_sap) facts.push({ title: 'TAG / SAP', value: row.tag_sap });
+  if (row.tag_sap) facts.push({ title: 'TAG / Código', value: row.tag_sap });
   if (row.localizacao) facts.push({ title: 'Localização', value: row.localizacao });
   const defeitos = Array.isArray(row.defeitos) ? row.defeitos.map(d => d?.titulo).filter(Boolean) : [];
   if (defeitos.length) facts.push({ title: 'Defeitos', value: defeitos.join('; ') });

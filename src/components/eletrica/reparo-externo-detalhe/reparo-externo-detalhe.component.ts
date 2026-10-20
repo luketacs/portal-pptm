@@ -1,9 +1,11 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { EletricaReparoService } from '../../../services/eletrica-reparo.service';
 import { NotificationService } from '../../../services/notification.service';
+import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
+import { AuthService } from '../../../services/auth.service';
 import { ReparoExterno, ReparoHistorico, ReparoStatus } from '../../../models/eletrica-reparo.model';
 import {
   REPARO_ENDERECO, REPARO_GARANTIA_LABEL, REPARO_STATUS, REPARO_STATUS_BADGE, REPARO_STATUS_LABEL, dataBr, numeroReparo,
@@ -34,6 +36,8 @@ export class ReparoExternoDetalheComponent implements OnInit {
   carregando = signal(true);
   gerandoPdf = signal(false);
   podeControlar = this.reparoService.podeControlar;
+  isAdmin = computed(() => this.authService.currentUser()?.role === 'Admin');
+  excluindo = signal(false);
 
   // Painel de status (supervisor)
   novoStatus = signal<ReparoStatus>('aberto');
@@ -52,6 +56,9 @@ export class ReparoExternoDetalheComponent implements OnInit {
   constructor(
     private reparoService: EletricaReparoService,
     private notificationService: NotificationService,
+    private confirmDialogService: ConfirmDialogService,
+    private authService: AuthService,
+    private router: Router,
     route: ActivatedRoute,
   ) {
     this.id = route.snapshot.paramMap.get('id') ?? '';
@@ -93,6 +100,26 @@ export class ReparoExternoDetalheComponent implements OnInit {
       this.notificationService.showError('Erro ao gerar o PDF.');
     } finally {
       this.gerandoPdf.set(false);
+    }
+  }
+
+  async excluir(): Promise<void> {
+    const r = this.reparo();
+    if (!r || this.excluindo()) return;
+    const ok = await this.confirmDialogService.confirm(
+      `Excluir o reparo ${numeroReparo(r.numero)} (${r.equipamento})? O histórico também é apagado. Esta ação não pode ser desfeita.`,
+      { confirmLabel: 'Excluir', danger: true },
+    );
+    if (!ok) return;
+    this.excluindo.set(true);
+    try {
+      await this.reparoService.excluir(r.id);
+      this.notificationService.showSuccess(`${numeroReparo(r.numero)} excluído.`);
+      await this.router.navigateByUrl('/eletrica/controle');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao excluir.');
+    } finally {
+      this.excluindo.set(false);
     }
   }
 

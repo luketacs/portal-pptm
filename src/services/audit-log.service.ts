@@ -41,6 +41,7 @@ export const AUDIT_EVENT_LABELS: Record<string, string> = {
   fundo_fixo_editado: 'Fundo Fixo — solicitação editada',
   eletrica_reparo_aberto: 'Elétrica — reparo externo solicitado',
   eletrica_reparo_status: 'Elétrica — status de reparo alterado',
+  eletrica_reparo_excluido: 'Elétrica — reparo externo excluído',
   manutencao_programacao_criada: 'Programação de Manutenção — OS criada',
   manutencao_programacao_editada: 'Programação de Manutenção — OS editada',
   manutencao_programacao_excluida: 'Programação de Manutenção — OS excluída',
