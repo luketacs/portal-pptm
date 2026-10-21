@@ -1,0 +1,231 @@
+<div class="max-w-3xl mx-auto space-y-6">
+  <div>
+    <a [routerLink]="id ? ['/eletrica/ensaios/trafos', id] : '/eletrica/ensaios'" class="text-xs font-semibold text-blue-600 hover:text-blue-700">← Voltar</a>
+    <h1 class="text-2xl font-bold text-gray-800 mt-1">{{ id ? 'Editar transformador' : 'Cadastrar transformador' }}</h1>
+    <p class="text-sm text-gray-500 mt-1">
+      Dados da placa. Tensões e ligações definem os pares de medição, a relação esperada no TTR e o mínimo de isolamento (NETA MTS).
+    </p>
+  </div>
+
+  @if (carregando()) {
+    <p class="text-sm text-gray-500">Carregando...</p>
+  } @else {
+    <form (ngSubmit)="onSubmit()" class="space-y-5">
+      <section class="app-card p-6 space-y-4">
+        <h2 class="text-base font-bold text-blue-900">Identificação</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">TAG <span class="text-red-500">*</span></label>
+            <input type="text" [ngModel]="tag()" (ngModelChange)="tag.set($event)" name="tag" required placeholder="Ex: TC-05"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <span class="block text-sm font-medium text-slate-700 mb-1">Situação <span class="text-red-500">*</span></span>
+            <div class="inline-flex rounded-lg border border-slate-300 p-0.5 text-sm font-semibold" role="radiogroup" aria-label="Situação">
+              @for (s of situacoes; track s) {
+                <button type="button" role="radio" [attr.aria-checked]="situacao() === s" (click)="situacao.set(s)" class="rounded-md px-4 py-1.5"
+                  [ngClass]="situacao() === s ? 'bg-blue-900 text-white' : 'text-slate-600 hover:bg-slate-50'">{{ situacaoLabel[s] }}</button>
+              }
+            </div>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-slate-700 mb-1">
+              {{ situacao() === 'reserva' ? 'Reserva de (equipamentos que ele pode substituir)' : 'Aplicação (onde trabalha / o que aciona)' }}
+            </label>
+            <input type="text" [ngModel]="aplicacao()" (ngModelChange)="aplicacao.set($event)" name="aplicacao"
+              [placeholder]="situacao() === 'reserva' ? 'Ex: TC-05 e TC-06' : 'Ex: Inversor de frequência do ventilador'"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">{{ rotuloLocal(situacao()) }}</label>
+            <input type="text" [ngModel]="localInstalacao()" (ngModelChange)="localInstalacao.set($event)" name="local"
+              [placeholder]="situacao() === 'reserva' ? 'Ex: Almoxarifado elétrico' : 'Ex: Casa de inversores'"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-slate-700 mb-1">Descrição</label>
+            <input type="text" [ngModel]="descricao()" (ngModelChange)="descricao.set($event)" name="descricao"
+              placeholder="Ex: Trafo 13,8 kV / 690 V do inversor de 12 pulsos"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Fabricante</label>
+            <input type="text" [ngModel]="fabricante()" (ngModelChange)="fabricante.set($event)" name="fabricante"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Modelo</label>
+            <input type="text" [ngModel]="modelo()" (ngModelChange)="modelo.set($event)" name="modelo"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Nº de série</label>
+            <input type="text" [ngModel]="numeroSerie()" (ngModelChange)="numeroSerie.set($event)" name="serie"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Código do produto</label>
+            <input type="text" [ngModel]="codigoProduto()" (ngModelChange)="codigoProduto.set($event)" name="codigo"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-slate-700 mb-1">Norma de fabricação</label>
+            <input type="text" [ngModel]="normaFabricacao()" (ngModelChange)="normaFabricacao.set($event)" name="norma" placeholder="Ex: NBR 10295/88"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+      </section>
+
+      <section class="app-card p-6 space-y-4">
+        <h2 class="text-base font-bold text-blue-900">Enrolamentos</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Tensão primário H (V) <span class="text-red-500">*</span></label>
+            <input type="text" inputmode="decimal" [ngModel]="tensaoPrimaria()" (ngModelChange)="tensaoPrimaria.set($event)" name="vp" required placeholder="13800"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Ligação do primário <span class="text-red-500">*</span></label>
+            <select [ngModel]="ligacaoPrimaria()" (ngModelChange)="ligacaoPrimaria.set($event)" name="ligp"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              @for (l of ligacoes; track l) { <option [value]="l">{{ ligacaoLabel[l] }}</option> }
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Potência (kVA)</label>
+            <input type="text" inputmode="decimal" [ngModel]="potenciaKva()" (ngModelChange)="potenciaKva.set($event)" name="kva" placeholder="2.500"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <p class="text-sm font-medium text-slate-700">Secundários <span class="text-red-500">*</span></p>
+          @for (s of secundarios(); track $index; let i = $index) {
+            <div class="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1">Nome</label>
+                <input type="text" [ngModel]="s.nome" (ngModelChange)="atualizarSecundario(i, 'nome', $event)" [name]="'snome' + i" maxlength="4"
+                  class="w-20 rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1">Tensão (V)</label>
+                <input type="text" inputmode="decimal" [ngModel]="s.tensaoV" (ngModelChange)="atualizarSecundario(i, 'tensaoV', $event)" [name]="'sv' + i" placeholder="690"
+                  class="w-28 rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1">Ligação</label>
+                <select [ngModel]="s.ligacao" (ngModelChange)="atualizarSecundario(i, 'ligacao', $event)" [name]="'slig' + i"
+                  class="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  @for (l of ligacoes; track l) { <option [value]="l">{{ ligacaoLabel[l] }}</option> }
+                </select>
+              </div>
+              @if (secundarios().length > 1) {
+                <button type="button" (click)="removerSecundario(i)" class="mb-2 text-xs font-semibold text-red-600 hover:text-red-700">Remover</button>
+              }
+            </div>
+          }
+          <button type="button" (click)="adicionarSecundario()" class="text-sm font-semibold text-blue-600 hover:text-blue-700">
+            + Adicionar secundário (trafo de 3 enrolamentos / 12 pulsos)
+          </button>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Meio isolante <span class="text-red-500">*</span></label>
+            <select [ngModel]="meioIsolante()" (ngModelChange)="meioIsolante.set($event)" name="meio"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              @for (m of meios; track m) { <option [value]="m">{{ meioLabel[m] }}</option> }
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Material do enrolamento <span class="text-red-500">*</span></label>
+            <select [ngModel]="materialEnrolamento()" (ngModelChange)="materialEnrolamento.set($event)" name="material"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              @for (m of materiais; track m) { <option [value]="m">{{ materialLabel[m] }}</option> }
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Classe de temperatura <span class="text-red-500">*</span></label>
+            <select [ngModel]="classeIsolamento()" (ngModelChange)="classeIsolamento.set($event)" name="classe"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              @for (c of classes; track c) { <option [value]="c">{{ classeLabel[c] }}</option> }
+            </select>
+          </div>
+          <div class="col-span-2 sm:col-span-3">
+            <label class="block text-sm font-medium text-slate-700 mb-1">Relação a vazio / taps</label>
+            <input type="text" [ngModel]="relacaoTaps()" (ngModelChange)="relacaoTaps.set($event)" name="taps" placeholder="Ex: 15,18 ~ 12,42 × 0,69"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        @if (criterio(); as c) {
+          <div class="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-900 space-y-1">
+            <p class="font-semibold">Critério NETA MTS para este transformador</p>
+            @for (e of c.isolamento; track e.nome) {
+              <p>{{ e.nome }}: isolamento 1 min a 20 °C ≥ {{ e.minimo }} MΩ · ensaiar com ≥ {{ e.tensaoEnsaio }} V CC</p>
+            }
+            @for (t of c.ttr; track t.nome) {
+              <p>TTR H/{{ t.nome }} (no tap nominal): relação calculada {{ t.relacao }} ± 0,5%</p>
+            }
+            <p>IP (ou IA) ≥ 1,00 · resistência ôhmica: diferença entre fases ≤ 2%</p>
+          </div>
+        }
+      </section>
+
+      <section class="app-card p-6 space-y-4">
+        <h2 class="text-base font-bold text-blue-900">Outros dados de placa</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Frequência (Hz)</label>
+            <input type="text" inputmode="decimal" [ngModel]="frequenciaHz()" (ngModelChange)="frequenciaHz.set($event)" name="freq"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Elevação média (°C)</label>
+            <input type="text" inputmode="decimal" [ngModel]="elevacaoTemperatura()" (ngModelChange)="elevacaoTemperatura.set($event)" name="elev" placeholder="105"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Refrigeração</label>
+            <input type="text" [ngModel]="refrigeracao()" (ngModelChange)="refrigeracao.set($event)" name="refr" placeholder="AN"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Grau de proteção</label>
+            <input type="text" [ngModel]="grauProtecao()" (ngModelChange)="grauProtecao.set($event)" name="ip" placeholder="IP 00"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Classe ambiente-clima-fogo</label>
+            <input type="text" [ngModel]="classeAmbiental()" (ngModelChange)="classeAmbiental.set($event)" name="amb" placeholder="E2-C1-F0"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Massa total (kg)</label>
+            <input type="text" inputmode="decimal" [ngModel]="massaKg()" (ngModelChange)="massaKg.set($event)" name="massa" placeholder="6.000"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Observações</label>
+          <textarea [ngModel]="observacoes()" (ngModelChange)="observacoes.set($event)" name="obs" rows="2"
+            placeholder="Ex: uso dedicado para inversor de frequência 12 pulsos"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+      </section>
+
+      @if (errorMessage()) {
+        <div class="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{{ errorMessage() }}</div>
+      }
+
+      <div class="flex justify-end gap-2">
+        <a [routerLink]="id ? ['/eletrica/ensaios/trafos', id] : '/eletrica/ensaios'"
+          class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancelar</a>
+        <button type="submit" [disabled]="isSubmitting()"
+          class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+          {{ isSubmitting() ? 'Salvando...' : (id ? 'Salvar alterações' : 'Cadastrar transformador') }}
+        </button>
+      </div>
+    </form>
+  }
+</div>

@@ -99,7 +99,7 @@ describe('IEEE 43-2013', () => {
 });
 
 const motor: Motor = {
-  id: 'm1', tag: '91ECA42AF001', descricao: 'Motor da bomba', localInstalacao: 'TT24', fabricante: 'WEG',
+  id: 'm1', tag: '91ECA42AF001', situacao: 'instalado', aplicacao: 'Bomba de água de alimentação B', descricao: 'Motor da bomba', localInstalacao: 'TT24', fabricante: 'WEG',
   modelo: 'HGF 315 C/D/E', numeroSerie: null, potenciaKw: 220, potenciaCv: 300, tensaoV: 6300, correnteA: 25.7,
   frequenciaHz: 60, fatorServico: 1, rotacaoRpm: 1781, classeIsolamento: 'F', tipoBobina: 'pre_formada',
   observacoes: null, criadoPorNome: 'Lucas', createdAt: new Date(), updatedAt: new Date(),
@@ -117,6 +117,7 @@ const ensaio: EnsaioIsolamento = {
 describe('PDF do ensaio', () => {
   it('troca símbolos que a fonte do PDF não tem', () => {
     expect(textoPdf('≥ 100 MΩ → ok')).toBe('>= 100 MOhm -> ok');
+    expect(textoPdf('13.800 V (Δ/Δ-Y)')).toBe('13.800 V (D/D-Y)');
   });
 
   it('gera um PDF válido com as seções do ensaio', async () => {
@@ -127,7 +128,7 @@ describe('PDF do ensaio', () => {
     const texto = [...bruto.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)]
       .map(m => { try { return inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1'); } catch { return ''; } })
       .join('\n');
-    ['EN-003', '91ECA42AF001', 'Dados do motor', 'IEEE 43-2013', 'Fase A', 'Fulano de Tal', 'REPROVADO', 'fundo de escala']
+    ['EN-003', '91ECA42AF001', 'Bomba de água de alimentação B', 'Instalado', 'Dados do motor', 'IEEE 43-2013', 'Fase A', 'Fulano de Tal', 'REPROVADO', 'fundo de escala']
       .forEach(t => expect(texto).toContain(t));
     expect(texto).not.toContain('Ω');
   });

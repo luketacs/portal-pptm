@@ -1,5 +1,5 @@
 import {
-  ClasseIsolamento, EnsaioIsolamento, LeituraIsolamento, ResultadoEnsaio, TipoBobina,
+  ClasseIsolamento, EnsaioIsolamento, LeituraIsolamento, ResultadoEnsaio, SituacaoEquipamento, TipoBobina,
 } from '../models/eletrica-ensaio.model';
 
 // Avaliação de resistência de isolamento de máquinas girantes pela IEEE 43-2013
@@ -18,6 +18,25 @@ export const IR_LIMITE_IP_MOHM = 5000;
 
 export function numeroEnsaio(numero: number | null | undefined): string {
   return numero ? `EN-${String(numero).padStart(3, '0')}` : '';
+}
+
+// ── Situação do equipamento (motor e trafo) ──
+export const SITUACOES: SituacaoEquipamento[] = ['instalado', 'reserva'];
+
+export const SITUACAO_LABEL: Record<SituacaoEquipamento, string> = { instalado: 'Instalado', reserva: 'Reserva' };
+
+// Cor neutra/informativa — verde e vermelho ficam pro resultado do ensaio.
+export const SITUACAO_BADGE: Record<SituacaoEquipamento, string> = {
+  instalado: 'bg-sky-100 text-sky-800',
+  reserva: 'bg-violet-100 text-violet-800',
+};
+
+export function rotuloLocal(s: SituacaoEquipamento): string {
+  return s === 'reserva' ? 'Local de armazenamento' : 'Local de instalação';
+}
+
+export function rotuloAplicacao(s: SituacaoEquipamento): string {
+  return s === 'reserva' ? 'Reserva de' : 'Aplicação';
 }
 
 export const CLASSES_ISOLAMENTO: ClasseIsolamento[] = ['A', 'B', 'F', 'H'];

@@ -5,9 +5,15 @@ export type TipoBobina = 'pre_formada' | 'randomica' | 'antiga';
 
 export type ResultadoEnsaio = 'aprovado' | 'reprovado';
 
+// Instalado em campo ou reserva (no almoxarifado / oficina). Vale pra motor e trafo.
+export type SituacaoEquipamento = 'instalado' | 'reserva';
+
 export interface Motor {
   id: string;
   tag: string;
+  situacao: SituacaoEquipamento;
+  // Instalado: equipamento que ele aciona. Reserva: de quais equipamentos é reserva.
+  aplicacao: string | null;
   descricao: string | null;
   localInstalacao: string | null;
   fabricante: string | null;

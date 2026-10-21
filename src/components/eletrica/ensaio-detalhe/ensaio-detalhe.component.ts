@@ -7,7 +7,7 @@ import { EletricaEnsaioService } from '../../../services/eletrica-ensaio.service
 import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { EnsaioIsolamento, Motor } from '../../../models/eletrica-ensaio.model';
-import { SerieLinha, drawLinhas, limparGrafico } from '../../../utils/charts';
+import { CorSerie, SerieLinha, drawLinhas, limparGrafico } from '../../../utils/charts';
 import {
   CLASSE_LABEL, RESULTADO_BADGE, RESULTADO_LABEL, TIPO_BOBINA_LABEL, avaliarEnsaio, circuitoLabel,
   criterioDoEnsaio, fatorCorrecao40, formatarIndice, formatarMohm, formatarNumero, ipMinimo, irMinimoMohm,
@@ -16,7 +16,7 @@ import {
 import { dataBr } from '../../../utils/eletrica-reparo';
 import { baixarPdfEnsaio } from '../../../utils/eletrica-ensaio-pdf';
 
-const COR_CIRCUITO: Record<string, 1 | 2 | 3 | 4> = { A: 1, B: 2, C: 3, ABC: 4 };
+const COR_CIRCUITO: Record<string, CorSerie> = { A: 1, B: 2, C: 3, ABC: 4 };
 const TEMPOS_MIN = [0.5, 1, 10];
 const tempoTexto = (t: number) => (t < 1 ? '30 s' : `${t} min`);
 
@@ -108,6 +108,10 @@ export class EnsaioDetalheComponent implements OnInit, OnDestroy {
   async ngOnInit(): Promise<void> {
     try {
       const e = await this.ensaioService.buscarEnsaio(this.id);
+      if (!e && (await this.ensaioService.tipoDoEnsaio(this.id)) === 'transformador') {
+        await this.router.navigate(['/eletrica/ensaios/trafo', this.id], { replaceUrl: true });
+        return;
+      }
       this.ensaio.set(e);
       if (e) this.motor.set(await this.ensaioService.buscarMotor(e.equipamentoId));
     } catch (err: unknown) {

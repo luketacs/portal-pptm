@@ -1,27 +1,38 @@
 <div class="space-y-6">
   <div class="flex flex-wrap items-end justify-between gap-3">
     <div>
-      <h1 class="text-2xl font-bold text-gray-800">Ensaios de Motores</h1>
+      <h1 class="text-2xl font-bold text-gray-800">Ensaios Elétricos</h1>
       <p class="text-sm text-gray-500 mt-1">
-        Resistência de isolamento e índice de polarização, avaliados pela IEEE 43-2013. Abra um motor para ver a tendência.
+        Motores pela IEEE 43-2013 e transformadores pela ANSI/NETA MTS. Abra um equipamento para ver a tendência.
       </p>
     </div>
     <div class="flex flex-wrap gap-2">
-      <a routerLink="/eletrica/ensaios/motores/novo"
-        class="rounded-lg border border-blue-600 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">+ Cadastrar motor</a>
-      <a routerLink="/eletrica/ensaios/novo" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">+ Lançar ensaio</a>
+      @if (aba() === 'trafos') {
+        <a routerLink="/eletrica/ensaios/trafos/novo"
+          class="rounded-lg border border-blue-600 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">+ Cadastrar transformador</a>
+        <a routerLink="/eletrica/ensaios/trafo/novo" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">+ Lançar ensaio</a>
+      } @else {
+        <a routerLink="/eletrica/ensaios/motores/novo"
+          class="rounded-lg border border-blue-600 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">+ Cadastrar motor</a>
+        <a routerLink="/eletrica/ensaios/novo" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">+ Lançar ensaio</a>
+      }
     </div>
   </div>
 
   <!-- Abas -->
-  <div class="flex gap-1 border-b border-slate-200">
+  <div class="flex gap-1 border-b border-slate-200 overflow-x-auto">
     <button type="button" (click)="trocarAba('motores')"
-      class="px-4 py-2 text-sm font-semibold -mb-px border-b-2"
+      class="px-4 py-2 text-sm font-semibold -mb-px border-b-2 whitespace-nowrap"
       [ngClass]="aba() === 'motores' ? 'border-blue-700 text-blue-800' : 'border-transparent text-slate-500 hover:text-slate-700'">
-      Motores ({{ contagem().todos }})
+      Motores ({{ linhasMotor().length }})
+    </button>
+    <button type="button" (click)="trocarAba('trafos')"
+      class="px-4 py-2 text-sm font-semibold -mb-px border-b-2 whitespace-nowrap"
+      [ngClass]="aba() === 'trafos' ? 'border-blue-700 text-blue-800' : 'border-transparent text-slate-500 hover:text-slate-700'">
+      Transformadores ({{ linhasTrafo().length }})
     </button>
     <button type="button" (click)="trocarAba('ensaios')"
-      class="px-4 py-2 text-sm font-semibold -mb-px border-b-2"
+      class="px-4 py-2 text-sm font-semibold -mb-px border-b-2 whitespace-nowrap"
       [ngClass]="aba() === 'ensaios' ? 'border-blue-700 text-blue-800' : 'border-transparent text-slate-500 hover:text-slate-700'">
       Todos os ensaios
     </button>
@@ -35,30 +46,41 @@
     </button>
     <button type="button" (click)="filtro.set('aprovado')" class="rounded-full px-3 py-1 text-xs font-semibold border"
       [ngClass]="filtro() === 'aprovado' ? 'bg-blue-900 text-white border-blue-900' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'">
-      {{ aba() === 'motores' ? 'Aprovados no último ensaio' : 'Aprovados' }}{{ aba() === 'motores' ? ' (' + contagem().aprovado + ')' : '' }}
+      {{ aba() === 'ensaios' ? 'Aprovados' : 'Aprovados no último ensaio (' + contagem().aprovado + ')' }}
     </button>
     <button type="button" (click)="filtro.set('reprovado')" class="rounded-full px-3 py-1 text-xs font-semibold border"
       [ngClass]="filtro() === 'reprovado' ? 'bg-blue-900 text-white border-blue-900' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'">
-      {{ aba() === 'motores' ? 'Reprovados no último ensaio' : 'Reprovados' }}{{ aba() === 'motores' ? ' (' + contagem().reprovado + ')' : '' }}
+      {{ aba() === 'ensaios' ? 'Reprovados' : 'Reprovados no último ensaio (' + contagem().reprovado + ')' }}
     </button>
-    @if (aba() === 'motores') {
+    @if (aba() !== 'ensaios') {
       <button type="button" (click)="filtro.set('sem_ensaio')" class="rounded-full px-3 py-1 text-xs font-semibold border"
         [ngClass]="filtro() === 'sem_ensaio' ? 'bg-blue-900 text-white border-blue-900' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'">
         Sem ensaio ({{ contagem().sem_ensaio }})
+      </button>
+      <span class="mx-1 w-px self-stretch bg-slate-200" aria-hidden="true"></span>
+      <button type="button" (click)="filtroSituacao.set(filtroSituacao() === 'instalado' ? 'todas' : 'instalado')" class="rounded-full px-3 py-1 text-xs font-semibold border"
+        [attr.aria-pressed]="filtroSituacao() === 'instalado'"
+        [ngClass]="filtroSituacao() === 'instalado' ? 'bg-blue-900 text-white border-blue-900' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'">
+        Instalados ({{ contagemSituacao().instalado }})
+      </button>
+      <button type="button" (click)="filtroSituacao.set(filtroSituacao() === 'reserva' ? 'todas' : 'reserva')" class="rounded-full px-3 py-1 text-xs font-semibold border"
+        [attr.aria-pressed]="filtroSituacao() === 'reserva'"
+        [ngClass]="filtroSituacao() === 'reserva' ? 'bg-blue-900 text-white border-blue-900' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'">
+        Reservas ({{ contagemSituacao().reserva }})
       </button>
     }
   </div>
 
   <input type="text" [ngModel]="busca()" (ngModelChange)="busca.set($event)"
-    [placeholder]="aba() === 'motores' ? 'Buscar por TAG, local, fabricante, modelo, série...' : 'Buscar por Nº, TAG, OS, executante...'"
+    [placeholder]="aba() === 'ensaios' ? 'Buscar por Nº, TAG, OS, executante...' : 'Buscar por TAG, aplicação, local, fabricante, modelo, série...'"
     class="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
 
-  @if (isLoading() && linhas().length === 0) {
+  @if (isLoading() && linhasMotor().length === 0 && linhasTrafo().length === 0) {
     <p class="text-sm text-gray-500">Carregando...</p>
   } @else if (aba() === 'motores') {
     @if (motoresFiltrados().length === 0) {
       <div class="app-card p-8 text-center text-sm text-gray-500">
-        @if (contagem().todos === 0) {
+        @if (linhasMotor().length === 0) {
           Nenhum motor cadastrado ainda. Comece em <a routerLink="/eletrica/ensaios/motores/novo" class="font-semibold text-blue-600 hover:text-blue-700">Cadastrar motor</a>.
         } @else {
           Nenhum motor encontrado.
@@ -70,7 +92,7 @@
           <thead class="bg-blue-900 text-white">
             <tr>
               <th class="px-3 py-3 text-left font-semibold">TAG</th>
-              <th class="px-3 py-3 text-left font-semibold">Local</th>
+              <th class="px-3 py-3 text-left font-semibold">Aplicação / Local</th>
               <th class="px-3 py-3 text-center font-semibold">Potência / Tensão</th>
               <th class="px-3 py-3 text-center font-semibold">Último ensaio</th>
               <th class="px-3 py-3 text-right font-semibold">Menor IR 1 min a 40 °C</th>
@@ -81,10 +103,18 @@
             @for (l of motoresFiltrados(); track l.motor.id) {
               <tr class="hover:bg-slate-50 cursor-pointer" [routerLink]="['/eletrica/ensaios/motores', l.motor.id]">
                 <td class="px-3 py-2">
-                  <div class="font-semibold text-blue-900">{{ l.motor.tag }}</div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="font-semibold text-blue-900">{{ l.motor.tag }}</span>
+                    <span class="text-[11px] font-semibold px-1.5 py-0.5 rounded-full" [ngClass]="situacaoBadge[l.motor.situacao]">{{ situacaoLabel[l.motor.situacao] }}</span>
+                  </div>
                   @if (l.motor.descricao) { <div class="text-xs text-gray-400">{{ l.motor.descricao }}</div> }
                 </td>
-                <td class="px-3 py-2 text-gray-600">{{ l.motor.localInstalacao || '—' }}</td>
+                <td class="px-3 py-2 text-gray-700">
+                  @if (l.motor.aplicacao) {
+                    <div>{{ l.motor.situacao === 'reserva' ? 'Reserva de ' : '' }}{{ l.motor.aplicacao }}</div>
+                  }
+                  <div class="text-xs text-gray-400">{{ l.motor.localInstalacao || (l.motor.aplicacao ? '' : '—') }}</div>
+                </td>
                 <td class="px-3 py-2 text-center text-gray-600 whitespace-nowrap">
                   {{ potencia(l.motor.potenciaKw, l.motor.potenciaCv) || '—' }} · {{ fmt(l.motor.tensaoV, 0) }} V
                 </td>
@@ -114,6 +144,69 @@
         </table>
       </div>
     }
+  } @else if (aba() === 'trafos') {
+    @if (trafosFiltrados().length === 0) {
+      <div class="app-card p-8 text-center text-sm text-gray-500">
+        @if (linhasTrafo().length === 0) {
+          Nenhum transformador cadastrado ainda. Comece em <a routerLink="/eletrica/ensaios/trafos/novo" class="font-semibold text-blue-600 hover:text-blue-700">Cadastrar transformador</a>.
+        } @else {
+          Nenhum transformador encontrado.
+        }
+      </div>
+    } @else {
+      <div class="overflow-x-auto rounded-xl border border-slate-200">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+          <thead class="bg-blue-900 text-white">
+            <tr>
+              <th class="px-3 py-3 text-left font-semibold">TAG</th>
+              <th class="px-3 py-3 text-left font-semibold">Aplicação / Local</th>
+              <th class="px-3 py-3 text-center font-semibold">Potência / Tensões</th>
+              <th class="px-3 py-3 text-center font-semibold">Último ensaio</th>
+              <th class="px-3 py-3 text-center font-semibold">Resultado</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-slate-100">
+            @for (l of trafosFiltrados(); track l.trafo.id) {
+              <tr class="hover:bg-slate-50 cursor-pointer" [routerLink]="['/eletrica/ensaios/trafos', l.trafo.id]">
+                <td class="px-3 py-2">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="font-semibold text-blue-900">{{ l.trafo.tag }}</span>
+                    <span class="text-[11px] font-semibold px-1.5 py-0.5 rounded-full" [ngClass]="situacaoBadge[l.trafo.situacao]">{{ situacaoLabel[l.trafo.situacao] }}</span>
+                  </div>
+                  @if (l.trafo.descricao) { <div class="text-xs text-gray-400">{{ l.trafo.descricao }}</div> }
+                </td>
+                <td class="px-3 py-2 text-gray-700">
+                  @if (l.trafo.aplicacao) {
+                    <div>{{ l.trafo.situacao === 'reserva' ? 'Reserva de ' : '' }}{{ l.trafo.aplicacao }}</div>
+                  }
+                  <div class="text-xs text-gray-400">{{ l.trafo.localInstalacao || (l.trafo.aplicacao ? '' : '—') }}</div>
+                </td>
+                <td class="px-3 py-2 text-center text-gray-600 whitespace-nowrap">
+                  {{ l.trafo.potenciaKva != null ? fmt(l.trafo.potenciaKva) + ' kVA · ' : '' }}{{ tensoes(l.trafo.tensaoPrimariaV, l.trafo.ligacaoPrimaria, l.trafo.secundarios) }}
+                </td>
+                <td class="px-3 py-2 text-center whitespace-nowrap">
+                  @if (l.ultimo) {
+                    <div class="text-gray-800">{{ dataBr(l.ultimo.dataEnsaio) }}</div>
+                    <div class="text-xs text-gray-400">{{ numero(l.ultimo.numero) }} · {{ l.totalEnsaios }} {{ l.totalEnsaios === 1 ? 'ensaio' : 'ensaios' }}</div>
+                  } @else {
+                    <span class="text-gray-400">—</span>
+                  }
+                </td>
+                <td class="px-3 py-2 text-center">
+                  @if (l.ultimo) {
+                    <span class="text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap" [ngClass]="resultadoBadge[l.ultimo.resultado]">
+                      {{ resultadoLabel[l.ultimo.resultado] }}
+                    </span>
+                  } @else {
+                    <span class="text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-600">Sem ensaio</span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
   } @else {
     @if (ensaiosFiltrados().length === 0) {
       <div class="app-card p-8 text-center text-sm text-gray-500">Nenhum ensaio encontrado.</div>
@@ -124,26 +217,26 @@
             <tr>
               <th class="px-3 py-3 text-center font-semibold">Nº</th>
               <th class="px-3 py-3 text-center font-semibold">Data</th>
-              <th class="px-3 py-3 text-left font-semibold">Motor</th>
+              <th class="px-3 py-3 text-left font-semibold">Equipamento</th>
               <th class="px-3 py-3 text-center font-semibold">OS</th>
               <th class="px-3 py-3 text-center font-semibold">Lançado por</th>
               <th class="px-3 py-3 text-center font-semibold">Resultado</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-slate-100">
-            @for (item of ensaiosFiltrados(); track item.ensaio.id) {
-              <tr class="hover:bg-slate-50 cursor-pointer" [routerLink]="['/eletrica/ensaios', item.ensaio.id]">
-                <td class="px-3 py-2 text-center font-semibold text-blue-900 whitespace-nowrap">{{ numero(item.ensaio.numero) }}</td>
-                <td class="px-3 py-2 text-center text-gray-600 whitespace-nowrap">{{ dataBr(item.ensaio.dataEnsaio) }}</td>
+            @for (item of ensaiosFiltrados(); track item.id) {
+              <tr class="hover:bg-slate-50 cursor-pointer" [routerLink]="item.link">
+                <td class="px-3 py-2 text-center font-semibold text-blue-900 whitespace-nowrap">{{ numero(item.numero) }}</td>
+                <td class="px-3 py-2 text-center text-gray-600 whitespace-nowrap">{{ dataBr(item.dataEnsaio) }}</td>
                 <td class="px-3 py-2 text-gray-800">
-                  <div class="font-medium">{{ item.motor?.tag ?? '—' }}</div>
-                  @if (item.motor?.localInstalacao) { <div class="text-xs text-gray-400">{{ item.motor?.localInstalacao }}</div> }
+                  <div class="font-medium">{{ item.tag }}</div>
+                  <div class="text-xs text-gray-400">{{ item.tipo }}{{ item.local ? ' · ' + item.local : '' }}</div>
                 </td>
-                <td class="px-3 py-2 text-center text-gray-600">{{ item.ensaio.osNumero || '—' }}</td>
-                <td class="px-3 py-2 text-center text-gray-600">{{ item.ensaio.criadoPorNome }}</td>
+                <td class="px-3 py-2 text-center text-gray-600">{{ item.osNumero || '—' }}</td>
+                <td class="px-3 py-2 text-center text-gray-600">{{ item.criadoPorNome }}</td>
                 <td class="px-3 py-2 text-center">
-                  <span class="text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap" [ngClass]="resultadoBadge[item.ensaio.resultado]">
-                    {{ resultadoLabel[item.ensaio.resultado] }}
+                  <span class="text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap" [ngClass]="resultadoBadge[item.resultado]">
+                    {{ resultadoLabel[item.resultado] }}
                   </span>
                 </td>
               </tr>

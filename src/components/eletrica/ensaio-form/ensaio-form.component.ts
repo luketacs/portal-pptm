@@ -62,6 +62,7 @@ export class EnsaioFormComponent implements OnInit {
   carregando = signal(true);
 
   motores = this.ensaioService.motores;
+  trafos = this.ensaioService.trafos;
   motorId = signal('');
   // Na correção vale a placa copiada no dia do ensaio, não a de hoje.
   private snapshot = signal<{ tensaoNominalV: number; classeIsolamento: ClasseIsolamento; tipoBobina: TipoBobina } | null>(null);
@@ -208,6 +209,11 @@ export class EnsaioFormComponent implements OnInit {
   }
 
   escolherMotor(id: string): void {
+    // Trafo tem formulário próprio (isolamento, ôhmica e TTR).
+    if (this.trafos().some(t => t.id === id)) {
+      this.router.navigate(['/eletrica/ensaios/trafo/novo'], { queryParams: { trafo: id } });
+      return;
+    }
     this.motorId.set(id);
     this.sugerirTensao();
   }

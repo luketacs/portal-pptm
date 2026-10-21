@@ -1,6 +1,6 @@
 import { EnsaioIsolamento, Motor } from '../models/eletrica-ensaio.model';
 import {
-  CLASSE_LABEL, IR_LIMITE_IP_MOHM, RESULTADO_LABEL, TIPO_BOBINA_CURTO, TIPO_BOBINA_LABEL, avaliarEnsaio, circuitoLabel, criterioDoEnsaio,
+  CLASSE_LABEL, IR_LIMITE_IP_MOHM, SITUACAO_LABEL, rotuloAplicacao, rotuloLocal, RESULTADO_LABEL, TIPO_BOBINA_CURTO, TIPO_BOBINA_LABEL, avaliarEnsaio, circuitoLabel, criterioDoEnsaio,
   fatorCorrecao40, formatarIndice, formatarMohm, formatarNumero, ipMinimo, irMinimoMohm, numeroEnsaio,
   potenciaTexto, temperaturaCorrecao, tensaoEnsaioAdequada, tensaoEnsaioRecomendada,
 } from './eletrica-ensaio';
@@ -39,7 +39,9 @@ export async function gerarPdfEnsaio(e: EnsaioIsolamento, m: Motor): Promise<Blo
   w.secao('1. Dados do motor');
   w.tabela([
     { rotulo: 'TAG', valor: m.tag },
-    { rotulo: 'Local de instalação', valor: m.localInstalacao },
+    { rotulo: 'Situação', valor: SITUACAO_LABEL[m.situacao] },
+    { rotulo: rotuloAplicacao(m.situacao), valor: m.aplicacao, largo: true },
+    { rotulo: rotuloLocal(m.situacao), valor: m.localInstalacao, largo: true },
     { rotulo: 'Descrição', valor: m.descricao, largo: true },
     { rotulo: 'Fabricante', valor: m.fabricante },
     { rotulo: 'Modelo', valor: m.modelo },

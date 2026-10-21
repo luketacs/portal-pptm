@@ -7,16 +7,16 @@ import { EletricaEnsaioService } from '../../../services/eletrica-ensaio.service
 import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { EnsaioIsolamento, Motor } from '../../../models/eletrica-ensaio.model';
-import { SerieLinha, drawLinhas, limparGrafico } from '../../../utils/charts';
+import { CorSerie, SerieLinha, drawLinhas, limparGrafico } from '../../../utils/charts';
 import {
-  CLASSE_LABEL, RESULTADO_BADGE, RESULTADO_LABEL, TIPO_BOBINA_LABEL, avaliarEnsaio, circuitoLabel, criterioDoEnsaio,
+  CLASSE_LABEL, RESULTADO_BADGE, RESULTADO_LABEL, SITUACAO_BADGE, SITUACAO_LABEL, rotuloAplicacao, rotuloLocal, TIPO_BOBINA_LABEL, avaliarEnsaio, circuitoLabel, criterioDoEnsaio,
   formatarIndice, formatarMohm, formatarNumero, ipMinimo, irMinimoMohm, numeroEnsaio, potenciaTexto,
   tensaoEnsaioRecomendada,
 } from '../../../utils/eletrica-ensaio';
 import { dataBr } from '../../../utils/eletrica-reparo';
 
 // Cor fixa por fase (a fase A é sempre a cor 1, mesmo se só houver B e C no gráfico).
-const COR_CIRCUITO: Record<string, 1 | 2 | 3 | 4> = { A: 1, B: 2, C: 3, ABC: 4 };
+const COR_CIRCUITO: Record<string, CorSerie> = { A: 1, B: 2, C: 3, ABC: 4 };
 
 // 'YYYY-MM-DD' → timestamp ao meio-dia local (evita a data voltar um dia por fuso).
 const instante = (iso: string) => {
@@ -40,6 +40,10 @@ export class MotorDetalheComponent implements OnInit, OnDestroy {
   readonly bobinaLabel = TIPO_BOBINA_LABEL;
   readonly resultadoLabel = RESULTADO_LABEL;
   readonly resultadoBadge = RESULTADO_BADGE;
+  readonly situacaoLabel = SITUACAO_LABEL;
+  readonly situacaoBadge = SITUACAO_BADGE;
+  readonly rotuloLocal = rotuloLocal;
+  readonly rotuloAplicacao = rotuloAplicacao;
   readonly numero = numeroEnsaio;
   readonly dataBr = dataBr;
   readonly mohm = formatarMohm;
@@ -114,7 +118,7 @@ export class MotorDetalheComponent implements OnInit, OnDestroy {
           ariaLabel: 'Resistência de isolamento de 1 minuto corrigida a 40 °C, por ensaio',
           eixoX: 'data', formatX: dataCurta, rotuloX: 'Data do ensaio',
           formatY: v => `${formatarMohm(v)} MΩ`, yLog: true,
-          referencia: { valor: c.irMin, rotulo: `Mínimo IEEE 43: ${formatarMohm(c.irMin)} MΩ` },
+          referencias: [{ valor: c.irMin, rotulo: `Mínimo IEEE 43: ${formatarMohm(c.irMin)} MΩ` }],
         });
       }
       if (ip) {
@@ -122,7 +126,7 @@ export class MotorDetalheComponent implements OnInit, OnDestroy {
           ariaLabel: 'Índice de polarização por ensaio',
           eixoX: 'data', formatX: dataCurta, rotuloX: 'Data do ensaio',
           formatY: v => formatarIndice(v),
-          referencia: { valor: c.ipMin, rotulo: `Mínimo IEEE 43: ${formatarIndice(c.ipMin)}` },
+          referencias: [{ valor: c.ipMin, rotulo: `Mínimo IEEE 43: ${formatarIndice(c.ipMin)}` }],
         });
       }
     });
@@ -156,7 +160,7 @@ export class MotorDetalheComponent implements OnInit, OnDestroy {
     if (!ok) return;
     this.excluindo.set(true);
     try {
-      await this.ensaioService.excluirMotor(m.id);
+      await this.ensaioService.excluirEquipamento(m.id);
       this.notificationService.showSuccess(`Motor ${m.tag} excluído.`);
       await this.router.navigateByUrl('/eletrica/ensaios');
     } catch (err: unknown) {

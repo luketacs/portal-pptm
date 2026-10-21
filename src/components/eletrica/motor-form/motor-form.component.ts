@@ -4,9 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { EletricaEnsaioService } from '../../../services/eletrica-ensaio.service';
 import { NotificationService } from '../../../services/notification.service';
-import { ClasseIsolamento, TipoBobina } from '../../../models/eletrica-ensaio.model';
+import { ClasseIsolamento, SituacaoEquipamento, TipoBobina } from '../../../models/eletrica-ensaio.model';
 import {
-  CLASSES_ISOLAMENTO, CLASSE_LABEL, TIPOS_BOBINA, TIPO_BOBINA_LABEL, formatarIndice, formatarNumero, ipMinimo,
+  CLASSES_ISOLAMENTO, CLASSE_LABEL, SITUACOES, SITUACAO_LABEL, rotuloLocal, TIPOS_BOBINA, TIPO_BOBINA_LABEL, formatarIndice, formatarNumero, ipMinimo,
   irMinimoMohm, irMinimoTexto, lerNumero, tensaoEnsaioRecomendada, tipoBobinaSugerido,
 } from '../../../utils/eletrica-ensaio';
 
@@ -21,6 +21,9 @@ import {
 })
 export class MotorFormComponent implements OnInit {
   readonly classes = CLASSES_ISOLAMENTO;
+  readonly situacoes = SITUACOES;
+  readonly situacaoLabel = SITUACAO_LABEL;
+  readonly rotuloLocal = rotuloLocal;
   readonly classeLabel = CLASSE_LABEL;
   readonly tiposBobina = TIPOS_BOBINA;
   readonly tipoBobinaLabel = TIPO_BOBINA_LABEL;
@@ -30,6 +33,8 @@ export class MotorFormComponent implements OnInit {
 
   tag = signal('');
   descricao = signal('');
+  situacao = signal<SituacaoEquipamento>('instalado');
+  aplicacao = signal('');
   localInstalacao = signal('');
   fabricante = signal('');
   modelo = signal('');
@@ -85,6 +90,8 @@ export class MotorFormComponent implements OnInit {
       const txt = (v: number | null) => (v === null ? '' : formatarNumero(v, 2));
       this.tag.set(m.tag);
       this.descricao.set(m.descricao ?? '');
+      this.situacao.set(m.situacao);
+      this.aplicacao.set(m.aplicacao ?? '');
       this.localInstalacao.set(m.localInstalacao ?? '');
       this.fabricante.set(m.fabricante ?? '');
       this.modelo.set(m.modelo ?? '');
@@ -144,6 +151,8 @@ export class MotorFormComponent implements OnInit {
       const id = await this.ensaioService.salvarMotor({
         tag: this.tag(),
         descricao: this.descricao(),
+        situacao: this.situacao(),
+        aplicacao: this.aplicacao(),
         localInstalacao: this.localInstalacao(),
         fabricante: this.fabricante(),
         modelo: this.modelo(),

@@ -68,6 +68,10 @@ input, button, textarea, select { font: inherit; }
   --viz-series-2: #eb6834;
   --viz-series-3: #1baf7a;
   --viz-series-4: #eda100;
+  /* 5–6: trafo de 12 pulsos tem 6 circuitos de isolamento. Slots 1–6 validados juntos
+     (CVD ΔE 9,1, visão normal 19,6 — PASS); contraste baixo nos 3, 4 e 5 → mesma regra. */
+  --viz-series-5: #e87ba4;
+  --viz-series-6: #008300;
   --viz-grid: #e2e8f0;
   --viz-ref: #334155;
 }
@@ -88,10 +92,14 @@ input, button, textarea, select { font: inherit; }
 .viz-root .viz-cor-2 { --viz-cor: var(--viz-series-2); }
 .viz-root .viz-cor-3 { --viz-cor: var(--viz-series-3); }
 .viz-root .viz-cor-4 { --viz-cor: var(--viz-series-4); }
+.viz-root .viz-cor-5 { --viz-cor: var(--viz-series-5); }
+.viz-root .viz-cor-6 { --viz-cor: var(--viz-series-6); }
 .viz-tooltip .viz-cor-1 { --viz-cor: var(--viz-series-1); }
 .viz-tooltip .viz-cor-2 { --viz-cor: var(--viz-series-2); }
 .viz-tooltip .viz-cor-3 { --viz-cor: var(--viz-series-3); }
 .viz-tooltip .viz-cor-4 { --viz-cor: var(--viz-series-4); }
+.viz-tooltip .viz-cor-5 { --viz-cor: var(--viz-series-5); }
+.viz-tooltip .viz-cor-6 { --viz-cor: var(--viz-series-6); }
 .viz-root .viz-serie { fill: none; stroke: var(--viz-cor); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .viz-root .viz-marcador { fill: var(--viz-cor); stroke: #ffffff; stroke-width: 2; transition: r 100ms ease; }
 .viz-root .viz-marcador.ativo { r: 6; }

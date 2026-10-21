@@ -32,9 +32,10 @@ export interface Imagem {
   altura: number;
 }
 
-// A Helvetica embutida do jsPDF só tem o conjunto WinAnsi: Ω, ≥, ≤, →, − saem como lixo.
+// A Helvetica embutida do jsPDF só tem o conjunto WinAnsi: Ω, ≥, ≤, →, −, Δ saem como lixo.
+// Δ vira D (notação IEC de ligação: Dyn, Dd).
 export function textoPdf(texto: string): string {
-  return texto.replace(/Ω/g, 'Ohm').replace(/≥/g, '>=').replace(/≤/g, '<=').replace(/→/g, '->').replace(/−/g, '-');
+  return texto.replace(/Ω/g, 'Ohm').replace(/≥/g, '>=').replace(/≤/g, '<=').replace(/→/g, '->').replace(/−/g, '-').replace(/Δ/g, 'D');
 }
 
 export class Escritor {

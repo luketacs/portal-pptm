@@ -161,14 +161,14 @@ export const APP_ROUTES: Routes = [
     data: { roles: ['Admin', 'Solicitante', 'Visualizador'], mode: 'controle' },
     title: 'Controle de Reparos Externos',
   },
-  // Ensaios de Motores — rotas fixas antes das com :id.
+  // Ensaios Elétricos (motores e transformadores) — rotas fixas antes das com :id.
   {
     path: 'eletrica/ensaios',
     loadComponent: () =>
       import('../components/eletrica/ensaios-lista/ensaios-lista.component').then(m => m.EnsaiosListaComponent),
     canActivate: [authGuard],
     data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
-    title: 'Ensaios de Motores',
+    title: 'Ensaios Elétricos',
   },
   {
     path: 'eletrica/ensaios/novo',
@@ -201,6 +201,54 @@ export const APP_ROUTES: Routes = [
     canActivate: [authGuard],
     data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
     title: 'Motor',
+  },
+  {
+    path: 'eletrica/ensaios/trafos/novo',
+    loadComponent: () =>
+      import('../components/eletrica/trafo-form/trafo-form.component').then(m => m.TrafoFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Cadastrar Transformador',
+  },
+  {
+    path: 'eletrica/ensaios/trafos/:id/editar',
+    loadComponent: () =>
+      import('../components/eletrica/trafo-form/trafo-form.component').then(m => m.TrafoFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Editar Transformador',
+  },
+  {
+    path: 'eletrica/ensaios/trafos/:id',
+    loadComponent: () =>
+      import('../components/eletrica/trafo-detalhe/trafo-detalhe.component').then(m => m.TrafoDetalheComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Transformador',
+  },
+  {
+    path: 'eletrica/ensaios/trafo/novo',
+    loadComponent: () =>
+      import('../components/eletrica/ensaio-trafo-form/ensaio-trafo-form.component').then(m => m.EnsaioTrafoFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Lançar Ensaio de Transformador',
+  },
+  {
+    path: 'eletrica/ensaios/trafo/:id/editar',
+    loadComponent: () =>
+      import('../components/eletrica/ensaio-trafo-form/ensaio-trafo-form.component').then(m => m.EnsaioTrafoFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Corrigir Ensaio de Transformador',
+  },
+  {
+    path: 'eletrica/ensaios/trafo/:id',
+    loadComponent: () =>
+      import('../components/eletrica/ensaio-trafo-detalhe/ensaio-trafo-detalhe.component').then(m => m.EnsaioTrafoDetalheComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Ensaio de Transformador',
   },
   {
     path: 'eletrica/ensaios/:id/editar',

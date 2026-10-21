@@ -206,7 +206,7 @@ function textoAcessivel(d: ChartDatum, total: number, fmt: (v: number) => string
 }
 
 // ── Linhas (tendência / curva) ───────────────────────────────────────────────
-// Até 4 séries, cor fixa por ENTIDADE (quem chama passa `cor` 1–4 — a fase A é sempre
+// Até 6 séries, cor fixa por ENTIDADE (quem chama passa `cor` 1–6 — a fase A é sempre
 // a cor 1, mesmo que a B não apareça). Linha 2px, marcador 8px com anel branco, legenda
 // sempre (≥ 2 séries) + rótulo direto no último ponto, linha de referência tracejada com
 // o próprio rótulo (ex.: mínimo da norma). Hover: régua vertical + tooltip com todas as
@@ -219,10 +219,12 @@ export interface PontoLinha {
   nota?: string;
 }
 
+export type CorSerie = 1 | 2 | 3 | 4 | 5 | 6;
+
 export interface SerieLinha {
   nome: string;
-  /** Slot da paleta categórica (1–4), fixo por entidade. */
-  cor: 1 | 2 | 3 | 4;
+  /** Slot da paleta categórica (1–6), fixo por entidade. */
+  cor: CorSerie;
   pontos: PontoLinha[];
 }
 
@@ -235,8 +237,8 @@ export interface LinhasOptions {
   formatY: (v: number) => string;
   /** Escala log no y (valores que variam em décadas, ex.: MΩ). */
   yLog?: boolean;
-  /** Linha horizontal de referência (ex.: mínimo IEEE 43). */
-  referencia?: { valor: number; rotulo: string };
+  /** Linhas horizontais de referência (ex.: mínimo da norma; no trafo, um por classe de tensão). */
+  referencias?: { valor: number; rotulo: string }[];
   /** Cabeçalho da coluna x na tabela pra leitor de tela. */
   rotuloX: string;
   altura?: number;
@@ -282,7 +284,8 @@ function desenharLinhas(el: HTMLElement, seriesBrutas: SerieLinha[], options: Li
 
   const xs = [...new Set(series.flatMap(s => s.pontos.map(p => p.x)))].sort((a, b) => a - b);
   const ys = series.flatMap(s => s.pontos.map(p => p.y));
-  if (options.referencia) ys.push(options.referencia.valor);
+  const referencias = options.referencias ?? [];
+  referencias.forEach(r => ys.push(r.valor));
 
   const largura = Math.max(el.clientWidth || 320, 260);
   const altura = options.altura ?? 240;
@@ -359,11 +362,11 @@ function desenharLinhas(el: HTMLElement, seriesBrutas: SerieLinha[], options: Li
       .attr('text-anchor', 'middle').text(options.formatX(t));
   });
 
-  if (options.referencia) {
-    const ry = y(options.referencia.valor);
+  referencias.forEach(r => {
+    const ry = y(r.valor);
     g.append('line').attr('class', 'viz-referencia').attr('x1', 0).attr('x2', plotW).attr('y1', ry).attr('y2', ry);
-    g.append('text').attr('class', 'viz-referencia-rotulo').attr('x', 4).attr('y', ry - 5).text(options.referencia.rotulo);
-  }
+    g.append('text').attr('class', 'viz-referencia-rotulo').attr('x', 4).attr('y', ry - 5).text(r.rotulo);
+  });
 
   const linha = d3.line<PontoLinha>().x(p => x(p.x)).y(p => y(p.y));
   series.forEach(s => {
@@ -407,7 +410,7 @@ function desenharLinhas(el: HTMLElement, seriesBrutas: SerieLinha[], options: Li
       l.append('span').attr('class', 'viz-legenda-cor');
       l.append('span').text(`${s.nome}: ${options.formatY(p.y)}${p.nota ? ` (${p.nota})` : ''}`);
     });
-    if (options.referencia) tooltip.append('div').attr('class', 'viz-tooltip-extra').text(options.referencia.rotulo);
+    referencias.forEach(r => tooltip.append('div').attr('class', 'viz-tooltip-extra').text(r.rotulo));
     const node = tooltip.node() as HTMLElement;
     const topoSvg = (svg.node() as SVGSVGElement).getBoundingClientRect().top - el.getBoundingClientRect().top;
     const esquerda = margem.left + px + 14;

@@ -208,3 +208,39 @@ test('ensaios de motores: qualquer um cadastra e lança; só quem lançou corrig
   const { rows: sobra } = await db.query('SELECT id FROM eletrica_ensaios WHERE id=$1', [e.id]);
   assert.equal(sobra.length, 0);
 });
+
+test('ensaios de transformador: placa obrigatória e ensaio só no tipo certo de equipamento', async () => {
+  await login(solicitante);
+  const sec = JSON.stringify([{ nome: '1X', tensaoV: 690, ligacao: 'D' }, { nome: '2X', tensaoV: 690, ligacao: 'Y' }]);
+  const { rows: [t] } = await db.query(`INSERT INTO eletrica_equipamentos(tipo,tag,tensao_v,classe_isolamento,ligacao_primaria,secundarios,
+      meio_isolante,material_enrolamento,criado_por_id) VALUES ('transformador','TC-05',13800,'F','D',$1,'seco','cobre',$2) RETURNING id`, [sec, solicitante]);
+  // Trafo sem secundário e motor sem tipo de bobina não passam.
+  await assert.rejects(db.query(`INSERT INTO eletrica_equipamentos(tipo,tag,tensao_v,classe_isolamento,ligacao_primaria,secundarios,
+      meio_isolante,material_enrolamento,criado_por_id) VALUES ('transformador','TC-06',13800,'F','D','[]','seco','cobre',$1)`, [solicitante]), /placa_trafo/);
+  await assert.rejects(db.query(`INSERT INTO eletrica_equipamentos(tag,tensao_v,classe_isolamento,criado_por_id)
+      VALUES ('M-SEM-BOBINA',440,'F',$1)`, [solicitante]), /placa_motor/);
+
+  const criterio = JSON.stringify({ tensaoPrimariaV: 13800, tapTensaoV: 13800, ligacaoPrimaria: 'D', secundarios: JSON.parse(sec),
+    meioIsolante: 'seco', materialEnrolamento: 'cobre', classeIsolamento: 'F' });
+  const lancarTrafo = (equip) => db.query(`INSERT INTO eletrica_ensaios(tipo,equipamento_id,data_ensaio,tensao_aplicada_v,temperatura_ambiente_c,
+      tensao_nominal_v,classe_isolamento,criterio,medicoes,ohmica,ttr,resultado,criado_por_id,criado_por_nome)
+    VALUES ('transformador',$1,'2026-09-04',5000,25,13800,'F',$2,'[]','[]','[]','aprovado',$3,'Teste') RETURNING id, numero`, [equip, criterio, solicitante]);
+  const { rows: [e] } = await lancarTrafo(t.id);
+  assert.ok(Number(e.numero) > 0);
+  // Ensaio de trafo sem critério, e ensaio de motor apontando pro trafo, não passam.
+  await assert.rejects(db.query(`INSERT INTO eletrica_ensaios(tipo,equipamento_id,data_ensaio,tensao_aplicada_v,temperatura_ambiente_c,
+      tensao_nominal_v,classe_isolamento,resultado,criado_por_id,criado_por_nome)
+    VALUES ('transformador',$1,'2026-09-04',5000,25,13800,'F','aprovado',$2,'Teste')`, [t.id, solicitante]), /criterio_tipo/);
+  await assert.rejects(db.query(`INSERT INTO eletrica_ensaios(equipamento_id,data_ensaio,tensao_aplicada_v,temperatura_ambiente_c,
+      tensao_nominal_v,classe_isolamento,tipo_bobina,resultado,criado_por_id,criado_por_nome)
+    VALUES ($1,'2026-09-04',5000,25,13800,'F','pre_formada','aprovado',$2,'Teste')`, [t.id, solicitante]), /não corresponde/);
+  const { rows: [m] } = await db.query(`INSERT INTO eletrica_equipamentos(tag,tensao_v,classe_isolamento,tipo_bobina,criado_por_id)
+      VALUES ('M-01',6300,'F','pre_formada',$1) RETURNING id`, [solicitante]);
+  await assert.rejects(lancarTrafo(m.id), /não corresponde/);
+
+  // 082: situação nasce 'instalado' e só aceita instalado/reserva.
+  const { rows: [sit] } = await db.query('SELECT situacao FROM eletrica_equipamentos WHERE id=$1', [m.id]);
+  assert.equal(sit.situacao, 'instalado');
+  await db.query("UPDATE eletrica_equipamentos SET situacao='reserva', aplicacao='M-02 e M-03' WHERE id=$1", [m.id]);
+  await assert.rejects(db.query("UPDATE eletrica_equipamentos SET situacao='sucata' WHERE id=$1", [m.id]), /situacao_check/);
+});
