@@ -1,0 +1,128 @@
+<div class="max-w-5xl mx-auto space-y-6">
+  @if (carregando() && !ensaio()) {
+    <p class="text-sm text-gray-500">Carregando...</p>
+  } @else if (!ensaio()) {
+    <div class="app-card p-8 text-center space-y-3">
+      <h2 class="text-lg font-bold text-gray-800">Termografia não encontrada</h2>
+      <a routerLink="/eletrica/ensaios" class="text-sm font-semibold text-blue-600 hover:text-blue-700">Voltar para a lista</a>
+    </div>
+  } @else {
+    @let e = ensaio()!;
+
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <a [routerLink]="linkEquipamento()" class="text-xs font-semibold text-blue-600 hover:text-blue-700">← {{ equipamento()?.tag ?? 'Equipamento' }}</a>
+        <div class="flex flex-wrap items-center gap-3 mt-1">
+          <h1 class="text-2xl font-bold text-gray-800">{{ numero(e.numero) }} · Termografia {{ equipamento()?.tag }}</h1>
+          <span class="text-xs font-semibold px-2 py-1 rounded-full" [ngClass]="resultadoBadge[e.resultado]">
+            {{ e.resultado === 'aprovado' ? '✓' : '✕' }} {{ resultadoLabel[e.resultado] }}
+          </span>
+          @if (pior(); as p) {
+            <span class="text-xs font-semibold px-2 py-1 rounded-full" [ngClass]="prioridadeBadge[p]">Pior ponto: prioridade {{ p }}</span>
+          }
+        </div>
+        <p class="text-sm text-gray-500 mt-1">
+          Inspeção em {{ dataBr(e.dataEnsaio) }}{{ e.osNumero ? ' · OS ' + e.osNumero : '' }} · lançada por {{ e.criadoPorNome }}
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        @if (isAdmin()) {
+          <button type="button" (click)="excluir()" [disabled]="excluindo()"
+            class="rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">
+            {{ excluindo() ? 'Excluindo...' : 'Excluir' }}
+          </button>
+        }
+        @if (podeCorrigir()) {
+          <a [routerLink]="['/eletrica/ensaios/termografia', e.id, 'editar']"
+            class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Corrigir</a>
+        }
+        <button type="button" (click)="baixarPdf()" [disabled]="gerandoPdf() || !equipamento()"
+          class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+          {{ gerandoPdf() ? 'Gerando PDF...' : 'Baixar relatório (PDF)' }}
+        </button>
+      </div>
+    </div>
+
+    <section class="app-card p-5">
+      <dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 text-sm">
+        <div><dt class="text-xs text-gray-400">Temp. ambiente</dt><dd class="text-gray-800">{{ fmt(e.temperaturaAmbienteC) }} °C</dd></div>
+        <div><dt class="text-xs text-gray-400">Carga</dt><dd class="text-gray-800">{{ e.condicoes.cargaPct != null ? fmt(e.condicoes.cargaPct, 0) + '%' : '—' }}</dd></div>
+        <div><dt class="text-xs text-gray-400">Emissividade</dt><dd class="text-gray-800">{{ e.condicoes.emissividade != null ? fmt(e.condicoes.emissividade, 2) : '—' }}</dd></div>
+        <div><dt class="text-xs text-gray-400">Distância</dt><dd class="text-gray-800">{{ e.condicoes.distanciaM != null ? fmt(e.condicoes.distanciaM) + ' m' : '—' }}</dd></div>
+        <div class="col-span-2"><dt class="text-xs text-gray-400">Câmera</dt><dd class="text-gray-800">{{ e.instrumentoModelo || '—' }}</dd></div>
+        <div class="col-span-2"><dt class="text-xs text-gray-400">Aplicação / local</dt><dd class="text-gray-800">{{ equipamento()?.aplicacao || '—' }}{{ equipamento()?.localInstalacao ? ' · ' + equipamento()?.localInstalacao : '' }}</dd></div>
+      </dl>
+    </section>
+
+    <section class="app-card p-5 space-y-3">
+      <h2 class="text-sm font-bold text-blue-900 uppercase tracking-wide">Pontos inspecionados</h2>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="text-xs text-slate-500 border-b border-slate-200">
+              <th class="py-2 pr-2 text-left font-semibold">Ponto</th>
+              <th class="py-2 px-2 text-left font-semibold">Grupo</th>
+              <th class="py-2 px-2 text-left font-semibold">Critério</th>
+              <th class="py-2 px-2 text-right font-semibold">Temp.</th>
+              <th class="py-2 px-2 text-right font-semibold">ΔT ambiente</th>
+              <th class="py-2 px-2 text-right font-semibold">ΔT similares</th>
+              <th class="py-2 pl-2 text-left font-semibold">Prioridade</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            @for (p of e.pontos; track $index; let i = $index) {
+              @let a = avaliacao()[i];
+              <tr>
+                <td class="py-2 pr-2 text-gray-800">{{ p.ponto }}</td>
+                <td class="py-2 px-2 text-gray-500">{{ p.grupo || '—' }}</td>
+                <td class="py-2 px-2 text-gray-500 text-xs">{{ p.criterio === 'limite' && p.limiteC != null ? 'Limite ' + fmt(p.limiteC, 0) + ' °C' : criterioLabel[p.criterio] }}</td>
+                <td class="py-2 px-2 text-right tabular-nums font-semibold text-gray-800">{{ temp(p.temperaturaC) }}</td>
+                <td class="py-2 px-2 text-right tabular-nums text-gray-600">{{ temp(a.dTAmbiente, true) }}</td>
+                <td class="py-2 px-2 text-right tabular-nums text-gray-600">{{ temp(a.dTSimilares, true) }}</td>
+                <td class="py-2 pl-2">
+                  @if (a.prioridade) {
+                    <span class="text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap" [ngClass]="prioridadeBadge[a.prioridade]">
+                      {{ a.prioridade }} · {{ prioridadeAcao[a.prioridade] }}
+                    </span>
+                    @if (a.motivo) { <span class="block text-[11px] text-gray-500 mt-0.5">{{ a.motivo }}</span> }
+                  } @else {
+                    <span class="text-xs font-semibold px-2 py-1 rounded-full" [ngClass]="p.criterio === 'registro' ? 'bg-gray-100 text-gray-600' : 'bg-green-100 text-green-800'">
+                      {{ p.criterio === 'registro' ? 'Registrado' : '✓ Normal' }}
+                    </span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="text-xs text-gray-500">
+        ANSI/NETA MTS 100.18 — prioridade 1: reparar já; 2: monitorar até corrigir; 3: reparar quando possível; 4: investigar. Reprova com prioridade 1 ou 2.
+      </p>
+    </section>
+
+    <section class="app-card p-5 space-y-3">
+      <h2 class="text-sm font-bold text-blue-900 uppercase tracking-wide">Imagens térmicas e anexos</h2>
+      <app-anexos-galeria [anexos]="e.anexos" />
+    </section>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <section class="app-card p-5 space-y-2">
+        <h2 class="text-sm font-bold text-blue-900 uppercase tracking-wide">Executantes</h2>
+        @if (e.executantes.length) {
+          <ul class="text-sm text-gray-800 space-y-0.5">
+            @for (x of e.executantes; track $index) {
+              <li>{{ x.nome }}@if (x.matricula) { <span class="text-gray-500"> · mat. {{ x.matricula }}</span> }</li>
+            }
+          </ul>
+        } @else {
+          <p class="text-sm text-gray-500">Não informados.</p>
+        }
+      </section>
+      <section class="app-card p-5 space-y-2">
+        <h2 class="text-sm font-bold text-blue-900 uppercase tracking-wide">Observações</h2>
+        <p class="text-sm text-gray-800 whitespace-pre-line">{{ e.observacoes || '—' }}</p>
+      </section>
+    </div>
+  }
+</div>

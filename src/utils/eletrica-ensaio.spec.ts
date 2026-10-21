@@ -110,7 +110,7 @@ const ensaio: EnsaioIsolamento = {
   instrumentoModelo: 'Fluke 1550C', tensaoAplicadaV: 5000, temperaturaAmbienteC: 30, temperaturaEnrolamentoC: null, umidadePct: 75,
   ...mt,
   medicoes: [leitura(), leitura({ circuito: 'B', r30s: 782, r1min: 803, r10min: 841 }), leitura({ circuito: 'C', foraEscala: true })],
-  resultado: 'reprovado', executantes: [{ nome: 'Fulano de Tal', matricula: '1234' }], observacoes: 'Enrolamento úmido.',
+  resultado: 'reprovado', executantes: [{ nome: 'Fulano de Tal', matricula: '1234' }], observacoes: 'Enrolamento úmido.', anexos: [],
   criadoPorId: 'u1', criadoPorNome: 'Lucas', createdAt: new Date(), updatedAt: new Date(),
 };
 

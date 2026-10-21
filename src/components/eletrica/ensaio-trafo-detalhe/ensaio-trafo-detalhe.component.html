@@ -196,6 +196,14 @@
       </section>
     }
 
+    <app-comparacao-anterior [itens]="comparacao()" [anteriorRotulo]="anteriorRotulo()"
+      [anteriorLink]="anterior() ? ['/eletrica/ensaios/trafo', anterior()!.id] : []" [regra]="regraComparacao" />
+
+    <section class="app-card p-5 space-y-3">
+      <h2 class="text-sm font-bold text-blue-900 uppercase tracking-wide">Anexos</h2>
+      <app-anexos-galeria [anexos]="e.anexos" />
+    </section>
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <section class="app-card p-5 space-y-2">
         <h2 class="text-sm font-bold text-blue-900 uppercase tracking-wide">Executantes</h2>

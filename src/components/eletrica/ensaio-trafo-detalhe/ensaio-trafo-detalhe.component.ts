@@ -1,5 +1,8 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { AnexosGaleriaComponent } from '../anexos/anexos.component';
+import { ComparacaoAnteriorComponent } from '../comparacao-anterior/comparacao-anterior.component';
+import { QUEDA_IR_ALERTA_PCT, VARIACAO_OHMICA_ALERTA_PCT, compararTrafo, ensaioAnterior } from '../../../utils/eletrica-comparacao';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { EletricaEnsaioService } from '../../../services/eletrica-ensaio.service';
 import { NotificationService } from '../../../services/notification.service';
@@ -19,7 +22,7 @@ import { baixarPdfEnsaioTrafo } from '../../../utils/eletrica-trafo-pdf';
 @Component({
   selector: 'app-ensaio-trafo-detalhe',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, AnexosGaleriaComponent, ComparacaoAnteriorComponent],
   templateUrl: './ensaio-trafo-detalhe.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -42,6 +45,17 @@ export class EnsaioTrafoDetalheComponent implements OnInit {
   private id = '';
   ensaio = signal<EnsaioTrafo | null>(null);
   trafo = signal<Transformador | null>(null);
+  anterior = signal<EnsaioTrafo | null>(null);
+  readonly regraComparacao = `Aviso quando a IR corrigida cai ${QUEDA_IR_ALERTA_PCT}% ou mais e quando a resistência ôhmica a 75 °C varia mais de ${VARIACAO_OHMICA_ALERTA_PCT}% (NETA MTS). Não muda o resultado.`;
+  comparacao = computed(() => {
+    const e = this.ensaio();
+    const a = this.anterior();
+    return e && a ? compararTrafo(e, a) : [];
+  });
+  anteriorRotulo = computed(() => {
+    const a = this.anterior();
+    return a ? `${numeroEnsaio(a.numero)} de ${dataBr(a.dataEnsaio)}` : null;
+  });
   carregando = signal(true);
   gerandoPdf = signal(false);
   excluindo = signal(false);
@@ -78,7 +92,13 @@ export class EnsaioTrafoDetalheComponent implements OnInit {
     try {
       const e = await this.ensaioService.buscarEnsaioTrafo(this.id);
       this.ensaio.set(e);
-      if (e) this.trafo.set(await this.ensaioService.buscarTrafo(e.equipamentoId));
+      if (e) {
+        const [t, lista] = await Promise.all([
+          this.ensaioService.buscarTrafo(e.equipamentoId), this.ensaioService.ensaiosDoTrafo(e.equipamentoId),
+        ]);
+        this.trafo.set(t);
+        this.anterior.set(ensaioAnterior(lista, e));
+      }
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao carregar o ensaio.');
     } finally {
@@ -92,7 +112,7 @@ export class EnsaioTrafoDetalheComponent implements OnInit {
     if (!e || !t || this.gerandoPdf()) return;
     this.gerandoPdf.set(true);
     try {
-      await baixarPdfEnsaioTrafo(e, t);
+      await baixarPdfEnsaioTrafo(e, t, this.anterior());
     } catch (err) {
       console.error('[ensaio-trafo] Falha ao gerar PDF:', err);
       this.notificationService.showError('Erro ao gerar o PDF.');

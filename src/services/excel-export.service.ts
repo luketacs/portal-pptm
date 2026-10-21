@@ -1185,6 +1185,71 @@ export class ExcelExportService {
     await this.baixarWorkbook(wb, params.titulo);
   }
 
+  // Várias abas simples (uma tabela por aba), mesmo visual das outras exportações: logo,
+  // título, cabeçalho azul congelado e filtro automático. Usado pelos Ensaios Elétricos.
+  async exportarAbas(params: {
+    titulo: string;
+    abas: { nome: string; colunas: { header: string; width: number; quebra?: boolean }[]; linhas: (string | number | null)[][] }[];
+  }): Promise<void> {
+    const { default: ExcelJS } = await import('exceljs');
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Portal PPTM';
+    wb.created = new Date();
+    const logoBuffer = await this.carregarLogoBuffer();
+
+    for (const aba of params.abas) {
+      const NC = aba.colunas.length;
+      const ws = wb.addWorksheet(this.nomeAbaSeguro(aba.nome), {
+        pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+        views: [{ state: 'frozen', ySplit: 4, showGridLines: false }],
+      });
+      ws.columns = aba.colunas.map(c => ({ width: c.width }));
+      if (logoBuffer) {
+        const logoId = wb.addImage({ buffer: logoBuffer, extension: 'png' });
+        ws.addImage(logoId, { tl: { col: 0.15, row: 0.12 }, ext: { width: 210, height: 63 } });
+      }
+      ws.getRow(1).height = 28;
+      ws.getRow(2).height = 18;
+      ws.getRow(3).height = 6;
+      const colTitulo = Math.min(3, NC);
+      ws.mergeCells(1, colTitulo, 1, Math.max(NC, colTitulo));
+      const cTitulo = ws.getCell(1, colTitulo);
+      cTitulo.value = `${params.titulo} — ${aba.nome}`;
+      cTitulo.font = { bold: true, size: 16, color: { argb: this.PROG_AZUL_TEXTO } };
+      cTitulo.alignment = { horizontal: 'left', vertical: 'middle' };
+      ws.mergeCells(2, colTitulo, 2, Math.max(NC, colTitulo));
+      const cSub = ws.getCell(2, colTitulo);
+      cSub.value = `${aba.linhas.length} linha(s) — gerado em ${this.nowStr()}`;
+      cSub.font = { size: 10, color: { argb: 'FF555555' } };
+      for (let c = 1; c <= NC; c++) ws.getCell(2, c).border = { bottom: { style: 'thin', color: { argb: 'FFB9C1FD' } } };
+
+      const header = ws.getRow(4);
+      header.height = 24;
+      aba.colunas.forEach((c, i) => {
+        const cel = header.getCell(i + 1);
+        cel.value = c.header;
+        cel.font = { bold: true, size: 9, color: { argb: 'FFFFFFFF' } };
+        cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL } };
+        cel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      });
+      let row = 5;
+      for (const linha of aba.linhas) {
+        linha.forEach((v, i) => {
+          const cel = ws.getCell(row, i + 1);
+          cel.value = v;
+          cel.font = { size: 9 };
+          cel.alignment = { vertical: 'top', wrapText: !!aba.colunas[i]?.quebra, horizontal: typeof v === 'number' ? 'right' : 'left' };
+          cel.border = this.bordaFina();
+        });
+        row++;
+      }
+      ws.pageSetup.margins = { left: 0.3, right: 0.3, top: 0.5, bottom: 0.4, header: 0.2, footer: 0.2 };
+      ws.pageSetup.printTitlesRow = '4:4';
+      ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(row - 1, 4), column: NC } };
+    }
+    await this.baixarWorkbook(wb, params.titulo);
+  }
+
   private async baixarWorkbook(wb: ExcelJS.Workbook, titulo: string): Promise<void> {
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });

@@ -45,6 +45,8 @@
         }
         <a [routerLink]="['/eletrica/ensaios/trafos', t.id, 'editar']"
           class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Editar transformador</a>
+        <a routerLink="/eletrica/ensaios/termografia/novo" [queryParams]="{ equipamento: t.id }"
+          class="rounded-lg border border-blue-600 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">+ Termografia</a>
         <a routerLink="/eletrica/ensaios/trafo/novo" [queryParams]="{ trafo: t.id }"
           class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">+ Lançar ensaio</a>
       </div>
@@ -175,5 +177,52 @@
         }
       </section>
     </div>
+
+    <!-- Termografias -->
+    <section class="app-card p-5 space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-sm font-bold text-blue-900 uppercase tracking-wide">Termografias</h2>
+        <a routerLink="/eletrica/ensaios/termografia/novo" [queryParams]="{ equipamento: t.id }"
+          class="rounded-lg border border-blue-600 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50">+ Termografia</a>
+      </div>
+      @if (!termografias().length) {
+        <p class="text-sm text-gray-500">Nenhuma termografia lançada.</p>
+      } @else {
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-xs text-slate-500 border-b border-slate-200">
+                <th class="py-2 pr-2 text-left font-semibold">Nº</th>
+                <th class="py-2 px-2 text-left font-semibold">Data</th>
+                <th class="py-2 px-2 text-right font-semibold">Ponto mais quente</th>
+                <th class="py-2 px-2 text-left font-semibold">Pior prioridade</th>
+                <th class="py-2 pl-2 text-center font-semibold">Resultado</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              @for (t of termografias(); track t.ensaio.id) {
+                <tr class="hover:bg-slate-50 cursor-pointer" [routerLink]="['/eletrica/ensaios/termografia', t.ensaio.id]">
+                  <td class="py-2 pr-2 font-semibold text-blue-900 whitespace-nowrap">{{ numero(t.ensaio.numero) }}</td>
+                  <td class="py-2 px-2 text-gray-700 whitespace-nowrap">{{ dataBr(t.ensaio.dataEnsaio) }}</td>
+                  <td class="py-2 px-2 text-right tabular-nums text-gray-800">{{ t.maisQuente }}</td>
+                  <td class="py-2 px-2">
+                    @if (t.pior) {
+                      <span class="text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap" [ngClass]="prioridadeBadge[t.pior]">{{ t.pior }} · {{ prioridadeAcao[t.pior] }}</span>
+                    } @else {
+                      <span class="text-xs text-gray-500">Sem anomalia</span>
+                    }
+                  </td>
+                  <td class="py-2 pl-2 text-center">
+                    <span class="text-xs font-semibold px-2 py-1 rounded-full" [ngClass]="resultadoBadge[t.ensaio.resultado]">{{ resultadoLabel[t.ensaio.resultado] }}</span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+
+    <app-equipamento-historico [equipamentoId]="t.id" [tipo]="'transformador'" [situacao]="t.situacao" [tag]="t.tag" (trocado)="recarregar()" />
   }
 </div>

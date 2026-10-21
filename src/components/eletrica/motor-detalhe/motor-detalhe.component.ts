@@ -2,6 +2,10 @@ import {
   ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, effect, signal, viewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { EquipamentoHistoricoComponent } from '../equipamento-historico/equipamento-historico.component';
+import { EnsaioTermografia } from '../../../models/eletrica-termografia.model';
+import { PRIORIDADE_ACAO, PRIORIDADE_BADGE, avaliarPontos, formatarTemp, piorPrioridade } from '../../../utils/eletrica-termografia';
+
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { EletricaEnsaioService } from '../../../services/eletrica-ensaio.service';
 import { NotificationService } from '../../../services/notification.service';
@@ -31,7 +35,7 @@ const dataCurta = (t: number) => new Date(t).toLocaleDateString('pt-BR', { day: 
 @Component({
   selector: 'app-motor-detalhe',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, EquipamentoHistoricoComponent],
   templateUrl: './motor-detalhe.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -55,6 +59,15 @@ export class MotorDetalheComponent implements OnInit, OnDestroy {
   motor = signal<Motor | null>(null);
   ensaios = signal<EnsaioIsolamento[]>([]);
   carregando = signal(true);
+
+  termografias = computed(() => this._termografias().map(e => {
+    const av = avaliarPontos(e.pontos, e.temperaturaAmbienteC);
+    const quente = e.pontos.filter(p => p.temperaturaC !== null).sort((a, b) => (b.temperaturaC ?? 0) - (a.temperaturaC ?? 0))[0];
+    return { ensaio: e, pior: piorPrioridade(av), maisQuente: quente ? `${formatarTemp(quente.temperaturaC)} · ${quente.ponto}` : '—' };
+  }).reverse());
+  private _termografias = signal<EnsaioTermografia[]>([]);
+  readonly prioridadeBadge = PRIORIDADE_BADGE;
+  readonly prioridadeAcao = PRIORIDADE_ACAO;
   excluindo = signal(false);
   isAdmin = this.ensaioService.isAdmin;
 
@@ -132,11 +145,19 @@ export class MotorDetalheComponent implements OnInit, OnDestroy {
     });
   }
 
-  async ngOnInit(): Promise<void> {
+  ngOnInit(): void {
+    this.recarregar();
+  }
+
+  // Também depois de uma troca (situação, aplicação e local mudam).
+  async recarregar(): Promise<void> {
     try {
-      const [m, e] = await Promise.all([this.ensaioService.buscarMotor(this.id), this.ensaioService.ensaiosDoMotor(this.id)]);
+      const [m, e, termo] = await Promise.all([
+        this.ensaioService.buscarMotor(this.id), this.ensaioService.ensaiosDoMotor(this.id), this.ensaioService.termografiasDo(this.id),
+      ]);
       this.motor.set(m);
       this.ensaios.set(e);
+      this._termografias.set(termo);
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao carregar o motor.');
     } finally {

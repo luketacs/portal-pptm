@@ -5,7 +5,8 @@ import {
   potenciaTexto, temperaturaCorrecao, tensaoEnsaioAdequada, tensaoEnsaioRecomendada,
 } from './eletrica-ensaio';
 import { dataBr } from './eletrica-reparo';
-import { Escritor, LARGURA, baixarBlob, cabecalhoFicha, carregarLogo, moldurasFicha } from './pdf-ficha';
+import { Escritor, LARGURA, baixarBlob, cabecalhoFicha, carregarLogo, moldurasFicha, secaoAnexos, secaoComparacao } from './pdf-ficha';
+import { compararMotor, linhasComparacao } from './eletrica-comparacao';
 
 // PDF do ensaio de resistência de isolamento — mesma ficha técnica do Reparo Externo.
 // Substitui a planilha "ENSAIO DE MOTORES - MT" impressa. Gerado no navegador (jsPDF).
@@ -16,7 +17,7 @@ const SITUACAO_TEXTO = { aprovado: 'Aprovado', reprovado: 'Reprovado', pendente:
 
 const comUnidade = (v: number | null, unidade: string, casas = 1) => (v === null ? null : `${formatarNumero(v, casas)} ${unidade}`);
 
-export async function gerarPdfEnsaio(e: EnsaioIsolamento, m: Motor): Promise<Blob> {
+export async function gerarPdfEnsaio(e: EnsaioIsolamento, m: Motor, anterior: EnsaioIsolamento | null = null): Promise<Blob> {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
   doc.setProperties({ title: `${numeroEnsaio(e.numero)} — ${TITULO_DOC} — ${m.tag}`, author: 'Diamante Geração de Energia' });
@@ -103,10 +104,18 @@ export async function gerarPdfEnsaio(e: EnsaioIsolamento, m: Motor): Promise<Blo
     { rotulo: 'Índice de polarização', valor: `≥ ${formatarIndice(ipMinimo(e.classeIsolamento))} para classe ${e.classeIsolamento} (tabela 4); não se aplica se IR 1 min a 40 °C > ${IR_LIMITE_IP_MOHM.toLocaleString('pt-BR')} MΩ. IA (R1min / R30s) é só informativo.`, largo: true },
   ], 1, 44);
 
+  secaoComparacao(
+    w, anterior ? `5. Comparação com o ensaio anterior (${numeroEnsaio(anterior.numero)}, ${dataBr(anterior.dataEnsaio)})` : '5. Comparação com o ensaio anterior',
+    anterior ? linhasComparacao(compararMotor(e, anterior)) : [],
+    'Primeiro ensaio deste motor no portal.',
+  );
+
   if (e.observacoes) {
-    w.secao('5. Observações');
+    w.secao('6. Observações');
     w.paragrafo(e.observacoes);
   }
+
+  await secaoAnexos(w, e.observacoes ? '7. Anexos' : '6. Anexos', e.anexos);
 
   moldurasFicha(doc, TITULO_DOC, `${numeroEnsaio(e.numero)} · ${m.tag}`, numeroEnsaio(e.numero));
   return doc.output('blob');
@@ -117,6 +126,6 @@ export function nomeArquivoPdfEnsaio(e: EnsaioIsolamento, m: Motor): string {
   return `${numeroEnsaio(e.numero)}_Ensaio_Isolamento_${tag}_${e.dataEnsaio}.pdf`;
 }
 
-export async function baixarPdfEnsaio(e: EnsaioIsolamento, m: Motor): Promise<void> {
-  baixarBlob(await gerarPdfEnsaio(e, m), nomeArquivoPdfEnsaio(e, m));
+export async function baixarPdfEnsaio(e: EnsaioIsolamento, m: Motor, anterior: EnsaioIsolamento | null = null): Promise<void> {
+  baixarBlob(await gerarPdfEnsaio(e, m, anterior), nomeArquivoPdfEnsaio(e, m));
 }

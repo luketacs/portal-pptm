@@ -126,7 +126,7 @@ const ensaio: EnsaioTrafo = {
   ],
   ohmica: [{ enrolamento: 'H', pares: [{ par: 'H1-H3', valor: 1000 }, { par: 'H2-H1', valor: 1010 }, { par: 'H3-H2', valor: 1005 }] }],
   ttr: [{ secundario: '1X', pares: [{ par: 'H1-H3 / 1X1-1X3', medida: 20.05 }, { par: 'H2-H1 / 1X2-1X1', medida: 19.98 }, { par: 'H3-H2 / 1X3-1X2', medida: 20.02 }] }],
-  resultado: 'reprovado', executantes: [{ nome: 'Fulano de Tal', matricula: '1234' }], observacoes: 'IP baixo entre H e 1X.',
+  resultado: 'reprovado', executantes: [{ nome: 'Fulano de Tal', matricula: '1234' }], observacoes: 'IP baixo entre H e 1X.', anexos: [],
   criadoPorId: 'u1', criadoPorNome: 'Lucas', createdAt: new Date(), updatedAt: new Date(),
 };
 

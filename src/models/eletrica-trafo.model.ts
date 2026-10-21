@@ -1,4 +1,4 @@
-import { ClasseIsolamento, Executante, SituacaoEquipamento } from './eletrica-ensaio.model';
+import { Anexo, ClasseIsolamento, Executante, SituacaoEquipamento } from './eletrica-ensaio.model';
 
 export type Ligacao = 'D' | 'Y';
 export type MeioIsolante = 'seco' | 'oleo';
@@ -96,6 +96,7 @@ export interface EnsaioTrafo {
   resultado: 'aprovado' | 'reprovado';
   executantes: Executante[];
   observacoes: string | null;
+  anexos: Anexo[];
   criadoPorId: string | null;
   criadoPorNome: string;
   createdAt: Date;

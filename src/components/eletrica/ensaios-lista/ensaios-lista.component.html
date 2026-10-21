@@ -3,10 +3,14 @@
     <div>
       <h1 class="text-2xl font-bold text-gray-800">Equipamentos e ensaios</h1>
       <p class="text-sm text-gray-500 mt-1">
-        Motores pela IEEE 43-2013 e transformadores pela ANSI/NETA MTS. Abra um equipamento para ver a tendência.
+        Motores pela IEEE 43-2013, transformadores e termografia pela ANSI/NETA MTS. Abra um equipamento para ver a tendência.
       </p>
     </div>
     <div class="flex flex-wrap gap-2">
+      <button type="button" (click)="exportarExcel()" [disabled]="exportando()"
+        class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+        {{ exportando() ? 'Gerando Excel...' : 'Exportar Excel' }}
+      </button>
       @if (aba() === 'trafos') {
         <a routerLink="/eletrica/ensaios/trafos/novo"
           class="rounded-lg border border-blue-600 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">+ Cadastrar transformador</a>

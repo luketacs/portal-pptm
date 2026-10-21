@@ -2,6 +2,10 @@ import {
   ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, effect, signal, viewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { EquipamentoHistoricoComponent } from '../equipamento-historico/equipamento-historico.component';
+import { EnsaioTermografia } from '../../../models/eletrica-termografia.model';
+import { PRIORIDADE_ACAO, PRIORIDADE_BADGE, avaliarPontos, formatarTemp, piorPrioridade } from '../../../utils/eletrica-termografia';
+
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { EletricaEnsaioService } from '../../../services/eletrica-ensaio.service';
 import { NotificationService } from '../../../services/notification.service';
@@ -30,7 +34,7 @@ const cor = (i: number) => (Math.min(i, 5) + 1) as CorSerie;
 @Component({
   selector: 'app-trafo-detalhe',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, EquipamentoHistoricoComponent],
   templateUrl: './trafo-detalhe.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -57,6 +61,15 @@ export class TrafoDetalheComponent implements OnInit, OnDestroy {
   trafo = signal<Transformador | null>(null);
   ensaios = signal<EnsaioTrafo[]>([]);
   carregando = signal(true);
+
+  termografias = computed(() => this._termografias().map(e => {
+    const av = avaliarPontos(e.pontos, e.temperaturaAmbienteC);
+    const quente = e.pontos.filter(p => p.temperaturaC !== null).sort((a, b) => (b.temperaturaC ?? 0) - (a.temperaturaC ?? 0))[0];
+    return { ensaio: e, pior: piorPrioridade(av), maisQuente: quente ? `${formatarTemp(quente.temperaturaC)} · ${quente.ponto}` : '—' };
+  }).reverse());
+  private _termografias = signal<EnsaioTermografia[]>([]);
+  readonly prioridadeBadge = PRIORIDADE_BADGE;
+  readonly prioridadeAcao = PRIORIDADE_ACAO;
   excluindo = signal(false);
   isAdmin = this.ensaioService.isAdmin;
 
@@ -162,11 +175,19 @@ export class TrafoDetalheComponent implements OnInit, OnDestroy {
     });
   }
 
-  async ngOnInit(): Promise<void> {
+  ngOnInit(): void {
+    this.recarregar();
+  }
+
+  // Também depois de uma troca (situação, aplicação e local mudam).
+  async recarregar(): Promise<void> {
     try {
-      const [t, e] = await Promise.all([this.ensaioService.buscarTrafo(this.id), this.ensaioService.ensaiosDoTrafo(this.id)]);
+      const [t, e, termo] = await Promise.all([
+        this.ensaioService.buscarTrafo(this.id), this.ensaioService.ensaiosDoTrafo(this.id), this.ensaioService.termografiasDo(this.id),
+      ]);
       this.trafo.set(t);
       this.ensaios.set(e);
+      this._termografias.set(termo);
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao carregar o transformador.');
     } finally {

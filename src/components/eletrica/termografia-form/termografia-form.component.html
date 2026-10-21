@@ -1,0 +1,240 @@
+<div class="max-w-5xl mx-auto space-y-6">
+  <div>
+    <a [routerLink]="id ? ['/eletrica/ensaios/termografia', id] : '/eletrica/ensaios'" class="text-xs font-semibold text-blue-600 hover:text-blue-700">← Voltar</a>
+    <h1 class="text-2xl font-bold text-gray-800 mt-1">{{ id ? 'Corrigir termografia ' + numeroAtual() : 'Lançar termografia' }}</h1>
+    <p class="text-sm text-gray-500 mt-1">
+      Temperatura de cada ponto inspecionado. A prioridade da ação (ANSI/NETA MTS, tabela 100.18) aparece enquanto você digita.
+    </p>
+  </div>
+
+  @if (carregando()) {
+    <p class="text-sm text-gray-500">Carregando...</p>
+  } @else if (erroFatal()) {
+    <div class="app-card p-8 text-center text-sm text-gray-600">{{ erroFatal() }}</div>
+  } @else {
+    <form (ngSubmit)="onSubmit()" class="space-y-5">
+      @if (!id) {
+        <div class="app-card p-4 flex flex-wrap items-center gap-3">
+          <span class="text-sm font-medium text-slate-700">Tipo de ensaio:</span>
+          <div class="inline-flex flex-wrap rounded-lg border border-slate-300 p-0.5 text-sm font-semibold" role="group" aria-label="Tipo de ensaio">
+            <a routerLink="/eletrica/ensaios/novo" class="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-50">Isolamento de motor</a>
+            <a routerLink="/eletrica/ensaios/trafo/novo" class="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-50">Ensaios de transformador</a>
+            <span class="rounded-md px-3 py-1.5 bg-blue-900 text-white" aria-current="true">Termografia</span>
+          </div>
+        </div>
+      }
+
+      <section class="app-card p-6 space-y-4">
+        <h2 class="text-base font-bold text-blue-900">1. Equipamento</h2>
+        @if (!id) {
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">TAG <span class="text-red-500">*</span></label>
+            <select [ngModel]="equipamentoId()" (ngModelChange)="escolherEquipamento($event)" name="equipamento" required
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="" disabled>Escolha...</option>
+              @if (motores().length) {
+                <optgroup label="Motores">
+                  @for (m of motores(); track m.id) {
+                    <option [value]="m.id">{{ m.tag }}{{ m.situacao === 'reserva' ? ' (reserva)' : '' }}{{ m.localInstalacao ? ' — ' + m.localInstalacao : '' }}</option>
+                  }
+                </optgroup>
+              }
+              @if (trafos().length) {
+                <optgroup label="Transformadores">
+                  @for (t of trafos(); track t.id) {
+                    <option [value]="t.id">{{ t.tag }}{{ t.situacao === 'reserva' ? ' (reserva)' : '' }}{{ t.localInstalacao ? ' — ' + t.localInstalacao : '' }}</option>
+                  }
+                </optgroup>
+              }
+            </select>
+            <p class="text-xs text-gray-500 mt-1">Ao escolher, os pontos comuns daquele tipo de equipamento já aparecem.</p>
+          </div>
+        } @else {
+          <p class="text-sm text-gray-800 font-semibold">{{ equipamento()?.tag }}</p>
+        }
+      </section>
+
+      <section class="app-card p-6 space-y-4">
+        <h2 class="text-base font-bold text-blue-900">2. Condições da inspeção</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Data <span class="text-red-500">*</span></label>
+            <input type="date" [ngModel]="dataEnsaio()" (ngModelChange)="dataEnsaio.set($event)" name="data" required
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Nº da OS</label>
+            <input type="text" [ngModel]="osNumero()" (ngModelChange)="osNumero.set($event)" name="os"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div class="col-span-2">
+            <label class="block text-sm font-medium text-slate-700 mb-1">Câmera (marca / modelo)</label>
+            <input type="text" [ngModel]="instrumentoModelo()" (ngModelChange)="instrumentoModelo.set($event)" name="camera" placeholder="Ex: FLIR E8"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Temp. ambiente (°C) <span class="text-red-500">*</span></label>
+            <input type="text" inputmode="decimal" [ngModel]="temperaturaAmbiente()" (ngModelChange)="temperaturaAmbiente.set($event)" name="tamb" required
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Carga (% da nominal)</label>
+            <input type="text" inputmode="decimal" [ngModel]="cargaPct()" (ngModelChange)="cargaPct.set($event)" name="carga"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Emissividade</label>
+            <input type="text" inputmode="decimal" [ngModel]="emissividade()" (ngModelChange)="emissividade.set($event)" name="emis"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Distância (m)</label>
+            <input type="text" inputmode="decimal" [ngModel]="distanciaM()" (ngModelChange)="distanciaM.set($event)" name="dist"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Umidade (%)</label>
+            <input type="text" inputmode="decimal" [ngModel]="umidade()" (ngModelChange)="umidade.set($event)" name="umidade"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+        @if (avisoCarga()) {
+          <p class="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">⚠ {{ avisoCarga() }}</p>
+        }
+      </section>
+
+      <section class="app-card p-6 space-y-3">
+        <h2 class="text-base font-bold text-blue-900">3. Pontos inspecionados</h2>
+        <p class="text-xs text-gray-500">
+          Pontos com o mesmo <strong>grupo</strong> (ex.: as três conexões) são comparados entre si. O critério define como o ponto é avaliado:
+          conexão elétrica pela NETA, bobina só entre similares, mancal pelo limite do fabricante.
+        </p>
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-xs text-slate-500 border-b border-slate-200">
+                <th class="py-2 pr-2 text-left font-semibold">Ponto</th>
+                <th class="py-2 px-1 text-left font-semibold">Grupo</th>
+                <th class="py-2 px-1 text-left font-semibold">Critério</th>
+                <th class="py-2 px-1 text-center font-semibold">Limite (°C)</th>
+                <th class="py-2 px-1 text-center font-semibold">Temp. (°C) <span class="text-red-500">*</span></th>
+                <th class="py-2 px-2 text-right font-semibold">ΔT ambiente</th>
+                <th class="py-2 px-2 text-right font-semibold">ΔT similares</th>
+                <th class="py-2 px-2 text-center font-semibold">Prioridade</th>
+                <th class="py-2 pl-1"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              @for (p of pontos(); track $index; let i = $index) {
+                @let a = avaliacao()?.[i];
+                <tr>
+                  <td class="py-2 pr-2">
+                    <input type="text" [ngModel]="p.ponto" (ngModelChange)="atualizarPonto(i, 'ponto', $event)" [name]="'pp' + i" placeholder="Ex: Conexão fase A"
+                      class="w-56 rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td class="py-2 px-1">
+                    <input type="text" [ngModel]="p.grupo" (ngModelChange)="atualizarPonto(i, 'grupo', $event)" [name]="'pg' + i"
+                      class="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td class="py-2 px-1">
+                    <select [ngModel]="p.criterio" (ngModelChange)="atualizarPonto(i, 'criterio', $event)" [name]="'pc' + i"
+                      class="w-44 rounded-lg border border-slate-300 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      @for (c of criterios; track c) { <option [value]="c">{{ criterioLabel[c] }}</option> }
+                    </select>
+                  </td>
+                  <td class="py-2 px-1">
+                    @if (p.criterio === 'limite') {
+                      <input type="text" inputmode="decimal" [ngModel]="p.limiteC" (ngModelChange)="atualizarPonto(i, 'limiteC', $event)" [name]="'pl' + i"
+                        [attr.aria-label]="p.ponto + ' — limite do fabricante'"
+                        class="w-20 rounded-lg border px-2 py-1.5 text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        [ngClass]="invalido(p.limiteC) ? 'border-red-400' : 'border-slate-300'" />
+                    } @else {
+                      <span class="block text-center text-xs text-gray-400">—</span>
+                    }
+                  </td>
+                  <td class="py-2 px-1">
+                    <input type="text" inputmode="decimal" [ngModel]="p.temperaturaC" (ngModelChange)="atualizarPonto(i, 'temperaturaC', $event)" [name]="'pt' + i"
+                      [attr.aria-label]="p.ponto + ' — temperatura'"
+                      class="w-20 rounded-lg border px-2 py-1.5 text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      [ngClass]="invalido(p.temperaturaC) ? 'border-red-400' : 'border-slate-300'" />
+                  </td>
+                  <td class="py-2 px-2 text-right tabular-nums text-gray-600">{{ temp(a?.dTAmbiente, true) }}</td>
+                  <td class="py-2 px-2 text-right tabular-nums text-gray-600">{{ temp(a?.dTSimilares, true) }}</td>
+                  <td class="py-2 px-2 text-center">
+                    @if (a?.prioridade) {
+                      <span class="text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap" [ngClass]="prioridadeBadge[a!.prioridade!]" [title]="a?.motivo ?? ''">
+                        {{ a!.prioridade }} · {{ prioridadeAcao[a!.prioridade!] }}
+                      </span>
+                    } @else if (a && !a.pendente && p.temperaturaC.trim()) {
+                      <span class="text-xs font-semibold px-2 py-1 rounded-full" [ngClass]="p.criterio === 'registro' ? 'bg-gray-100 text-gray-600' : 'bg-green-100 text-green-800'">
+                        {{ p.criterio === 'registro' ? 'Registrado' : '✓ Normal' }}
+                      </span>
+                    } @else {
+                      <span class="text-xs text-gray-400">—</span>
+                    }
+                  </td>
+                  <td class="py-2 pl-1">
+                    <button type="button" (click)="removerPonto(i)" class="text-xs font-semibold text-red-600 hover:text-red-700" [attr.aria-label]="'Remover ' + p.ponto">✕</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <button type="button" (click)="adicionarPonto()" class="text-sm font-semibold text-blue-600 hover:text-blue-700">+ Adicionar ponto</button>
+
+        @if (resultado(); as r) {
+          <div class="flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3"
+            [ngClass]="r === 'aprovado' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'">
+            <span class="text-sm font-bold px-3 py-1 rounded-full" [ngClass]="resultadoBadge[r]">{{ r === 'aprovado' ? '✓' : '✕' }} {{ resultadoLabel[r] }}</span>
+            <span class="text-sm" [ngClass]="r === 'aprovado' ? 'text-green-900' : 'text-red-900'">
+              {{ r === 'aprovado' ? 'Nenhum ponto em prioridade 1 ou 2. Prioridades 3 e 4 aprovam, mas ficam registradas para acompanhar.' : 'Há ponto em prioridade 1 ou 2 — programar a correção.' }}
+            </span>
+          </div>
+        } @else if (pendencias().length) {
+          <ul class="rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 text-xs text-slate-600 list-disc pl-8 space-y-0.5">
+            @for (x of pendencias(); track x) { <li>{{ x }}</li> }
+          </ul>
+        }
+      </section>
+
+      <section class="app-card p-6 space-y-3">
+        <h2 class="text-base font-bold text-blue-900">4. Imagens térmicas e anexos</h2>
+        <app-anexos-editor [(itens)]="anexos" dica="Imagem térmica de cada ponto quente (e a foto visível do mesmo ponto), relatório da câmera em PDF..." />
+      </section>
+
+      <section class="app-card p-6 space-y-3">
+        <h2 class="text-base font-bold text-blue-900">5. Executantes</h2>
+        @for (x of executantes(); track $index; let i = $index) {
+          <div class="flex flex-wrap items-center gap-2">
+            <input type="text" [ngModel]="x.nome" (ngModelChange)="atualizarExecutante(i, 'nome', $event)" [name]="'exnome' + i" placeholder="Nome"
+              class="flex-1 min-w-[12rem] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="text" [ngModel]="x.matricula" (ngModelChange)="atualizarExecutante(i, 'matricula', $event)" [name]="'exmat' + i" placeholder="Matrícula"
+              class="w-32 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <button type="button" (click)="removerExecutante(i)" class="text-xs font-semibold text-red-600 hover:text-red-700">Remover</button>
+          </div>
+        }
+        <button type="button" (click)="adicionarExecutante()" class="text-sm font-semibold text-blue-600 hover:text-blue-700">+ Adicionar executante</button>
+      </section>
+
+      <section class="app-card p-6 space-y-2">
+        <h2 class="text-base font-bold text-blue-900">6. Observações</h2>
+        <textarea [ngModel]="observacoes()" (ngModelChange)="observacoes.set($event)" name="obs" rows="3"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+      </section>
+
+      @if (errorMessage()) {
+        <div class="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{{ errorMessage() }}</div>
+      }
+
+      <div class="flex justify-end gap-2">
+        <a [routerLink]="id ? ['/eletrica/ensaios/termografia', id] : '/eletrica/ensaios'"
+          class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancelar</a>
+        <button type="submit" [disabled]="isSubmitting() || !resultado()"
+          class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+          {{ isSubmitting() ? 'Salvando...' : (id ? 'Salvar correção' : 'Registrar termografia') }}
+        </button>
+      </div>
+    </form>
+  }
+</div>

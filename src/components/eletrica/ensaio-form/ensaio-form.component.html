@@ -14,6 +14,16 @@
     <div class="app-card p-8 text-center text-sm text-gray-600">{{ errorMessage() }}</div>
   } @else {
     <form (ngSubmit)="onSubmit()" class="space-y-5">
+      @if (!id) {
+        <div class="app-card p-4 flex flex-wrap items-center gap-3">
+          <span class="text-sm font-medium text-slate-700">Tipo de ensaio:</span>
+          <div class="inline-flex flex-wrap rounded-lg border border-slate-300 p-0.5 text-sm font-semibold" role="group" aria-label="Tipo de ensaio">
+            <span class="rounded-md px-3 py-1.5 bg-blue-900 text-white" aria-current="true">Isolamento de motor</span>
+            <button type="button" (click)="irPara('trafo')" class="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-50">Ensaios de transformador</button>
+            <button type="button" (click)="irPara('termografia')" class="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-50">Termografia</button>
+          </div>
+        </div>
+      }
       <!-- Motor -->
       <section class="app-card p-6 space-y-4">
         <h2 class="text-base font-bold text-blue-900">1. Motor</h2>
@@ -244,6 +254,11 @@
           </div>
         }
         <button type="button" (click)="adicionarExecutante()" class="text-sm font-semibold text-blue-600 hover:text-blue-700">+ Adicionar executante</button>
+      </section>
+
+      <section class="app-card p-6 space-y-3">
+        <h2 class="text-base font-bold text-blue-900">Anexos</h2>
+        <app-anexos-editor [(itens)]="anexos" />
       </section>
 
       <section class="app-card p-6 space-y-2">

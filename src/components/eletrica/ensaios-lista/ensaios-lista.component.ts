@@ -6,6 +6,9 @@ import { EletricaEnsaioService } from '../../../services/eletrica-ensaio.service
 import { NotificationService } from '../../../services/notification.service';
 import { EnsaioIsolamento, Motor, ResultadoEnsaio, SituacaoEquipamento } from '../../../models/eletrica-ensaio.model';
 import { EnsaioTrafo, Transformador } from '../../../models/eletrica-trafo.model';
+import { EnsaioTermografia } from '../../../models/eletrica-termografia.model';
+import { ExcelExportService } from '../../../services/excel-export.service';
+import { abasEnsaiosEletricos } from '../../../utils/eletrica-ensaios-excel';
 import {
   RESULTADO_BADGE, RESULTADO_LABEL, SITUACAO_BADGE, SITUACAO_LABEL, avaliarEnsaio, criterioDoEnsaio, formatarMohm, formatarNumero, numeroEnsaio,
   potenciaTexto,
@@ -33,7 +36,7 @@ interface LinhaEnsaio {
   id: string;
   numero: number;
   dataEnsaio: string;
-  tipo: 'Motor' | 'Transformador';
+  tipo: 'Isolamento (motor)' | 'Transformador' | 'Termografia';
   tag: string;
   local: string | null;
   osNumero: string | null;
@@ -72,6 +75,7 @@ export class EnsaiosListaComponent implements OnInit {
   readonly tensoes = tensoesTexto;
 
   aba = signal<Aba>('motores');
+  exportando = signal(false);
   filtro = signal<Filtro>('todos');
   filtroSituacao = signal<SituacaoEquipamento | 'todas'>('todas');
   busca = signal('');
@@ -102,17 +106,21 @@ export class EnsaiosListaComponent implements OnInit {
     const trafos = new Map(this.ensaioService.trafos().map(t => [t.id, t]));
     const deMotor = this.ensaioService.ensaios().map(e => {
       const m = motores.get(e.equipamentoId);
-      return this.linhaEnsaio(e, 'Motor', m?.tag ?? '—', m?.localInstalacao ?? null, ['/eletrica/ensaios', e.id]);
+      return this.linhaEnsaio(e, 'Isolamento (motor)', m?.tag ?? '—', m?.localInstalacao ?? null, ['/eletrica/ensaios', e.id]);
+    });
+    const deTermo = this.ensaioService.termografias().map(e => {
+      const eq = motores.get(e.equipamentoId) ?? trafos.get(e.equipamentoId);
+      return this.linhaEnsaio(e, 'Termografia', eq?.tag ?? '—', eq?.localInstalacao ?? null, ['/eletrica/ensaios/termografia', e.id]);
     });
     const deTrafo = this.ensaioService.ensaiosTrafo().map(e => {
       const t = trafos.get(e.equipamentoId);
       return this.linhaEnsaio(e, 'Transformador', t?.tag ?? '—', t?.localInstalacao ?? null, ['/eletrica/ensaios/trafo', e.id]);
     });
-    return [...deMotor, ...deTrafo].sort((a, b) => b.dataEnsaio.localeCompare(a.dataEnsaio) || b.numero - a.numero);
+    return [...deMotor, ...deTrafo, ...deTermo].sort((a, b) => b.dataEnsaio.localeCompare(a.dataEnsaio) || b.numero - a.numero);
   });
 
   private linhaEnsaio(
-    e: EnsaioIsolamento | EnsaioTrafo, tipo: LinhaEnsaio['tipo'], tag: string, local: string | null, link: string[],
+    e: EnsaioIsolamento | EnsaioTrafo | EnsaioTermografia, tipo: LinhaEnsaio['tipo'], tag: string, local: string | null, link: string[],
   ): LinhaEnsaio {
     return {
       id: e.id, numero: e.numero, dataEnsaio: e.dataEnsaio, tipo, tag, local, osNumero: e.osNumero,
@@ -172,6 +180,7 @@ export class EnsaiosListaComponent implements OnInit {
   constructor(
     private ensaioService: EletricaEnsaioService,
     private notificationService: NotificationService,
+    private excelExportService: ExcelExportService,
     private router: Router,
     route: ActivatedRoute,
   ) {
@@ -181,6 +190,31 @@ export class EnsaiosListaComponent implements OnInit {
 
   ngOnInit(): void {
     this.ensaioService.load().catch(err => this.notificationService.showError(err?.message || 'Erro ao carregar os ensaios.'));
+  }
+
+  // Excel com tudo (cadastro, uma linha por medição de cada ensaio e o histórico de trocas).
+  async exportarExcel(): Promise<void> {
+    if (this.exportando()) return;
+    this.exportando.set(true);
+    try {
+      const movimentos = await this.ensaioService.todosMovimentos();
+      await this.excelExportService.exportarAbas({
+        titulo: 'Ensaios Elétricos',
+        abas: abasEnsaiosEletricos({
+          motores: this.ensaioService.motores(),
+          trafos: this.ensaioService.trafos(),
+          ensaiosMotor: this.ensaioService.ensaios(),
+          ensaiosTrafo: this.ensaioService.ensaiosTrafo(),
+          termografias: this.ensaioService.termografias(),
+          movimentos,
+        }),
+      });
+    } catch (err: unknown) {
+      console.error('[ensaios] Falha ao exportar Excel:', err);
+      this.notificationService.showError('Erro ao gerar o Excel.');
+    } finally {
+      this.exportando.set(false);
+    }
   }
 
   trocarAba(aba: Aba): void {

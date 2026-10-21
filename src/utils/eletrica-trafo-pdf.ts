@@ -5,7 +5,8 @@ import {
   circuitoTrafoLabel, fatorCorrecao20, formatarPct, formatarRelacao, temperaturaEnsaio, tensoesTexto,
 } from './eletrica-trafo';
 import { dataBr } from './eletrica-reparo';
-import { Escritor, LARGURA, baixarBlob, cabecalhoFicha, carregarLogo, moldurasFicha } from './pdf-ficha';
+import { Escritor, LARGURA, baixarBlob, cabecalhoFicha, carregarLogo, moldurasFicha, secaoAnexos, secaoComparacao } from './pdf-ficha';
+import { compararTrafo, linhasComparacao } from './eletrica-comparacao';
 
 // PDF do ensaio de transformador — o "check list de ensaios elétricos" da planilha do
 // TC-05, na mesma ficha técnica do Reparo Externo e do ensaio de motor.
@@ -14,7 +15,7 @@ const TITULO_DOC = 'Ensaios Elétricos de Transformador';
 const SITUACAO_TEXTO = { aprovado: 'Aprovado', reprovado: 'Reprovado', pendente: 'Incompleto' } as const;
 const comUnidade = (v: number | null, unidade: string, casas = 1) => (v === null ? null : `${formatarNumero(v, casas)} ${unidade}`);
 
-export async function gerarPdfEnsaioTrafo(e: EnsaioTrafo, t: Transformador): Promise<Blob> {
+export async function gerarPdfEnsaioTrafo(e: EnsaioTrafo, t: Transformador, anterior: EnsaioTrafo | null = null): Promise<Blob> {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
   doc.setProperties({ title: `${numeroEnsaio(e.numero)} — ${TITULO_DOC} — ${t.tag}`, author: 'Diamante Geração de Energia' });
@@ -136,10 +137,18 @@ export async function gerarPdfEnsaioTrafo(e: EnsaioTrafo, t: Transformador): Pro
     { rotulo: 'TTR', valor: `Desvio ≤ ±${formatarNumero(TTR_DESVIO_MAX_PCT, 1)}% da relação calculada pelo tap e pelas ligações.`, largo: true },
   ], 1, 36);
 
+  secaoComparacao(
+    w, anterior ? `${secao++}. Comparação com o ensaio anterior (${numeroEnsaio(anterior.numero)}, ${dataBr(anterior.dataEnsaio)})` : `${secao++}. Comparação com o ensaio anterior`,
+    anterior ? linhasComparacao(compararTrafo(e, anterior)) : [],
+    'Primeiro ensaio deste transformador no portal.',
+  );
+
   if (e.observacoes) {
-    w.secao(`${secao}. Observações`);
+    w.secao(`${secao++}. Observações`);
     w.paragrafo(e.observacoes);
   }
+
+  await secaoAnexos(w, `${secao}. Anexos`, e.anexos);
 
   moldurasFicha(doc, TITULO_DOC, `${numeroEnsaio(e.numero)} · ${t.tag}`, numeroEnsaio(e.numero));
   return doc.output('blob');
@@ -150,6 +159,6 @@ export function nomeArquivoPdfEnsaioTrafo(e: EnsaioTrafo, t: Transformador): str
   return `${numeroEnsaio(e.numero)}_Ensaios_Transformador_${tag}_${e.dataEnsaio}.pdf`;
 }
 
-export async function baixarPdfEnsaioTrafo(e: EnsaioTrafo, t: Transformador): Promise<void> {
-  baixarBlob(await gerarPdfEnsaioTrafo(e, t), nomeArquivoPdfEnsaioTrafo(e, t));
+export async function baixarPdfEnsaioTrafo(e: EnsaioTrafo, t: Transformador, anterior: EnsaioTrafo | null = null): Promise<void> {
+  baixarBlob(await gerarPdfEnsaioTrafo(e, t, anterior), nomeArquivoPdfEnsaioTrafo(e, t));
 }

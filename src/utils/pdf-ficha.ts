@@ -261,3 +261,60 @@ export function baixarBlob(blob: Blob, nome: string): void {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
+
+// Seção de anexos do ensaio: imagens em grade 2 por linha (moldura fina + legenda
+// "Foto N – ..."), PDFs listados pelo nome — mesmo visual das fotos do Reparo Externo.
+export async function secaoAnexos(
+  w: Escritor, titulo: string, anexos: { url: string; nome: string; tipo: 'imagem' | 'pdf'; legenda: string }[],
+): Promise<void> {
+  if (!anexos.length) return;
+  const doc = w.doc;
+  w.secao(titulo);
+  const imagens = anexos.filter(a => a.tipo === 'imagem');
+  const pdfs = anexos.filter(a => a.tipo === 'pdf');
+  const carregadas = await Promise.all(imagens.map(a => carregarImagem(a.url, { maxLado: 1400 })));
+  const gap = 5;
+  const largura = (LARGURA - gap) / 2;
+  const hImg = 66;
+  const hCelula = hImg + 7;
+  for (let i = 0; i < imagens.length; i += 2) {
+    w.garantirEspaco(hCelula + 2);
+    for (let j = 0; j < 2 && i + j < imagens.length; j++) {
+      const x = MARGEM + j * (largura + gap);
+      const img = carregadas[i + j];
+      doc.setDrawColor(...LINHA_TABELA).setLineWidth(0.2).rect(x, w.y, largura, hImg, 'S');
+      if (img) {
+        imagemContida(doc, img, x + 1.5, w.y + 1.5, largura - 3, hImg - 3);
+      } else {
+        doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...SUAVE).text('Imagem indisponível', x + largura / 2, w.y + hImg / 2, { align: 'center' });
+      }
+      const a = imagens[i + j];
+      const legenda = textoPdf(`Foto ${i + j + 1}${a.legenda ? ` – ${a.legenda}` : ''}`);
+      doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...ROTULO);
+      doc.text(doc.splitTextToSize(legenda, largura)[0] as string, x, w.y + hImg + 4.5);
+    }
+    w.y += hCelula + 2;
+  }
+  if (pdfs.length) {
+    w.paragrafo(`Documentos anexados no portal: ${pdfs.map(p => (p.legenda ? `${p.legenda} (${p.nome})` : p.nome)).join('; ')}.`);
+  }
+}
+
+// Comparação com o ensaio anterior: Item | Grandeza | Anterior | Atual | Variação | Aviso.
+export function secaoComparacao(
+  w: Escritor, titulo: string,
+  itens: { item: string; grandeza: string; anterior: string; atual: string; variacao: string; alerta: string | null }[],
+  semAnterior: string,
+): void {
+  w.secao(titulo);
+  if (!itens.length) {
+    w.paragrafo(semAnterior);
+    return;
+  }
+  w.tabelaColunas(
+    ['Item', 'Grandeza', 'Anterior', 'Atual', 'Variação', 'Aviso'],
+    [30, 46, 22, 22, 20, LARGURA - 140],
+    itens.map(i => [i.item, i.grandeza, i.anterior, i.atual, i.variacao, i.alerta ?? '—']),
+    [false, false, true, true, true, false],
+  );
+}

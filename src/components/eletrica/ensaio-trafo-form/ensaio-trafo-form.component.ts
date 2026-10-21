@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { AnexoForm, AnexosEditorComponent, anexoParaForm } from '../anexos/anexos.component';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { EletricaEnsaioService } from '../../../services/eletrica-ensaio.service';
 import { NotificationService } from '../../../services/notification.service';
@@ -55,7 +56,7 @@ function hojeIso(): string {
 @Component({
   selector: 'app-ensaio-trafo-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, AnexosEditorComponent],
   templateUrl: './ensaio-trafo-form.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -99,6 +100,7 @@ export class EnsaioTrafoFormComponent implements OnInit {
   ttr = signal<TtrForm[]>([]);
   executantes = signal<ExecutanteForm[]>([]);
   observacoes = signal('');
+  anexos = signal<AnexoForm[]>([]);
 
   isSubmitting = signal(false);
   errorMessage = signal('');
@@ -234,6 +236,7 @@ export class EnsaioTrafoFormComponent implements OnInit {
     if (e.ttr.length) this.ttr.set(e.ttr.map(t => ({ secundario: t.secundario, pares: t.pares.map(x => ({ par: x.par, medida: txt(x.medida, 4) })) })));
     this.executantes.set(e.executantes.length ? e.executantes.map(x => ({ ...x })) : [{ nome: '', matricula: '' }]);
     this.observacoes.set(e.observacoes ?? '');
+    this.anexos.set(e.anexos.map(anexoParaForm));
   }
 
   // Linhas vazias a partir da placa (circuitos de isolamento, pares da ôhmica e do TTR).
@@ -323,6 +326,7 @@ export class EnsaioTrafoFormComponent implements OnInit {
     this.isSubmitting.set(true);
     this.errorMessage.set('');
     try {
+      const anexos = await this.ensaioService.subirAnexos(this.anexos());
       const { id, numero } = await this.ensaioService.salvarEnsaioTrafo({
         equipamentoId: this.trafoId(),
         dataEnsaio: this.dataEnsaio(),
@@ -336,6 +340,7 @@ export class EnsaioTrafoFormComponent implements OnInit {
         ...this.leituras(),
         executantes: this.executantes(),
         observacoes: this.observacoes(),
+        anexos,
       }, this.id ?? undefined);
       this.notificationService.showSuccess(`Ensaio ${numeroEnsaio(numero)} ${this.id ? 'corrigido' : 'registrado'}: ${RESULTADO_LABEL[av.resultado]}.`);
       await this.ensaioService.load();

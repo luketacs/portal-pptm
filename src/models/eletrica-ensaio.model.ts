@@ -51,6 +51,32 @@ export interface Executante {
   matricula: string;
 }
 
+// Arquivo anexado ao ensaio (foto da tela do instrumento, relatório, imagem térmica...).
+export interface Anexo {
+  url: string;
+  nome: string;
+  tipo: 'imagem' | 'pdf';
+  legenda: string;
+}
+
+// Linha do histórico de situação do equipamento (gravada por trigger — 083).
+export interface MovimentoEquipamento {
+  id: string;
+  equipamentoId: string;
+  dataMovimento: string; // 'YYYY-MM-DD'
+  situacaoAnterior: SituacaoEquipamento | null;
+  situacaoNova: SituacaoEquipamento;
+  aplicacaoAnterior: string | null;
+  aplicacaoNova: string | null;
+  localAnterior: string | null;
+  localNovo: string | null;
+  trocaId: string | null;
+  substitutoTag: string | null;
+  motivo: string | null;
+  usuarioNome: string | null;
+  createdAt: Date;
+}
+
 export interface EnsaioIsolamento {
   id: string;
   numero: number;
@@ -71,6 +97,7 @@ export interface EnsaioIsolamento {
   resultado: ResultadoEnsaio;
   executantes: Executante[];
   observacoes: string | null;
+  anexos: Anexo[];
   criadoPorId: string | null;
   criadoPorNome: string;
   createdAt: Date;

@@ -2,6 +2,9 @@ import {
   ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, effect, signal, viewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { AnexosGaleriaComponent } from '../anexos/anexos.component';
+import { ComparacaoAnteriorComponent } from '../comparacao-anterior/comparacao-anterior.component';
+import { QUEDA_IR_ALERTA_PCT, compararMotor, ensaioAnterior } from '../../../utils/eletrica-comparacao';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { EletricaEnsaioService } from '../../../services/eletrica-ensaio.service';
 import { NotificationService } from '../../../services/notification.service';
@@ -24,7 +27,7 @@ const tempoTexto = (t: number) => (t < 1 ? '30 s' : `${t} min`);
 @Component({
   selector: 'app-ensaio-detalhe',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, AnexosGaleriaComponent, ComparacaoAnteriorComponent],
   templateUrl: './ensaio-detalhe.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -43,6 +46,17 @@ export class EnsaioDetalheComponent implements OnInit, OnDestroy {
   private id = '';
   ensaio = signal<EnsaioIsolamento | null>(null);
   motor = signal<Motor | null>(null);
+  anterior = signal<EnsaioIsolamento | null>(null);
+  readonly regraComparacao = `Aviso quando a IR corrigida cai ${QUEDA_IR_ALERTA_PCT}% ou mais (IEEE 43: acompanhar a tendência). Não muda o resultado.`;
+  comparacao = computed(() => {
+    const e = this.ensaio();
+    const a = this.anterior();
+    return e && a ? compararMotor(e, a) : [];
+  });
+  anteriorRotulo = computed(() => {
+    const a = this.anterior();
+    return a ? `${numeroEnsaio(a.numero)} de ${dataBr(a.dataEnsaio)}` : null;
+  });
   carregando = signal(true);
   gerandoPdf = signal(false);
   excluindo = signal(false);
@@ -108,12 +122,21 @@ export class EnsaioDetalheComponent implements OnInit, OnDestroy {
   async ngOnInit(): Promise<void> {
     try {
       const e = await this.ensaioService.buscarEnsaio(this.id);
-      if (!e && (await this.ensaioService.tipoDoEnsaio(this.id)) === 'transformador') {
-        await this.router.navigate(['/eletrica/ensaios/trafo', this.id], { replaceUrl: true });
-        return;
+      if (!e) {
+        const tipo = await this.ensaioService.tipoDoEnsaio(this.id);
+        if (tipo && tipo !== 'motor') {
+          await this.router.navigate(EletricaEnsaioService.rotaEnsaio(tipo, this.id), { replaceUrl: true });
+          return;
+        }
       }
       this.ensaio.set(e);
-      if (e) this.motor.set(await this.ensaioService.buscarMotor(e.equipamentoId));
+      if (e) {
+        const [m, lista] = await Promise.all([
+          this.ensaioService.buscarMotor(e.equipamentoId), this.ensaioService.ensaiosDoMotor(e.equipamentoId),
+        ]);
+        this.motor.set(m);
+        this.anterior.set(ensaioAnterior(lista, e));
+      }
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao carregar o ensaio.');
     } finally {
@@ -131,7 +154,7 @@ export class EnsaioDetalheComponent implements OnInit, OnDestroy {
     if (!e || !m || this.gerandoPdf()) return;
     this.gerandoPdf.set(true);
     try {
-      await baixarPdfEnsaio(e, m);
+      await baixarPdfEnsaio(e, m, this.anterior());
     } catch (err) {
       console.error('[ensaio] Falha ao gerar PDF:', err);
       this.notificationService.showError('Erro ao gerar o PDF.');

@@ -48,6 +48,7 @@ export const AUDIT_EVENT_LABELS: Record<string, string> = {
   eletrica_trafo_cadastrado: 'Elétrica — transformador cadastrado',
   eletrica_trafo_editado: 'Elétrica — transformador editado',
   eletrica_trafo_excluido: 'Elétrica — transformador excluído',
+  eletrica_equipamento_troca: 'Elétrica — troca de equipamento (reserva)',
   eletrica_ensaio_registrado: 'Elétrica — ensaio registrado',
   eletrica_ensaio_editado: 'Elétrica — ensaio corrigido',
   eletrica_ensaio_excluido: 'Elétrica — ensaio excluído',

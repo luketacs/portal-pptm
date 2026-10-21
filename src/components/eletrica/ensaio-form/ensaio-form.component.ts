@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { AnexoForm, AnexosEditorComponent, anexoParaForm } from '../anexos/anexos.component';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { EletricaEnsaioService } from '../../../services/eletrica-ensaio.service';
 import { NotificationService } from '../../../services/notification.service';
@@ -43,7 +44,7 @@ function hojeIso(): string {
 @Component({
   selector: 'app-ensaio-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, AnexosEditorComponent],
   templateUrl: './ensaio-form.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -79,6 +80,7 @@ export class EnsaioFormComponent implements OnInit {
   linhas = signal<LinhaForm[]>(CIRCUITOS.fases.map(linhaVazia));
   executantes = signal<ExecutanteForm[]>([]);
   observacoes = signal('');
+  anexos = signal<AnexoForm[]>([]);
 
   isSubmitting = signal(false);
   errorMessage = signal('');
@@ -206,6 +208,12 @@ export class EnsaioFormComponent implements OnInit {
     })));
     this.executantes.set(e.executantes.length ? e.executantes.map(x => ({ ...x })) : [{ nome: '', matricula: '' }]);
     this.observacoes.set(e.observacoes ?? '');
+    this.anexos.set(e.anexos.map(anexoParaForm));
+  }
+
+  irPara(tipo: 'trafo' | 'termografia'): void {
+    const qp = this.motorId() ? { [tipo === 'trafo' ? 'trafo' : 'equipamento']: this.motorId() } : {};
+    this.router.navigate([tipo === 'trafo' ? '/eletrica/ensaios/trafo/novo' : '/eletrica/ensaios/termografia/novo'], { queryParams: qp });
   }
 
   escolherMotor(id: string): void {
@@ -275,6 +283,7 @@ export class EnsaioFormComponent implements OnInit {
     this.isSubmitting.set(true);
     this.errorMessage.set('');
     try {
+      const anexos = await this.ensaioService.subirAnexos(this.anexos());
       const { id, numero } = await this.ensaioService.salvarEnsaio({
         equipamentoId: this.motorId(),
         dataEnsaio: this.dataEnsaio(),
@@ -291,6 +300,7 @@ export class EnsaioFormComponent implements OnInit {
         medicoes: this.medicoes(),
         executantes: this.executantes(),
         observacoes: this.observacoes(),
+        anexos,
       }, this.id ?? undefined);
       this.notificationService.showSuccess(`Ensaio ${numeroEnsaio(numero)} ${this.id ? 'corrigido' : 'registrado'}: ${RESULTADO_LABEL[av.resultado]}.`);
       await this.ensaioService.load();

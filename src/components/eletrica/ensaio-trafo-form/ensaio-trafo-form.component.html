@@ -14,6 +14,17 @@
     <div class="app-card p-8 text-center text-sm text-gray-600">{{ erroFatal() }}</div>
   } @else {
     <form (ngSubmit)="onSubmit()" class="space-y-5">
+      @if (!id) {
+        <div class="app-card p-4 flex flex-wrap items-center gap-3">
+          <span class="text-sm font-medium text-slate-700">Tipo de ensaio:</span>
+          <div class="inline-flex flex-wrap rounded-lg border border-slate-300 p-0.5 text-sm font-semibold" role="group" aria-label="Tipo de ensaio">
+            <a routerLink="/eletrica/ensaios/novo" class="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-50">Isolamento de motor</a>
+            <span class="rounded-md px-3 py-1.5 bg-blue-900 text-white" aria-current="true">Ensaios de transformador</span>
+            <a routerLink="/eletrica/ensaios/termografia/novo" [queryParams]="trafoId() ? { equipamento: trafoId() } : {}"
+              class="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-50">Termografia</a>
+          </div>
+        </div>
+      }
       <!-- Trafo -->
       <section class="app-card p-6 space-y-4">
         <h2 class="text-base font-bold text-blue-900">1. Transformador</h2>
@@ -286,6 +297,11 @@
           </div>
         }
         <button type="button" (click)="adicionarExecutante()" class="text-sm font-semibold text-blue-600 hover:text-blue-700">+ Adicionar executante</button>
+      </section>
+
+      <section class="app-card p-6 space-y-3">
+        <h2 class="text-base font-bold text-blue-900">Anexos</h2>
+        <app-anexos-editor [(itens)]="anexos" />
       </section>
 
       <section class="app-card p-6 space-y-2">

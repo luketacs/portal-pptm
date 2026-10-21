@@ -244,3 +244,47 @@ test('ensaios de transformador: placa obrigatória e ensaio só no tipo certo de
   await db.query("UPDATE eletrica_equipamentos SET situacao='reserva', aplicacao='M-02 e M-03' WHERE id=$1", [m.id]);
   await assert.rejects(db.query("UPDATE eletrica_equipamentos SET situacao='sucata' WHERE id=$1", [m.id]), /situacao_check/);
 });
+
+test('equipamentos: histórico por trigger, troca instalado x reserva e termografia em qualquer tipo', async () => {
+  await login(visualizador);
+  const motor = (tag, situacao, aplicacao, local) => db.query(`INSERT INTO eletrica_equipamentos(tag,tensao_v,classe_isolamento,tipo_bobina,
+      situacao,aplicacao,local_instalacao,criado_por_id) VALUES ($1,440,'F','randomica',$2,$3,$4,$5) RETURNING id`,
+    [tag, situacao, aplicacao, local, visualizador]);
+  const { rows: [a] } = await motor('BOMBA-A', 'instalado', 'Bomba de água A', 'Casa de bombas');
+  const { rows: [r] } = await motor('RES-01', 'reserva', 'Bombas A e B', 'Almoxarifado');
+  const hist = async (id) => (await db.query(
+    'SELECT situacao_anterior, situacao_nova, aplicacao_nova, local_novo, troca_id, substituto_tag, motivo FROM eletrica_equipamentos_movimentos WHERE equipamento_id=$1 ORDER BY created_at, situacao_nova', [id])).rows;
+  assert.equal((await hist(a.id))[0].motivo, 'Cadastro');
+  // Histórico não é gravável pelo app.
+  await assert.rejects(db.query("INSERT INTO eletrica_equipamentos_movimentos(equipamento_id,situacao_nova) VALUES ($1,'reserva')", [a.id]), /row-level security/);
+
+  // Troca: a reserva assume aplicação e local; o instalado vira reserva no local informado.
+  await db.query("SELECT eletrica_trocar_equipamentos($1,$2,'Oficina elétrica','2026-10-21','Rolamento travado')", [a.id, r.id]);
+  const { rows: depois } = await db.query('SELECT id, situacao, aplicacao, local_instalacao FROM eletrica_equipamentos WHERE id IN ($1,$2)', [a.id, r.id]);
+  const ra = depois.find(x => x.id === a.id);
+  const rr = depois.find(x => x.id === r.id);
+  assert.deepEqual([ra.situacao, ra.aplicacao, ra.local_instalacao], ['reserva', 'Bomba de água A', 'Oficina elétrica']);
+  assert.deepEqual([rr.situacao, rr.aplicacao, rr.local_instalacao], ['instalado', 'Bomba de água A', 'Casa de bombas']);
+  const [ha, hr] = [(await hist(a.id)).at(-1), (await hist(r.id)).at(-1)];
+  assert.equal(ha.substituto_tag, 'RES-01');
+  assert.equal(hr.substituto_tag, 'BOMBA-A');
+  assert.equal(ha.motivo, 'Rolamento travado');
+  assert.ok(ha.troca_id && ha.troca_id === hr.troca_id);
+  // Edição comum depois da troca não herda motivo/troca (set_config é local à transação).
+  await db.query("UPDATE eletrica_equipamentos SET local_instalacao='Almoxarifado' WHERE id=$1", [a.id]);
+  const ultimo = (await hist(a.id)).at(-1);
+  assert.equal(ultimo.troca_id, null);
+  assert.equal(ultimo.motivo, null);
+  // Troca ao contrário (reserva saindo) é recusada.
+  await assert.rejects(db.query("SELECT eletrica_trocar_equipamentos($1,$2,'x',null,null)", [a.id, r.id]), /instalado por uma reserva/);
+
+  // Termografia: sem tensão de ensaio, em motor; isolamento continua exigindo os campos.
+  const { rows: [t] } = await db.query(`INSERT INTO eletrica_ensaios(tipo,equipamento_id,data_ensaio,temperatura_ambiente_c,criterio,medicoes,resultado,
+      anexos,criado_por_id,criado_por_nome) VALUES ('termografia',$1,'2026-10-21',30,'{"cargaPct":80}','[]','aprovado',
+      '[{"url":"x","nome":"ir.jpg","tipo":"imagem","legenda":""}]',$2,'Teste') RETURNING id`, [r.id, visualizador]);
+  assert.ok(t.id);
+  await assert.rejects(db.query(`INSERT INTO eletrica_ensaios(equipamento_id,data_ensaio,temperatura_ambiente_c,tipo_bobina,resultado,criado_por_id,criado_por_nome)
+      VALUES ($1,'2026-10-21',30,'randomica','aprovado',$2,'Teste')`, [r.id, visualizador]), /criterio_tipo/);
+  await assert.rejects(db.query(`INSERT INTO eletrica_ensaios(tipo,equipamento_id,data_ensaio,temperatura_ambiente_c,criterio,resultado,anexos,criado_por_id,criado_por_nome)
+      VALUES ('termografia',$1,'2026-10-21',30,'{}','aprovado','{}',$2,'Teste')`, [r.id, visualizador]), /anexos_check/);
+});

@@ -261,6 +261,30 @@ export const APP_ROUTES: Routes = [
     title: 'Ensaio de Transformador',
   },
   {
+    path: 'eletrica/ensaios/termografia/novo',
+    loadComponent: () =>
+      import('../components/eletrica/termografia-form/termografia-form.component').then(m => m.TermografiaFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Lançar Termografia',
+  },
+  {
+    path: 'eletrica/ensaios/termografia/:id/editar',
+    loadComponent: () =>
+      import('../components/eletrica/termografia-form/termografia-form.component').then(m => m.TermografiaFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Corrigir Termografia',
+  },
+  {
+    path: 'eletrica/ensaios/termografia/:id',
+    loadComponent: () =>
+      import('../components/eletrica/termografia-detalhe/termografia-detalhe.component').then(m => m.TermografiaDetalheComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Termografia',
+  },
+  {
     path: 'eletrica/ensaios/:id/editar',
     loadComponent: () =>
       import('../components/eletrica/ensaio-form/ensaio-form.component').then(m => m.EnsaioFormComponent),
