@@ -50,7 +50,7 @@ function porEquipamento<T extends { equipamentoId: string }>(lista: T[]): Map<st
   return m;
 }
 
-// Entrada do menu "Ensaios Elétricos": cada motor / trafo com o último ensaio (é o que diz
+// Entrada do menu "Equipamentos e ensaios": cada motor / trafo com o último ensaio (é o que diz
 // se ele está apto hoje) e, na outra aba, todos os ensaios lançados.
 @Component({
   selector: 'app-ensaios-lista',

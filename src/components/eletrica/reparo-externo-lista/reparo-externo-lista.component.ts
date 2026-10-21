@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { EletricaReparoService } from '../../../services/eletrica-reparo.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
@@ -12,8 +12,9 @@ import {
 
 type FiltroStatus = ReparoStatus | 'andamento' | 'todos';
 
-// Duas telas na mesma lista: 'meus' (quem abriu acompanha o andamento) e 'controle'
-// (supervisor de elétrica / Admin vê tudo, com contagem por status).
+// "Acompanhar reparos": todo mundo vê todos os reparos, com contagem por status. O
+// supervisor de elétrica / Admin atualiza o status abrindo o reparo (antes era a tela
+// separada "Controle de Reparos", hoje redireciona pra cá).
 @Component({
   selector: 'app-reparo-externo-lista',
   standalone: true,
@@ -28,7 +29,6 @@ export class ReparoExternoListaComponent implements OnInit {
   readonly numero = numeroReparo;
   readonly dataBr = dataBr;
 
-  mode: 'meus' | 'controle' = 'meus';
   filtroStatus = signal<FiltroStatus>('andamento');
   busca = signal('');
 
@@ -41,7 +41,7 @@ export class ReparoExternoListaComponent implements OnInit {
 
   private base = computed(() => {
     const todos = this.reparoService.reparos();
-    if (this.mode === 'controle' || !this.soMeus()) return todos;
+    if (!this.soMeus()) return todos;
     const uid = this.authService.currentUser()?.id;
     return todos.filter(r => r.solicitanteId === uid);
   });
@@ -73,10 +73,7 @@ export class ReparoExternoListaComponent implements OnInit {
     private reparoService: EletricaReparoService,
     private authService: AuthService,
     private notificationService: NotificationService,
-    route: ActivatedRoute,
-  ) {
-    this.mode = route.snapshot.data['mode'] === 'controle' ? 'controle' : 'meus';
-  }
+  ) {}
 
   ngOnInit(): void {
     this.reparoService.load().catch(err => this.notificationService.showError(err?.message || 'Erro ao carregar reparos.'));

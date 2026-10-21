@@ -1,23 +1,14 @@
 <div class="space-y-6">
   <div class="flex flex-wrap items-end justify-between gap-3">
     <div>
-      <h1 class="text-2xl font-bold text-gray-800">{{ mode === 'controle' ? 'Controle de Reparos Externos' : 'Reparos Externos' }}</h1>
+      <h1 class="text-2xl font-bold text-gray-800">Reparos Externos</h1>
       <p class="text-sm text-gray-500 mt-1">
-        @if (mode === 'controle') {
-          Todas as solicitações de reparo externo. Abra uma para ver o relatório e atualizar o status.
-        } @else {
-          Todas as solicitações de reparo externo e em que pé estão. Use "Só os meus" para ver as que você abriu.
-        }
+        Todas as solicitações de reparo externo e em que pé estão. Use "Só os meus" para ver as que você abriu.
+        @if (podeControlar()) { Como supervisor, abra um reparo para atualizar o status. }
       </p>
     </div>
     <a routerLink="/eletrica/reparo-externo/novo" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">+ Nova solicitação</a>
   </div>
-
-  @if (mode === 'controle' && !podeControlar()) {
-    <div class="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
-      Só o supervisor de elétrica (ou Admin) pode alterar o status. Você está vendo em modo leitura.
-    </div>
-  }
 
   <!-- Filtro por status, com contagem -->
   <div class="flex flex-wrap gap-2">
@@ -45,12 +36,10 @@
   <div class="flex flex-wrap items-center gap-4">
     <input type="text" [ngModel]="busca()" (ngModelChange)="busca.set($event)" placeholder="Buscar por Nº, equipamento, TAG, série, solicitante..."
       class="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-    @if (mode !== 'controle') {
-      <label class="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer select-none">
-        <input type="checkbox" class="h-4 w-4 rounded border-slate-300" [checked]="soMeus()" (change)="soMeus.set($any($event.target).checked)" />
-        Só os meus
-      </label>
-    }
+    <label class="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer select-none">
+      <input type="checkbox" class="h-4 w-4 rounded border-slate-300" [checked]="soMeus()" (change)="soMeus.set($any($event.target).checked)" />
+      Só os meus
+    </label>
   </div>
 
   @if (isLoading() && lista().length === 0) {

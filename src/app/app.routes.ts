@@ -142,7 +142,7 @@ export const APP_ROUTES: Routes = [
     loadComponent: () =>
       import('../components/eletrica/reparo-externo-lista/reparo-externo-lista.component').then(m => m.ReparoExternoListaComponent),
     canActivate: [authGuard],
-    data: { roles: ['Admin', 'Solicitante', 'Visualizador'], mode: 'meus' },
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
     title: 'Reparos Externos',
   },
   {
@@ -153,14 +153,9 @@ export const APP_ROUTES: Routes = [
     data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
     title: 'Reparo Externo',
   },
-  {
-    path: 'eletrica/controle',
-    loadComponent: () =>
-      import('../components/eletrica/reparo-externo-lista/reparo-externo-lista.component').then(m => m.ReparoExternoListaComponent),
-    canActivate: [authGuard],
-    data: { roles: ['Admin', 'Solicitante', 'Visualizador'], mode: 'controle' },
-    title: 'Controle de Reparos Externos',
-  },
+  // "Controle de Reparos" virou parte de "Acompanhar reparos" (o supervisor atualiza o
+  // status abrindo o reparo). Link antigo continua funcionando.
+  { path: 'eletrica/controle', redirectTo: 'eletrica/reparos' },
   // Ensaios Elétricos (motores e transformadores) — rotas fixas antes das com :id.
   {
     path: 'eletrica/ensaios',
@@ -168,7 +163,7 @@ export const APP_ROUTES: Routes = [
       import('../components/eletrica/ensaios-lista/ensaios-lista.component').then(m => m.EnsaiosListaComponent),
     canActivate: [authGuard],
     data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
-    title: 'Ensaios Elétricos',
+    title: 'Equipamentos e ensaios',
   },
   {
     path: 'eletrica/ensaios/novo',
@@ -177,6 +172,14 @@ export const APP_ROUTES: Routes = [
     canActivate: [authGuard],
     data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
     title: 'Lançar Ensaio',
+  },
+  {
+    path: 'eletrica/ensaios/equipamentos/novo',
+    loadComponent: () =>
+      import('../components/eletrica/equipamento-novo/equipamento-novo.component').then(m => m.EquipamentoNovoComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Cadastrar Equipamento',
   },
   {
     path: 'eletrica/ensaios/motores/novo',

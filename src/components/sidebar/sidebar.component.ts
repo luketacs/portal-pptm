@@ -14,6 +14,8 @@ interface NavLink {
   roles: UserRole[];
   // Além do Admin, só aparece pra quem tem supervisor_eletrica no perfil.
   supervisorEletrica?: boolean;
+  // Título de seção mostrado acima deste link (separa assuntos dentro do grupo).
+  secao?: string;
 }
 
 interface NavGroup {
@@ -133,6 +135,19 @@ interface NavGroup {
       font-weight: 600;
     }
 
+    .submenu-secao {
+      padding: 0.7rem 0.7rem 0.2rem;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #94a3b8;
+    }
+
+    .submenu-secao:first-child {
+      padding-top: 0.25rem;
+    }
+
     .submenu-dot {
       width: 0.38rem;
       height: 0.38rem;
@@ -219,13 +234,11 @@ export class SidebarComponent implements OnDestroy {
       icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>',
       roles: ['Solicitante', 'Admin', 'Visualizador'],
       links: [
-        { path: '/eletrica/reparo-externo/novo', label: 'Solicitar Reparo Externo', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
-        { path: '/eletrica/reparos', label: 'Reparos Externos', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
-        { path: '/eletrica/controle', label: 'Controle de Reparos', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'], supervisorEletrica: true },
-        { path: '/eletrica/ensaios', label: 'Ensaios Elétricos', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
-        { path: '/eletrica/ensaios/motores/novo', label: 'Cadastrar Motor', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
-        { path: '/eletrica/ensaios/trafos/novo', label: 'Cadastrar Transformador', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
-        { path: '/eletrica/ensaios/novo', label: 'Lançar Ensaio', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
+        { path: '/eletrica/reparo-externo/novo', label: 'Nova solicitação', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'], secao: 'Reparos externos' },
+        { path: '/eletrica/reparos', label: 'Acompanhar reparos', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
+        { path: '/eletrica/ensaios', label: 'Equipamentos e ensaios', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'], secao: 'Ensaios' },
+        { path: '/eletrica/ensaios/novo', label: 'Lançar ensaio', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
+        { path: '/eletrica/ensaios/equipamentos/novo', label: 'Cadastrar equipamento', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
       ],
     },
     {

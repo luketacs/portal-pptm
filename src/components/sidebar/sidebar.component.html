@@ -31,6 +31,9 @@
         @if (isGroupExpanded(group)) {
           <div class="nav-submenu">
             @for (link of group.links; track link.path) {
+              @if (link.secao) {
+                <div class="submenu-secao" role="presentation">{{ link.secao }}</div>
+              }
               <a
                 [routerLink]="link.path"
                 routerLinkActive="active"
