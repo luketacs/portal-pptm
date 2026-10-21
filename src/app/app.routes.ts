@@ -153,9 +153,16 @@ export const APP_ROUTES: Routes = [
     data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
     title: 'Reparo Externo',
   },
-  // "Controle de Reparos" virou parte de "Acompanhar reparos" (o supervisor atualiza o
-  // status abrindo o reparo). Link antigo continua funcionando.
-  { path: 'eletrica/controle', redirectTo: 'eletrica/reparos' },
+  // Só supervisor de elétrica / Admin (o menu esconde; a tela manda os outros pra
+  // "Acompanhar reparos").
+  {
+    path: 'eletrica/controle',
+    loadComponent: () =>
+      import('../components/eletrica/reparo-externo-lista/reparo-externo-lista.component').then(m => m.ReparoExternoListaComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'], mode: 'controle' },
+    title: 'Controle de Reparos Externos',
+  },
   // Ensaios Elétricos (motores e transformadores) — rotas fixas antes das com :id.
   {
     path: 'eletrica/ensaios',

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { EletricaReparoService } from '../../../services/eletrica-reparo.service';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
@@ -12,9 +12,10 @@ import {
 
 type FiltroStatus = ReparoStatus | 'andamento' | 'todos';
 
-// "Acompanhar reparos": todo mundo vê todos os reparos, com contagem por status. O
-// supervisor de elétrica / Admin atualiza o status abrindo o reparo (antes era a tela
-// separada "Controle de Reparos", hoje redireciona pra cá).
+// Duas telas na mesma lista:
+// - 'acompanhar' ("Acompanhar reparos"): todo mundo vê todos os reparos, com "Só os meus".
+// - 'controle' ("Controle de reparos"): só supervisor de elétrica / Admin — a fila de
+//   trabalho, com os parados há mais tempo primeiro e o tempo no status atual.
 @Component({
   selector: 'app-reparo-externo-lista',
   standalone: true,
@@ -29,6 +30,7 @@ export class ReparoExternoListaComponent implements OnInit {
   readonly numero = numeroReparo;
   readonly dataBr = dataBr;
 
+  mode: 'acompanhar' | 'controle' = 'acompanhar';
   filtroStatus = signal<FiltroStatus>('andamento');
   busca = signal('');
 
@@ -41,7 +43,7 @@ export class ReparoExternoListaComponent implements OnInit {
 
   private base = computed(() => {
     const todos = this.reparoService.reparos();
-    if (!this.soMeus()) return todos;
+    if (this.mode === 'controle' || !this.soMeus()) return todos;
     const uid = this.authService.currentUser()?.id;
     return todos.filter(r => r.solicitanteId === uid);
   });
@@ -57,7 +59,7 @@ export class ReparoExternoListaComponent implements OnInit {
   lista = computed(() => {
     const f = this.filtroStatus();
     const termo = this.busca().trim().toLowerCase();
-    return this.base().filter(r => {
+    const filtrados = this.base().filter(r => {
       if (f === 'andamento' && reparoEncerrado(r.status)) return false;
       if (f !== 'andamento' && f !== 'todos' && r.status !== f) return false;
       if (termo) {
@@ -67,15 +69,36 @@ export class ReparoExternoListaComponent implements OnInit {
       }
       return true;
     });
+    // No controle, o que está parado há mais tempo no mesmo status vem primeiro.
+    return this.mode === 'controle'
+      ? [...filtrados].sort((a, b) => this.desdeStatus(a).getTime() - this.desdeStatus(b).getTime())
+      : filtrados;
   });
+
+  desdeStatus(r: { statusAtualizadoEm: Date | null; createdAt: Date }): Date {
+    return r.statusAtualizadoEm ?? r.createdAt;
+  }
+
+  // "há 3 dias" — tempo no status atual (coluna do controle).
+  diasNoStatus(r: { statusAtualizadoEm: Date | null; createdAt: Date }): number {
+    return Math.max(0, Math.floor((Date.now() - this.desdeStatus(r).getTime()) / 86400000));
+  }
 
   constructor(
     private reparoService: EletricaReparoService,
     private authService: AuthService,
     private notificationService: NotificationService,
-  ) {}
+    private router: Router,
+    route: ActivatedRoute,
+  ) {
+    this.mode = route.snapshot.data['mode'] === 'controle' ? 'controle' : 'acompanhar';
+  }
 
   ngOnInit(): void {
+    if (this.mode === 'controle' && !this.podeControlar()) {
+      this.router.navigateByUrl('/eletrica/reparos', { replaceUrl: true });
+      return;
+    }
     this.reparoService.load().catch(err => this.notificationService.showError(err?.message || 'Erro ao carregar reparos.'));
   }
 }

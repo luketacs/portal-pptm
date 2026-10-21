@@ -115,7 +115,7 @@ export class ReparoExternoDetalheComponent implements OnInit {
     try {
       await this.reparoService.excluir(r.id);
       this.notificationService.showSuccess(`${numeroReparo(r.numero)} excluído.`);
-      await this.router.navigateByUrl('/eletrica/reparos');
+      await this.router.navigateByUrl('/eletrica/controle');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao excluir.');
     } finally {

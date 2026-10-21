@@ -236,6 +236,7 @@ export class SidebarComponent implements OnDestroy {
       links: [
         { path: '/eletrica/reparo-externo/novo', label: 'Nova solicitação', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'], secao: 'Reparos externos' },
         { path: '/eletrica/reparos', label: 'Acompanhar reparos', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
+        { path: '/eletrica/controle', label: 'Controle de reparos', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'], supervisorEletrica: true },
         { path: '/eletrica/ensaios', label: 'Equipamentos e ensaios', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'], secao: 'Ensaios' },
         { path: '/eletrica/ensaios/novo', label: 'Lançar ensaio', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },
         { path: '/eletrica/ensaios/equipamentos/novo', label: 'Cadastrar equipamento', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'] },

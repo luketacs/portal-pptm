@@ -4,7 +4,7 @@
   } @else if (!reparo()) {
     <div class="app-card p-8 text-center space-y-3">
       <h2 class="text-lg font-bold text-gray-800">Reparo não encontrado</h2>
-      <a routerLink="/eletrica/reparos" class="text-sm font-semibold text-blue-600 hover:text-blue-700">Voltar para a lista</a>
+      <a [routerLink]="podeControlar() ? '/eletrica/controle' : '/eletrica/reparos'" class="text-sm font-semibold text-blue-600 hover:text-blue-700">Voltar para a lista</a>
     </div>
   } @else {
     @let r = reparo()!;
