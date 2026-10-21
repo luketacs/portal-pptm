@@ -171,3 +171,40 @@ test('reparo externo: qualquer um abre em nome próprio; só supervisor de elét
   assert.equal(hist.find(h => h.status === 'em_reparo').observacao, 'Enviado');
   await assert.rejects(db.query("INSERT INTO eletrica_reparos_historico(reparo_id,status) VALUES ($1,'concluido')", [r.id]), /row-level security/);
 });
+
+test('ensaios de motores: qualquer um cadastra e lança; só quem lançou corrige; só Admin exclui', async () => {
+  const cadastrar = (dono, tag) => db.query(`INSERT INTO eletrica_equipamentos(tag,tensao_v,classe_isolamento,tipo_bobina,criado_por_id)
+    VALUES ($1,6300,'F','pre_formada',$2) RETURNING id`, [tag, dono]);
+  const lancar = (motor, dono) => db.query(`INSERT INTO eletrica_ensaios(equipamento_id,data_ensaio,tensao_aplicada_v,temperatura_ambiente_c,
+      tensao_nominal_v,classe_isolamento,tipo_bobina,medicoes,resultado,criado_por_id,criado_por_nome)
+    VALUES ($1,'2026-10-21',5000,30,6300,'F','pre_formada','[{"circuito":"A","r1min":975}]','aprovado',$2,'Teste') RETURNING id, numero`, [motor, dono]);
+
+  await login(visualizador);
+  const { rows: [m] } = await cadastrar(visualizador, '91ECA42AF001');
+  // TAG não repete, nem com outra caixa/espaço.
+  await assert.rejects(cadastrar(visualizador, ' 91eca42af001 '), /uq_eletrica_equipamentos_tag/);
+  await assert.rejects(cadastrar(admin, 'OUTRO'), /row-level security/);
+  const { rows: [e] } = await lancar(m.id, visualizador);
+  assert.ok(Number(e.numero) > 0);
+  await assert.rejects(lancar(m.id, solicitante), /row-level security/);
+
+  // Outro usuário edita o motor, mas não corrige o ensaio alheio (RLS: 0 linhas).
+  await login(solicitante);
+  const { rows: editado } = await db.query("UPDATE eletrica_equipamentos SET local_instalacao='TT24' WHERE id=$1 RETURNING id", [m.id]);
+  assert.equal(editado.length, 1);
+  const { rows: nada } = await db.query("UPDATE eletrica_ensaios SET resultado='reprovado' WHERE id=$1 RETURNING id", [e.id]);
+  assert.equal(nada.length, 0);
+  const { rows: semExcluir } = await db.query('DELETE FROM eletrica_ensaios WHERE id=$1 RETURNING id', [e.id]);
+  assert.equal(semExcluir.length, 0);
+
+  // Quem lançou corrige, mas não troca o dono nem o número.
+  await login(visualizador);
+  await db.query("UPDATE eletrica_ensaios SET resultado='reprovado' WHERE id=$1", [e.id]);
+  await assert.rejects(db.query('UPDATE eletrica_ensaios SET criado_por_id=$2 WHERE id=$1', [e.id, solicitante]), /trocar/);
+
+  // Admin exclui o motor e os ensaios saem junto.
+  await login(admin);
+  await db.query('DELETE FROM eletrica_equipamentos WHERE id=$1', [m.id]);
+  const { rows: sobra } = await db.query('SELECT id FROM eletrica_ensaios WHERE id=$1', [e.id]);
+  assert.equal(sobra.length, 0);
+});

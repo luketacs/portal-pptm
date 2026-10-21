@@ -161,6 +161,63 @@ export const APP_ROUTES: Routes = [
     data: { roles: ['Admin', 'Solicitante', 'Visualizador'], mode: 'controle' },
     title: 'Controle de Reparos Externos',
   },
+  // Ensaios de Motores — rotas fixas antes das com :id.
+  {
+    path: 'eletrica/ensaios',
+    loadComponent: () =>
+      import('../components/eletrica/ensaios-lista/ensaios-lista.component').then(m => m.EnsaiosListaComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Ensaios de Motores',
+  },
+  {
+    path: 'eletrica/ensaios/novo',
+    loadComponent: () =>
+      import('../components/eletrica/ensaio-form/ensaio-form.component').then(m => m.EnsaioFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Lançar Ensaio',
+  },
+  {
+    path: 'eletrica/ensaios/motores/novo',
+    loadComponent: () =>
+      import('../components/eletrica/motor-form/motor-form.component').then(m => m.MotorFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Cadastrar Motor',
+  },
+  {
+    path: 'eletrica/ensaios/motores/:id/editar',
+    loadComponent: () =>
+      import('../components/eletrica/motor-form/motor-form.component').then(m => m.MotorFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Editar Motor',
+  },
+  {
+    path: 'eletrica/ensaios/motores/:id',
+    loadComponent: () =>
+      import('../components/eletrica/motor-detalhe/motor-detalhe.component').then(m => m.MotorDetalheComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Motor',
+  },
+  {
+    path: 'eletrica/ensaios/:id/editar',
+    loadComponent: () =>
+      import('../components/eletrica/ensaio-form/ensaio-form.component').then(m => m.EnsaioFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Corrigir Ensaio',
+  },
+  {
+    path: 'eletrica/ensaios/:id',
+    loadComponent: () =>
+      import('../components/eletrica/ensaio-detalhe/ensaio-detalhe.component').then(m => m.EnsaioDetalheComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Ensaio de Isolamento',
+  },
 
   {
     path: 'fundo-fixo',

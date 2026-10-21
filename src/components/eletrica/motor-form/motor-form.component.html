@@ -1,0 +1,137 @@
+<div class="max-w-3xl mx-auto space-y-6">
+  <div>
+    <a [routerLink]="id ? ['/eletrica/ensaios/motores', id] : '/eletrica/ensaios'" class="text-xs font-semibold text-blue-600 hover:text-blue-700">← Voltar</a>
+    <h1 class="text-2xl font-bold text-gray-800 mt-1">{{ id ? 'Editar motor' : 'Cadastrar motor' }}</h1>
+    <p class="text-sm text-gray-500 mt-1">
+      Dados da placa do motor. Tensão, classe de isolamento e tipo de bobina definem o critério da IEEE 43-2013.
+    </p>
+  </div>
+
+  @if (carregando()) {
+    <p class="text-sm text-gray-500">Carregando...</p>
+  } @else {
+    <form (ngSubmit)="onSubmit()" class="space-y-5">
+      <section class="app-card p-6 space-y-4">
+        <h2 class="text-base font-bold text-blue-900">Identificação</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">TAG <span class="text-red-500">*</span></label>
+            <input type="text" [ngModel]="tag()" (ngModelChange)="tag.set($event)" name="tag" required placeholder="Ex: 91ECA42AF001"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Local de instalação</label>
+            <input type="text" [ngModel]="localInstalacao()" (ngModelChange)="localInstalacao.set($event)" name="local" placeholder="Ex: TT24"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-slate-700 mb-1">Descrição</label>
+            <input type="text" [ngModel]="descricao()" (ngModelChange)="descricao.set($event)" name="descricao" placeholder="Ex: Motor da bomba de água de alimentação"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Fabricante</label>
+            <input type="text" [ngModel]="fabricante()" (ngModelChange)="fabricante.set($event)" name="fabricante" placeholder="Ex: WEG"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Modelo</label>
+            <input type="text" [ngModel]="modelo()" (ngModelChange)="modelo.set($event)" name="modelo" placeholder="Ex: HGF 315 C/D/E"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Nº de série</label>
+            <input type="text" [ngModel]="numeroSerie()" (ngModelChange)="numeroSerie.set($event)" name="serie"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+      </section>
+
+      <section class="app-card p-6 space-y-4">
+        <h2 class="text-base font-bold text-blue-900">Dados de placa</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Tensão (V) <span class="text-red-500">*</span></label>
+            <input type="text" inputmode="decimal" [ngModel]="tensaoV()" (ngModelChange)="mudarTensao($event)" name="tensao" required placeholder="6300"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Potência (kW)</label>
+            <input type="text" inputmode="decimal" [ngModel]="potenciaKw()" (ngModelChange)="potenciaKw.set($event)" name="kw" placeholder="220"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Potência (cv)</label>
+            <input type="text" inputmode="decimal" [ngModel]="potenciaCv()" (ngModelChange)="potenciaCv.set($event)" name="cv" placeholder="300"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Corrente (A)</label>
+            <input type="text" inputmode="decimal" [ngModel]="correnteA()" (ngModelChange)="correnteA.set($event)" name="corrente" placeholder="25,7"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Frequência (Hz)</label>
+            <input type="text" inputmode="decimal" [ngModel]="frequenciaHz()" (ngModelChange)="frequenciaHz.set($event)" name="freq"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Fator de serviço</label>
+            <input type="text" inputmode="decimal" [ngModel]="fatorServico()" (ngModelChange)="fatorServico.set($event)" name="fs" placeholder="1,0"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Rotação (rpm)</label>
+            <input type="text" inputmode="numeric" [ngModel]="rotacaoRpm()" (ngModelChange)="rotacaoRpm.set($event)" name="rpm" placeholder="1781"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Classe de isolamento <span class="text-red-500">*</span></label>
+            <select [ngModel]="classeIsolamento()" (ngModelChange)="classeIsolamento.set($event)" name="classe"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              @for (c of classes; track c) { <option [value]="c">{{ classeLabel[c] }}</option> }
+            </select>
+          </div>
+        </div>
+
+        <fieldset class="space-y-2">
+          <legend class="block text-sm font-medium text-slate-700 mb-1">Tipo de bobina do estator <span class="text-red-500">*</span></legend>
+          @for (t of tiposBobina; track t) {
+            <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="radio" name="bobina" class="mt-0.5 h-4 w-4" [checked]="tipoBobina() === t" (change)="escolherBobina(t)" />
+              {{ tipoBobinaLabel[t] }}
+            </label>
+          }
+        </fieldset>
+
+        @if (criterio(); as c) {
+          <div class="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-900 space-y-0.5">
+            <p class="font-semibold">Critério IEEE 43-2013 para este motor</p>
+            <p>IR 1 min corrigida a 40 °C: mínimo {{ c.irMin }}</p>
+            <p>Índice de polarização: mínimo {{ c.ipMin }}</p>
+            <p>Tensão de ensaio recomendada: {{ c.tensaoEnsaio }} CC</p>
+          </div>
+        }
+      </section>
+
+      <section class="app-card p-6 space-y-2">
+        <h2 class="text-base font-bold text-blue-900">Observações</h2>
+        <textarea [ngModel]="observacoes()" (ngModelChange)="observacoes.set($event)" name="obs" rows="2"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+      </section>
+
+      @if (errorMessage()) {
+        <div class="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{{ errorMessage() }}</div>
+      }
+
+      <div class="flex justify-end gap-2">
+        <a [routerLink]="id ? ['/eletrica/ensaios/motores', id] : '/eletrica/ensaios'"
+          class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancelar</a>
+        <button type="submit" [disabled]="isSubmitting()"
+          class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+          {{ isSubmitting() ? 'Salvando...' : (id ? 'Salvar alterações' : 'Cadastrar motor') }}
+        </button>
+      </div>
+    </form>
+  }
+</div>
