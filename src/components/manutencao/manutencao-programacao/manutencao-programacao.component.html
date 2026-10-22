@@ -273,7 +273,7 @@
           <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Backlog do SIGMA — OS abertas ainda não programadas</p>
           <div class="flex items-center gap-2">
             @if (backlogAtualizadoEm(); as ts) {
-              <span class="text-[11px] text-gray-400" title="O SIGMA é consultado com cache de até 10min — não é tempo real">Atualizado às {{ backlogAtualizadoEmLabel() }}</span>
+              <span class="text-[11px] text-gray-400" title="O SIGMA é consultado com cache de até 3min — não é tempo real">Atualizado às {{ backlogAtualizadoEmLabel() }}</span>
             }
             @if (!backlogCarregando()) {
               <button (click)="carregarBacklog()" title="Buscar de novo no SIGMA" class="text-xs text-blue-600 hover:text-blue-700 font-semibold">Atualizar</button>
@@ -344,7 +344,7 @@
           </button>
           <div class="flex items-center gap-2">
             @if (materiaisDisponiveisAtualizadoEm(); as ts) {
-              <span class="text-[11px] text-gray-400" title="Almoxarifado em tempo real; dados da OS vêm do SIGMA (cache de até 10min)">Atualizado às {{ materiaisDisponiveisAtualizadoEmLabel() }}</span>
+              <span class="text-[11px] text-gray-400" title="Almoxarifado em tempo real; dados da OS vêm do SIGMA (cache de até 3min)">Atualizado às {{ materiaisDisponiveisAtualizadoEmLabel() }}</span>
             }
             @if (!materiaisDisponiveisCarregando()) {
               <button (click)="carregarMateriaisDisponiveis()" title="Buscar de novo" class="text-xs text-blue-600 hover:text-blue-700 font-semibold">Atualizar</button>

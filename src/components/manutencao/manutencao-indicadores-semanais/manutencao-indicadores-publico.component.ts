@@ -194,7 +194,9 @@ function paraManutencaoOrdem(r: OrdemPublicaRaw): ManutencaoOrdem {
   };
 }
 
-const INTERVALO_POLL_MS = 3 * 60 * 1000;
+// 1min: o cache do SIGMA no servidor dura 3min (api/_sigma-shared.js) — poll curto faz o
+// apontamento novo aparecer logo que o cache renova, sem somar mais 3min de espera.
+const INTERVALO_POLL_MS = 60 * 1000;
 
 // Reload completo da página (não só reconsulta de dados) — pensado pra essa tela ficar
 // aberta num monitor do setor por horas/dias: sem isso, a aba nunca pega um deploy novo

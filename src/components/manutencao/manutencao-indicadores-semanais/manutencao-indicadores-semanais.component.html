@@ -201,7 +201,7 @@
             @if (apontamentosCarregando()) { Atualizando apontamentos... } @else { ↻ Atualizar apontamentos }
           </button>
           @if (apontamentosAtualizadoEm(); as data) {
-            <span class="text-xs text-gray-400">Consultado às {{ data | date: 'HH:mm' }} — o SIGMA é reconsultado no máximo a cada 10 min</span>
+            <span class="text-xs text-gray-400">Consultado às {{ data | date: 'HH:mm' }} — o SIGMA é reconsultado no máximo a cada 3 min</span>
           }
           @if (apontamentosErro()) {
             <span class="text-xs text-red-600">{{ apontamentosErro() }}</span>
@@ -759,7 +759,7 @@
           Horas = hora final − hora inicial, menos 30 min quando o almoço está marcado.
           "Fora da prog." = OS que não estava na programação do técnico na semana — não entra na eficiência.
           @if (ex.semHorario > 0) { {{ ex.semHorario }} apontamento(s) sem hora de início/fim contam 0h. }
-          Dados do SIGMA atualizam a cada ~10 min.
+          Dados do SIGMA atualizam a cada ~3 min.
         </p>
       }
     </div>

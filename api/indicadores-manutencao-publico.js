@@ -159,7 +159,7 @@ export default async function handler(req, res) {
     // (sem requisição extra): cada aba manda seu sessaoId (gerado uma vez por
     // carregamento de página, via crypto.randomUUID no cliente) na query string, esta
     // function grava/atualiza o "sinal de vida" dela em manutencao_indicadores_presenca
-    // e conta quantas sessões deram sinal nos últimos 6min (2x o intervalo de poll, pra
+    // e conta quantas sessões deram sinal nos últimos 6min (folga larga sobre o poll de 1min, pra
     // não "piscar" entre uma leva de poll e outra). Limpa sessões velhas (>15min) de
     // passagem, sem precisar de cron/job separado. Best-effort — nunca deve derrubar o
     // resto da resposta.

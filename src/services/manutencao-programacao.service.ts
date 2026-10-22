@@ -816,7 +816,7 @@ export class ManutencaoProgramacaoService {
 
   // Backlog do SIGMA: OS abertas de uma área, ainda não lançadas na nossa programação —
   // ajuda a montar a semana a partir do que já existe no ERP. `atualizadoEm` reflete
-  // quando o proxy buscou os dados do SIGMA por último (cache de até 10min lá) — não é
+  // quando o proxy buscou os dados do SIGMA por último (cache de até 3min lá) — não é
   // tempo real, então a tela mostra esse horário pra deixar isso visível.
   async consultarBacklogSigma(area: ManutencaoArea): Promise<{ itens: SigmaBacklogItem[]; atualizadoEm: number }> {
     const token = await this.authService.getValidAccessToken();

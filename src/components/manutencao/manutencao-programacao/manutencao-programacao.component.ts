@@ -793,7 +793,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   // Backlog do SIGMA (OS abertas da área, ainda não lançadas aqui) — só faz sentido
   // nas telas de área única, porque o campo de área do SIGMA é por OS, não por semana.
-  // Não é tempo real: o proxy cacheia a exportação do SIGMA por até ~10min pra não
+  // Não é tempo real: o proxy cacheia a exportação do SIGMA por até ~3min pra não
   // rebaixar um arquivo de vários MB a cada clique — por isso busca de novo toda vez
   // que o painel é aberto (não só na primeira vez) e mostra o horário da última busca.
   // Menu "Mais ações" no cabeçalho — agrupa Backlog/Gerenciar Apoio/Feriado/Férias

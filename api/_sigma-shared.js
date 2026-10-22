@@ -1,5 +1,5 @@
 // Módulo compartilhado — NÃO é uma rota (Vercel ignora arquivos com "_" na frente em
-// api/). Busca e cacheia (10min) os exports de OS/apontamentos do SIGMA, usados tanto
+// api/). Busca e cacheia (3min) os exports de OS/apontamentos do SIGMA, usados tanto
 // pelo proxy autenticado da Programação (sigma-ordens-proxy.js) quanto pelo endpoint
 // público do Kanban da Oficina (kanban-atividades-publico.js).
 //
@@ -13,7 +13,9 @@
 export const URL_OS = 'https://utepecem.com/sigma/export/?dados=os&empresa=PTPC';
 export const URL_APONTAMENTOS = 'https://utepecem.com/sigma/export/?dados=apontamentos&empresa=PTPC';
 export const REQUEST_TIMEOUT_MS = 25000;
-export const CACHE_TTL_MS = 10 * 60 * 1000;
+// 3min (era 10): cada function tem cache próprio e renova em hora diferente — com 10min o
+// link público chegava a ficar ~10min atrás do Portal num apontamento novo.
+export const CACHE_TTL_MS = 3 * 60 * 1000;
 
 // Índices de coluna fixos, conferidos direto contra os dados reais (não dá pra confiar
 // em casar o texto do cabeçalho — ele vem em Windows-1252 e alguns nomes têm acento/º).

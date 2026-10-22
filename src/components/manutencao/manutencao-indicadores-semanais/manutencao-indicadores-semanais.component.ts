@@ -79,7 +79,7 @@ interface HorasTecnicoItem {
 // público (manutencao-indicadores-publico.component.ts), que precisa exatamente dos
 // mesmos cálculos sem poder depender de nada Angular/Supabase.
 
-// Reaproveita o mesmo intervalo do proxy do SIGMA (cache de 10min no servidor, ver
+// Reaproveita o mesmo intervalo do proxy do SIGMA (cache de 3min no servidor, ver
 // api/_sigma-shared.js) — poll mais frequente que isso não traria dado mais novo, só
 // gastaria requisição à toa; 3min dá uma sensação de "ao vivo" sem exagerar.
 const INTERVALO_POLL_MS = 3 * 60 * 1000;
@@ -307,7 +307,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
 
   // Todo o histórico, não só a semana selecionada — a Evolução ao Longo do Ano e o
   // Consolidado do Ano precisam da execução de toda semana já registrada. O proxy do
-  // SIGMA já cacheia por 10min no servidor e o histórico hoje é limitado (desde a
+  // SIGMA já cacheia por 3min no servidor e o histórico hoje é limitado (desde a
   // S37/2026, quando a Programação nativa começou a ser usada) — se um dia isso
   // crescer muito, vale paginar por semana em vez de buscar tudo de uma vez.
   private numerosOsVisiveis = computed(() =>
@@ -370,7 +370,7 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
   });
 
   // Botão "Atualizar apontamentos" (só Admin): refaz só a consulta acima, sem recarregar
-  // o resto da tela. O proxy guarda o SIGMA em cache por até 10 min (_sigma-shared.js) —
+  // o resto da tela. O proxy guarda o SIGMA em cache por até 3 min (_sigma-shared.js) —
   // clicar antes disso devolve o mesmo dado.
   apontamentosCarregando = signal(false);
   apontamentosErro = signal('');
