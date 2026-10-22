@@ -2686,14 +2686,19 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     // Andaime/munck/guindaste: OS equivalente na programação do Apoio, pra empresa
     // certa. Dois chips da mesma empresa (Munck + Guindaste da Cordeiro) viram uma OS
     // só, com os dias dos dois somados.
-    if (this.formArea() !== 'APOIO') {
+    //
+    // Vale também pra OS lançada no próprio Apoio (ex.: Refrigeração precisando de
+    // andaime) — reportado: antes isso era barrado pela área e a OS nunca chegava na
+    // agenda da TOP ANDAIMES. Só pula a empresa que já é a dona da OS (não espelha pra si).
+    {
       const mapaEmpresa = this.recursoParaEmpresaApoio();
       const recursosPorEmpresa = new Map<string, string[]>();
       for (const r of recursos) {
         const empresa = mapaEmpresa[r.toUpperCase()];
-        if (!empresa) continue;
+        if (!empresa || empresa.trim().toUpperCase() === mandante.toUpperCase()) continue;
         recursosPorEmpresa.set(empresa, [...(recursosPorEmpresa.get(empresa) ?? []), r]);
       }
+      const origem = this.formArea() === 'APOIO' ? mandante : this.areaLabel[this.formArea()];
       for (const [empresa, recursosDaEmpresa] of recursosPorEmpresa) {
         const dias = [...new Set(recursosDaEmpresa.flatMap(r => this.apoioDiasDoRecurso(r)))].sort();
         if (dias.length === 0) continue;
@@ -2708,7 +2713,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
             recursos: recursosParaEspelho(recursos, r => mapaEmpresa[r.toUpperCase()] === empresa, mandante) || undefined,
             tecnicoNome: empresa,
             diasPrevistos: dias,
-            observacoes: `Apoio automático (${empresa}) — vinculado à OS de ${this.areaLabel[this.formArea()]}${numero ? ' nº ' + numero : ''}.`,
+            observacoes: `Apoio automático (${empresa}) — vinculado à OS de ${origem}${numero ? ' nº ' + numero : ''}.`,
           },
         });
       }
