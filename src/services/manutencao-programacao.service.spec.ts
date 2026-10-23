@@ -204,3 +204,86 @@ it('reabrir semana barrado pelo RLS (0 linhas) avisa em vez de fingir que reabri
   await expect(service.reabrirSemana('2026-10-05')).rejects.toThrow('permissão');
   expect(service.semanaEstaFechada('2026-10-05')).toBe(true);
 });
+
+// ── Carga inteligente e cache do SIGMA ───────────────────────────────────
+function criarServicoContandoCargas() {
+  const cargas = { n: 0 };
+  let aoStatus: (s: string) => void = () => {};
+  const callbacks: Record<string, (p: unknown) => void> = {};
+  const canal = {
+    on: (tipo: string, _f: unknown, cb: (p: unknown) => void) => { callbacks[tipo] = cb; return canal; },
+    subscribe: (cb: (s: string) => void) => { aoStatus = cb; return canal; },
+  };
+  const cadeia: Record<string, unknown> = {};
+  for (const m of ['select', 'order']) cadeia[m] = () => cadeia;
+  cadeia['range'] = async (from: number) => { if (from === 0) cargas.n++; return { data: from === 0 ? [LINHA] : [], error: null }; };
+  const supabase = { client: { from: () => cadeia, channel: () => canal, removeChannel: async () => 'ok' } };
+  const service = new ManutencaoProgramacaoService(supabase as any, { currentUser: () => null, getValidAccessToken: async () => 't' } as any, { log: () => {} } as any);
+  return { service, cargas, status: (s: string) => aoStatus(s), emitir: (p: unknown) => callbacks['postgres_changes'](p) };
+}
+
+it('voltar à tela sem alteração externa não relê as OS; com alteração (ou canal caído), relê', async () => {
+  jest.useFakeTimers();
+  const { service, cargas, status, emitir } = criarServicoContandoCargas();
+  service.iniciarMonitoramentoAlteracoes();
+  status('SUBSCRIBED');
+  await service.loadSeNecessario();
+  await service.loadSeNecessario();
+  expect(cargas.n).toBe(1);
+
+  emitir({ eventType: 'INSERT', new: { ...LINHA, id: 'os-9' }, old: {} });
+  await jest.advanceTimersByTimeAsync(3000);
+  await service.loadSeNecessario();
+  expect(cargas.n).toBe(2);
+
+  status('CHANNEL_ERROR');
+  await service.loadSeNecessario();
+  expect(cargas.n).toBe(3);
+});
+
+it('sem canal de alterações, sempre relê', async () => {
+  const { service, cargas } = criarServicoContandoCargas();
+  await service.loadSeNecessario();
+  await service.loadSeNecessario();
+  expect(cargas.n).toBe(2);
+});
+
+it('SIGMA: OS consultada há pouco vem do cache; forçar consulta de novo', async () => {
+  const pedidos: string[] = [];
+  globalThis.fetch = (async (url: string) => {
+    pedidos.push(decodeURIComponent(url.split('numeros_os=')[1] ?? ''));
+    const numeros = (decodeURIComponent(url.split('numeros_os=')[1] ?? '')).split(',');
+    return { ok: true, json: async () => ({ success: true, data: Object.fromEntries(numeros.map(n => [n, { numero: n }])) }) };
+  }) as any;
+  const { service } = criarServicoContandoCargas();
+  await service.consultarOrdensSigma(['1', '2']);
+  const r = await service.consultarOrdensSigma(['1', '2', '3']);
+  expect(Object.keys(r).sort()).toEqual(['1', '2', '3']);
+  await service.consultarOrdensSigma(['1'], true);
+  expect(pedidos).toEqual(['1,2', '3', '1']);
+});
+
+it('editar: queda de rede (Failed to fetch) tenta de novo uma vez antes de falhar', async () => {
+  let chamadas = 0;
+  const cadeia: Record<string, unknown> = {};
+  for (const m of ['update', 'select', 'eq', 'abortSignal']) cadeia[m] = () => cadeia;
+  cadeia['single'] = () => {
+    chamadas++;
+    return Promise.resolve(chamadas === 1
+      ? { data: null, error: { message: 'TypeError: Failed to fetch' } }
+      : { data: LINHA, error: null });
+  };
+  const registros: { event_type: string }[] = [];
+  const service = new ManutencaoProgramacaoService({ client: { from: () => cadeia } } as any,
+    { currentUser: () => ({ id: 'u1', name: 'Lucas', role: 'Admin' }) } as any, { log: (e: { event_type: string }) => registros.push(e) } as any);
+  const executar = (service as any).executarGravacao.bind(service);
+  const r = await executar('editar', () => (cadeia['single'] as () => Promise<unknown>)());
+  expect(r.error).toBeNull();
+  expect(chamadas).toBe(2);
+  expect(registros).toEqual([]);
+
+  chamadas = 0;
+  const criar = await executar('criar', () => (cadeia['single'] as () => Promise<unknown>)());
+  expect(criar.error?.message).toContain('Failed to fetch');
+  expect(chamadas).toBe(1);
+});

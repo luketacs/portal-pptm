@@ -149,6 +149,11 @@ function mapRecursoEspecialRow(r: { id: string; opcao: string; empresa_apoio: st
   return { id: r.id, opcao: r.opcao, empresaApoio: r.empresa_apoio };
 }
 
+// Queda de conexão (o pedido nem chegou/voltou), não recusa do banco.
+function falhaDeRede(erro: { message: string }): boolean {
+  return /failed to fetch|networkerror|load failed|network request failed/i.test(erro.message);
+}
+
 @Injectable({ providedIn: 'root' })
 export class ManutencaoProgramacaoService {
   private readonly TIMEOUT_GRAVACAO_MS = 20_000;
@@ -165,6 +170,15 @@ export class ManutencaoProgramacaoService {
   private _alteracoesExternas = signal<readonly AlteracaoExterna[]>([]);
   alteracoesExternas = this._alteracoesExternas.asReadonly();
   private canalAlteracoes: RealtimeChannel | null = null;
+  private carregadoEm: number | null = null;
+  // Quando o canal ficou SUBSCRIBED; null = desligado/caído (ver loadSeNecessario).
+  private inscritoEm: number | null = null;
+  private readonly IDADE_MAXIMA_CARGA_MS = 30 * 60 * 1000;
+  // Resultado do SIGMA por OS: o proxy já guarda o export por 3 min, então reconsultar
+  // antes disso só repete a mesma resposta — e a tela reconsultava a cada troca de aba.
+  private readonly CACHE_SIGMA_MS = 3 * 60 * 1000;
+  private sigmaPorOs = new Map<string, { em: number; resultado: ConsultaSigmaResultado }>();
+  private preventivasPendentesCache: { em: number; dados: Promise<SigmaPreventivaPendente[]> } | null = null;
   // Espera antes de comparar o evento com a lista local: o evento da própria gravação
   // pode chegar antes da resposta HTTP que atualiza a lista (incluirNaLista).
   private readonly ESPERA_COMPARACAO_MS = 2_000;
@@ -235,9 +249,22 @@ export class ManutencaoProgramacaoService {
       if (error) throw new Error(error.message);
       this._ordens.set((data ?? []).map(mapRow));
       this._alteracoesExternas.set([]);
+      this.carregadoEm = Date.now();
     } finally {
       this.isLoading.set(false);
     }
+  }
+
+  // Trocar de aba (Elétrica/Mecânica/Apoio) recria a tela, e cada abertura relia as
+  // ~1,4 mil OS. Com o canal de alterações ligado desde ANTES da última carga, a lista
+  // em memória só fica velha se chegou alteração externa — aí sim relê. Sem canal (ou
+  // canal que caiu), ou carga velha demais, relê como antes.
+  async loadSeNecessario(): Promise<void> {
+    const confiavel = this.carregadoEm !== null
+      && this.inscritoEm !== null && this.inscritoEm <= this.carregadoEm
+      && this._alteracoesExternas().length === 0
+      && Date.now() - this.carregadoEm < this.IDADE_MAXIMA_CARGA_MS;
+    if (!confiavel) await this.load();
   }
 
   // Avisa (sem recarregar sozinho — quem está no meio de um lançamento não perde nada)
@@ -260,7 +287,8 @@ export class ManutencaoProgramacaoService {
         if (semana) this.registrarAlteracoes([semana], nome ?? null);
       })
       .subscribe(status => {
-        if (status !== 'SUBSCRIBED') return;
+        if (status !== 'SUBSCRIBED') { this.inscritoEm = null; return; }
+        this.inscritoEm = Date.now();
         // Reconexão (rede caiu, aba ficou suspensa): o que mudou nesse meio-tempo não
         // chega como evento — melhor avisar à toa do que deixar a tela velha calada.
         if (jaConectou) this.registrarAlteracoes(['*'], null);
@@ -272,6 +300,7 @@ export class ManutencaoProgramacaoService {
     if (!this.canalAlteracoes) return;
     void this.supabaseService.client.removeChannel(this.canalAlteracoes);
     this.canalAlteracoes = null;
+    this.inscritoEm = null;
   }
 
   private avaliarAlteracao(payload: RealtimePostgresChangesPayload<ManutencaoOrdemRow>): void {
@@ -368,22 +397,31 @@ export class ManutencaoProgramacaoService {
     operacao: 'criar' | 'editar' | 'apoio', chamada: () => PromiseLike<R>,
   ): Promise<R> {
     const t0 = performance.now();
-    try {
-      const resultado = await comLimiteDeTempo(chamada(), this.LIMITE_TOTAL_GRAVACAO_MS);
-      this.registrarTelemetria(operacao, performance.now() - t0, resultado.error);
-      return resultado;
-    } catch (e: unknown) {
-      const erro = e instanceof Error ? { name: e.name, message: e.message } : { message: String(e) };
-      this.registrarTelemetria(operacao, performance.now() - t0, erro);
-      throw new Error(mensagemErroGravacao(erro));
+    // Edição é um UPDATE pelo id — repetir não duplica nada. A telemetria de 08 e 15/10
+    // mostrou "Failed to fetch" ao editar com a aba aberta há horas (conexão velha que
+    // caiu): uma segunda tentativa abre conexão nova e costuma passar.
+    const tentativas = operacao === 'editar' ? 2 : 1;
+    for (let tentativa = 1; ; tentativa++) {
+      try {
+        const resultado = await comLimiteDeTempo(chamada(), this.LIMITE_TOTAL_GRAVACAO_MS);
+        if (resultado.error && tentativa < tentativas && falhaDeRede(resultado.error)) continue;
+        this.registrarTelemetria(operacao, performance.now() - t0, resultado.error, tentativa);
+        return resultado;
+      } catch (e: unknown) {
+        const erro = e instanceof Error ? { name: e.name, message: e.message } : { message: String(e) };
+        if (tentativa < tentativas && falhaDeRede(erro)) continue;
+        this.registrarTelemetria(operacao, performance.now() - t0, erro, tentativa);
+        throw new Error(mensagemErroGravacao(erro));
+      }
     }
   }
 
   private registrarTelemetria(
     operacao: 'criar' | 'editar' | 'apoio', ms: number, erro: { message: string; name?: string; code?: string } | null,
+    tentativas = 1,
   ): void {
     const registro = avaliarGravacao({
-      operacao, ms, erro,
+      operacao, ms, erro, tentativas,
       msDesdeAbertura: performance.now(),
       visivel: typeof document === 'undefined' || document.visibilityState === 'visible',
       online: typeof navigator === 'undefined' || navigator.onLine !== false,
@@ -802,9 +840,17 @@ export class ManutencaoProgramacaoService {
   // pessoa digita o número da OS, quanto pra conferir se ela foi executada dentro da
   // semana programada. Aceita várias OS de uma vez (batch) pra não disparar uma
   // consulta por linha da tela.
-  async consultarOrdensSigma(numerosOs: string[]): Promise<Record<string, ConsultaSigmaResultado>> {
-    const numeros = [...new Set(numerosOs.map(n => n.trim()).filter(Boolean))];
-    if (numeros.length === 0) return {};
+  async consultarOrdensSigma(numerosOs: string[], forcar = false): Promise<Record<string, ConsultaSigmaResultado>> {
+    const todos = [...new Set(numerosOs.map(n => n.trim()).filter(Boolean))];
+    const agora = Date.now();
+    const doCache: Record<string, ConsultaSigmaResultado> = {};
+    const numeros = forcar ? todos : todos.filter(n => {
+      const guardado = this.sigmaPorOs.get(n);
+      if (!guardado || agora - guardado.em >= this.CACHE_SIGMA_MS) return true;
+      doCache[n] = guardado.resultado;
+      return false;
+    });
+    if (numeros.length === 0) return doCache;
 
     const token = await this.authService.getValidAccessToken();
     const resp = await fetch(`/api/sigma-ordens-proxy?numeros_os=${encodeURIComponent(numeros.join(','))}`, {
@@ -814,11 +860,22 @@ export class ManutencaoProgramacaoService {
     if (!resp.ok || !body?.success) {
       throw new Error(body?.error || 'Falha ao consultar o SIGMA.');
     }
-    return body.data as Record<string, ConsultaSigmaResultado>;
+    const novos = body.data as Record<string, ConsultaSigmaResultado>;
+    for (const [numero, resultado] of Object.entries(novos)) this.sigmaPorOs.set(numero, { em: agora, resultado });
+    return { ...doCache, ...novos };
   }
 
   // OS preventivas pendentes (PEND) do SIGMA, todas as áreas — ver osSigmaDosPlanos.
   async consultarPreventivasPendentesSigma(): Promise<SigmaPreventivaPendente[]> {
+    const guardado = this.preventivasPendentesCache;
+    if (guardado && Date.now() - guardado.em < this.CACHE_SIGMA_MS) return guardado.dados;
+    const dados = this.buscarPreventivasPendentesSigma();
+    this.preventivasPendentesCache = { em: Date.now(), dados };
+    dados.catch(() => { if (this.preventivasPendentesCache?.dados === dados) this.preventivasPendentesCache = null; });
+    return dados;
+  }
+
+  private async buscarPreventivasPendentesSigma(): Promise<SigmaPreventivaPendente[]> {
     const token = await this.authService.getValidAccessToken();
     const resp = await fetch('/api/sigma-ordens-proxy?preventivas_pendentes=1', {
       headers: token ? { Authorization: `Bearer ${token}` } : {},

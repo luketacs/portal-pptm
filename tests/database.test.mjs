@@ -29,6 +29,7 @@ before(async () => {
     CREATE TABLE materials(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), status text, updated_at timestamptz DEFAULT now());
     CREATE TABLE profiles(id uuid PRIMARY KEY, name text, email text, role text, department text, position text, must_change_password boolean DEFAULT false);
     INSERT INTO profiles(id,name,role) VALUES ('${admin}','Admin','Admin'), ('${solicitante}','Solicitante','Solicitante'), ('${visualizador}','Visualizador','Visualizador');
+    CREATE TABLE audit_logs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, user_name text, event_type text, resource_type text, resource_id text, description text, metadata jsonb, created_at timestamptz DEFAULT now());
     CREATE TABLE purchase_requests(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), requester_id uuid REFERENCES profiles(id), status text, requestdate timestamptz DEFAULT now(), history jsonb DEFAULT '[]');
     ALTER TABLE purchase_requests ENABLE ROW LEVEL SECURITY;
     CREATE POLICY "Allow update requests" ON purchase_requests FOR UPDATE USING (true) WITH CHECK (true);
@@ -313,4 +314,18 @@ test('SC: solicitante edita só a própria Pendente; visualizador não grava; s�
   assert.equal((await db.query('DELETE FROM purchase_requests WHERE id=$1', [sc.id])).affectedRows, 0);
   await login(admin);
   assert.equal((await db.query('DELETE FROM purchase_requests WHERE id=$1', [sc.id])).affectedRows, 1);
+});
+
+test('auditoria: limpeza apaga o que passou de 30 dias, menos o histórico de cadastro dos planos', async () => {
+  await db.exec('RESET ROLE');
+  await db.exec(`DELETE FROM audit_logs;
+    INSERT INTO audit_logs(user_name,event_type,resource_type,description,created_at) VALUES
+      ('A','request_updated','request','velho', now() - interval '31 days'),
+      ('A','request_updated','request','novo', now() - interval '29 days'),
+      ('A','manutencao_plano_editado','manutencao_planos','plano velho', now() - interval '400 days'),
+      ('A','manutencao_plano_checklist_replicado','manutencao_planos_x','replicado velho', now() - interval '400 days');`);
+  const { rows: [{ limpar_audit_logs: apagados }] } = await db.query('SELECT public.limpar_audit_logs()');
+  assert.equal(apagados, 1);
+  const { rows } = await db.query('SELECT description FROM audit_logs ORDER BY description');
+  assert.deepEqual(rows.map(r => r.description), ['novo', 'plano velho', 'replicado velho']);
 });

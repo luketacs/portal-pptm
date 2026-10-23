@@ -172,8 +172,20 @@ export class ManutencaoPlanosService {
         adiamentos.set(r.plano_id, doPlano);
       }
       this._adiamentos.set(adiamentos);
+      this.carregadoEm = Date.now();
     } finally {
       this.isLoading.set(false);
+    }
+  }
+
+  // A Programação (cada aba) relia planos + ciclos + OS previstas + adiamentos ao abrir.
+  // Gravações deste app já atualizam a memória; o que muda por fora (outro usuário, ou
+  // ciclos gravados por trigger) entra na próxima releitura após 5 min.
+  private carregadoEm: number | null = null;
+  private readonly IDADE_MAXIMA_CARGA_MS = 5 * 60 * 1000;
+  async loadSeNecessario(): Promise<void> {
+    if (this.carregadoEm === null || Date.now() - this.carregadoEm >= this.IDADE_MAXIMA_CARGA_MS) {
+      await this.load();
     }
   }
 
@@ -187,8 +199,11 @@ export class ManutencaoPlanosService {
     this._ciclos.set((data ?? []).map(mapCicloRow));
   }
 
+  // Indexado: a Programação chama getById várias vezes por linha (selo KKS) a cada
+  // atualização da tela — com ~830 planos, o find linear pesava.
+  private planosPorId = computed(() => new Map(this._planos().map(p => [p.id, p])));
   getById(id: string): PlanoManutencao | undefined {
-    return this._planos().find(p => p.id === id);
+    return this.planosPorId().get(id);
   }
 
   // Data do ciclo mais recente já registrado pro plano, ou null se nunca foi

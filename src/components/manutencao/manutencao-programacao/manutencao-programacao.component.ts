@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, effect, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -1943,8 +1943,9 @@ export class ManutencaoProgramacaoComponent implements OnInit {
       this.pageTitle = `Programação ${AREA_LABEL[area]}`;
     }
 
+    // O canal fica ligado ao sair da tela: é ele que permite voltar (ou trocar de aba)
+    // sem reler todas as OS — ver loadSeNecessario.
     this.manutencaoService.iniciarMonitoramentoAlteracoes();
-    inject(DestroyRef).onDestroy(() => this.manutencaoService.pararMonitoramentoAlteracoes());
 
     // Consulta ao SIGMA: semana nova (ou liga/desliga o horizonte) = todas as OS visíveis;
     // mesma semana = só número de OS que ainda não tem resultado. Antes, cada salvar
@@ -1965,7 +1966,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // pra quem quiser conferir uma baixa recém-lançada sem esperar trocar de filtro.
   atualizarAtendimento(): void {
     const numeros = this.numerosOsVisiveis();
-    if (numeros.length > 0) this.buscarExecucaoSigma(numeros);
+    if (numeros.length > 0) this.buscarExecucaoSigma(numeros, true);
   }
 
   private ultimaChaveSemanaSigma: string | null = null;
@@ -1973,11 +1974,11 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // terminar apagava o spinner da outra.
   private consultasSigmaEmAndamento = 0;
 
-  private async buscarExecucaoSigma(numeros: string[]): Promise<void> {
+  private async buscarExecucaoSigma(numeros: string[], forcar = false): Promise<void> {
     this.consultasSigmaEmAndamento++;
     this.sigmaAtualizando.set(true);
     try {
-      const resultado = await this.manutencaoService.consultarOrdensSigma(numeros);
+      const resultado = await this.manutencaoService.consultarOrdensSigma(numeros, forcar);
       this.sigmaPorOs.update(atual => ({ ...atual, ...resultado }));
     } catch {
       // Consulta best-effort — falha do SIGMA não deve travar a tela de programação.
@@ -2193,7 +2194,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // telas se recalculam sozinhas (signals) conforme cada um chega.
   async ngOnInit(): Promise<void> {
     const essenciais = Promise.all([
-      this.manutencaoService.load(),
+      this.manutencaoService.loadSeNecessario(),
       this.apontamentosService.loadColaboradores(),
       this.manutencaoService.loadEquipamentos(),
       ...(this.areaFixa === 'APOIO'
@@ -2208,7 +2209,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     await Promise.all([
       essenciais,
       complementar('recursos especiais', this.manutencaoService.loadRecursosEspeciais()),
-      complementar('planos de manutenção', this.manutencaoPlanosService.load()),
+      complementar('planos de manutenção', this.manutencaoPlanosService.loadSeNecessario()),
       complementar('status de parada da planta', this.manutencaoService.loadParadaAtual()),
       complementar('semanas fechadas', this.manutencaoService.loadSemanasFechadas()),
     ]);

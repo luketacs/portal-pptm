@@ -334,6 +334,7 @@ export function avaliarGravacao(params: {
   msDesdeAbertura: number;
   visivel: boolean;
   online: boolean;
+  tentativas?: number;
 }): { event_type: string; description: string; metadata: Record<string, unknown> } | null {
   if (!params.erro && params.ms < LIMITE_GRAVACAO_LENTA_MS) return null;
   const metadata: Record<string, unknown> = {
@@ -343,6 +344,8 @@ export function avaliarGravacao(params: {
     aba_visivel: params.visivel,
     online: params.online,
   };
+  // Só aparece quando houve nova tentativa automática (queda de rede ao editar).
+  if ((params.tentativas ?? 1) > 1) metadata['tentativas'] = params.tentativas;
   if (params.erro) {
     metadata['erro_nome'] = params.erro.name ?? null;
     metadata['erro_codigo'] = params.erro.code ?? null;
