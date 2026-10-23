@@ -145,7 +145,7 @@ export class AppComponent implements OnDestroy {
         if (!isValid) {
           console.warn('[AppComponent] Session expired, logging out');
           this.notificationService.showError('Sua sessão expirou. Por favor, faça login novamente.');
-          await this.authService.logout();
+          await this.authService.logout('local');
           await this.router.navigateByUrl('/login', { replaceUrl: true });
         }
       }

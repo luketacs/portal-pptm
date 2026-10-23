@@ -110,8 +110,15 @@ export interface MetaSaidaMensal {
   atualizadoPorNome: string | null;
 }
 
+// Movimentações, SAs e saldo só mudam por importação de planilha — e cada tela do almox
+// (e a Programação) baixava as três tabelas inteiras (~7 mil linhas) toda vez que abria.
+// Guarda o resultado por alguns minutos; importar limpa na hora.
+const CACHE_ALMOX_MS = 5 * 60 * 1000;
+
 @Injectable({ providedIn: 'root' })
 export class AlmoxarifadoService {
+  private cache = new Map<string, { em: number; dados: Promise<unknown[]> }>();
+
   constructor(
     private supabaseService: SupabaseService,
     private authService: AuthService
@@ -127,35 +134,51 @@ export class AlmoxarifadoService {
     return data;
   }
 
+  // Devolve cópia do array: quem chama pode ordenar/filtrar sem estragar o cache.
+  private comCache<T>(chave: string, buscar: () => Promise<T[]>): Promise<T[]> {
+    const guardado = this.cache.get(chave);
+    if (guardado && Date.now() - guardado.em < CACHE_ALMOX_MS) {
+      return (guardado.dados as Promise<T[]>).then(lista => [...lista]);
+    }
+    const dados = buscar();
+    this.cache.set(chave, { em: Date.now(), dados });
+    dados.catch(() => { if (this.cache.get(chave)?.dados === dados) this.cache.delete(chave); });
+    return dados.then(lista => [...lista]);
+  }
+
+  limparCache(): void {
+    this.cache.clear();
+  }
+
   async getMovimentacoes(): Promise<Movimentacao[]> {
-    return this.fetchAllPages<Movimentacao>((from, to) =>
+    return this.comCache('movimentacoes', () => this.fetchAllPages<Movimentacao>((from, to) =>
       this.supabaseService.client
         .from('almox_movimentacoes')
         .select('*')
         .order('data_operacao', { ascending: false }).order('id')
         .range(from, to)
-    );
+    ));
   }
 
   async getSolicitacoes(): Promise<Solicitacao[]> {
-    return this.fetchAllPages<Solicitacao>((from, to) =>
+    return this.comCache('solicitacoes', () => this.fetchAllPages<Solicitacao>((from, to) =>
       this.supabaseService.client
         .from('almox_solicitacoes')
         .select('*')
         .eq('status', 'aberta')   // apenas abertas — exclui 'encerrada' e 'atendida'
         .order('sa_numero').order('id')
         .range(from, to)
-    );
+    ));
   }
 
   async getSaldoReal(): Promise<SaldoReal[]> {
-    return this.fetchAllPages<SaldoReal>((from, to) =>
+    return this.comCache('saldo', () => this.fetchAllPages<SaldoReal>((from, to) =>
       this.supabaseService.client
         .from('almox_saldo_real')
         .select('*')
         .order('produto_codigo').order('id')
         .range(from, to)
-    );
+    ));
   }
 
   async getUltimaImportacao(tipo: string): Promise<UltimaImportacao | null> {
@@ -342,6 +365,7 @@ export class AlmoxarifadoService {
     });
 
     const result = await response.json();
+    this.limparCache();
     if (!result.success) throw new Error(result.error || 'Erro ao importar arquivo.');
     return result;
   }

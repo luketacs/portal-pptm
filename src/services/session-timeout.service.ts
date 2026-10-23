@@ -30,6 +30,14 @@ export class SessionTimeoutService implements OnDestroy {
   // Timestamp da última atividade
   private lastActivity = Date.now();
 
+  // Atividade compartilhada entre as abas: o logout é global (derruba a sessão em todas),
+  // então uma aba parada não pode deslogar enquanto o usuário trabalha em outra — era isso
+  // que fazia as SCs sumirem ("não existe") no meio da edição.
+  private readonly ATIVIDADE_STORAGE_KEY = 'portal-pptm-ultima-atividade';
+  // mousemove dispara dezenas de vezes por segundo; grava/reagenda no máx. a cada 5 s.
+  private readonly INTERVALO_REGISTRO_MS = 5000;
+  private ultimoRegistro = 0;
+
   // Eventos que resetam o timer de inatividade
   private readonly ACTIVITY_EVENTS = [
     'mousedown',
@@ -114,26 +122,49 @@ export class SessionTimeoutService implements OnDestroy {
    * Callback chamado quando há atividade do usuário
    */
   private onUserActivity = (): void => {
-    this.lastActivity = Date.now();
+    const agora = Date.now();
+    this.lastActivity = agora;
     this.warningShown = false;
+    if (agora - this.ultimoRegistro < this.INTERVALO_REGISTRO_MS) return;
+    this.ultimoRegistro = agora;
+    try { localStorage.setItem(this.ATIVIDADE_STORAGE_KEY, String(agora)); } catch { /* storage bloqueado */ }
     this.resetInactivityTimer();
   };
+
+  // Última atividade em qualquer aba aberta do portal.
+  private ultimaAtividadeGeral(): number {
+    let outraAba = 0;
+    try { outraAba = Number(localStorage.getItem(this.ATIVIDADE_STORAGE_KEY)) || 0; } catch { /* storage bloqueado */ }
+    return Math.max(this.lastActivity, outraAba);
+  }
+
+  // Se outra aba teve atividade, reagenda os timers pro tempo que falta em vez de avisar/deslogar.
+  private outraAbaAtiva(): boolean {
+    const parado = Date.now() - this.ultimaAtividadeGeral();
+    if (parado >= this.INACTIVITY_TIMEOUT - this.WARNING_TIME) return false;
+    this.agendarTimers(this.INACTIVITY_TIMEOUT - parado);
+    return true;
+  }
 
   /**
    * Reseta o timer de inatividade
    */
   private resetInactivityTimer(): void {
+    this.agendarTimers(this.INACTIVITY_TIMEOUT);
+  }
+
+  private agendarTimers(ateLogoutMs: number): void {
     this.clearTimers();
 
     // Timer para mostrar aviso antes de fazer logout
     this.warningTimer = window.setTimeout(() => {
       this.showInactivityWarning();
-    }, this.INACTIVITY_TIMEOUT - this.WARNING_TIME);
+    }, Math.max(0, ateLogoutMs - this.WARNING_TIME));
 
     // Timer para fazer logout automático
     this.inactivityTimer = window.setTimeout(() => {
       this.handleInactivityTimeout();
-    }, this.INACTIVITY_TIMEOUT);
+    }, ateLogoutMs);
   }
 
   /**
@@ -157,6 +188,7 @@ export class SessionTimeoutService implements OnDestroy {
     if (this.warningShown || !this.isActive) {
       return;
     }
+    if (this.outraAbaAtiva()) return;
 
     this.warningShown = true;
     
@@ -176,6 +208,12 @@ export class SessionTimeoutService implements OnDestroy {
    */
   private handleInactivityTimeout(): void {
     if (!this.isActive) {
+      return;
+    }
+    // Checa de novo na hora: o aviso pode ter sido pulado e outra aba ter atividade recente.
+    const parado = Date.now() - this.ultimaAtividadeGeral();
+    if (parado < this.INACTIVITY_TIMEOUT) {
+      this.agendarTimers(this.INACTIVITY_TIMEOUT - parado);
       return;
     }
 

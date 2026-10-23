@@ -89,22 +89,13 @@ export class AuthService {
    */
   async checkSession(): Promise<boolean> {
     try {
+      // getSession() do SDK já renova o token perto de vencer — sem refresh manual aqui,
+      // que concorria com o autoRefresh e podia queimar o refresh token (SIGNED_OUT).
       const session = await this.getSessionWithTimeout();
-      if (!session?.user) {
-        return false;
-      }
-
-      // Se estiver perto de expirar, tenta renovar preventivamente.
-      const expiresAt = session.expires_at ?? 0;
-      const now = Math.floor(Date.now() / 1000);
-      if (expiresAt > 0 && expiresAt - now <= 60) {
-        const refreshed = await this.refreshSessionWithTimeout();
-        return !!refreshed?.user;
-      }
-
-      return true;
+      return !!session?.user;
     } catch {
-      return false;
+      // Lentidão ou trava ao ler a sessão não é sessão expirada: não derruba o usuário.
+      return true;
     }
   }
 
@@ -132,35 +123,11 @@ export class AuthService {
    * Garante que o token está válido e a sessão está ativa
    */
   async refreshSessionBeforeOperation(): Promise<{ success: boolean; error?: string }> {
+    // Chamado depois de um 401: o servidor recusou o token, então renova de fato (antes só
+    // renovava se o relógio local dissesse que venceu, e o retry levava outro 401).
     try {
-      console.log('[AuthService] Refreshing session before operation...');
-      const session = await this.getSessionWithTimeout();
-
-      if (!session) {
-        console.error('[AuthService] No active session');
-        return { success: false, error: 'No active session' };
-      }
-
-      // Verificar se token expirou
-      const expiresAt = session.expires_at;
-      const now = Math.floor(Date.now() / 1000);
-      
-      if (expiresAt && now >= expiresAt) {
-        console.log('[AuthService] Token expired, attempting to refresh...');
-        const newSession = await this.refreshSessionWithTimeout();
-        if (!newSession) {
-          console.error('[AuthService] Failed to refresh token');
-          return { success: false, error: 'Token refresh failed' };
-        }
-
-        console.log('[AuthService] Token refreshed successfully');
-      } else if (expiresAt) {
-        console.log('[AuthService] Session is valid, token expires in', expiresAt - now, 'seconds');
-      } else {
-        console.log('[AuthService] Session is valid');
-      }
-
-      return { success: true };
+      const session = await this.refreshSessionWithTimeout();
+      return session ? { success: true } : { success: false, error: 'No active session' };
     } catch (error) {
       console.error('[AuthService] Session refresh error:', error);
       return { success: false, error: (error as Error).message };
@@ -169,21 +136,13 @@ export class AuthService {
 
   async getValidAccessToken(): Promise<string | null> {
     try {
-      let session = await this.getSessionWithTimeout();
-      if (!session) return null;
-
-      const expiresAt = session.expires_at ?? 0;
-      const now = Math.floor(Date.now() / 1000);
-      if (expiresAt > 0 && expiresAt - now <= 60) {
-        const refreshedSession = await this.refreshSessionWithTimeout();
-        if (refreshedSession) {
-          session = refreshedSession;
-        }
-      }
-
-      return session.access_token ?? null;
+      const session = await this.getSessionWithTimeout();
+      return session?.access_token ?? null;
     } catch {
-      return null;
+      // Trava/lentidão ao ler a sessão (ex.: renovação em andamento noutra aba): usa o token
+      // salvo em vez de devolver null — null faz o SupabaseRestService deslogar o usuário.
+      // Se o token salvo estiver vencido, o 401 cai no refreshSessionBeforeOperation.
+      return this.getStoredAccessToken();
     }
   }
 
@@ -424,7 +383,9 @@ export class AuthService {
     return 'Falha ao carregar dados do usuário após login. Tente novamente.';
   }
 
-  async logout(): Promise<void> {
+  // scope 'local' encerra só esta aba/navegador — usado nos logouts forçados (token
+  // recusado), pra não derrubar a sessão do usuário nas outras abas por tabela.
+  async logout(scope: 'global' | 'local' = 'global'): Promise<void> {
     this.isLoggingOut.set(true);
     let forcedTimeout: any;
     try {
@@ -452,7 +413,7 @@ export class AuthService {
       }, 10000);
 
       // Fazer o signOut
-      await this.withAuthTimeout(this.supabase.auth.signOut());
+      await this.withAuthTimeout(this.supabase.auth.signOut({ scope }));
 
       // Limpar o localStorage manualmente como backup
       localStorage.removeItem(this.AUTH_STORAGE_KEY);
@@ -486,13 +447,14 @@ export class AuthService {
         }
       }
       
-      // Verificar se consegue obter o usuário atual
+      // Verificar se consegue obter o usuário atual. Só recusa quando o servidor diz que o
+      // token não vale (401/403); falha de rede no F5 não pode deslogar.
       const { data: { user }, error } = await this.withAuthTimeout(this.supabase.auth.getUser());
-      
-      return !error && !!user;
+      if (error) return !(error.status === 401 || error.status === 403);
+      return !!user;
     } catch (error) {
       console.error('[AuthService] Session validation error:', error);
-      return false;
+      return true;
     }
   }
 

@@ -61,7 +61,7 @@ export class SupabaseRestService {
         if (response.status === 401 && retryOnAuthFailure) {
           const refresh = await this.authService.refreshSessionBeforeOperation();
           if (refresh.success) return this.getPaged<T>(path, timeoutMs, false);
-          await this.handleAuthRequired();
+          await this.handleAuthRequiredSeSemSessao();
         }
         return { data: [], total: 0, error, status: response.status };
       }
@@ -184,7 +184,7 @@ export class SupabaseRestService {
           if (refresh.success) {
             return this.request<T>(method, path, body, timeoutMs, false, returnRepresentation);
           }
-          await this.handleAuthRequired();
+          await this.handleAuthRequiredSeSemSessao();
           return {
             data: null,
             error: { message: 'Sessão expirada. Faça login novamente.', code: 'AUTH_REQUIRED', status: response.status },
@@ -225,13 +225,20 @@ export class SupabaseRestService {
     };
   }
 
+  // Renovação falhou: só desloga se a sessão sumiu de fato. Falha de rede na renovação
+  // devolve o erro pra tela tentar de novo, sem derrubar o usuário (e a lista de SCs).
+  private async handleAuthRequiredSeSemSessao(): Promise<void> {
+    if (await this.authService.checkSession()) return;
+    await this.handleAuthRequired();
+  }
+
   private async handleAuthRequired(): Promise<void> {
     if (this.handlingAuthFailure) return;
     this.handlingAuthFailure = true;
 
     try {
       this.notificationService.showError('Sua sessão expirou. Faça login novamente.');
-      await this.authService.logout();
+      await this.authService.logout('local');
       await this.router.navigateByUrl('/login', { replaceUrl: true });
     } catch {
       await this.router.navigateByUrl('/login', { replaceUrl: true });
