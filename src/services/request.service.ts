@@ -15,6 +15,12 @@ interface StatusValidation {
 
 const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutos
 
+// id.desc desempata: itens criados juntos gravam o mesmo requestdate e, sem desempate, a
+// ordem entre eles muda de uma consulta pra outra (ainda mais depois de um UPDATE) — com a
+// paginação por offset uma SC escapava entre duas páginas e "sumia" até a próxima carga.
+const REQUEST_SELECT = 'select=*,requester:profiles!purchase_requests_requester_id_fkey(id,name,email,role)';
+const REQUEST_ORDER = 'order=requestdate.desc,id.desc';
+
 @Injectable({ providedIn: 'root' })
 export class RequestService {
   private _requests = signal<PurchaseRequest[]>([]);
@@ -28,8 +34,10 @@ export class RequestService {
     return Date.now() - last.getTime() > STALE_THRESHOLD_MS;
   });
 
-  private _isLoading = false;
+  private _inFlight: Promise<void> | null = null;
   private _hasLoaded = false;
+  // Muda a cada clearRequests: carga que termina depois do logout não repopula a lista.
+  private _generation = 0;
   private readonly OPERATION_TIMEOUT_MS = 10000;
   private readonly MAX_RETRIES = 3;
 
@@ -58,53 +66,71 @@ export class RequestService {
     return mapRequestFromDbUtil(r);
   }
 
+  // Quem chega com uma carga já em andamento espera por ela em vez de sair na hora.
+  // Com force, a carga em andamento pode ter começado antes da gravação que pediu o
+  // reload — então espera ela terminar e busca de novo (ou pega carona na que outra
+  // chamada forçada já disparou).
   async loadRequests(force = false): Promise<void> {
-    const loadingTimeout = setTimeout(() => {
-      if (this._isLoading) {
-        this._isLoading = false;
-      }
-    }, 60000);
-
-    if (this._isLoading) {
-      clearTimeout(loadingTimeout);
+    if (this._inFlight) {
+      if (!force) return this._inFlight;
+      await this._inFlight.catch(() => undefined);
+      if (this._inFlight) return this._inFlight;
+    } else if (this._hasLoaded && !force) {
       return;
     }
 
-    if (this._hasLoaded && !force) {
-      clearTimeout(loadingTimeout);
-      return;
-    }
-
-    this._isLoading = true;
-    try {
-      const { data, error } = await this.supabaseRestService.getAllPaged<PurchaseRequestRow>(
-        'purchase_requests?select=*,requester:profiles!purchase_requests_requester_id_fkey(id,name,email,role)&order=requestdate.desc',
-        this.OPERATION_TIMEOUT_MS
-      );
-
-      if (error) {
-        throw error;
-      }
-
-      const mappedData = (data || []).map(r => this.mapRequestFromDb(r));
-      this._requests.set(mappedData);
-      this._lastFetchedAt.set(new Date());
-      this._hasLoaded = true;
-    } finally {
-      this._isLoading = false;
-      clearTimeout(loadingTimeout);
-    }
+    // Limpa _inFlight dentro da própria promise: quem está esperando só retoma depois
+    // disso, então não confunde a carga velha com uma nova.
+    const load: Promise<void> = this.fetchAll(this._generation).finally(() => {
+      if (this._inFlight === load) this._inFlight = null;
+    });
+    this._inFlight = load;
+    return load;
   }
 
-  resetLoadingState(): void {
-    this._isLoading = false;
-    this._hasLoaded = false;
+  private async fetchAll(generation: number): Promise<void> {
+    const { data, error } = await this.supabaseRestService.getAllPaged<PurchaseRequestRow>(
+      `purchase_requests?${REQUEST_SELECT}&${REQUEST_ORDER}`,
+      this.OPERATION_TIMEOUT_MS
+    );
+
+    if (error) {
+      throw error;
+    }
+    if (generation !== this._generation) return;
+
+    const mappedData = (data || []).map(r => this.mapRequestFromDb(r));
+    this._requests.set(mappedData);
+    this._lastFetchedAt.set(new Date());
+    this._hasLoaded = true;
+  }
+
+  // Busca uma SC direto no banco quando ela não está na lista em memória (lista ainda
+  // carregando, ou carga anterior incompleta) e encaixa o resultado na lista.
+  async fetchById(id: string): Promise<PurchaseRequest | undefined> {
+    const generation = this._generation;
+    const { data, error } = await this.supabaseRestService.get<PurchaseRequestRow[]>(
+      `purchase_requests?id=eq.${encodeURIComponent(id)}&${REQUEST_SELECT}`,
+      this.OPERATION_TIMEOUT_MS
+    );
+    if (error || !data?.length || generation !== this._generation) return undefined;
+
+    const found = this.mapRequestFromDb(data[0]);
+    this._requests.update(list =>
+      list.some(r => r.id === id) ? list.map(r => (r.id === id ? found : r)) : [...list, found]
+    );
+    return found;
+  }
+
+  private async getOrFetch(id: string): Promise<PurchaseRequest | undefined> {
+    return this.getById(id) ?? (await this.fetchById(id));
   }
 
   clearRequests(): void {
+    this._generation++;
     this._requests.set([]);
     this._hasLoaded = false;
-    this._isLoading = false;
+    this._inFlight = null;
   }
 
   getById(id: string): PurchaseRequest | undefined {
@@ -333,7 +359,7 @@ export class RequestService {
   }
 
   async updateRequest(id: string, data: Partial<PurchaseRequest>, user: UserProfile): Promise<void> {
-    const req = this.getById(id);
+    const req = await this.getOrFetch(id);
     if (!req) {
       throw new Error('Solicitação não encontrada');
     }
@@ -475,7 +501,7 @@ export class RequestService {
     user: UserProfile,
     details?: string
   ): Promise<void> {
-    const request = this.getById(id);
+    const request = await this.getOrFetch(id);
     if (!request) {
       throw new Error('Solicitação não encontrada');
     }
@@ -570,7 +596,7 @@ export class RequestService {
       throw new Error('Apenas administradores podem excluir solicitações');
     }
 
-    const request = this.getById(id);
+    const request = await this.getOrFetch(id);
     if (!request) {
       throw new Error('Solicitação não encontrada');
     }

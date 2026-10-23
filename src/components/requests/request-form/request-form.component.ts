@@ -1,4 +1,4 @@
-﻿import { ChangeDetectionStrategy, Component, signal, OnDestroy, OnInit } from '@angular/core';
+﻿import { ChangeDetectionStrategy, Component, signal, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators, FormArray, FormGroup } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -18,7 +18,7 @@ import { MaterialService } from '../../../services/material.service';
   templateUrl: './request-form.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class RequestFormComponent implements OnInit, OnDestroy {
+export class RequestFormComponent implements OnDestroy {
   currentUser;
   
   // Form options
@@ -62,12 +62,6 @@ export class RequestFormComponent implements OnInit, OnDestroy {
     });
 
     this.addItem(); // Start with one item by default
-  }
-
-  ngOnInit(): void {
-    // Correção: resetar flags do serviço quando o componente é criado.
-    // Garante que, se houve travamento anterior, o estado seja limpo.
-    this.requestService.resetLoadingState();
   }
 
   ngOnDestroy(): void {

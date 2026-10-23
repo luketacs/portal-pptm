@@ -33,6 +33,7 @@ export class RequestDetailComponent implements OnDestroy {
   users;
   request = signal<PurchaseRequest | undefined>(undefined);
   hasAccess = signal(true); // Signal to control view access
+  isLoadingRequest = signal(false);
   
   // Editable request state for forms
   editableRequest = signal<EditableRequest>({});
@@ -207,7 +208,7 @@ export class RequestDetailComponent implements OnDestroy {
     this.rejectionReasonRD.set('');
   }
 
-  private loadRequestById(requestId: string) {
+  private async loadRequestById(requestId: string) {
     const user = this.currentUser();
     if (!user) {
       this.hasAccess.set(false);
@@ -215,7 +216,18 @@ export class RequestDetailComponent implements OnDestroy {
       return;
     }
     
-    const foundRequest = this.requestService.getById(requestId);
+    // Fora da lista em memória (F5 com a lista ainda carregando, ou carga incompleta):
+    // busca só esta SC no banco em vez de mostrar "não encontrada".
+    let foundRequest = this.requestService.getById(requestId);
+    if (!foundRequest) {
+      this.isLoadingRequest.set(true);
+      try {
+        foundRequest = await this.requestService.fetchById(requestId);
+      } finally {
+        this.isLoadingRequest.set(false);
+      }
+      if (this.route.snapshot.paramMap.get('id') !== requestId) return;
+    }
     
     if (!foundRequest) {
       this.request.set(undefined);
@@ -664,9 +676,11 @@ export class RequestDetailComponent implements OnDestroy {
   private refreshRequest() {
     const req = this.request();
     if (req) {
+        // Se a SC não está na lista recarregada, mantém a que já está na tela — o effect
+        // atualiza quando ela voltar. Antes virava undefined e a tela dizia "não encontrada".
         const refreshed = this.requestService.getById(req.id)
-        this.request.set(refreshed);
         if(refreshed) {
+          this.request.set(refreshed);
           this.editableRequest.set({
              ...refreshed,
             deliveryDate: refreshed.deliveryDate?.toISOString().split('T')[0],

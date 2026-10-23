@@ -29,6 +29,13 @@ before(async () => {
     CREATE TABLE materials(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), status text, updated_at timestamptz DEFAULT now());
     CREATE TABLE profiles(id uuid PRIMARY KEY, name text, email text, role text, department text, position text, must_change_password boolean DEFAULT false);
     INSERT INTO profiles(id,name,role) VALUES ('${admin}','Admin','Admin'), ('${solicitante}','Solicitante','Solicitante'), ('${visualizador}','Visualizador','Visualizador');
+    CREATE TABLE purchase_requests(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), requester_id uuid REFERENCES profiles(id), status text, requestdate timestamptz DEFAULT now(), history jsonb DEFAULT '[]');
+    ALTER TABLE purchase_requests ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY "Allow update requests" ON purchase_requests FOR UPDATE USING (true) WITH CHECK (true);
+    CREATE FUNCTION get_user_role() RETURNS text LANGUAGE sql STABLE SECURITY DEFINER AS
+      $$ SELECT COALESCE((SELECT role FROM profiles WHERE id = auth.uid() LIMIT 1), 'Solicitante') $$;
+    CREATE FUNCTION get_user_role(user_id uuid) RETURNS text LANGUAGE sql VOLATILE SECURITY DEFINER AS
+      $$ SELECT role FROM profiles WHERE id = user_id $$;
   `);
   const migrations = await readdir('supabase/migrations');
   const prerequisites = new Set([36,37,43,44,46,49,50,51,52,53]);
@@ -287,4 +294,23 @@ test('equipamentos: histórico por trigger, troca instalado x reserva e termogra
       VALUES ($1,'2026-10-21',30,'randomica','aprovado',$2,'Teste')`, [r.id, visualizador]), /criterio_tipo/);
   await assert.rejects(db.query(`INSERT INTO eletrica_ensaios(tipo,equipamento_id,data_ensaio,temperatura_ambiente_c,criterio,resultado,anexos,criado_por_id,criado_por_nome)
       VALUES ('termografia',$1,'2026-10-21',30,'{}','aprovado','{}',$2,'Teste')`, [r.id, visualizador]), /anexos_check/);
+});
+
+test('SC: solicitante edita só a própria Pendente; visualizador não grava; só Admin exclui', async () => {
+  await login(solicitante);
+  const { rows: [sc] } = await db.query("INSERT INTO purchase_requests(requester_id,status) VALUES ($1,'Pendente') RETURNING id", [solicitante]);
+  await assert.rejects(db.query("INSERT INTO purchase_requests(requester_id,status) VALUES ($1,'Pendente')", [admin]), /row-level security/);
+  assert.equal((await db.query("UPDATE purchase_requests SET status='Pendente' WHERE id=$1", [sc.id])).affectedRows, 1);
+
+  await login(visualizador);
+  assert.equal((await db.query("UPDATE purchase_requests SET status='Finalizado' WHERE id=$1", [sc.id])).affectedRows, 0);
+  assert.equal((await db.query('SELECT id FROM purchase_requests WHERE id=$1', [sc.id])).rows.length, 1);
+
+  await login(admin);
+  await db.query("UPDATE purchase_requests SET status='Aprovado no Portal' WHERE id=$1", [sc.id]);
+  await login(solicitante);
+  assert.equal((await db.query("UPDATE purchase_requests SET status='Finalizado' WHERE id=$1", [sc.id])).affectedRows, 0);
+  assert.equal((await db.query('DELETE FROM purchase_requests WHERE id=$1', [sc.id])).affectedRows, 0);
+  await login(admin);
+  assert.equal((await db.query('DELETE FROM purchase_requests WHERE id=$1', [sc.id])).affectedRows, 1);
 });
