@@ -175,6 +175,8 @@ function areaManutencaoSigma(v: string): ManutencaoArea | null {
   return null;
 }
 
+type AbaProgramacao = 'programacao' | 'preventivas' | 'materiais' | 'backlog' | 'atrasadas';
+
 @Component({
   selector: 'app-manutencao-programacao',
   standalone: true,
@@ -479,7 +481,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
     return ordensDaSemana.filter(o => {
       if (area !== 'todos' && o.area !== area) return false;
-      if (status !== 'todos' && o.status !== status) return false;
+      if (status !== 'todos' && this.statusExibido(o) !== status) return false;
       if (tecnico !== 'todos' && o.tecnicoNome !== tecnico) return false;
       if (termo) {
         const texto = `${o.numeroOs ?? ''} ${o.descricao} ${o.equipamento ?? ''} ${o.tecnicoNome}`.toLowerCase();
@@ -748,12 +750,108 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   // Status vem do SIGMA, sem lista fechada — o filtro mostra só os valores que
   // realmente aparecem na semana/área selecionada.
+  // Chips do filtro de Status = o que a coluna Status mostra (execução do SIGMA), não o
+  // status bruto do banco — que é sempre 'PEND' (e vazio em treinamento/folga, o que
+  // virava um chip em branco). Lançamentos que não são OS ficam de fora do filtro.
+  statusExibido(o: ManutencaoOrdem): string | null {
+    if (o.tipo !== 'ordem') return null;
+    if (!o.numeroOs?.trim()) return o.semOs ? 'Sem OS' : 'Criar OS';
+    return this.statusOuExecucao(o)?.label ?? 'Aguardando SIGMA';
+  }
+  private readonly ORDEM_STATUS_FILTRO = ['Executada', 'Não executada', 'Aguardando SIGMA', 'Criar OS', 'Sem OS'];
   statusesComOrdemNaSemana = computed(() => {
-    const valores = new Set(this.ordensDaSemana().filter(o => this.areaFiltro() === 'todos' || o.area === this.areaFiltro()).map(o => o.status));
-    return Array.from(valores).sort();
+    const valores = new Set<string>();
+    for (const o of this.ordensDaSemana()) {
+      if (this.areaFiltro() !== 'todos' && o.area !== this.areaFiltro()) continue;
+      const st = this.statusExibido(o);
+      if (st) valores.add(st);
+    }
+    const posicao = (v: string) => { const i = this.ORDEM_STATUS_FILTRO.indexOf(v); return i === -1 ? 99 : i; };
+    return Array.from(valores).sort((a, b) => posicao(a) - posicao(b) || a.localeCompare(b, 'pt-BR'));
   });
 
-  countTotal = computed(() => this.listaFiltrada().length);
+  // Setas ◀ ▶ do filtro de semana — `semanas` vem da mais nova pra mais antiga.
+  private indiceSemana = computed(() => this.semanas.findIndex(s => s.value === this.semanaFiltro()));
+  temSemanaAnterior = computed(() => this.indiceSemana() >= 0 && this.indiceSemana() < this.semanas.length - 1);
+  temSemanaSeguinte = computed(() => this.indiceSemana() > 0);
+  irParaSemana(passo: -1 | 1): void {
+    const destino = this.semanas[this.indiceSemana() - passo];
+    if (destino) this.semanaFiltro.set(destino.value);
+  }
+
+  // Resumo da semana (faixa de indicadores no topo) — tudo respeitando os filtros.
+  resumoSemana = computed(() => {
+    const lista = this.listaFiltrada();
+    const ordens = lista.filter(o => o.tipo === 'ordem');
+    let horas = 0;
+    let capacidade: number | null = null;
+    if (this.areaFixa) {
+      for (const g of this.grupos()) {
+        horas += g.totalHoras;
+        if (g.capacidade !== null) capacidade = (capacidade ?? 0) + g.capacidade;
+      }
+    } else {
+      horas = somaHoras(lista);
+    }
+    return {
+      os: ordens.length,
+      outros: lista.length - ordens.length,
+      horas: Math.round(horas * 10) / 10,
+      capacidade: capacidade === null ? null : Math.round(capacidade * 10) / 10,
+      criarOs: ordens.filter(o => !o.numeroOs?.trim() && !o.semOs).length,
+    };
+  });
+
+  // Barra de ocupação no cabeçalho do técnico — mesmas cores do selo de capacidade
+  // (vermelho estourou, verde fechou certinho, azul ainda sobra).
+  ocupacaoPercentual(g: { totalHoras: number; capacidade: number | null }): number {
+    return g.capacidade ? Math.min(100, Math.round((g.totalHoras / g.capacidade) * 100)) : 0;
+  }
+  ocupacaoBarraClass(g: { saldo: number | null }): string {
+    if (g.saldo === null) return 'bg-slate-300';
+    if (g.saldo < 0) return 'bg-red-500';
+    if (g.saldo === 0) return 'bg-green-500';
+    return 'bg-blue-500';
+  }
+
+  // ── Abas: Programação primeiro; os painéis de apoio ao planejamento ficam ao lado,
+  // com contador, em vez de empilhados antes da programação (que começava a ~30% da
+  // página). Materiais virou aba a pedido do usuário (23/10) — antes era card fixo.
+  abaAtiva = signal<AbaProgramacao>('programacao');
+  abas = computed(() => {
+    const abas: { id: AbaProgramacao; label: string; contador: number | null; tom: 'neutro' | 'aviso' | 'alerta' | 'ok' }[] = [
+      { id: 'programacao', label: 'Programação', contador: null, tom: 'neutro' },
+    ];
+    if (!this.areaFixa) return abas;
+    if (this.podeEditar()) {
+      const n = this.preventivasVencendo().length;
+      abas.push({ id: 'preventivas', label: 'Preventivas da semana', contador: n, tom: n > 0 ? 'aviso' : 'neutro' });
+    }
+    if (this.areaFixa !== 'APOIO') {
+      const m = this.materiaisDisponiveisFiltrado().length;
+      abas.push({ id: 'materiais', label: 'Materiais disponíveis', contador: m, tom: m > 0 ? 'ok' : 'neutro' });
+      const carregado = this.backlogAtualizadoEm() !== null;
+      abas.push({ id: 'backlog', label: 'Backlog SIGMA', contador: carregado ? this.backlogFiltrado().length : null, tom: 'neutro' });
+    }
+    if (this.podeEditar()) {
+      const a = this.preventivasAtrasadas().length;
+      abas.push({ id: 'atrasadas', label: 'Não programadas', contador: a, tom: a > 0 ? 'alerta' : 'neutro' });
+    }
+    return abas;
+  });
+  selecionarAba(id: AbaProgramacao): void {
+    this.abaAtiva.set(id);
+    if (id === 'backlog' && this.backlogAtualizadoEm() === null && !this.backlogCarregando()) void this.carregarBacklog();
+  }
+  abaContadorClass(tom: 'neutro' | 'aviso' | 'alerta' | 'ok'): string {
+    return { neutro: 'bg-slate-100 text-slate-600', aviso: 'bg-amber-100 text-amber-700', alerta: 'bg-red-100 text-red-700', ok: 'bg-green-100 text-green-700' }[tom];
+  }
+
+  // Grade SEG–DOM das linhas: marca o dia pela data (OS) ou pelo rótulo (férias/atestado).
+  diaMarcado(marcados: readonly string[], dia: { data: string; label: string }): boolean {
+    return marcados.includes(dia.data) || marcados.includes(dia.label);
+  }
+
 
   equipamentos = this.manutencaoService.equipamentos;
 
@@ -836,7 +934,6 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     return id ? this.manutencaoService.getById(id) ?? null : null;
   });
 
-  backlogAberto = signal(false);
   backlogCarregando = signal(false);
   backlogErro = signal('');
   backlogAtualizadoEm = signal<number | null>(null);
@@ -861,14 +958,6 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     const ts = this.backlogAtualizadoEm();
     if (!ts) return '';
     return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  }
-
-  async toggleBacklog(): Promise<void> {
-    const abrir = !this.backlogAberto();
-    this.backlogAberto.set(abrir);
-    if (abrir) {
-      await this.carregarBacklog();
-    }
   }
 
   async carregarBacklog(): Promise<void> {
@@ -1289,11 +1378,6 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // desaparecia da lista assim que a semana virasse. Esse painel separado guarda essas
   // preventivas: qualquer uma cuja "próxima data" já passou da semana atual de verdade
   // (não a semana selecionada no filtro) e ainda não foi programada.
-  atrasadasAberto = signal(false);
-
-  toggleAtrasadas(): void {
-    this.atrasadasAberto.set(!this.atrasadasAberto());
-  }
 
   private readonly hojeInicioSemanaIso = paraIso(segundaFeiraDe(new Date()));
 
@@ -1562,10 +1646,17 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // signal controla tanto a semana única quanto cada bloco do Horizonte de 4 semanas —
   // é a mesma preferência ("quero ver o quadro de LOTO agora ou não"), não uma por
   // bloco.
-  quadroLotoAberto = signal(true);
+  // 23/10: passou a abrir recolhido (a pedido do usuário — o quadro empurrava a
+  // programação pra baixo), mas lembra a escolha: quem abrir continua vendo aberto.
+  private readonly LOTO_ABERTO_KEY = 'portal-pptm-programacao-loto-aberto';
+  quadroLotoAberto = signal((() => {
+    try { return localStorage.getItem(this.LOTO_ABERTO_KEY) === '1'; } catch { return false; }
+  })());
   toggleQuadroLoto(): void {
     this.quadroLotoAberto.update(v => !v);
+    try { localStorage.setItem(this.LOTO_ABERTO_KEY, this.quadroLotoAberto() ? '1' : '0'); } catch { /* storage bloqueado */ }
   }
+  lotoConflitos = computed(() => this.quadroLoto().filter(l => l.temConflito).length);
 
   // Mesma ideia pra Escala de turno — pedido do usuário logo em seguida do LOTO.
   escalaTurnoAberta = signal(true);
