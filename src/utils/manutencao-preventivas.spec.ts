@@ -65,8 +65,19 @@ describe('proximaDataFixa', () => {
     expect(proximaDataFixa('2026-09-14', 1, 'Semana(s)', '2026-09-17', '2026-09-14')).toBe('2026-09-21');
   });
 
-  it('ciclo registrado cobre mais de uma ocorrência de uma vez (ex.: técnico adiantou serviço)', () => {
-    expect(proximaDataFixa('2026-09-01', 1, 'Semana(s)', '2026-09-02', '2026-09-22')).toBe('2026-09-29');
+  // Reportado na S44/2026: OS excluída numa semana não voltava porque o plano já tinha
+  // OS numa semana à frente — ciclo futuro não cobre ocorrência anterior sem ciclo.
+  it('ciclo numa semana à frente não esconde ocorrência anterior sem ciclo', () => {
+    expect(proximaDataFixa('2026-09-01', 1, 'Semana(s)', '2026-09-02', '2026-09-22')).toBe('2026-09-08');
+  });
+
+  it('OS excluída no meio da sequência: a ocorrência volta mesmo com ciclos antes e depois', () => {
+    // Semanal: S43 (19/10) e S45 (02/11) programadas, S44 (26/10) excluída.
+    expect(proximaDataFixa('2026-10-05', 1, 'Semana(s)', '2026-10-19', ['2026-10-19', '2026-11-02'])).toBe('2026-10-26');
+  });
+
+  it('lista de ciclos cobrindo as ocorrências seguidas pula pra primeira sem ciclo', () => {
+    expect(proximaDataFixa('2026-10-05', 1, 'Semana(s)', '2026-10-19', ['2026-10-19', '2026-10-26'])).toBe('2026-11-02');
   });
 
   it('ultimoCicloIso null (nunca programado) equivale a não passar o argumento', () => {
@@ -197,8 +208,8 @@ describe('mês com dia 29-31 e âncora antiga', () => {
     expect(proximaDataFixa('2015-01-01', 1, 'Dia(s)', '2026-10-12')).toBe('2026-10-12');
   });
 
-  it('proximaDataFixa pula ciclo muito à frente sem andar ciclo a ciclo', () => {
-    expect(proximaDataFixa('2026-01-05', 1, 'Semana(s)', '2026-10-12', '2030-01-07', true)).toBe('2030-01-14');
+  it('proximaDataFixa com ciclo muito à frente não esconde a ocorrência atual', () => {
+    expect(proximaDataFixa('2026-01-05', 1, 'Semana(s)', '2026-10-12', '2030-01-07', true)).toBe('2026-10-12');
   });
 });
 

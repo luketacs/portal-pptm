@@ -88,22 +88,33 @@ export function primeiroIndiceAPartirDe(ancora: string, valor: number, unidade: 
 // `agendaRigida`: plano que nunca é antecipado (ver PlanoManutencao.agendaRigida) não
 // precisa de folga — sem ela, o ciclo de uma ocorrência não engole a seguinte quando as
 // duas estão perto (ex. teste RETOMA dia 21/09 e o próximo dia 06/10).
+//
+// Recebe TODOS os ciclos do plano, não só o último. Reportado na S44/2026: preventiva
+// programada e depois excluída ("não precisa mais") não voltava pra lista da semana —
+// com só o último ciclo, uma OS do mesmo plano numa semana à frente (S45) escondia a
+// ocorrência da S44, que tinha ficado sem ciclo. Agora cada ocorrência é checada contra
+// os ciclos dela (mesma cobertura de planosAtrasados): coberta = algum ciclo entre
+// (ocorrência - folga) e a ocorrência seguinte; cedo demais = menos do intervalo mínimo
+// depois de um ciclo anterior.
 export function proximaDataFixa(
   dataAncora: string, valor: number, unidade: PeriodicidadeUnidade, referenciaIso: string,
-  ultimoCicloIso: string | null = null, agendaRigida = false,
+  ciclosIso: string | readonly string[] | null = null, agendaRigida = false,
 ): string {
   if (valor <= 0) return dataAncora;
+  const ciclos = ciclosIso === null ? [] : typeof ciclosIso === 'string' ? [ciclosIso] : ciclosIso;
   const folga = agendaRigida ? 0 : folgaCoberturaCiclo(valor, unidade);
-  let k = primeiroIndiceAPartirDe(dataAncora, valor, unidade, referenciaIso);
-  if (ultimoCicloIso !== null) {
-    // Primeira ocorrência DEPOIS da cobertura do último ciclo (ciclo + folga) e, fora da
-    // agenda rígida, a pelo menos 2/3 do período dele.
-    const dias = periodicidadeEmDias(valor, unidade);
-    const intervaloMinimo = agendaRigida ? 0 : dias - Math.round(dias / 3);
-    const depoisDaCobertura = somarDias(ultimoCicloIso, Math.max(folga + 1, intervaloMinimo));
-    k = Math.max(k, primeiroIndiceAPartirDe(dataAncora, valor, unidade, depoisDaCobertura));
+  const dias = periodicidadeEmDias(valor, unidade);
+  const intervaloMinimo = agendaRigida ? 0 : dias - Math.round(dias / 3);
+  const distanciaMinima = Math.max(folga + 1, intervaloMinimo);
+  // Termina: depois do último ciclo + distanciaMinima nenhuma ocorrência é bloqueada.
+  for (let k = primeiroIndiceAPartirDe(dataAncora, valor, unidade, referenciaIso); ; k++) {
+    const data = somarPeriodos(dataAncora, k, valor, unidade);
+    const seguinte = somarPeriodos(dataAncora, k + 1, valor, unidade);
+    const desde = somarDias(data, -folga);
+    const bloqueada = ciclos.some(c =>
+      c < desde ? data < somarDias(c, distanciaMinima) : c < seguinte);
+    if (!bloqueada) return data;
   }
-  return somarPeriodos(dataAncora, k, valor, unidade);
 }
 
 // Máximo de dias que alinharDatasPorEquipamento pode antecipar um plano — planos do

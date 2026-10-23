@@ -157,14 +157,9 @@ export class ManutencaoPlanosComponent implements OnInit {
   // Cada plano ativo já com a próxima execução (derivada do último ciclo) e a
   // "última execução" (o próprio último ciclo, se existir) — insumo da tabela e dos KPIs.
   private planosComProximaTodos = computed(() =>
-    agendaDosPlanos(this.manutencaoPlanosService.planos(), this.ultimoCicloPorPlano(),
+    agendaDosPlanos(this.manutencaoPlanosService.planos(), this.manutencaoPlanosService.ciclosPorPlano(),
       this.manutencaoProgramacaoService.paradaAtual() !== null, this.hojeInicioSemanaIso,
       this.manutencaoProgramacaoService.semanasFechadas()));
-
-  private ultimoCicloPorPlano = computed(() => {
-    const planos = this.manutencaoPlanosService.planos();
-    return new Map(planos.map(p => [p.id, this.manutencaoPlanosService.ultimoCicloDoPlano(p.id)]));
-  });
 
   // Ocorrências de semanas passadas que não viraram OS (ver planosAtrasados).
   private planosAtrasadosTodos = computed(() =>
@@ -970,7 +965,7 @@ export class ManutencaoPlanosComponent implements OnInit {
       const plantaParada = this.manutencaoProgramacaoService.paradaAtual() !== null;
       const efetiva = periodicidadeEfetiva(valores.periodicidadeValor, valores.periodicidadeUnidade, plantaParada, valores.area);
       const depois = proximaDataFixa(valores.dataInicial, efetiva.valor, efetiva.unidade, this.hojeInicioSemanaIso,
-        this.manutencaoPlanosService.ultimoCicloDoPlano(original.id), original.agendaRigida);
+        this.manutencaoPlanosService.ciclosPorPlano().get(original.id) ?? null, original.agendaRigida);
       if (antes && antes !== depois) {
         avisos.push(`A próxima execução muda de ${this.formatarDataBr(antes)} (S${this.numeroSemanaISO(antes)}) `
           + `para ${this.formatarDataBr(depois)} (S${this.numeroSemanaISO(depois)}).`);

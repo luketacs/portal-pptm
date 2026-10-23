@@ -654,7 +654,7 @@ describe('alinhamento não antecipa mais que a folga do próprio plano', () => {
   const mensal = plano({ id: '0207', ...kks, periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)', dataInicial: '2026-11-02' });
   const semanal = plano({ id: '0208', ...kks, periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)', dataInicial: '2026-09-21' });
   const quinzenal = plano({ id: '0209', ...kks, periodicidadeValor: 2, periodicidadeUnidade: 'Semana(s)', dataInicial: '2026-10-05' });
-  const ciclos = new Map<string, string | null>([['0208', '2026-10-05'], ['0209', '2026-09-21']]);
+  const ciclos = new Map<string, string | string[] | null>([['0208', ['2026-09-28', '2026-10-05']], ['0209', '2026-09-21']]);
   const agenda = () => agendaDosPlanos([mensal, semanal, quinzenal], ciclos, false, '2026-09-28', new Map());
 
   it('semanal já programado na S41 não volta pra S41 puxado pelo quinzenal pendente', () => {

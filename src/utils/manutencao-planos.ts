@@ -56,13 +56,13 @@ export interface PlanoComProximaData extends PlanoManutencao {
 
 /** Agenda única para cadastro e programação: calendário fixo, parada e semanas fechadas. */
 export function agendaDosPlanos(
-  planos: PlanoManutencao[], ultimoCicloPorPlano: Map<string, string | null>,
+  planos: PlanoManutencao[], ciclosPorPlano: ReadonlyMap<string, string | readonly string[] | null>,
   plantaParada: boolean, hojeInicioSemana: string, semanasFechadas: ReadonlyMap<string, unknown>,
 ): PlanoComProximaData[] {
   const referencia = primeiraSemanaAberta(hojeInicioSemana, semanasFechadas);
   return (['ELETRICA', 'MECANICA', 'APOIO'] as const).flatMap(area => {
     const agenda = planosComProximaExecucaoFixa(
-      planos.filter(p => p.area === area), plantaParada, referencia, ultimoCicloPorPlano,
+      planos.filter(p => p.area === area), plantaParada, referencia, ciclosPorPlano,
     );
     return hojeInicioSemana >= '2026-09-21' ? alinharDatasPorEquipamento(agenda, janelaAlinhamentoDaArea(area)) : agenda;
   });
@@ -107,20 +107,19 @@ export function planosComProximaExecucao(
 // Pedido do usuário: "não existe backlog, começando do zero" — a sequência de âncora
 // nunca depende de QUANDO a execução real aconteceu.
 //
-// `ultimoCicloPorPlano` (mesmo Map que planosComProximaExecucao já usa, ver
-// ManutencaoPlanosService.ultimoCicloDoPlano): sem ele, a ocorrência calculada não
-// sabia que já tinha sido programada nessa semana (ver proximaDataFixa) — o plano
-// continuava aparecendo em "Preventivas vencendo" o resto da semana mesmo depois de
-// virar uma OS. Passa o último ciclo registrado do plano pra proximaDataFixa pular
-// pra próxima ocorrência quando já houver ciclo cobrindo a atual.
+// `ciclosPorPlano` (ver ManutencaoPlanosService.ciclosPorPlano): sem ele, a ocorrência
+// calculada não sabia que já tinha sido programada nessa semana (ver proximaDataFixa) —
+// o plano continuava aparecendo em "Preventivas vencendo" o resto da semana mesmo
+// depois de virar uma OS. Todos os ciclos, não só o último: OS excluída numa semana
+// volta pra lista mesmo com o plano já programado numa semana à frente.
 export function planosComProximaExecucaoFixa(
   planos: PlanoManutencao[], plantaParada: boolean, referenciaIso: string,
-  ultimoCicloPorPlano: Map<string, string | null> = new Map(),
+  ciclosPorPlano: ReadonlyMap<string, string | readonly string[] | null> = new Map(),
 ): PlanoComProximaData[] {
   return planos.filter(p => p.ativo).map(p => {
     const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, plantaParada, p.area);
-    const ultimoCiclo = ultimoCicloPorPlano.get(p.id) ?? null;
-    const proximaData = proximaDataFixa(p.dataInicial, efetiva.valor, efetiva.unidade, referenciaIso, ultimoCiclo, p.agendaRigida);
+    const ciclos = ciclosPorPlano.get(p.id) ?? null;
+    const proximaData = proximaDataFixa(p.dataInicial, efetiva.valor, efetiva.unidade, referenciaIso, ciclos, p.agendaRigida);
     return { ...p, proximaData };
   });
 }

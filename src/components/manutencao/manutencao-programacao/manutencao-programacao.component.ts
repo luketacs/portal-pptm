@@ -1117,9 +1117,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
 
   // Agenda compartilhada com o cadastro: cadência fixa, parada e primeira semana aberta.
   private agendaPlanos = computed<PlanoComProximaData[]>(() => {
-    const planos = this.manutencaoPlanosService.planos();
-    const ultimoCicloPorPlano = new Map(planos.map(p => [p.id, this.manutencaoPlanosService.ultimoCicloDoPlano(p.id)]));
-    return agendaDosPlanos(planos, ultimoCicloPorPlano, this.plantaParadaAtiva(),
+    return agendaDosPlanos(this.manutencaoPlanosService.planos(), this.manutencaoPlanosService.ciclosPorPlano(), this.plantaParadaAtiva(),
       this.hojeInicioSemanaIso, this.manutencaoService.semanasFechadas());
   });
   private planosComProximaDaArea = computed(() => this.agendaPlanos().filter(p => p.area === this.areaFixa));
