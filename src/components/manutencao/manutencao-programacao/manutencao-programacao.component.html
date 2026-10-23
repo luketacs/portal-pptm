@@ -496,6 +496,10 @@
                     <td class="py-1.5 pr-3 text-gray-600 whitespace-nowrap">{{ plano.periodicidadeValor }} {{ plano.periodicidadeUnidade }}</td>
                     <td class="py-1.5 pr-3 whitespace-nowrap">
                       <span class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700">{{ plano.proximaData }}</span>
+                      @if (plano.ocorrenciaAdiada) {
+                        <span class="block mt-0.5 text-[11px] font-semibold text-violet-700"
+                          title="Adiada pelo Admin — ao programar, conta como a ocorrência original">adiada de {{ formatarDataBr(plano.ocorrenciaAdiada) }}</span>
+                      }
                     </td>
                     <td class="py-1.5 pr-3 whitespace-nowrap">
                       @if (osDaOcorrencia(plano); as osPlanilha) {
@@ -511,6 +515,10 @@
                     </td>
                     <td class="py-1.5 pr-3 whitespace-nowrap">
                       <button (click)="programarDaPreventiva(plano)" class="text-xs font-semibold px-2 py-1 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition">Programar</button>
+                      @if (isAdmin()) {
+                        <button (click)="adiarPreventiva(plano)" [disabled]="isProcessando()" title="Adiar para a próxima semana"
+                          class="ml-1 text-xs font-semibold px-2 py-1 rounded-lg bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 disabled:opacity-50 transition">Adiar</button>
+                      }
                     </td>
                   </tr>
                 }

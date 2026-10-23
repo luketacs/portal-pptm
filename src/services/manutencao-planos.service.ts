@@ -8,6 +8,7 @@ import {
   ManutencaoArea, PeriodicidadeUnidade, PlanoManutencao,
 } from '../models/manutencao-programacao.model';
 import { AlteracaoCampo, diferencasPlano } from '../utils/manutencao-planos-saude';
+import { AdiamentosPorPlano } from '../utils/manutencao-planos';
 
 interface PlanoManutencaoRow {
   id: string;
@@ -117,6 +118,10 @@ export class ManutencaoPlanosService {
   // Operação): chave `${planoId}|${data}` → número da OS daquela semana.
   private _osPrevistas = signal<ReadonlyMap<string, string>>(new Map());
 
+  // Ocorrências adiadas pelo Admin (migration 084): plano -> (ocorrência -> nova data).
+  private _adiamentos = signal<AdiamentosPorPlano>(new Map());
+  adiamentosPorPlano = this._adiamentos.asReadonly();
+
   /** Número da OS já aberta pra essa ocorrência do plano (null se não houver). */
   osPrevista(planoId: string, data: string | null | undefined): string | null {
     return data ? this._osPrevistas().get(`${planoId}|${data}`) ?? null : null;
@@ -131,11 +136,13 @@ export class ManutencaoPlanosService {
   async load(): Promise<void> {
     this.isLoading.set(true);
     try {
-      const [planosRes, ciclosRes, osPrevistasRes] = await Promise.all([
+      const [planosRes, ciclosRes, osPrevistasRes, adiamentosRes] = await Promise.all([
         fetchAllRows((from, to) => this.supabaseService.client.from('manutencao_planos').select('*').order('codigo').order('id').range(from, to)),
         fetchAllRows((from, to) => this.supabaseService.client.from('manutencao_ciclos').select('*').order('id').range(from, to)),
         fetchAllRows<{ plano_id: string; data_prevista: string; numero_os: string }>((from, to) => this.supabaseService.client
           .from('manutencao_os_previstas').select('plano_id, data_prevista, numero_os').order('id').range(from, to)),
+        fetchAllRows<{ plano_id: string; data_ocorrencia: string; nova_data: string }>((from, to) => this.supabaseService.client
+          .from('manutencao_adiamentos').select('plano_id, data_ocorrencia, nova_data').order('id').range(from, to)),
       ]);
       if (planosRes.error) throw new Error(planosRes.error.message);
       if (ciclosRes.error) throw new Error(ciclosRes.error.message);
@@ -145,6 +152,15 @@ export class ManutencaoPlanosService {
       // preenche o número da semana sozinha — não trava o resto.
       if (osPrevistasRes.error) console.warn('[ManutencaoPlanos] OS previstas indisponíveis:', osPrevistasRes.error.message);
       this._osPrevistas.set(new Map((osPrevistasRes.data ?? []).map(r => [`${r.plano_id}|${r.data_prevista}`, r.numero_os])));
+      // Best-effort também: sem a migration 084 só não aparece nada adiado.
+      if (adiamentosRes.error) console.warn('[ManutencaoPlanos] Adiamentos indisponíveis:', adiamentosRes.error.message);
+      const adiamentos = new Map<string, Map<string, string>>();
+      for (const r of adiamentosRes.data ?? []) {
+        const doPlano = adiamentos.get(r.plano_id) ?? new Map<string, string>();
+        doPlano.set(r.data_ocorrencia, r.nova_data);
+        adiamentos.set(r.plano_id, doPlano);
+      }
+      this._adiamentos.set(adiamentos);
     } finally {
       this.isLoading.set(false);
     }
@@ -410,6 +426,34 @@ export class ManutencaoPlanosService {
       .eq('id', id);
     if (error) throw new Error(error.message);
     await this.load();
+  }
+
+  // Adia uma ocorrência do plano (só Admin). `ocorrencia` é a data REAL (o ciclo continua
+  // nela ao programar); adiar de novo a mesma ocorrência só troca a nova data.
+  async adiarOcorrencia(plano: PlanoManutencao, ocorrencia: string, novaData: string): Promise<void> {
+    const user = this.garantirAdmin('Só Admin pode adiar preventiva.');
+    const { error } = await this.supabaseService.client.from('manutencao_adiamentos').upsert({
+      plano_id: plano.id,
+      data_ocorrencia: ocorrencia,
+      nova_data: novaData,
+      criado_por_id: user.id,
+      criado_por_nome: user.name,
+    }, { onConflict: 'plano_id,data_ocorrencia' });
+    if (error) throw new Error(error.message);
+    this.auditLogService.log({
+      user_id: user.id,
+      user_name: user.name,
+      event_type: 'manutencao_preventiva_adiada',
+      resource_type: 'manutencao_planos',
+      resource_id: plano.id,
+      description: `${user.name} adiou ${plano.codigo} ${plano.nome} (ocorrência ${ocorrencia}) para ${novaData}`,
+      metadata: { data_ocorrencia: ocorrencia, nova_data: novaData },
+    });
+    this._adiamentos.update(atual => {
+      const novo = new Map(atual);
+      novo.set(plano.id, new Map(atual.get(plano.id) ?? []).set(ocorrencia, novaData));
+      return novo;
+    });
   }
 
   // Ciclos são gravados pelo trigger da programação, na mesma transação da ordem.

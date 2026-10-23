@@ -159,14 +159,14 @@ export class ManutencaoPlanosComponent implements OnInit {
   private planosComProximaTodos = computed(() =>
     agendaDosPlanos(this.manutencaoPlanosService.planos(), this.manutencaoPlanosService.ciclosPorPlano(),
       this.manutencaoProgramacaoService.paradaAtual() !== null, this.hojeInicioSemanaIso,
-      this.manutencaoProgramacaoService.semanasFechadas()));
+      this.manutencaoProgramacaoService.semanasFechadas(), this.manutencaoPlanosService.adiamentosPorPlano()));
 
   // Ocorrências de semanas passadas que não viraram OS (ver planosAtrasados).
   private planosAtrasadosTodos = computed(() =>
     planosAtrasados(this.planosComProximaTodos(), datasProgramadasPorPlano(this.manutencaoPlanosService.planos(),
       this.manutencaoPlanosService.ciclosPorPlano(), this.manutencaoProgramacaoService.ordens()),
       primeiraSemanaAberta(this.hojeInicioSemanaIso, this.manutencaoProgramacaoService.semanasFechadas()),
-      this.manutencaoProgramacaoService.paradaAtual() !== null));
+      this.manutencaoProgramacaoService.paradaAtual() !== null, this.manutencaoPlanosService.adiamentosPorPlano()));
 
   private planosAtrasadosIds = computed(() => new Set(this.planosAtrasadosTodos().map(p => p.id)));
 

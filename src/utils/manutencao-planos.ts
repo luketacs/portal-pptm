@@ -52,17 +52,24 @@ export function proximaExecucaoPlano(
 
 export interface PlanoComProximaData extends PlanoManutencao {
   proximaData: string;
+  // Ocorrência REAL que o Admin adiou (ver AdiamentosPorPlano) — proximaData já é a nova
+  // data. Ao programar, o ciclo é gravado nesta data (ver dataCicloAoProgramar).
+  ocorrenciaAdiada?: string | null;
 }
+
+// Plano -> (data da ocorrência adiada -> nova data). Ver migration 084.
+export type AdiamentosPorPlano = ReadonlyMap<string, ReadonlyMap<string, string>>;
 
 /** Agenda única para cadastro e programação: calendário fixo, parada e semanas fechadas. */
 export function agendaDosPlanos(
   planos: PlanoManutencao[], ciclosPorPlano: ReadonlyMap<string, string | readonly string[] | null>,
   plantaParada: boolean, hojeInicioSemana: string, semanasFechadas: ReadonlyMap<string, unknown>,
+  adiamentosPorPlano: AdiamentosPorPlano = new Map(),
 ): PlanoComProximaData[] {
   const referencia = primeiraSemanaAberta(hojeInicioSemana, semanasFechadas);
   return (['ELETRICA', 'MECANICA', 'APOIO'] as const).flatMap(area => {
     const agenda = planosComProximaExecucaoFixa(
-      planos.filter(p => p.area === area), plantaParada, referencia, ciclosPorPlano,
+      planos.filter(p => p.area === area), plantaParada, referencia, ciclosPorPlano, adiamentosPorPlano,
     );
     return hojeInicioSemana >= '2026-09-21' ? alinharDatasPorEquipamento(agenda, janelaAlinhamentoDaArea(area)) : agenda;
   });
@@ -112,15 +119,38 @@ export function planosComProximaExecucao(
 // o plano continuava aparecendo em "Preventivas vencendo" o resto da semana mesmo
 // depois de virar uma OS. Todos os ciclos, não só o último: OS excluída numa semana
 // volta pra lista mesmo com o plano já programado numa semana à frente.
+//
+// `adiamentosPorPlano` (Admin, "Adiar" na lista de preventivas): a ocorrência adiada
+// aparece na nova data. Vale também pra ocorrência que já ficou antes da referência
+// (adiada da S44 pra S45, olhando a S45) enquanto não tiver ciclo.
 export function planosComProximaExecucaoFixa(
   planos: PlanoManutencao[], plantaParada: boolean, referenciaIso: string,
   ciclosPorPlano: ReadonlyMap<string, string | readonly string[] | null> = new Map(),
+  adiamentosPorPlano: AdiamentosPorPlano = new Map(),
 ): PlanoComProximaData[] {
   return planos.filter(p => p.ativo).map(p => {
     const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, plantaParada, p.area);
     const ciclos = ciclosPorPlano.get(p.id) ?? null;
-    const proximaData = proximaDataFixa(p.dataInicial, efetiva.valor, efetiva.unidade, referenciaIso, ciclos, p.agendaRigida);
-    return { ...p, proximaData };
+    const proximaDe = (referencia: string) =>
+      proximaDataFixa(p.dataInicial, efetiva.valor, efetiva.unidade, referencia, ciclos, p.agendaRigida);
+    let proximaData = proximaDe(referenciaIso);
+    let ocorrenciaAdiada: string | null = null;
+    const adiamentos = adiamentosPorPlano.get(p.id);
+    if (adiamentos) {
+      const nova = adiamentos.get(proximaData);
+      if (nova) {
+        ocorrenciaAdiada = proximaData;
+        proximaData = nova;
+      }
+      for (const [ocorrencia, novaData] of adiamentos) {
+        if (ocorrencia >= referenciaIso || novaData < referenciaIso || novaData >= proximaData) continue;
+        // Partindo da própria ocorrência, ela só volta igual se ainda não tiver ciclo.
+        if (proximaDe(ocorrencia) !== ocorrencia) continue;
+        ocorrenciaAdiada = ocorrencia;
+        proximaData = novaData;
+      }
+    }
+    return ocorrenciaAdiada ? { ...p, proximaData, ocorrenciaAdiada } : { ...p, proximaData };
   });
 }
 
@@ -191,8 +221,9 @@ export function alinharDatasPorEquipamento(
   const porEquipamento = new Map<string, number[]>();
   planos.forEach((p, i) => {
     // Agenda rígida (ver PlanoManutencao.agendaRigida): fica fora do alinhamento — nem é
-    // antecipado, nem puxa os vizinhos pra sua data.
-    if (p.agendaRigida) return;
+    // antecipado, nem puxa os vizinhos pra sua data. Adiada pelo Admin também fica fora:
+    // foi pra essa data de propósito.
+    if (p.agendaRigida || p.ocorrenciaAdiada) return;
     const chave = chaveEquipamento(p);
     const lista = porEquipamento.get(chave);
     if (lista) lista.push(i);
@@ -242,7 +273,7 @@ export function antecipacaoMaxima(valor: number, unidade: PeriodicidadeUnidade):
  * descoberta e voltava pra mesma semana mesmo depois de programado.
  */
 export function dataCicloAoProgramar(p: PlanoComProximaData): string {
-  return (p as Partial<PlanoAlinhadoPorEquipamento>).proximaDataOriginal ?? p.proximaData;
+  return p.ocorrenciaAdiada ?? (p as Partial<PlanoAlinhadoPorEquipamento>).proximaDataOriginal ?? p.proximaData;
 }
 
 // Planos cuja próxima execução cai dentro da semana em exibição, ordenados por
@@ -399,9 +430,11 @@ export interface PlanoAtrasado extends PlanoAlinhadoPorEquipamento {
 // ocorrência seguinte: mesma folga do alinhamento por equipamento (ciclo gravado antes
 // da data, quando o plano saiu junto com o vizinho) e qualquer data até a próxima
 // (OS programada com atraso, ciclo ajustado pela data da OS — migration 063).
+// Ocorrência adiada pelo Admin pra uma data ainda aberta não conta como perdida: ela
+// está na lista da semana nova. Se essa semana também passar sem OS, aí conta.
 export function planosAtrasados(
   agenda: PlanoComProximaData[], datasProgramadas: ReadonlyMap<string, readonly string[]>,
-  semanaAberta: string, plantaParada: boolean,
+  semanaAberta: string, plantaParada: boolean, adiamentosPorPlano: AdiamentosPorPlano = new Map(),
 ): PlanoAtrasado[] {
   const janela = somarDias(semanaAberta, -7 * JANELA_NAO_PROGRAMADAS_SEMANAS);
   const inicio = janela > INICIO_CONTROLE_NAO_PROGRAMADAS ? janela : INICIO_CONTROLE_NAO_PROGRAMADAS;
@@ -413,12 +446,14 @@ export function planosAtrasados(
       if (efetiva.valor <= 0) return [];
       const folga = p.agendaRigida ? 0 : folgaCoberturaCiclo(efetiva.valor, efetiva.unidade);
       const ciclos = datasProgramadas.get(p.id) ?? [];
+      const adiamentos = adiamentosPorPlano.get(p.id);
       const perdidas: string[] = [];
       let k = primeiroIndiceAPartirDe(p.dataInicial, efetiva.valor, efetiva.unidade, inicio);
       for (let data = somarPeriodos(p.dataInicial, k, efetiva.valor, efetiva.unidade); data <= fim;) {
         const seguinte = somarPeriodos(p.dataInicial, ++k, efetiva.valor, efetiva.unidade);
         const desde = somarDias(data, -folga);
-        if (!ciclos.some(c => c >= desde && c < seguinte)) perdidas.push(data);
+        const adiadaPraFrente = (adiamentos?.get(data) ?? '') >= semanaAberta;
+        if (!adiadaPraFrente && !ciclos.some(c => c >= desde && c < seguinte)) perdidas.push(data);
         data = seguinte;
       }
       if (perdidas.length === 0) return [];
@@ -427,6 +462,7 @@ export function planosAtrasados(
         proximaData: perdidas[0],
         // Data perdida é a ocorrência REAL — não herda a antecipação do alinhamento.
         proximaDataOriginal: null,
+        ocorrenciaAdiada: null,
         prazoLimite: dataLimiteComTolerancia(perdidas[0], efetiva.valor, efetiva.unidade)!,
         ocorrenciasPerdidas: perdidas.length,
       }];

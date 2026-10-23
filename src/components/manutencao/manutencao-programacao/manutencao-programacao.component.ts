@@ -30,7 +30,7 @@ import {
   resumoPorEquipeApoio, sugestoesDaSemana,
   osSigmaDosPlanos,
 } from '../../../utils/manutencao-planos';
-import { preventivaVencendo } from '../../../utils/manutencao-preventivas';
+import { preventivaVencendo, somarDias } from '../../../utils/manutencao-preventivas';
 import { OrdemComMaterialDisponivel, ordensComMaterialTotalmenteDisponivel } from '../../../utils/manutencao-materiais-disponiveis';
 import { EscalaTurnoTabelaComponent } from './escala-turno-tabela/escala-turno-tabela.component';
 import { FichaImpressaoComponent } from './ficha-impressao/ficha-impressao.component';
@@ -1118,7 +1118,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // Agenda compartilhada com o cadastro: cadência fixa, parada e primeira semana aberta.
   private agendaPlanos = computed<PlanoComProximaData[]>(() => {
     return agendaDosPlanos(this.manutencaoPlanosService.planos(), this.manutencaoPlanosService.ciclosPorPlano(), this.plantaParadaAtiva(),
-      this.hojeInicioSemanaIso, this.manutencaoService.semanasFechadas());
+      this.hojeInicioSemanaIso, this.manutencaoService.semanasFechadas(), this.manutencaoPlanosService.adiamentosPorPlano());
   });
   private planosComProximaDaArea = computed(() => this.agendaPlanos().filter(p => p.area === this.areaFixa));
 
@@ -1302,7 +1302,30 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   preventivasAtrasadas = computed(() =>
     planosAtrasados(this.planosComProximaDaArea(), datasProgramadasPorPlano(this.planosComProximaDaArea(),
       this.manutencaoPlanosService.ciclosPorPlano(), this.manutencaoService.ordens()),
-      primeiraSemanaAberta(this.hojeInicioSemanaIso, this.manutencaoService.semanasFechadas()), this.plantaParadaAtiva()));
+      primeiraSemanaAberta(this.hojeInicioSemanaIso, this.manutencaoService.semanasFechadas()), this.plantaParadaAtiva(),
+      this.manutencaoPlanosService.adiamentosPorPlano()));
+
+  // Adiar pra próxima semana (só Admin): mesma ocorrência, uma semana depois da data que
+  // está na lista. Adiar de novo empurra mais uma semana. Ao programar, o ciclo continua
+  // na data original (ver dataCicloAoProgramar), então o plano não sai da sequência.
+  async adiarPreventiva(plano: PlanoComProximaData): Promise<void> {
+    if (!this.isAdmin() || this.isProcessando()) return;
+    const ocorrencia = dataCicloAoProgramar(plano);
+    const novaData = somarDias(plano.proximaData, 7);
+    if (!(await this.confirmDialogService.confirm(
+      `Adiar "${plano.nome}" para a próxima semana (${this.formatarDataBr(novaData)})?\n\n` +
+      `A ocorrência de ${this.formatarDataBr(ocorrencia)} sai desta semana e aparece na semana de ${this.formatarDataBr(novaData)}.`,
+      { confirmLabel: 'Adiar' }))) return;
+    this.isProcessando.set(true);
+    try {
+      await this.manutencaoPlanosService.adiarOcorrencia(plano, ocorrencia, novaData);
+      this.notificationService.showSuccess(`Preventiva adiada para ${this.formatarDataBr(novaData)}.`);
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao adiar a preventiva.');
+    } finally {
+      this.isProcessando.set(false);
+    }
+  }
 
   // Abre "Novo lançamento" já preenchido a partir de um plano preventivo vencendo —
   // mesma ideia do programarDoBacklog, mas o "Nome Bem" do plano mestre quase nunca

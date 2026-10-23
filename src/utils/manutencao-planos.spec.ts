@@ -738,3 +738,47 @@ describe('osSigmaDosPlanos', () => {
     expect(osSigmaDosPlanos([plano({ id: 'p1', nome: 'X' })], [os('1', 'Y', '', '2025-01-01')], new Set(), norm).size).toBe(0);
   });
 });
+
+// Admin adia a preventiva pra próxima semana (migration 084).
+describe('preventiva adiada', () => {
+  const mensal = plano({ id: 'adi', periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)', dataInicial: '2026-10-28' });
+  const adiamentos = new Map([['adi', new Map([['2026-10-28', '2026-11-04']])]]);
+
+  it('aparece na nova data e grava o ciclo na ocorrência original', () => {
+    const p = agendaDosPlanos([mensal], new Map(), false, '2026-10-19', new Map(), adiamentos)[0];
+    expect(p.proximaData).toBe('2026-11-04');
+    expect(p.ocorrenciaAdiada).toBe('2026-10-28');
+    expect(dataCicloAoProgramar(p)).toBe('2026-10-28');
+  });
+
+  it('continua aparecendo depois que a semana original passou', () => {
+    const p = agendaDosPlanos([mensal], new Map(), false, '2026-11-02', new Map(), adiamentos)[0];
+    expect(p.proximaData).toBe('2026-11-04');
+  });
+
+  it('programada (ciclo na data original) sai da lista e a sequência segue', () => {
+    const p = agendaDosPlanos([mensal], new Map([['adi', ['2026-10-28']]]), false, '2026-11-02', new Map(), adiamentos)[0];
+    expect(p.proximaData).toBe('2026-11-28');
+    expect(p.ocorrenciaAdiada).toBeUndefined();
+  });
+
+  it('não conta como não programada enquanto a nova data está aberta', () => {
+    const agenda = agendaDosPlanos([mensal], new Map(), false, '2026-11-02', new Map(), adiamentos);
+    expect(planosAtrasados(agenda, new Map(), '2026-11-02', false, adiamentos)).toEqual([]);
+  });
+
+  it('conta como não programada se a semana nova também passou sem OS', () => {
+    const agenda = agendaDosPlanos([mensal], new Map(), false, '2026-11-09', new Map(), adiamentos);
+    const atrasadas = planosAtrasados(agenda, new Map(), '2026-11-09', false, adiamentos);
+    expect(atrasadas.map(a => a.proximaData)).toEqual(['2026-10-28']);
+    expect(dataCicloAoProgramar(atrasadas[0])).toBe('2026-10-28');
+  });
+
+  it('não é puxada pelo alinhamento com outro plano do mesmo equipamento', () => {
+    const kks = { tagKks: 'EAC31' };
+    const adiada = plano({ ...mensal, ...kks });
+    const vizinho = plano({ id: 'viz', ...kks, periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)', dataInicial: '2026-11-02' });
+    const a = agendaDosPlanos([adiada, vizinho], new Map(), false, '2026-10-19', new Map(), adiamentos);
+    expect(a.find(p => p.id === 'adi')!.proximaData).toBe('2026-11-04');
+  });
+});
