@@ -1,37 +1,74 @@
-<div class="overflow-x-auto">
-  <table class="min-w-full text-sm">
-    <thead>
-      <tr class="text-left text-xs text-gray-500 uppercase">
-        <th class="py-1 pr-3">Equipamento</th>
-        @for (dia of dias; track dia.data) {
-          <th class="py-1 px-1 text-center">{{ dia.label }}</th>
-        }
-      </tr>
-    </thead>
-    <tbody class="divide-y divide-slate-100">
-      @for (linha of quadroLoto; track linha.equipamento) {
-        @if (linha.separadorAntes) {
-          <tr>
-            <td [attr.colspan]="dias.length + 1" class="pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide border-t border-slate-200">Sem conflito</td>
-          </tr>
-        }
-        <tr [class.bg-orange-50]="linha.temConflito">
-          <td class="py-1 pr-3 font-semibold text-gray-700">{{ linha.equipamento }}</td>
-          @for (cel of linha.dias; track cel.data) {
-            <td class="py-1 px-1 text-center">
-              @if (cel.conflito) {
-                <button type="button" (click)="onCelulaClick(linha.equipamento, cel.data, cel.itens, $event)"
-                  class="inline-block w-5 h-5 leading-5 rounded bg-orange-100 text-orange-700 font-bold text-xs hover:ring-2 hover:ring-orange-300" [title]="conflitoLotoTitle(cel.itens)">⚠</button>
-              } @else if (cel.itens.length > 0) {
-                <button type="button" (click)="onCelulaClick(linha.equipamento, cel.data, cel.itens, $event)"
-                  class="inline-block w-5 h-5 rounded hover:ring-2 hover:ring-offset-1" [class]="lotoBadgeClass(cel.itens[0].status)" [title]="cel.itens[0].status + ': ' + cel.itens[0].descricao + ' (' + cel.itens[0].tecnicos.join(', ') + ')'"></button>
-              } @else {
-                <span class="inline-block w-5 h-5 rounded bg-gray-50"></span>
-              }
-            </td>
-          }
-        </tr>
+<!-- Conflitos por extenso — o que precisa ser resolvido, sem ter que caçar o ⚠ na grade -->
+@if (conflitos().length > 0) {
+  <div class="mb-3 rounded-lg border border-orange-200 bg-orange-50 p-2">
+    <p class="text-[11px] font-semibold text-orange-800 uppercase tracking-wide mb-1">Conflitos a resolver</p>
+    <ul class="space-y-0.5">
+      @for (c of conflitos(); track c.equipamento + c.dias) {
+        <li>
+          <button type="button" (click)="onSegmentoClick(c.equipamento, c.segmento, $event)"
+            class="w-full text-left text-xs text-orange-900 hover:bg-orange-100 rounded px-1 py-0.5">
+            <span class="font-bold">{{ c.equipamento }}</span> · {{ c.dias }}: {{ c.texto }}
+            @if (c.os.length > 0) { <span class="text-orange-700"> — OS {{ c.os.join(' × ') }}</span> }
+          </button>
+        </li>
       }
-    </tbody>
-  </table>
+    </ul>
+  </div>
+}
+
+<!-- Filtros rápidos + busca -->
+<div class="flex flex-wrap items-center gap-1.5 mb-2">
+  @for (op of opcoesFiltro; track op.id) {
+    @if (op.id === 'todos' || contagens()[op.id] > 0) {
+      <button type="button" (click)="filtro.set(op.id)"
+        class="text-xs font-semibold px-2.5 py-1 rounded-full border transition"
+        [class]="filtro() === op.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-slate-300 hover:bg-slate-50'">
+        {{ op.label }} <span class="opacity-70">{{ contagens()[op.id] }}</span>
+      </button>
+    }
+  }
+  <input type="text" [value]="busca()" (input)="busca.set($any($event.target).value)" placeholder="Buscar equipamento..."
+    class="ml-auto w-full sm:w-52 rounded-lg border border-slate-300 px-2.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+</div>
+
+<div class="overflow-x-auto">
+  <div class="min-w-[44rem]">
+    <!-- Cabeçalho -->
+    <div class="grid gap-x-1 pb-1 text-xs text-gray-500 uppercase font-semibold" [style]="colunas">
+      <div class="pr-2">Equipamento</div>
+      @for (dia of dias(); track dia.data; let i = $index) {
+        <div class="text-center rounded py-0.5"
+          [class]="dia.data === hoje ? 'bg-blue-600 text-white' : (i >= 5 ? 'text-gray-300' : '')"
+          [title]="dia.data === hoje ? 'Hoje' : ''">{{ i >= 5 ? dia.label.charAt(0) : dia.label }}</div>
+      }
+    </div>
+
+    @for (l of linhas(); track l.linha.equipamento) {
+      @if (l.separadorAntes) {
+        <div class="pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide border-t border-slate-200">Sem conflito</div>
+      }
+      <div class="grid gap-x-1 items-center border-t border-slate-100 py-1" [style]="colunas" [class.bg-orange-50]="l.linha.temConflito">
+        <div class="pr-2 min-w-0" style="grid-row: 1; grid-column: 1">
+          <p class="text-sm font-semibold text-gray-700 truncate">{{ l.linha.equipamento }}</p>
+          @if (l.nome) { <p class="text-[10px] text-gray-400 truncate" [title]="l.nome">{{ l.nome }}</p> }
+        </div>
+        <!-- Fundo de cada dia (hoje em azul claro); as faixas ficam por cima -->
+        @for (dia of dias(); track dia.data; let i = $index) {
+          <div class="h-6 rounded" [class.bg-blue-50]="dia.data === hoje" [style.grid-row]="1" [style.grid-column]="i + 2"></div>
+        }
+        @for (seg of l.segmentos; track seg.inicio) {
+          <button type="button" (click)="onSegmentoClick(l.linha.equipamento, seg, $event)" [title]="tituloSegmento(seg)"
+            class="h-6 rounded px-1.5 text-[10px] font-bold flex items-center justify-center gap-1 min-w-0 hover:brightness-110 hover:ring-2 hover:ring-offset-1 hover:ring-slate-300 transition"
+            [class]="corSegmento(seg)" [style.grid-row]="1" [style.grid-column]="colunaSegmento(seg)">
+            <span class="truncate">{{ rotulo(seg) }}</span>
+            @if (detalhe(seg); as det) {
+              <span class="truncate font-medium opacity-80" [class.hidden]="seg.dias < 2">· {{ det }}</span>
+            }
+          </button>
+        }
+      </div>
+    } @empty {
+      <p class="text-xs text-gray-400 py-3">Nenhum equipamento para esse filtro.</p>
+    }
+  </div>
 </div>

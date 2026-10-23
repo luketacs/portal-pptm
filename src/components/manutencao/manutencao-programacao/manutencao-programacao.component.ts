@@ -235,10 +235,10 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // "equipamento:data" (não pelo array em si, pra sobreviver a recomputações do
   // computed quadroLoto) + os próprios itens já resolvidos no momento do clique.
   lotoDetalheChave = signal<string | null>(null);
-  lotoDetalheItens = signal<{ status: string; descricao: string; tecnicos: string[] }[]>([]);
+  lotoDetalheItens = signal<{ status: string; descricao: string; tecnicos: string[]; numeroOs?: string | null }[]>([]);
   lotoDetalhePos = signal<{ top: number; left: number } | null>(null);
 
-  toggleLotoDetalhe(chave: string, itens: { status: string; descricao: string; tecnicos: string[] }[], event: MouseEvent): void {
+  toggleLotoDetalhe(chave: string, itens: { status: string; descricao: string; tecnicos: string[]; numeroOs?: string | null }[], event: MouseEvent): void {
     event.stopPropagation();
     if (this.lotoDetalheChave() === chave) {
       this.lotoDetalheChave.set(null);
@@ -1657,6 +1657,7 @@ export class ManutencaoProgramacaoComponent implements OnInit {
     try { localStorage.setItem(this.LOTO_ABERTO_KEY, this.quadroLotoAberto() ? '1' : '0'); } catch { /* storage bloqueado */ }
   }
   lotoConflitos = computed(() => this.quadroLoto().filter(l => l.temConflito).length);
+  equipamentoNomes = computed(() => this.manutencaoService.equipamentoNomes());
 
   // Mesma ideia pra Escala de turno — pedido do usuário logo em seguida do LOTO.
   escalaTurnoAberta = signal(true);

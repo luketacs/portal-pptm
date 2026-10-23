@@ -188,6 +188,10 @@ export class ManutencaoProgramacaoService {
   // quadro de bloqueios (LOTO) por equipamento/dia.
   private _equipamentos = signal<string[]>([]);
   equipamentos = this._equipamentos.asReadonly();
+  // Nome legível por tag (public/equipamentos-nomes.json, opcional) — aparece embaixo da
+  // tag no quadro de LOTO. Sem o arquivo, ou sem a tag nele, mostra só a tag.
+  private _equipamentoNomes = signal<Record<string, string>>({});
+  equipamentoNomes = this._equipamentoNomes.asReadonly();
 
   // Cadastro de empresas/equipes do Apoio e da escala de turno — no banco (editável
   // por Admin), diferente do catálogo de equipamentos acima (que continua estático).
@@ -231,9 +235,11 @@ export class ManutencaoProgramacaoService {
   async loadEquipamentos(): Promise<void> {
     if (this._equipamentos().length > 0) return;
     try {
-      const resp = await fetch('/equipamentos.json');
+      const [resp, respNomes] = await Promise.all([fetch('/equipamentos.json'), fetch('/equipamentos-nomes.json').catch(() => null)]);
       const data = await resp.json();
       this._equipamentos.set(Array.isArray(data) ? data : []);
+      const nomes = respNomes?.ok ? await respNomes.json().catch(() => null) : null;
+      if (nomes && typeof nomes === 'object' && !Array.isArray(nomes)) this._equipamentoNomes.set(nomes as Record<string, string>);
     } catch (err) {
       console.error('[ManutencaoProgramacaoService] Falha ao carregar equipamentos.json:', err);
     }
