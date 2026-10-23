@@ -113,6 +113,16 @@ export class SupabaseRestService {
     return this.request<null>('PATCH', path, body, timeoutMs);
   }
 
+  // Mesmo POST/PATCH, mas o banco devolve as linhas gravadas (Prefer: return=representation)
+  // — quem chama aplica na lista em memória em vez de recarregar a tabela inteira.
+  async postReturning<T>(path: string, body: unknown, timeoutMs = this.DEFAULT_TIMEOUT_MS): Promise<RestResult<T[]>> {
+    return this.request<T[]>('POST', path, body, timeoutMs, true, true);
+  }
+
+  async patchReturning<T>(path: string, body: unknown, timeoutMs = this.DEFAULT_TIMEOUT_MS): Promise<RestResult<T[]>> {
+    return this.request<T[]>('PATCH', path, body, timeoutMs, true, true);
+  }
+
   async delete(path: string, timeoutMs = this.DEFAULT_TIMEOUT_MS): Promise<{ success: boolean; error: any; status?: number }> {
     const result = await this.request<null>('DELETE', path, undefined, timeoutMs);
     return { success: !result.error, error: result.error, status: result.status };
@@ -123,7 +133,8 @@ export class SupabaseRestService {
     path: string,
     body?: unknown,
     timeoutMs = this.DEFAULT_TIMEOUT_MS,
-    retryOnAuthFailure = true
+    retryOnAuthFailure = true,
+    returnRepresentation = false
   ): Promise<RestResult<T>> {
     const token = await this.authService.getValidAccessToken();
     if (!token) {
@@ -141,7 +152,9 @@ export class SupabaseRestService {
     try {
       const response = await fetch(`${supabaseConfig.url}/rest/v1/${path}`, {
         method,
-        headers: this.buildHeaders(token),
+        headers: returnRepresentation
+          ? { ...this.buildHeaders(token), Prefer: 'return=representation' }
+          : this.buildHeaders(token),
         body: body !== undefined ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
@@ -169,7 +182,7 @@ export class SupabaseRestService {
         if (response.status === 401 && retryOnAuthFailure) {
           const refresh = await this.authService.refreshSessionBeforeOperation();
           if (refresh.success) {
-            return this.request<T>(method, path, body, timeoutMs, false);
+            return this.request<T>(method, path, body, timeoutMs, false, returnRepresentation);
           }
           await this.handleAuthRequired();
           return {
@@ -182,7 +195,7 @@ export class SupabaseRestService {
         return { data: null, error: normalizedError, status: response.status };
       }
 
-      if (method === 'GET') {
+      if (method === 'GET' || returnRepresentation) {
         const data = (await response.json().catch(() => null)) as T | null;
         return { data, error: null, status: response.status };
       }

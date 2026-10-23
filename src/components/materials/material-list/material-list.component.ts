@@ -224,7 +224,7 @@ export class MaterialListComponent implements OnInit {
 
     const user = this.currentUser();
     const adminInfo = user ? { id: user.id, name: user.name } : undefined;
-    const { error } = await this.materialService.updateMaterialStatus(material.id!, novoStatus, adminInfo);
+    const { data: atualizado, error } = await this.materialService.updateMaterialStatus(material.id!, novoStatus, adminInfo);
 
     if (error) {
       console.error('[MaterialList] Error updating material status:', error);
@@ -239,8 +239,13 @@ export class MaterialListComponent implements OnInit {
       this.lastLiberated.set({ material, adminName: user.name });
     }
 
-    // Recarrega do servidor para garantir dados atualizados
-    await this.loadMaterials();
+    // Troca só a linha gravada (status/released_at vêm do banco); o nome do criador
+    // não vem no PATCH, então mantém o que já estava na lista.
+    if (atualizado) {
+      this.materials.update(lista => lista.map(m =>
+        m.id === atualizado.id ? { ...atualizado, created_by_name: m.created_by_name } : m
+      ));
+    }
 
   }
 

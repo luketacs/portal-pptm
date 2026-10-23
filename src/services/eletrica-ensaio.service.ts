@@ -16,6 +16,7 @@ import { avaliarEnsaio, criterioDoEnsaio, numeroEnsaio } from '../utils/eletrica
 import { avaliarTrafo } from '../utils/eletrica-trafo';
 import { avaliarPontos, resultadoTermografia } from '../utils/eletrica-termografia';
 import { comprimirImagem } from '../utils/eletrica-reparo';
+import { removerDaLista, upsertNaLista } from '../utils/lista-local';
 
 const BUCKET_ANEXOS = 'eletrica-ensaios';
 
@@ -403,6 +404,13 @@ function payloadTermografia(e: SalvarTermografia) {
   };
 }
 
+// Mesma ordem do load(): equipamentos por tag (desempate id); ensaios por data e número, mais novo primeiro.
+const cmpTexto = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const ordemEquipamento = (a: { tag: string; id: string }, b: { tag: string; id: string }) =>
+  cmpTexto(a.tag, b.tag) || cmpTexto(a.id, b.id);
+const ordemEnsaio = (a: { dataEnsaio: string; numero: number }, b: { dataEnsaio: string; numero: number }) =>
+  cmpTexto(b.dataEnsaio, a.dataEnsaio) || b.numero - a.numero;
+
 function mensagemErro(message: string): string {
   if (message.includes('uq_eletrica_equipamentos_tag')) return 'Já existe um equipamento cadastrado com essa TAG.';
   return message;
@@ -558,7 +566,33 @@ export class EletricaEnsaioService {
       description: `${user.name} registrou troca de equipamento (sai ${params.saiId}, entra ${params.entraId})`,
       metadata: { ...params },
     });
-    await this.load();
+    // A RPC não devolve nada: relê só os dois equipamentos que mudaram (o histórico de
+    // movimentos é lido à parte pela tela). Se a releitura falhar, cai no load() completo.
+    const { data, error: erroReleitura } = await this.supabaseService.client
+      .from('eletrica_equipamentos').select('*').in('id', [params.saiId, params.entraId]);
+    if (erroReleitura || !data) {
+      await this.load();
+      return;
+    }
+    for (const r of data as MotorRow[]) this.aplicarEquipamento(r);
+  }
+
+  // Encaixa a linha gravada na lista certa (motor ou trafo), sem recarregar a tabela.
+  private aplicarEquipamento(r: MotorRow): void {
+    if (r.tipo === 'motor') this._motores.update(l => upsertNaLista(l, mapMotor(r), ordemEquipamento));
+    else if (r.tipo === 'transformador') this._trafos.update(l => upsertNaLista(l, mapTrafo(r), ordemEquipamento));
+  }
+
+  private aplicarEnsaio(r: EnsaioRow): void {
+    if (r.tipo === 'resistencia_isolamento') this._ensaios.update(l => upsertNaLista(l, mapEnsaio(r), ordemEnsaio));
+    else if (r.tipo === 'transformador') this._ensaiosTrafo.update(l => upsertNaLista(l, mapEnsaioTrafo(r), ordemEnsaio));
+    else if (r.tipo === 'termografia') this._termografias.update(l => upsertNaLista(l, mapTermografia(r), ordemEnsaio));
+  }
+
+  private removerEnsaios(filtro: (e: { id: string; equipamentoId: string }) => boolean): void {
+    this._ensaios.update(l => l.filter(e => !filtro(e)));
+    this._ensaiosTrafo.update(l => l.filter(e => !filtro(e)));
+    this._termografias.update(l => l.filter(e => !filtro(e)));
   }
 
   // ── Anexos ──
@@ -614,9 +648,9 @@ export class EletricaEnsaioService {
 
     const query = id
       ? this.supabaseService.client.from('eletrica_equipamentos')
-        .update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id).select('id')
+        .update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id).select('*')
       : this.supabaseService.client.from('eletrica_equipamentos')
-        .insert({ ...payload, tipo: 'motor', criado_por_id: user.id, criado_por_nome: user.name }).select('id');
+        .insert({ ...payload, tipo: 'motor', criado_por_id: user.id, criado_por_nome: user.name }).select('*');
     const { data, error } = await query;
     if (error) throw new Error(mensagemErro(error.message));
     if (!data?.length) throw new Error('Sem permissão para salvar o motor.');
@@ -629,6 +663,7 @@ export class EletricaEnsaioService {
       resource_id: data[0].id,
       description: `${user.name} ${id ? 'editou' : 'cadastrou'} o motor ${payload.tag}`,
     });
+    this.aplicarEquipamento(data[0] as MotorRow);
     return data[0].id;
   }
 
@@ -639,9 +674,9 @@ export class EletricaEnsaioService {
 
     const query = id
       ? this.supabaseService.client.from('eletrica_equipamentos')
-        .update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id).select('id')
+        .update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id).select('*')
       : this.supabaseService.client.from('eletrica_equipamentos')
-        .insert({ ...payload, tipo: 'transformador', criado_por_id: user.id, criado_por_nome: user.name }).select('id');
+        .insert({ ...payload, tipo: 'transformador', criado_por_id: user.id, criado_por_nome: user.name }).select('*');
     const { data, error } = await query;
     if (error) throw new Error(mensagemErro(error.message));
     if (!data?.length) throw new Error('Sem permissão para salvar o transformador.');
@@ -654,6 +689,7 @@ export class EletricaEnsaioService {
       resource_id: data[0].id,
       description: `${user.name} ${id ? 'editou' : 'cadastrou'} o transformador ${payload.tag}`,
     });
+    this.aplicarEquipamento(data[0] as MotorRow);
     return data[0].id;
   }
 
@@ -664,9 +700,9 @@ export class EletricaEnsaioService {
 
     const query = id
       ? this.supabaseService.client.from('eletrica_ensaios')
-        .update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id).select('id, numero')
+        .update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id).select('*')
       : this.supabaseService.client.from('eletrica_ensaios')
-        .insert({ ...payload, criado_por_id: user.id, criado_por_nome: user.name }).select('id, numero');
+        .insert({ ...payload, criado_por_id: user.id, criado_por_nome: user.name }).select('*');
     const { data, error } = await query;
     if (error) throw new Error(error.message);
     if (!data?.length) throw new Error('Só quem lançou o ensaio (ou Admin) pode corrigi-lo.');
@@ -680,6 +716,7 @@ export class EletricaEnsaioService {
       description: `${user.name} ${id ? 'corrigiu' : 'registrou'} o ensaio de transformador ${numeroEnsaio(data[0].numero)} (${payload.resultado})`,
       metadata: { numero: data[0].numero, resultado: payload.resultado, tipo: 'transformador' },
     });
+    this.aplicarEnsaio(data[0] as EnsaioRow);
     return { id: data[0].id, numero: Number(data[0].numero) };
   }
 
@@ -689,9 +726,9 @@ export class EletricaEnsaioService {
     const payload = payloadTermografia(dados);
     const query = id
       ? this.supabaseService.client.from('eletrica_ensaios')
-        .update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id).select('id, numero')
+        .update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id).select('*')
       : this.supabaseService.client.from('eletrica_ensaios')
-        .insert({ ...payload, criado_por_id: user.id, criado_por_nome: user.name }).select('id, numero');
+        .insert({ ...payload, criado_por_id: user.id, criado_por_nome: user.name }).select('*');
     const { data, error } = await query;
     if (error) throw new Error(error.message);
     if (!data?.length) throw new Error('Só quem lançou o ensaio (ou Admin) pode corrigi-lo.');
@@ -704,6 +741,7 @@ export class EletricaEnsaioService {
       description: `${user.name} ${id ? 'corrigiu' : 'registrou'} a termografia ${numeroEnsaio(data[0].numero)} (${payload.resultado})`,
       metadata: { numero: data[0].numero, resultado: payload.resultado, tipo: 'termografia' },
     });
+    this.aplicarEnsaio(data[0] as EnsaioRow);
     return { id: data[0].id, numero: Number(data[0].numero) };
   }
 
@@ -724,6 +762,10 @@ export class EletricaEnsaioService {
       resource_id: id,
       description: `${admin.name} excluiu o ${data[0].tipo === 'transformador' ? 'transformador' : 'motor'} ${data[0].tag} e os ensaios dele`,
     });
+    // Os ensaios saem junto no banco (CASCADE); aqui também.
+    this._motores.update(l => removerDaLista(l, id));
+    this._trafos.update(l => removerDaLista(l, id));
+    this.removerEnsaios(e => e.equipamentoId === id);
   }
 
   async salvarEnsaio(dados: SalvarEnsaio, id?: string): Promise<{ id: string; numero: number }> {
@@ -733,9 +775,9 @@ export class EletricaEnsaioService {
 
     const query = id
       ? this.supabaseService.client.from('eletrica_ensaios')
-        .update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id).select('id, numero')
+        .update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id).select('*')
       : this.supabaseService.client.from('eletrica_ensaios')
-        .insert({ ...payload, criado_por_id: user.id, criado_por_nome: user.name }).select('id, numero');
+        .insert({ ...payload, criado_por_id: user.id, criado_por_nome: user.name }).select('*');
     const { data, error } = await query;
     if (error) throw new Error(error.message);
     // RLS barra sem erro: 0 linhas = sem permissão.
@@ -750,6 +792,7 @@ export class EletricaEnsaioService {
       description: `${user.name} ${id ? 'corrigiu' : 'registrou'} o ensaio ${numeroEnsaio(data[0].numero)} (${payload.resultado})`,
       metadata: { numero: data[0].numero, resultado: payload.resultado },
     });
+    this.aplicarEnsaio(data[0] as EnsaioRow);
     return { id: data[0].id, numero: Number(data[0].numero) };
   }
 
@@ -769,5 +812,6 @@ export class EletricaEnsaioService {
       resource_id: id,
       description: `${admin.name} excluiu o ensaio ${numeroEnsaio(data[0].numero)}`,
     });
+    this.removerEnsaios(e => e.id === id);
   }
 }

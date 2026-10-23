@@ -2591,7 +2591,8 @@ export class ManutencaoProgramacaoComponent implements OnInit {
   // de um plano preventivo, e sem segurar o formulário: a OS já está salva e na lista.
   private recarregarCiclosEmSegundoPlano(necessario: boolean): void {
     if (!necessario) return;
-    this.manutencaoPlanosService.load().catch(err =>
+    // Só os ciclos mudam (trigger da migration 057) — não relê os ~750 planos.
+    this.manutencaoPlanosService.loadCiclos().catch(err =>
       console.error('[ManutencaoProgramacao] Falha ao atualizar ciclos dos planos:', err));
   }
 

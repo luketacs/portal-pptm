@@ -303,7 +303,7 @@ export class EnsaioFormComponent implements OnInit {
         anexos,
       }, this.id ?? undefined);
       this.notificationService.showSuccess(`Ensaio ${numeroEnsaio(numero)} ${this.id ? 'corrigido' : 'registrado'}: ${RESULTADO_LABEL[av.resultado]}.`);
-      await this.ensaioService.load();
+      // O service já encaixou a linha gravada nas listas; sem recarregar tudo.
       await this.router.navigate(['/eletrica/ensaios', id]);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao salvar o ensaio.';

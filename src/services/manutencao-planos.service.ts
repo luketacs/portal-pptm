@@ -9,6 +9,7 @@ import {
 } from '../models/manutencao-programacao.model';
 import { AlteracaoCampo, diferencasPlano } from '../utils/manutencao-planos-saude';
 import { AdiamentosPorPlano } from '../utils/manutencao-planos';
+import { removerDaLista, upsertNaLista, upsertVariosNaLista } from '../utils/lista-local';
 
 interface PlanoManutencaoRow {
   id: string;
@@ -90,6 +91,16 @@ function mapPlanoRow(r: PlanoManutencaoRow): PlanoManutencao {
   };
 }
 
+// Mesma ordem do load (ORDER BY codigo, id) — códigos são 'PM-0001', comparação simples.
+const compararCodigo = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+const porCodigo = (a: PlanoManutencao, b: PlanoManutencao): number =>
+  compararCodigo(a.codigo, b.codigo) || compararCodigo(a.id, b.id);
+
+// UPDATE barrado pelo RLS não dá erro, só volta 0 linhas — .single() acusa PGRST116.
+function erroGravacaoPlano(error: { message: string; code?: string }): Error {
+  return new Error(error.code === 'PGRST116' ? 'Não foi possível salvar o plano (sem permissão no banco).' : error.message);
+}
+
 function mapCicloRow(r: CicloManutencaoRow): CicloManutencao {
   return {
     id: r.id,
@@ -166,6 +177,16 @@ export class ManutencaoPlanosService {
     }
   }
 
+  // Só o ledger de ciclos — é o que muda (via trigger da migration 057) quando uma OS de
+  // preventiva é criada/editada/excluída/reprogramada. Não precisa reler planos, OS
+  // previstas e adiamentos junto.
+  async loadCiclos(): Promise<void> {
+    const { data, error } = await fetchAllRows((from, to) => this.supabaseService.client
+      .from('manutencao_ciclos').select('*').order('id').range(from, to));
+    if (error) throw new Error(error.message);
+    this._ciclos.set((data ?? []).map(mapCicloRow));
+  }
+
   getById(id: string): PlanoManutencao | undefined {
     return this._planos().find(p => p.id === id);
   }
@@ -199,6 +220,31 @@ export class ManutencaoPlanosService {
     return mapa;
   });
 
+  // Aplica na lista as linhas devolvidas pela gravação, em vez de recarregar planos +
+  // ciclos + OS previstas + adiamentos inteiros. Gravar plano não mexe em outra tabela
+  // (os triggers de manutencao_planos são BEFORE e só tocam a própria linha).
+  private aplicarPlanos(linhas: PlanoManutencaoRow[]): void {
+    const planos = linhas.map(mapPlanoRow);
+    this._planos.update(lista => planos.length === 1
+      ? upsertNaLista(lista, planos[0], porCodigo)
+      : upsertVariosNaLista(lista, planos, porCodigo));
+  }
+
+  // Excluir o plano apaga em cascata (ON DELETE CASCADE) ciclos, OS previstas e
+  // adiamentos dele — limpa o mesmo aqui. As OS da programação só perdem o vínculo
+  // (SET NULL) e são estado do ManutencaoProgramacaoService, não daqui.
+  private removerPlanoLocal(id: string): void {
+    this._planos.update(lista => removerDaLista(lista, id));
+    this._ciclos.update(lista => lista.filter(c => c.planoId !== id));
+    this._osPrevistas.update(mapa => new Map([...mapa].filter(([chave]) => !chave.startsWith(`${id}|`))));
+    this._adiamentos.update(mapa => {
+      if (!mapa.has(id)) return mapa;
+      const novo = new Map(mapa);
+      novo.delete(id);
+      return novo;
+    });
+  }
+
   private garantirAdmin(mensagem: string): { id: string; name: string } {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
@@ -209,7 +255,8 @@ export class ManutencaoPlanosService {
   async criar(req: CreatePlanoManutencaoRequest): Promise<void> {
     const user = this.garantirAdmin('Só Admin pode cadastrar plano de manutenção.');
 
-    const { error } = await this.supabaseService.client.from('manutencao_planos').insert({
+    // select('*'): volta com o código gerado pelo trigger (PM-xxxx), entra direto na lista.
+    const { data, error } = await this.supabaseService.client.from('manutencao_planos').insert({
       nome: req.nome.trim(),
       equipamento: req.equipamento.trim(),
       tag_kks: req.tagKks?.trim() || null,
@@ -230,7 +277,7 @@ export class ManutencaoPlanosService {
       recursos_apoio: req.recursosApoio?.trim() || null,
       criado_por_id: user.id,
       criado_por_nome: user.name,
-    });
+    }).select('*').single();
     if (error) throw new Error(error.message);
 
     this.auditLogService.log({
@@ -242,7 +289,7 @@ export class ManutencaoPlanosService {
       metadata: { area: req.area, periodicidade: `${req.periodicidadeValor} ${req.periodicidadeUnidade}` },
     });
 
-    await this.load();
+    this.aplicarPlanos([data as PlanoManutencaoRow]);
   }
 
   async editar(id: string, req: EditarPlanoManutencaoRequest): Promise<void> {
@@ -250,7 +297,7 @@ export class ManutencaoPlanosService {
     // Versão antes de salvar — vira o "antes → depois" do histórico de alterações.
     const anterior = this.getById(id);
 
-    const { error } = await this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('manutencao_planos')
       .update({
         nome: req.nome.trim(),
@@ -275,8 +322,10 @@ export class ManutencaoPlanosService {
         atualizado_por_nome: user.name,
         atualizado_em: new Date().toISOString(),
       })
-      .eq('id', id);
-    if (error) throw new Error(error.message);
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) throw erroGravacaoPlano(error);
 
     const alteracoes = anterior ? diferencasPlano(anterior, req) : [];
     const resumo = alteracoes.length > 0 ? `: ${alteracoes.map(a => a.campo).join(', ')}` : '';
@@ -290,7 +339,7 @@ export class ManutencaoPlanosService {
       metadata: { codigo: anterior?.codigo ?? null, alteracoes },
     });
 
-    await this.load();
+    this.aplicarPlanos([data as PlanoManutencaoRow]);
   }
 
   // Histórico de alterações do cadastro de um plano (quem, quando, campo antes → depois),
@@ -336,7 +385,7 @@ export class ManutencaoPlanosService {
       .from('manutencao_planos')
       .update({ atividades, atualizado_por_id: user.id, atualizado_por_nome: user.name, atualizado_em: new Date().toISOString() })
       .in('id', ids)
-      .select('id');
+      .select('*');
     if (error) throw new Error(error.message);
     const alterados = data?.length ?? 0;
     if (alterados === 0) throw new Error('Nenhum plano foi alterado (sem permissão no banco).');
@@ -353,7 +402,7 @@ export class ManutencaoPlanosService {
       metadata: { origem: origemId, destinos: ids, passos: atividades.length },
     });
 
-    await this.load();
+    this.aplicarPlanos(data as PlanoManutencaoRow[]);
     return alterados;
   }
 
@@ -369,11 +418,13 @@ export class ManutencaoPlanosService {
     const user = this.garantirAdmin(`Só Admin pode ${ativo ? 'ativar' : 'desativar'} plano de manutenção.`);
     const plano = this.getById(id);
 
-    const { error } = await this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('manutencao_planos')
       .update({ ativo, atualizado_por_id: user.id, atualizado_por_nome: user.name, atualizado_em: new Date().toISOString() })
-      .eq('id', id);
-    if (error) throw new Error(error.message);
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) throw erroGravacaoPlano(error);
 
     this.auditLogService.log({
       user_id: user.id,
@@ -384,7 +435,7 @@ export class ManutencaoPlanosService {
       description: `${user.name} ${ativo ? 'ativou' : 'desativou'} o plano de manutenção "${plano?.nome ?? ''}"`,
     });
 
-    await this.load();
+    this.aplicarPlanos([data as PlanoManutencaoRow]);
   }
 
   // Excluir não apaga ordens já geradas nem o histórico de ciclos que já viraram
@@ -412,7 +463,7 @@ export class ManutencaoPlanosService {
       description: `${user.name} excluiu o plano de manutenção "${plano?.nome ?? ''}"`,
     });
 
-    await this.load();
+    this.removerPlanoLocal(id);
   }
 
   // Anota (ou limpa, se numeroOs vier vazio) o número da OS já aberta/reservada no
@@ -420,12 +471,14 @@ export class ManutencaoPlanosService {
   // programarDaPreventiva, que usa isso pra pré-preencher o formulário. Não é
   // Admin-only: quem já pode criar OS, pode anotar o número reservado.
   async salvarNumeroOsReservado(id: string, numeroOs: string): Promise<void> {
-    const { error } = await this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('manutencao_planos')
       .update({ numero_os_reservado: numeroOs.trim() || null, atualizado_em: new Date().toISOString() })
-      .eq('id', id);
-    if (error) throw new Error(error.message);
-    await this.load();
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) throw erroGravacaoPlano(error);
+    this.aplicarPlanos([data as PlanoManutencaoRow]);
   }
 
   // Adia uma ocorrência do plano (só Admin). `ocorrencia` é a data REAL (o ciclo continua

@@ -314,8 +314,8 @@ export class RequestFormComponent implements OnDestroy {
           priority: formValue.priority,
           justification: formValue.justification,
         };
-        // skipReload=true para evitar reload múltiplo.
-        return this.requestService.addRequest(newRequest, requester, true);
+        // Cada SC criada já entra na lista em memória com a linha devolvida pelo banco.
+        return this.requestService.addRequest(newRequest, requester);
       });
 
       // Sem timeout: deixar as operações completarem naturalmente.
@@ -332,9 +332,6 @@ export class RequestFormComponent implements OnDestroy {
         console.error('[RequestForm] requests failed:', firstError.reason);
         throw new Error(firstError.reason?.message || 'Erro ao criar solicitações');
       }
-
-      // Recarrega apenas uma vez após todas as operações.
-      await this.requestService.loadRequests(true);
 
       // Mensagem baseada nos resultados
       let message = '';

@@ -2,6 +2,7 @@ import { fetchAllRows } from '../utils/supabase-pagination';
 import { Injectable, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
+import { upsertNaLista } from '../utils/lista-local';
 import { ChaveIndicadorManual, IndicadorManual } from '../models/manutencao-programacao.model';
 
 interface IndicadorManualRow {
@@ -64,7 +65,7 @@ export class ManutencaoIndicadoresManuaisService {
     if (user.role !== 'Admin') throw new Error('Só Admin pode editar indicadores manuais.');
     if (!Number.isFinite(valor)) throw new Error('Informe um valor numérico válido.');
 
-    const { error } = await this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('manutencao_indicadores_manuais')
       .upsert(
         {
@@ -74,9 +75,13 @@ export class ManutencaoIndicadoresManuaisService {
           atualizado_em: new Date().toISOString(),
         },
         { onConflict: 'ano,chave' },
-      );
+      )
+      .select('*')
+      .single();
     if (error) throw new Error(error.message);
 
-    await this.load();
+    // Upsert devolve a linha (nova ou atualizada) — mesma ordem do load (id).
+    this._itens.update(lista => upsertNaLista(lista, mapRow(data as IndicadorManualRow),
+      (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)));
   }
 }

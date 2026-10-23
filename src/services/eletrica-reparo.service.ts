@@ -8,6 +8,7 @@ import {
   ReparoHistorico, ReparoStatus,
 } from '../models/eletrica-reparo.model';
 import { REPARO_STATUS_LABEL, comprimirImagem, numeroReparo } from '../utils/eletrica-reparo';
+import { removerDaLista, upsertNaLista } from '../utils/lista-local';
 
 const BUCKET = 'eletrica-reparos';
 
@@ -94,6 +95,10 @@ function mapRow(r: ReparoRow): ReparoExterno {
 }
 
 const textoOuNull = (v: string | null | undefined) => v?.trim() || null;
+
+// Mesma ordem do load(): created_at desc, desempate por id.
+const ordemReparos = (a: ReparoExterno, b: ReparoExterno) =>
+  b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 @Injectable({ providedIn: 'root' })
 export class EletricaReparoService {
@@ -184,7 +189,7 @@ export class EletricaReparoService {
     };
 
     const { data: inserted, error } = await this.supabaseService.client
-      .from('eletrica_reparos').insert(payload).select('id, numero').single();
+      .from('eletrica_reparos').insert(payload).select('*').single();
     if (error) throw new Error(error.message);
 
     // Aviso no Teams do supervisor. Fire-and-forget: se falhar, o reparo continua aberto
@@ -205,7 +210,8 @@ export class EletricaReparoService {
       metadata: { numero: inserted.numero },
     });
 
-    await this.load();
+    // Linha devolvida já tem número e defaults do banco; o histórico (trigger) é lido à parte.
+    this._reparos.update(l => upsertNaLista(l, mapRow(inserted as ReparoRow), ordemReparos));
     return { id: inserted.id, numero: inserted.numero };
   }
 
@@ -227,7 +233,7 @@ export class EletricaReparoService {
         previsao_retorno: dados.previsaoRetorno || null,
       })
       .eq('id', id)
-      .select('numero');
+      .select('*');
     if (error) throw new Error(error.message);
     // RLS barra sem erro: 0 linhas = sem permissão no banco.
     if (!data?.length) throw new Error('Sem permissão para alterar este reparo.');
@@ -242,7 +248,7 @@ export class EletricaReparoService {
       metadata: { status: dados.status, observacao: dados.observacao || null },
     });
 
-    await this.load();
+    this._reparos.update(l => upsertNaLista(l, mapRow(data[0] as ReparoRow), ordemReparos));
   }
 
   // Só Admin (RLS portal_admin_excluir). O histórico sai junto (ON DELETE CASCADE).
@@ -266,7 +272,7 @@ export class EletricaReparoService {
       description: `${admin.name} excluiu o reparo externo ${numeroReparo(data[0].numero)}: ${data[0].equipamento}`,
     });
 
-    await this.load();
+    this._reparos.update(l => removerDaLista(l, id));
   }
 
   private async uploadFoto(file: File): Promise<string | null> {

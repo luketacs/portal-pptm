@@ -8,6 +8,7 @@ import {
   FundoFixoSetor, FundoFixoSolicitacao, FundoFixoStatus,
 } from '../models/fundo-fixo.model';
 import { calcularSaldoCaixa, calcularTotalComprometidoMes, numeroFundoFixo, proximoMes } from '../utils/fundo-fixo-calc';
+import { removerDaLista, upsertNaLista } from '../utils/lista-local';
 
 export const FUNDO_FIXO_LIMITE_MENSAL = 3000;
 export const FUNDO_FIXO_LIMITE_POR_COMPRA = 500;
@@ -126,6 +127,12 @@ function mapSaqueRow(r: FundoFixoSaqueRow): FundoFixoSaque {
   };
 }
 
+// Mesma ordem do load(): mais recente primeiro, desempate por id.
+const ordenarSolicitacoes = (a: FundoFixoSolicitacao, b: FundoFixoSolicitacao) =>
+  b.dataSolicitacao.getTime() - a.dataSolicitacao.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+const ordenarSaques = (a: FundoFixoSaque, b: FundoFixoSaque) =>
+  b.dataSaque.getTime() - a.dataSaque.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
 @Injectable({ providedIn: 'root' })
 export class FundoFixoService {
   private _solicitacoes = signal<FundoFixoSolicitacao[]>([]);
@@ -191,6 +198,7 @@ export class FundoFixoService {
     if (!data || data.length === 0) {
       throw new Error('Não foi possível excluir (permissão do banco). Verifique se a migration 012_fundo_fixo_caixa.sql foi executada no Supabase.');
     }
+    this._solicitacoes.update(l => removerDaLista(l, id));
 
     this.auditLogService.log({
       user_id: admin.id,
@@ -200,8 +208,6 @@ export class FundoFixoService {
       resource_id: id,
       description: `${admin.name} excluiu solicitação de Fundo Fixo de ${item?.solicitanteNome ?? ''}: ${item?.material ?? ''}`,
     });
-
-    await this.load();
   }
 
   async registrarSaque(req: CreateFundoFixoSaque): Promise<void> {
@@ -221,8 +227,10 @@ export class FundoFixoService {
       registrado_por_nome: admin.name,
     };
 
-    const { error } = await this.supabaseService.client.from('fundo_fixo_saques').insert(payload);
+    const { data: inserido, error } = await this.supabaseService.client
+      .from('fundo_fixo_saques').insert(payload).select('*').single();
     if (error) throw new Error(error.message);
+    this._saques.update(l => upsertNaLista(l, mapSaqueRow(inserido as FundoFixoSaqueRow), ordenarSaques));
 
     const descricao = req.tipo === 'ajuste_inicial'
       ? `${admin.name} registrou saldo inicial em caixa de R$ ${req.valor.toFixed(2)} no Fundo Fixo`
@@ -235,8 +243,6 @@ export class FundoFixoService {
       description: descricao,
       metadata: { valor: req.valor, taxa: req.taxa ?? null, tipo: req.tipo ?? 'saque' },
     });
-
-    await this.load();
   }
 
   async atualizarTaxaSaque(id: string, taxa: number): Promise<void> {
@@ -244,11 +250,17 @@ export class FundoFixoService {
     if (!admin) throw new Error('Sessão expirada.');
     if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
-    const { error } = await this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('fundo_fixo_saques')
       .update({ taxa })
-      .eq('id', id);
+      .eq('id', id)
+      .select('*');
     if (error) throw new Error(error.message);
+    // RLS bloqueando o UPDATE não dá erro, só volta 0 linhas.
+    if (!data || data.length === 0) {
+      throw new Error('Não foi possível salvar a taxa do saque (sem permissão no banco ou o saque foi excluído).');
+    }
+    this._saques.update(l => upsertNaLista(l, mapSaqueRow(data[0] as FundoFixoSaqueRow), ordenarSaques));
 
     this.auditLogService.log({
       user_id: admin.id,
@@ -259,8 +271,6 @@ export class FundoFixoService {
       description: `${admin.name} informou a taxa de R$ ${taxa.toFixed(2)} de um saque do Fundo Fixo`,
       metadata: { taxa },
     });
-
-    await this.load();
   }
 
   async excluirSaque(id: string): Promise<void> {
@@ -277,6 +287,7 @@ export class FundoFixoService {
     if (!data || data.length === 0) {
       throw new Error('Não foi possível excluir o saque (permissão do banco). Verifique se a migration 013 foi executada no Supabase.');
     }
+    this._saques.update(l => removerDaLista(l, id));
 
     this.auditLogService.log({
       user_id: admin.id,
@@ -286,8 +297,6 @@ export class FundoFixoService {
       resource_id: id,
       description: `${admin.name} excluiu um saque do Fundo Fixo`,
     });
-
-    await this.load();
   }
 
   // Devolve o número do chamado (FF-001...) pra mostrar pra quem solicitou.
@@ -324,8 +333,10 @@ export class FundoFixoService {
     };
 
     const { data: inserted, error } = await this.supabaseService.client
-      .from('fundo_fixo_solicitacoes').insert(payload).select('id, numero').single();
+      .from('fundo_fixo_solicitacoes').insert(payload).select('*').single();
     if (error) throw new Error(error.message);
+    // numero (FF-001...) vem da identity do banco — já chega preenchido na linha devolvida.
+    this._solicitacoes.update(l => upsertNaLista(l, mapRow(inserted as FundoFixoRow), ordenarSolicitacoes));
 
     // Manda pra aprovação no Teams do gestor do setor. Fire-and-forget: se falhar, a
     // solicitação continua pendente no portal pro Admin.
@@ -347,9 +358,23 @@ export class FundoFixoService {
       description: `${user.name} solicitou compra via Fundo Fixo (${numeroFundoFixo(inserted?.numero)})${descricaoEmNomeDe}: ${req.material} (R$ ${req.valorEstimado.toFixed(2)})`,
       metadata: { setor: req.setor, valor_estimado: req.valorEstimado, comprador_id: payload.comprador_id, numero: inserted?.numero ?? null },
     });
-
-    await this.load();
     return inserted?.numero ?? null;
+  }
+
+  // UPDATE de uma solicitação devolvendo a linha gravada, que entra direto na lista em
+  // memória (sem recarregar a tabela inteira).
+  private async gravarSolicitacao(id: string, payload: Record<string, unknown>): Promise<void> {
+    const { data, error } = await this.supabaseService.client
+      .from('fundo_fixo_solicitacoes')
+      .update(payload)
+      .eq('id', id)
+      .select('*');
+    if (error) throw new Error(error.message);
+    // RLS bloqueando o UPDATE não dá erro, só volta 0 linhas.
+    if (!data || data.length === 0) {
+      throw new Error('Não foi possível salvar a solicitação (sem permissão no banco ou ela foi excluída).');
+    }
+    this._solicitacoes.update(l => upsertNaLista(l, mapRow(data[0] as FundoFixoRow), ordenarSolicitacoes));
   }
 
   async atribuirComprador(id: string, compradorId: string, compradorNome: string): Promise<void> {
@@ -357,11 +382,7 @@ export class FundoFixoService {
     if (!admin) throw new Error('Sessão expirada.');
     if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
-    const { error } = await this.supabaseService.client
-      .from('fundo_fixo_solicitacoes')
-      .update({ comprador_id: compradorId, comprador_nome: compradorNome })
-      .eq('id', id);
-    if (error) throw new Error(error.message);
+    await this.gravarSolicitacao(id, { comprador_id: compradorId, comprador_nome: compradorNome });
 
     const item = this.getById(id);
     this.auditLogService.log({
@@ -372,8 +393,6 @@ export class FundoFixoService {
       resource_id: id,
       description: `${admin.name} direcionou a compra de ${item?.material ?? ''} para ${compradorNome}`,
     });
-
-    await this.load();
   }
 
   // Vincula uma solicitação sem dono (veio do link público, solicitante_id null) a um
@@ -384,11 +403,7 @@ export class FundoFixoService {
     if (!admin) throw new Error('Sessão expirada.');
     if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
-    const { error } = await this.supabaseService.client
-      .from('fundo_fixo_solicitacoes')
-      .update({ solicitante_id: solicitanteId, solicitante_nome: solicitanteNome })
-      .eq('id', id);
-    if (error) throw new Error(error.message);
+    await this.gravarSolicitacao(id, { solicitante_id: solicitanteId, solicitante_nome: solicitanteNome });
 
     const item = this.getById(id);
     this.auditLogService.log({
@@ -399,8 +414,6 @@ export class FundoFixoService {
       resource_id: id,
       description: `${admin.name} vinculou a solicitação "${item?.material ?? ''}" (via link público) ao usuário ${solicitanteNome}`,
     });
-
-    await this.load();
   }
 
   // Admin corrige os dados originais da solicitação (link errado, valor digitado errado
@@ -434,11 +447,7 @@ export class FundoFixoService {
       if (anterior!.formaPagamentoSecundaria != null) payload['valor_final_secundario'] = updates.valorFinalSecundario ?? null;
     }
 
-    const { error } = await this.supabaseService.client
-      .from('fundo_fixo_solicitacoes')
-      .update(payload)
-      .eq('id', id);
-    if (error) throw new Error(error.message);
+    await this.gravarSolicitacao(id, payload);
 
     const fmt = (v: number | null | undefined) => `R$ ${(v ?? 0).toFixed(2)}`;
     const valorPagoAntes = (anterior?.valorFinal ?? 0) + (anterior?.valorFinalSecundario ?? 0);
@@ -453,8 +462,6 @@ export class FundoFixoService {
         + (mudouValorPago ? ` — valor pago ${fmt(valorPagoAntes)} → ${fmt(valorPagoDepois)}` : ''),
       metadata: mudouValorPago ? { valor_pago_antes: valorPagoAntes, valor_pago_depois: valorPagoDepois } : undefined,
     });
-
-    await this.load();
   }
 
   async aprovar(id: string, gestorAprovador: string): Promise<void> {
@@ -462,17 +469,13 @@ export class FundoFixoService {
     if (!admin) throw new Error('Sessão expirada.');
     if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
-    const { error } = await this.supabaseService.client
-      .from('fundo_fixo_solicitacoes')
-      .update({
-        status: 'aprovado',
-        aprovador_id: admin.id,
-        aprovador_nome: admin.name,
-        gestor_aprovador: gestorAprovador,
-        data_aprovacao: new Date().toISOString(),
-      })
-      .eq('id', id);
-    if (error) throw new Error(error.message);
+    await this.gravarSolicitacao(id, {
+      status: 'aprovado',
+      aprovador_id: admin.id,
+      aprovador_nome: admin.name,
+      gestor_aprovador: gestorAprovador,
+      data_aprovacao: new Date().toISOString(),
+    });
 
     const item = this.getById(id);
     this.auditLogService.log({
@@ -484,8 +487,6 @@ export class FundoFixoService {
       description: `${admin.name} aprovou solicitação de Fundo Fixo de ${item?.solicitanteNome ?? ''} (gestor: ${gestorAprovador}): ${item?.material ?? ''}`,
       metadata: { gestor_aprovador: gestorAprovador },
     });
-
-    await this.load();
   }
 
   async recusar(id: string, motivo: string): Promise<void> {
@@ -493,17 +494,13 @@ export class FundoFixoService {
     if (!admin) throw new Error('Sessão expirada.');
     if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
-    const { error } = await this.supabaseService.client
-      .from('fundo_fixo_solicitacoes')
-      .update({
-        status: 'recusado',
-        aprovador_id: admin.id,
-        aprovador_nome: admin.name,
-        data_aprovacao: new Date().toISOString(),
-        motivo_recusa: motivo.trim() || null,
-      })
-      .eq('id', id);
-    if (error) throw new Error(error.message);
+    await this.gravarSolicitacao(id, {
+      status: 'recusado',
+      aprovador_id: admin.id,
+      aprovador_nome: admin.name,
+      data_aprovacao: new Date().toISOString(),
+      motivo_recusa: motivo.trim() || null,
+    });
 
     const item = this.getById(id);
     this.auditLogService.log({
@@ -514,8 +511,6 @@ export class FundoFixoService {
       resource_id: id,
       description: `${admin.name} recusou solicitação de Fundo Fixo de ${item?.solicitanteNome ?? ''}: ${item?.material ?? ''}`,
     });
-
-    await this.load();
   }
 
   async marcarComprado(
@@ -548,11 +543,7 @@ export class FundoFixoService {
     };
     if (fornecedor?.trim()) payload['fornecedor'] = fornecedor.trim();
 
-    const { error } = await this.supabaseService.client
-      .from('fundo_fixo_solicitacoes')
-      .update(payload)
-      .eq('id', id);
-    if (error) throw new Error(error.message);
+    await this.gravarSolicitacao(id, payload);
 
     const item = this.getById(id);
     const valorTotal = valorFinal + (pagamentoSecundario?.valorFinal ?? 0);
@@ -568,8 +559,6 @@ export class FundoFixoService {
       description: `${user.name} registrou compra via Fundo Fixo: ${item?.material ?? ''} (${descricaoValor})`
         + (reaproveitadas.length ? ' — orçamento/recibo da solicitação usado como comprovante' : ''),
     });
-
-    await this.load();
   }
 
   // Anexa nota(s) fiscal(is) extra a uma compra que já foi registrada (ex.: a compra
@@ -589,11 +578,7 @@ export class FundoFixoService {
 
     const urlsFinal = [...item.notasFiscaisUrls, ...novas];
 
-    const { error } = await this.supabaseService.client
-      .from('fundo_fixo_solicitacoes')
-      .update({ nota_fiscal_urls: urlsFinal })
-      .eq('id', id);
-    if (error) throw new Error(error.message);
+    await this.gravarSolicitacao(id, { nota_fiscal_urls: urlsFinal });
 
     this.auditLogService.log({
       user_id: user.id,
@@ -604,8 +589,6 @@ export class FundoFixoService {
       description: `${user.name} anexou ${novas.length} nota(s) fiscal(is) adicional(is) a: ${item.material}`
         + (reaproveitadas.length ? ' (orçamento/recibo da solicitação reaproveitado)' : ''),
     });
-
-    await this.load();
   }
 
   // Orçamento/recibo anexado na solicitação, pra entrar como nota fiscal sem novo upload
@@ -632,11 +615,7 @@ export class FundoFixoService {
     const mesAnterior = item.mesReferencia;
     const novoMes = proximoMes(mesAnterior);
 
-    const { error } = await this.supabaseService.client
-      .from('fundo_fixo_solicitacoes')
-      .update({ mes_referencia: novoMes })
-      .eq('id', id);
-    if (error) throw new Error(error.message);
+    await this.gravarSolicitacao(id, { mes_referencia: novoMes });
 
     this.auditLogService.log({
       user_id: admin.id,
@@ -647,8 +626,6 @@ export class FundoFixoService {
       description: `${admin.name} moveu a compra "${item.material}" de ${mesAnterior} para ${novoMes} (não vai entrar na fatura deste mês)`,
       metadata: { mes_anterior: mesAnterior, mes_novo: novoMes },
     });
-
-    await this.load();
   }
 
   // Admin pode corrigir a forma de pagamento mesmo depois da nota fiscal já anexada
@@ -658,11 +635,7 @@ export class FundoFixoService {
     if (!admin) throw new Error('Sessão expirada.');
     if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
-    const { error } = await this.supabaseService.client
-      .from('fundo_fixo_solicitacoes')
-      .update({ forma_pagamento: formaPagamento })
-      .eq('id', id);
-    if (error) throw new Error(error.message);
+    await this.gravarSolicitacao(id, { forma_pagamento: formaPagamento });
 
     const item = this.getById(id);
     this.auditLogService.log({
@@ -674,8 +647,6 @@ export class FundoFixoService {
       description: `${admin.name} alterou a forma de pagamento de ${item?.material ?? ''} para ${formaPagamento}`,
       metadata: { forma_pagamento: formaPagamento },
     });
-
-    await this.load();
   }
 
   // Marca que a pessoa já recebeu de volta o dinheiro que pagou do próprio bolso.
@@ -685,11 +656,7 @@ export class FundoFixoService {
     if (!admin) throw new Error('Sessão expirada.');
     if (admin.role !== 'Admin') throw new Error('Apenas administradores podem executar esta ação.');
 
-    const { error } = await this.supabaseService.client
-      .from('fundo_fixo_solicitacoes')
-      .update({ reembolsado: true, data_reembolso: new Date().toISOString() })
-      .eq('id', id);
-    if (error) throw new Error(error.message);
+    await this.gravarSolicitacao(id, { reembolsado: true, data_reembolso: new Date().toISOString() });
 
     const item = this.getById(id);
     this.auditLogService.log({
@@ -700,8 +667,6 @@ export class FundoFixoService {
       resource_id: id,
       description: `${admin.name} marcou como reembolsado: ${item?.material ?? ''} (${item?.solicitanteNome ?? ''})`,
     });
-
-    await this.load();
   }
 
   private async uploadAnexo(file: File, subpasta: 'orcamentos' | 'notas-fiscais'): Promise<string | null> {

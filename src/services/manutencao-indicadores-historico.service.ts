@@ -2,6 +2,7 @@ import { fetchAllRows } from '../utils/supabase-pagination';
 import { Injectable, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
+import { upsertVariosNaLista } from '../utils/lista-local';
 import { CategoriaIndicador, ImportarIndicadorHistoricoItem, IndicadorHistoricoSemana } from '../models/manutencao-programacao.model';
 
 interface IndicadorHistoricoRow {
@@ -80,7 +81,7 @@ export class ManutencaoIndicadoresHistoricoService {
     if (itens.length === 0) return;
 
     const agora = new Date().toISOString();
-    const { error } = await this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('manutencao_indicadores_historico')
       .upsert(
         itens.map(item => ({
@@ -99,10 +100,19 @@ export class ManutencaoIndicadoresHistoricoService {
           importado_em: agora,
         })),
         { onConflict: 'semana_inicio,categoria' },
-      );
+      )
+      .select('*');
     if (error) throw new Error(error.message);
 
-    this._itens.set([]); // força reload — load() só busca se estiver vazio
-    await this.load();
+    // Lista ainda não carregada: só as linhas importadas fariam o load() (que só busca
+    // com a lista vazia) achar que já tem tudo — aí carrega inteiro uma vez.
+    if (this._itens().length === 0) {
+      await this.load(true);
+      return;
+    }
+    // Upsert devolve as linhas inseridas e as atualizadas — mesma ordem do load.
+    const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+    this._itens.update(lista => upsertVariosNaLista(lista, (data ?? []).map(mapRow),
+      (a, b) => cmp(a.semanaInicio, b.semanaInicio) || cmp(a.id, b.id)));
   }
 }

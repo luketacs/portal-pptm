@@ -146,3 +146,61 @@ it('reconexão do canal marca tudo como possivelmente desatualizado', () => {
   status('SUBSCRIBED');
   expect(semanas(service)).toEqual(['*']);
 });
+
+// ── Cadastros (férias/semanas fechadas/parada) sem recarregar a tabela ────────
+// Fila de respostas por tabela; fila vazia = página vazia (fim da paginação).
+function servicoComTabelas(filas: Record<string, unknown[]>) {
+  const tabelas: string[] = [];
+  const proxima = (t: string) => Promise.resolve(filas[t]?.shift() ?? { data: [], error: null });
+  const from = (t: string) => {
+    tabelas.push(t);
+    const cadeia: Record<string, unknown> = {};
+    for (const m of ['insert', 'update', 'delete', 'select', 'eq', 'is', 'order', 'range', 'limit']) cadeia[m] = () => cadeia;
+    cadeia['single'] = () => proxima(t);
+    cadeia['then'] = (ok: (v: unknown) => unknown, erro: (e: unknown) => unknown) => proxima(t).then(ok, erro);
+    return cadeia;
+  };
+  const auth = { currentUser: () => ({ id: 'u1', name: 'Lucas', role: 'Admin' }) };
+  const service = new ManutencaoProgramacaoService({ client: { from } } as any, auth as any, { log: () => {} } as any);
+  return { service, tabelas };
+}
+
+const FERIAS = (id: string, inicio: string) =>
+  ({ id, tecnico_nome: 'Carlos Jr', tecnico_matricula: null, area: 'ELETRICA', data_inicio: inicio, data_fim: inicio });
+
+it('criarFerias entra na lista na ordem de data_inicio, sem reler a tabela', async () => {
+  const filas: Record<string, unknown[]> = { manutencao_ferias: [{ data: [FERIAS('f1', '2026-01-05'), FERIAS('f3', '2026-03-02')], error: null }] };
+  const { service, tabelas } = servicoComTabelas(filas);
+  await service.loadFerias();
+  filas['manutencao_ferias'].push({ data: FERIAS('f2', '2026-02-02'), error: null });
+  tabelas.length = 0;
+  await service.criarFerias({ tecnicoNome: 'Carlos Jr', tecnicoMatricula: null, area: 'ELETRICA', dataInicio: '2026-02-02', dataFim: '2026-02-02' });
+  expect(service.ferias().map(f => f.id)).toEqual(['f1', 'f2', 'f3']);
+  expect(tabelas).toEqual(['manutencao_ferias']);
+});
+
+it('fechar e reabrir semana atualizam o mapa local sem reler', async () => {
+  const filas: Record<string, unknown[]> = {
+    manutencao_semanas_fechadas: [
+      { data: { semana_inicio: '2026-10-05', fechado_por_nome: 'Lucas', fechado_em: '2026-10-09T10:00:00Z' }, error: null },
+      { data: [{ semana_inicio: '2026-10-05' }], error: null },
+    ],
+  };
+  const { service, tabelas } = servicoComTabelas(filas);
+  await service.fecharSemana('2026-10-05');
+  expect(service.infoSemanaFechada('2026-10-05')?.fechadoPorNome).toBe('Lucas');
+  await service.reabrirSemana('2026-10-05');
+  expect(service.semanaEstaFechada('2026-10-05')).toBe(false);
+  expect(tabelas).toEqual(['manutencao_semanas_fechadas', 'manutencao_semanas_fechadas']);
+});
+
+it('reabrir semana barrado pelo RLS (0 linhas) avisa em vez de fingir que reabriu', async () => {
+  const fechada = { semana_inicio: '2026-10-05', fechado_por_nome: 'Lucas', fechado_em: '2026-10-09T10:00:00Z' };
+  const filas: Record<string, unknown[]> = {
+    manutencao_semanas_fechadas: [{ data: [fechada], error: null }, { data: [], error: null }, { data: [fechada], error: null }],
+  };
+  const { service } = servicoComTabelas(filas);
+  await service.loadSemanasFechadas();
+  await expect(service.reabrirSemana('2026-10-05')).rejects.toThrow('permissão');
+  expect(service.semanaEstaFechada('2026-10-05')).toBe(true);
+});

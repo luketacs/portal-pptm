@@ -53,7 +53,8 @@ export class ModalReprogramarComponent {
     try {
       const novosDias = diasDaSemana(novaSemana).filter(d => d.label !== 'SAB' && d.label !== 'DOM').map(d => d.data);
       await this.manutencaoService.reprogramarOrdem(ordem.id, novaSemana, novosDias, this.recalcular());
-      await this.manutencaoPlanosService.load();
+      // Reprogramar pode mover o ciclo (trigger da migration 057) — relê só os ciclos.
+      await this.manutencaoPlanosService.loadCiclos();
 
       this.notificationService.showSuccess('Ordem reprogramada.');
       this.fechar();

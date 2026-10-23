@@ -232,7 +232,7 @@ export class TermografiaFormComponent implements OnInit {
         anexos,
       }, this.id ?? undefined);
       this.notificationService.showSuccess(`Termografia ${numeroEnsaio(numero)} ${this.id ? 'corrigida' : 'registrada'}: ${RESULTADO_LABEL[this.resultado()!]}.`);
-      await this.ensaioService.load();
+      // O service já encaixou a linha gravada nas listas; sem recarregar tudo.
       await this.router.navigate(['/eletrica/ensaios/termografia', id]);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao salvar a termografia.';

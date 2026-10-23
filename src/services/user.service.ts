@@ -8,6 +8,10 @@ import { AuditLogService } from './audit-log.service';
 import { NotificationService } from './notification.service';
 import { environment } from '../environments/environment';
 import { withRetry } from '../utils/retry';
+import { removerDaLista, upsertNaLista } from '../utils/lista-local';
+
+// Mesma ordem do loadUsers() (order=name.asc).
+const ordemPorNome = (a: UserProfile, b: UserProfile) => (a.name ?? '').localeCompare(b.name ?? '', 'pt-BR');
 
 @Injectable({ providedIn: 'root' })
 export class UserService {
@@ -28,13 +32,6 @@ export class UserService {
     private notificationService: NotificationService
   ) {
     this.supabase = supabaseService.client;
-  }
-
-  private async supabaseRestRequest(method: 'POST' | 'PATCH', path: string, body: unknown): Promise<{ data: null; error: import('../models/database.types').RestError | null }> {
-    if (method === 'POST') {
-      return this.supabaseRestService.post(path, body, this.OPERATION_TIMEOUT_MS);
-    }
-    return this.supabaseRestService.patch(path, body, this.OPERATION_TIMEOUT_MS);
   }
 
   async loadUsers(): Promise<void> {
@@ -73,6 +70,7 @@ export class UserService {
       return { success: false, error: 'Password is required for new users.' };
     }
 
+    let novoId: string | undefined;
     try {
       const token = await this.authService.getValidAccessToken();
       if (!token) {
@@ -102,10 +100,11 @@ export class UserService {
             ),
           ]) as Response;
 
-          const result = await response.json() as { success: boolean; error?: string };
+          const result = await response.json() as { success: boolean; error?: string; userId?: string };
           if (!result.success) {
             throw new Error(result.error || 'Erro ao criar usuário');
           }
+          novoId = result.userId;
         },
         { maxAttempts: 2 }
       );
@@ -115,8 +114,7 @@ export class UserService {
     }
 
     await new Promise(resolve => setTimeout(resolve, 300));
-    this._hasLoaded = false;
-    await this.loadUsers();
+    await this.aplicarPerfilCriado(novoId);
 
     const admin = this.authService.currentUser();
     if (admin) {
@@ -137,16 +135,20 @@ export class UserService {
 
   async updateUser(userId: string, updatedData: Partial<UserProfile>): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await this.supabaseRestRequest(
-        'PATCH',
+      const { data, error } = await this.supabaseRestService.patchReturning<UserProfile>(
         `profiles?id=eq.${encodeURIComponent(userId)}`,
-        updatedData
+        updatedData,
+        this.OPERATION_TIMEOUT_MS
       );
 
       if (error) {
         return { success: false, error: error.message };
       }
-      await this.loadUsers();
+      // RLS barra sem erro: 0 linhas = nada foi gravado.
+      if (!data?.length) {
+        return { success: false, error: 'Sem permissão para alterar este usuário.' };
+      }
+      this._users.update(l => upsertNaLista(l, data[0], ordemPorNome));
 
       const admin = this.authService.currentUser();
       const target = this._users().find(u => u.id === userId);
@@ -181,7 +183,8 @@ export class UserService {
       if (error) {
         this.notificationService.showError(`Erro ao excluir usuário: ${error.message}. Verifique se a função 'delete_user' existe no Supabase.`);
       } else {
-        await this.loadUsers();
+        // A RPC não devolve nada; sem erro = usuário excluído.
+        this._users.update(l => removerDaLista(l, userId));
 
         const admin = this.authService.currentUser();
         if (admin) {
@@ -199,6 +202,23 @@ export class UserService {
     } catch (error: any) {
       this.notificationService.showError(`Erro ao excluir usuário: ${error.message || 'Timeout'}`);
     }
+  }
+
+  // O usuário é criado pela API serverless (sem devolver o perfil): busca só a linha nova.
+  // Se a API não mandou o id ou a busca falhar, recarrega a lista inteira como antes.
+  private async aplicarPerfilCriado(userId: string | undefined): Promise<void> {
+    if (userId) {
+      const { data, error } = await this.supabaseRestService.get<UserProfile[]>(
+        `profiles?select=*&id=eq.${encodeURIComponent(userId)}`,
+        this.OPERATION_TIMEOUT_MS
+      );
+      if (!error && data?.length) {
+        this._users.update(l => upsertNaLista(l, data[0], ordemPorNome));
+        return;
+      }
+    }
+    this._hasLoaded = false;
+    await this.loadUsers();
   }
 
   async resetPassword(userId: string, email: string): Promise<{ success: boolean; error?: string }> {

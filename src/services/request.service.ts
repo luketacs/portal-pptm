@@ -7,6 +7,7 @@ import { AuditLogService } from './audit-log.service';
 import type { PurchaseRequestRow } from '../models/database.types';
 import { withRetry } from '../utils/retry';
 import { mapRequestFromDb as mapRequestFromDbUtil } from '../utils/request-mapper';
+import { removerDaLista, upsertNaLista } from '../utils/lista-local';
 
 interface StatusValidation {
   valid: boolean;
@@ -20,6 +21,13 @@ const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutos
 // paginação por offset uma SC escapava entre duas páginas e "sumia" até a próxima carga.
 const REQUEST_SELECT = 'select=*,requester:profiles!purchase_requests_requester_id_fkey(id,name,email,role)';
 const REQUEST_ORDER = 'order=requestdate.desc,id.desc';
+
+// Mesma ordem do REQUEST_ORDER, pra encaixar na lista em memória a SC gravada.
+function ordemRequests(a: PurchaseRequest, b: PurchaseRequest): number {
+  const porData = b.requestDate.getTime() - a.requestDate.getTime();
+  if (porData !== 0) return porData;
+  return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+}
 
 @Injectable({ providedIn: 'root' })
 export class RequestService {
@@ -116,10 +124,17 @@ export class RequestService {
     if (error || !data?.length || generation !== this._generation) return undefined;
 
     const found = this.mapRequestFromDb(data[0]);
-    this._requests.update(list =>
-      list.some(r => r.id === id) ? list.map(r => (r.id === id ? found : r)) : [...list, found]
-    );
+    this._requests.update(list => upsertNaLista(list, found, ordemRequests));
     return found;
+  }
+
+  // Aplica na lista a linha que o banco devolveu na gravação — sem recarregar todas as SCs.
+  private aplicarGravada(rows: PurchaseRequestRow[] | null): PurchaseRequest | undefined {
+    const row = rows?.[0];
+    if (!row) return undefined;
+    const gravada = this.mapRequestFromDb(row);
+    this._requests.update(list => upsertNaLista(list, gravada, ordemRequests));
+    return gravada;
   }
 
   private async getOrFetch(id: string): Promise<PurchaseRequest | undefined> {
@@ -168,8 +183,7 @@ export class RequestService {
 
   async addRequest(
     request: Omit<PurchaseRequest, 'id' | 'requestDate' | 'status' | 'history'>,
-    requester: UserProfile,
-    skipReload = false
+    requester: UserProfile
   ): Promise<void> {
     const historyEvent: HistoryEvent = {
       date: new Date(),
@@ -206,14 +220,23 @@ export class RequestService {
 
     await withRetry(
       async () => {
-        const { error } = await this.supabaseRestRequest('POST', 'purchase_requests', [newRequestData]);
+        const { data, error } = await this.supabaseRestService.postReturning<PurchaseRequestRow>(
+          `purchase_requests?${REQUEST_SELECT}`,
+          [newRequestData],
+          this.OPERATION_TIMEOUT_MS
+        );
         if (error?.code === '23505') {
+          // Gravou na tentativa anterior mas a resposta se perdeu: busca a linha que ficou.
           const existing = await this.supabaseRestService.get<Array<{ id: string }>>(
             `purchase_requests?id=eq.${newRequestData.id}&select=id`
           );
-          if (!existing.error && existing.data?.some(row => row.id === newRequestData.id)) return;
+          if (!existing.error && existing.data?.some(row => row.id === newRequestData.id)) {
+            await this.fetchById(newRequestData.id);
+            return;
+          }
         }
         if (error) throw error;
+        this.aplicarGravada(data);
       },
       { maxAttempts: this.MAX_RETRIES, retryIf: e => this.isNetworkError(e) }
     );
@@ -228,10 +251,6 @@ export class RequestService {
       description: `${requester.name} criou solicitação de ${request.materialCode} — ${request.description}`,
       metadata: { material_code: request.materialCode, priority: request.priority, material_type: request.materialType },
     });
-
-    if (!skipReload) {
-      await this.loadRequests(true);
-    }
   }
 
   private translateFieldName(fieldName: keyof PurchaseRequest): string {
@@ -420,19 +439,7 @@ export class RequestService {
       ...(changes.length > 0 ? { history: updatedHistory } : {}),
     });
 
-    await withRetry(
-      async () => {
-        const { error } = await this.supabaseRestRequest(
-          'PATCH',
-          `purchase_requests?id=eq.${encodeURIComponent(id)}`,
-          updatePayload
-        );
-        if (error) throw new Error(this.formatSupabaseError(error));
-      },
-      { maxAttempts: this.MAX_RETRIES, retryIf: e => this.isNetworkError(e) }
-    );
-
-    await this.loadRequests(true);
+    await this.patchAplicando(id, updatePayload);
 
     if (changes.length > 0) {
       this.auditLogService.log({
@@ -445,6 +452,29 @@ export class RequestService {
         metadata: { material_code: req.materialCode, fields_changed: changes },
       });
     }
+  }
+
+  // PATCH pedindo a linha de volta. O RLS barra UPDATE sem erro (0 linhas) — sem linha
+  // devolvida, a gravação não aconteceu.
+  private async patchAplicando(id: string, payload: Record<string, unknown>): Promise<PurchaseRequest> {
+    let rows: PurchaseRequestRow[] | null = null;
+    await withRetry(
+      async () => {
+        const { data, error } = await this.supabaseRestService.patchReturning<PurchaseRequestRow>(
+          `purchase_requests?id=eq.${encodeURIComponent(id)}&${REQUEST_SELECT}`,
+          payload,
+          this.OPERATION_TIMEOUT_MS
+        );
+        if (error) throw new Error(this.formatSupabaseError(error));
+        rows = data;
+      },
+      { maxAttempts: this.MAX_RETRIES, retryIf: e => this.isNetworkError(e) }
+    );
+    const gravada = this.aplicarGravada(rows);
+    if (!gravada) {
+      throw new Error('Alteração não gravada: sem permissão para editar esta solicitação no status atual.');
+    }
+    return gravada;
   }
 
   validateStatusTransition(request: PurchaseRequest, newStatus: RequestStatus, isAdmin = false): StatusValidation {
@@ -546,21 +576,7 @@ export class RequestService {
 
     const sanitizedPayload = this.sanitizeUpdatePayload(payload);
 
-    await withRetry(
-      async () => {
-        const { error } = await this.supabaseRestRequest(
-          'PATCH',
-          `purchase_requests?id=eq.${encodeURIComponent(id)}`,
-          sanitizedPayload
-        );
-        if (error) throw new Error(this.formatSupabaseError(error));
-      },
-      { maxAttempts: this.MAX_RETRIES, retryIf: e => this.isNetworkError(e) }
-    );
-
-    await this.loadRequests(true);
-
-    const refreshedRequest = this.getById(id);
+    const refreshedRequest = await this.patchAplicando(id, sanitizedPayload);
     this.auditLogService.log({
       user_id: user.id,
       user_name: user.name,
@@ -623,8 +639,7 @@ export class RequestService {
       metadata: { material_code: request.materialCode, status: request.status },
     });
 
-    this._hasLoaded = false;
-    await this.loadRequests(true);
+    this._requests.update(list => removerDaLista(list, id));
   }
 
   private async createNotificationForRequester(request: PurchaseRequest, title: string, message: string): Promise<void> {

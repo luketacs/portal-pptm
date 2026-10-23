@@ -22,15 +22,17 @@ export class MaterialService {
     private authService: AuthService
   ) {}
 
+  // Gravações pedem a linha de volta (return=representation): quem chama aplica na lista
+  // em memória em vez de recarregar a tabela inteira.
   private async supabaseRestRequest(
     method: 'POST' | 'PATCH',
     path: string,
     body: any
-  ): Promise<{ data: null; error: any }> {
+  ): Promise<{ data: Material[] | null; error: any }> {
     if (method === 'POST') {
-      return this.supabaseRestService.post(path, body, this.SUPABASE_OPERATION_TIMEOUT_MS);
+      return this.supabaseRestService.postReturning<Material>(path, body, this.SUPABASE_OPERATION_TIMEOUT_MS);
     }
-    return this.supabaseRestService.patch(path, body, this.SUPABASE_OPERATION_TIMEOUT_MS);
+    return this.supabaseRestService.patchReturning<Material>(path, body, this.SUPABASE_OPERATION_TIMEOUT_MS);
   }
 
   private async supabaseRestGet<T>(path: string): Promise<{ data: T | null; error: any }> {
@@ -170,7 +172,7 @@ export class MaterialService {
         created_by: userId,
       };
 
-      const { error } = await this.supabaseRestRequest('POST', 'materials', [insertData]);
+      const { data, error } = await this.supabaseRestRequest('POST', 'materials', [insertData]);
 
       if (error) {
         if (error.code === '23505' && String(error.message || '').includes('codigo')) {
@@ -179,7 +181,7 @@ export class MaterialService {
         return { data: null, error };
       }
 
-      return { data: null, error: null };
+      return { data: data?.[0] ?? null, error: null };
     } catch (err) {
       return { data: null, error: err };
     }
@@ -280,7 +282,7 @@ export class MaterialService {
         return { data: null, error: { message: 'NCM deve conter exatamente 8 dígitos numéricos' } };
       }
 
-      const { error } = await this.supabaseRestRequest(
+      const { data: gravados, error } = await this.supabaseRestRequest(
         'PATCH',
         `materials?id=eq.${encodeURIComponent(id)}`,
         updates
@@ -291,6 +293,10 @@ export class MaterialService {
           return { data: null, error: { message: 'Já existe um material com este código' } };
         }
         return { data: null, error };
+      }
+      // RLS barra sem erro: 0 linhas = nada foi gravado.
+      if (!gravados?.length) {
+        return { data: null, error: { message: 'Sem permissão para alterar este material.' } };
       }
 
       if (originalMaterial && updatedBy) {
@@ -323,7 +329,7 @@ export class MaterialService {
         });
       }
 
-      return { data: null, error: null };
+      return { data: gravados[0], error: null };
     } catch (err) {
       return { data: null, error: err };
     }
@@ -337,7 +343,7 @@ export class MaterialService {
     try {
       const { data: material } = adminInfo ? await this.getMaterialById(id) : { data: null };
 
-      const { error } = await this.supabaseRestRequest(
+      const { data: gravados, error } = await this.supabaseRestRequest(
         'PATCH',
         `materials?id=eq.${encodeURIComponent(id)}`,
         { status }
@@ -345,6 +351,10 @@ export class MaterialService {
 
       if (error) {
         return { data: null, error };
+      }
+      // RLS barra sem erro: 0 linhas = nada foi gravado.
+      if (!gravados?.length) {
+        return { data: null, error: { message: 'Sem permissão para alterar este material.' } };
       }
 
       if (adminInfo && material?.created_by && material.created_by !== adminInfo.id) {
@@ -365,7 +375,7 @@ export class MaterialService {
         });
       }
 
-      return { data: null, error: null };
+      return { data: gravados[0], error: null };
     } catch (err) {
       return { data: null, error: err };
     }

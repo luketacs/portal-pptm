@@ -761,7 +761,8 @@ export class ManutencaoPlanosComponent implements OnInit {
         falhas.push(`${o.semanaInicio.split('-').reverse().join('/')}: ${err instanceof Error ? err.message : 'erro'}`);
       }
     }
-    await this.manutencaoPlanosService.load();
+    // Excluir OS só mexe nos ciclos (trigger da migration 057) — relê só eles.
+    await this.manutencaoPlanosService.loadCiclos();
     this.isProcessando.set(false);
     if (falhas.length) this.notificationService.showError(`${excluidas} OS excluída(s); não foi possível excluir: ${falhas.join('; ')}`);
     else this.notificationService.showSuccess(`${excluidas} OS excluída(s).`);
@@ -786,7 +787,8 @@ export class ManutencaoPlanosComponent implements OnInit {
         falhas.push(`${p.plano.codigo}: ${err instanceof Error ? err.message : 'erro'}`);
       }
     }
-    await this.manutencaoPlanosService.load();
+    // Realinhar move o ciclo via trigger (migration 057) — relê só os ciclos.
+    await this.manutencaoPlanosService.loadCiclos();
     this.isProcessando.set(false);
     const ok = alvos.length - falhas.length;
     if (falhas.length) this.notificationService.showError(`${ok} ajustado(s); falhou: ${falhas.join('; ')}`);

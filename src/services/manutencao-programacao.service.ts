@@ -8,6 +8,7 @@ import { AuditLogService } from './audit-log.service';
 import { avaliarGravacao, podeEditarSemanaFechada } from '../utils/manutencao-regras';
 import { comLimiteDeTempo } from '../utils/retry';
 import { cicloCoerenteComOrdem } from '../utils/manutencao-planos-saude';
+import { removerDaLista, upsertNaLista } from '../utils/lista-local';
 import {
   AtestadoTecnico, AtividadeChecklist, CategoriaIndicador, ConsultaSigmaResultado, CreateManutencaoOrdemRequest, EditarManutencaoOrdemRequest,
   EquipeApoioItem, FeriasTecnico, ManutencaoArea, ManutencaoOrdem, ManutencaoTipo, OperadorEscalaApoio, ParadaPlanta,
@@ -118,6 +119,34 @@ function mapRow(r: ManutencaoOrdemRow): ManutencaoOrdem {
 // createdAt fica de fora: o mesmo timestamp pode vir formatado diferente pela API e pelo realtime.
 function mesmoConteudo(a: ManutencaoOrdem, b: ManutencaoOrdem): boolean {
   return JSON.stringify({ ...a, createdAt: null }) === JSON.stringify({ ...b, createdAt: null });
+}
+
+// Comparadores que reproduzem o ORDER BY de cada load — a linha devolvida pela gravação
+// entra na lista local na mesma posição em que o load a colocaria.
+const compararTexto = (a: string, b: string): number => a.localeCompare(b, 'pt-BR');
+const compararCodigo = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+const porNome = (a: { nome: string }, b: { nome: string }): number => compararTexto(a.nome, b.nome);
+const porPeriodo = (a: { dataInicio: string; id: string }, b: { dataInicio: string; id: string }): number =>
+  compararCodigo(a.dataInicio, b.dataInicio) || compararCodigo(a.id, b.id);
+
+// Férias e atestados têm o mesmo formato de linha.
+const CAMPOS_PERIODO = 'id, tecnico_nome, tecnico_matricula, area, data_inicio, data_fim';
+interface PeriodoTecnicoRow {
+  id: string; tecnico_nome: string; tecnico_matricula: string | null; area: string; data_inicio: string; data_fim: string;
+}
+function mapPeriodoRow(r: PeriodoTecnicoRow): FeriasTecnico & AtestadoTecnico {
+  return {
+    id: r.id,
+    tecnicoNome: r.tecnico_nome,
+    tecnicoMatricula: r.tecnico_matricula,
+    area: r.area as ManutencaoArea,
+    dataInicio: r.data_inicio,
+    dataFim: r.data_fim,
+  };
+}
+
+function mapRecursoEspecialRow(r: { id: string; opcao: string; empresa_apoio: string }): RecursoEspecialItem {
+  return { id: r.id, opcao: r.opcao, empresaApoio: r.empresa_apoio };
 }
 
 @Injectable({ providedIn: 'root' })
@@ -731,6 +760,8 @@ export class ManutencaoProgramacaoService {
   async reprogramarOrdem(id: string, novaSemanaInicio: string, novosDiasPrevistos: string[], recalcularCiclo = false): Promise<void> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
+    // Releitura proposital ANTES de validar: conflito/férias/semana fechada precisam
+    // enxergar o que outros usuários gravaram desde que a tela abriu.
     await Promise.all([this.load(), this.loadFerias(), this.loadAtestados(), this.loadSemanasFechadas()]);
     const item = this.getById(id);
     if (!item) throw new Error('Ordem não encontrada. Atualize a programação.');
@@ -849,11 +880,14 @@ export class ManutencaoProgramacaoService {
     const nomeLimpo = nome.trim().toUpperCase();
     if (!nomeLimpo) throw new Error('Informe o nome da equipe/empresa.');
 
-    const { error } = await this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('manutencao_apoio_equipes')
-      .insert({ nome: nomeLimpo, criado_por_id: user.id, criado_por_nome: user.name });
+      .insert({ nome: nomeLimpo, criado_por_id: user.id, criado_por_nome: user.name })
+      .select('id, nome')
+      .single();
     if (error) throw new Error(error.code === '23505' ? 'Essa equipe/empresa já está cadastrada.' : error.message);
-    await this.loadApoioCadastros();
+    // Linha devolvida pelo insert entra direto na lista (mesma ordem do load: nome).
+    this._equipesApoio.update(lista => upsertNaLista(lista, data as EquipeApoioItem, porNome));
   }
 
   async excluirEquipeApoio(id: string): Promise<void> {
@@ -864,7 +898,7 @@ export class ManutencaoProgramacaoService {
       .select('id');
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) throw new Error('Não foi possível excluir (permissão do banco).');
-    await this.loadApoioCadastros();
+    this._equipesApoio.update(lista => removerDaLista(lista, id));
   }
 
   // ── Cadastro de recursos especiais (Munck/Guindaste/Andaime/Fontebras...) ───
@@ -875,7 +909,7 @@ export class ManutencaoProgramacaoService {
       .select('id, opcao, empresa_apoio')
       .order('opcao');
     if (error) throw new Error(error.message);
-    this._recursosEspeciais.set((data ?? []).map(r => ({ id: r.id, opcao: r.opcao, empresaApoio: r.empresa_apoio })));
+    this._recursosEspeciais.set((data ?? []).map(mapRecursoEspecialRow));
   }
 
   async criarRecursoEspecial(opcao: string, empresaApoio: string): Promise<void> {
@@ -886,11 +920,13 @@ export class ManutencaoProgramacaoService {
     if (!opcaoLimpa) throw new Error('Informe o rótulo do recurso.');
     if (!empresaLimpa) throw new Error('Informe pra quem esse recurso espelha no Apoio.');
 
-    const { error } = await this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('manutencao_recursos_especiais')
-      .insert({ opcao: opcaoLimpa, empresa_apoio: empresaLimpa, criado_por_id: user.id, criado_por_nome: user.name });
+      .insert({ opcao: opcaoLimpa, empresa_apoio: empresaLimpa, criado_por_id: user.id, criado_por_nome: user.name })
+      .select('id, opcao, empresa_apoio')
+      .single();
     if (error) throw new Error(error.code === '23505' ? 'Esse recurso já está cadastrado.' : error.message);
-    await this.loadRecursosEspeciais();
+    this._recursosEspeciais.update(lista => upsertNaLista(lista, mapRecursoEspecialRow(data), (a, b) => compararTexto(a.opcao, b.opcao)));
   }
 
   async excluirRecursoEspecial(id: string): Promise<void> {
@@ -901,7 +937,7 @@ export class ManutencaoProgramacaoService {
       .select('id');
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) throw new Error('Não foi possível excluir (permissão do banco).');
-    await this.loadRecursosEspeciais();
+    this._recursosEspeciais.update(lista => removerDaLista(lista, id));
   }
 
   // ── Parada da planta (Admin-only) ────────────────────────────────────────────
@@ -921,21 +957,30 @@ export class ManutencaoProgramacaoService {
   async iniciarParadaPlanta(): Promise<void> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
-    const { error } = await this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('manutencao_parada_planta')
-      .insert({ data_inicio: new Date().toISOString().slice(0, 10), criado_por_id: user.id, criado_por_nome: user.name });
+      .insert({ data_inicio: new Date().toISOString().slice(0, 10), criado_por_id: user.id, criado_por_nome: user.name })
+      .select('id, data_inicio, data_fim')
+      .single();
     if (error) throw new Error(error.message);
-    await this.loadParadaAtual();
+    // A recém-criada é a aberta mais recente (início = hoje) — é o que o load acharia.
+    this._paradaAtual.set({ id: data.id, dataInicio: data.data_inicio, dataFim: data.data_fim });
   }
 
   async encerrarParadaPlanta(): Promise<void> {
     const atual = this._paradaAtual();
     if (!atual) return;
-    const { error } = await this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('manutencao_parada_planta')
       .update({ data_fim: new Date().toISOString().slice(0, 10) })
-      .eq('id', atual.id);
+      .eq('id', atual.id)
+      .select('id');
     if (error) throw new Error(error.message);
+    // RLS barra o UPDATE sem erro — 0 linhas = nada foi encerrado.
+    if (!data || data.length === 0) throw new Error('Não foi possível encerrar a parada (permissão do banco).');
+    // Pode haver outra parada aberta mais antiga (o load pega a mais recente); nesse
+    // caso raro relê só a parada atual, que é uma linha.
+    this._paradaAtual.set(null);
     await this.loadParadaAtual();
   }
 
@@ -974,9 +1019,11 @@ export class ManutencaoProgramacaoService {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
     if (user.role !== 'Admin') throw new Error('Só Admin pode fechar a semana.');
-    const { error } = await this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('manutencao_semanas_fechadas')
-      .insert({ semana_inicio: semanaInicio, fechado_por_id: user.id, fechado_por_nome: user.name });
+      .insert({ semana_inicio: semanaInicio, fechado_por_id: user.id, fechado_por_nome: user.name })
+      .select('semana_inicio, fechado_por_nome, fechado_em')
+      .single();
     if (error) throw new Error(error.message);
     this.auditLogService.log({
       user_id: user.id,
@@ -986,18 +1033,26 @@ export class ManutencaoProgramacaoService {
       description: `${user.name} fechou a programação da semana de ${semanaInicio}`,
       metadata: { semana_inicio: semanaInicio },
     });
-    await this.loadSemanasFechadas();
+    this._semanasFechadas.update(atual => new Map(atual).set(data.semana_inicio as string, {
+      fechadoPorNome: data.fechado_por_nome as string, fechadoEm: data.fechado_em as string,
+    }));
   }
 
   async reabrirSemana(semanaInicio: string): Promise<void> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');
     if (user.role !== 'Admin') throw new Error('Só Admin pode reabrir a semana.');
-    const { error } = await this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('manutencao_semanas_fechadas')
       .delete()
-      .eq('semana_inicio', semanaInicio);
+      .eq('semana_inicio', semanaInicio)
+      .select('semana_inicio');
     if (error) throw new Error(error.message);
+    if (!data || data.length === 0) {
+      // 0 linhas: ou outro Admin já reabriu, ou o RLS barrou sem erro — o banco decide.
+      await this.loadSemanasFechadas();
+      if (this.semanaEstaFechada(semanaInicio)) throw new Error('Não foi possível reabrir a semana (permissão do banco).');
+    }
     this.auditLogService.log({
       user_id: user.id,
       user_name: user.name,
@@ -1006,7 +1061,11 @@ export class ManutencaoProgramacaoService {
       description: `${user.name} reabriu a programação da semana de ${semanaInicio}`,
       metadata: { semana_inicio: semanaInicio },
     });
-    await this.loadSemanasFechadas();
+    this._semanasFechadas.update(atual => {
+      const novo = new Map(atual);
+      novo.delete(semanaInicio);
+      return novo;
+    });
   }
 
   async criarOperadorEscala(nome: string, equipe: 'A' | 'B' | 'C' | 'D'): Promise<void> {
@@ -1015,11 +1074,15 @@ export class ManutencaoProgramacaoService {
     const nomeLimpo = nome.trim();
     if (!nomeLimpo) throw new Error('Informe o nome do operador.');
 
-    const { error } = await this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('manutencao_apoio_escala')
-      .insert({ nome: nomeLimpo, equipe, criado_por_id: user.id, criado_por_nome: user.name });
+      .insert({ nome: nomeLimpo, equipe, criado_por_id: user.id, criado_por_nome: user.name })
+      .select('id, nome, equipe')
+      .single();
     if (error) throw new Error(error.message);
-    await this.loadApoioCadastros();
+    // Mesma ordem do load: equipe, depois nome.
+    this._escalaApoio.update(lista => upsertNaLista(lista, data as OperadorEscalaApoio,
+      (a, b) => compararTexto(a.equipe, b.equipe) || porNome(a, b)));
   }
 
   async excluirOperadorEscala(id: string): Promise<void> {
@@ -1030,7 +1093,7 @@ export class ManutencaoProgramacaoService {
       .select('id');
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) throw new Error('Não foi possível excluir (permissão do banco).');
-    await this.loadApoioCadastros();
+    this._escalaApoio.update(lista => removerDaLista(lista, id));
   }
 
   // ── Férias ────────────────────────────────────────────────────────────────
@@ -1038,17 +1101,10 @@ export class ManutencaoProgramacaoService {
   async loadFerias(): Promise<void> {
     const { data, error } = await fetchAllRows((from, to) => this.supabaseService.client
       .from('manutencao_ferias')
-      .select('id, tecnico_nome, tecnico_matricula, area, data_inicio, data_fim')
+      .select(CAMPOS_PERIODO)
       .order('data_inicio').order('id').range(from, to));
     if (error) throw new Error(error.message);
-    this._ferias.set((data ?? []).map(r => ({
-      id: r.id,
-      tecnicoNome: r.tecnico_nome,
-      tecnicoMatricula: r.tecnico_matricula,
-      area: r.area as ManutencaoArea,
-      dataInicio: r.data_inicio,
-      dataFim: r.data_fim,
-    })));
+    this._ferias.set((data ?? []).map(mapPeriodoRow));
   }
 
   async criarFerias(params: {
@@ -1060,7 +1116,7 @@ export class ManutencaoProgramacaoService {
     if (!params.dataInicio || !params.dataFim) throw new Error('Informe início e fim das férias.');
     if (params.dataFim < params.dataInicio) throw new Error('A data final não pode ser antes da inicial.');
 
-    const { error } = await this.supabaseService.client.from('manutencao_ferias').insert({
+    const { data, error } = await this.supabaseService.client.from('manutencao_ferias').insert({
       tecnico_nome: params.tecnicoNome,
       tecnico_matricula: params.tecnicoMatricula,
       area: params.area,
@@ -1068,7 +1124,7 @@ export class ManutencaoProgramacaoService {
       data_fim: params.dataFim,
       criado_por_id: user.id,
       criado_por_nome: user.name,
-    });
+    }).select(CAMPOS_PERIODO).single();
     if (error) throw new Error(error.message);
 
     this.auditLogService.log({
@@ -1079,7 +1135,7 @@ export class ManutencaoProgramacaoService {
       description: `${user.name} cadastrou férias de ${params.tecnicoNome} (${params.dataInicio} a ${params.dataFim})`,
     });
 
-    await this.loadFerias();
+    this._ferias.update(lista => upsertNaLista(lista, mapPeriodoRow(data), porPeriodo));
   }
 
   async excluirFerias(id: string): Promise<void> {
@@ -1104,7 +1160,7 @@ export class ManutencaoProgramacaoService {
       description: `${user.name} excluiu férias de ${item?.tecnicoNome ?? ''}`,
     });
 
-    await this.loadFerias();
+    this._ferias.update(lista => removerDaLista(lista, id));
   }
 
   // ── Atestado médico ──────────────────────────────────────────────────────────
@@ -1112,17 +1168,10 @@ export class ManutencaoProgramacaoService {
   async loadAtestados(): Promise<void> {
     const { data, error } = await fetchAllRows((from, to) => this.supabaseService.client
       .from('manutencao_atestados')
-      .select('id, tecnico_nome, tecnico_matricula, area, data_inicio, data_fim')
+      .select(CAMPOS_PERIODO)
       .order('data_inicio').order('id').range(from, to));
     if (error) throw new Error(error.message);
-    this._atestados.set((data ?? []).map(r => ({
-      id: r.id,
-      tecnicoNome: r.tecnico_nome,
-      tecnicoMatricula: r.tecnico_matricula,
-      area: r.area as ManutencaoArea,
-      dataInicio: r.data_inicio,
-      dataFim: r.data_fim,
-    })));
+    this._atestados.set((data ?? []).map(mapPeriodoRow));
   }
 
   async criarAtestado(params: {
@@ -1134,7 +1183,7 @@ export class ManutencaoProgramacaoService {
     if (!params.dataInicio || !params.dataFim) throw new Error('Informe início e fim do atestado.');
     if (params.dataFim < params.dataInicio) throw new Error('A data final não pode ser antes da inicial.');
 
-    const { error } = await this.supabaseService.client.from('manutencao_atestados').insert({
+    const { data, error } = await this.supabaseService.client.from('manutencao_atestados').insert({
       tecnico_nome: params.tecnicoNome,
       tecnico_matricula: params.tecnicoMatricula,
       area: params.area,
@@ -1142,7 +1191,7 @@ export class ManutencaoProgramacaoService {
       data_fim: params.dataFim,
       criado_por_id: user.id,
       criado_por_nome: user.name,
-    });
+    }).select(CAMPOS_PERIODO).single();
     if (error) throw new Error(error.message);
 
     this.auditLogService.log({
@@ -1153,7 +1202,7 @@ export class ManutencaoProgramacaoService {
       description: `${user.name} cadastrou atestado médico de ${params.tecnicoNome} (${params.dataInicio} a ${params.dataFim})`,
     });
 
-    await this.loadAtestados();
+    this._atestados.update(lista => upsertNaLista(lista, mapPeriodoRow(data), porPeriodo));
   }
 
   async excluirAtestado(id: string): Promise<void> {
@@ -1178,6 +1227,6 @@ export class ManutencaoProgramacaoService {
       description: `${user.name} excluiu atestado médico de ${item?.tecnicoNome ?? ''}`,
     });
 
-    await this.loadAtestados();
+    this._atestados.update(lista => removerDaLista(lista, id));
   }
 }
