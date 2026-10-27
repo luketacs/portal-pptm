@@ -14,7 +14,7 @@ import { EnsaioIsolamento, Motor } from '../../../models/eletrica-ensaio.model';
 import { CorSerie, SerieLinha, drawLinhas, limparGrafico } from '../../../utils/charts';
 import {
   CLASSE_LABEL, RESULTADO_BADGE, RESULTADO_LABEL, SITUACAO_BADGE, SITUACAO_LABEL, rotuloAplicacao, rotuloLocal, TIPO_ACIONAMENTO_LABEL, TIPO_BOBINA_LABEL, avaliarEnsaio, circuitoLabel, criterioDoEnsaio,
-  formatarIndice, formatarMohm, formatarNumero, ipMinimo, irMinimoMohm, numeroEnsaio, potenciaTexto,
+  formatarIndice, formatarMohm, formatarNumero, ipMinimo, IR_LIMITE_IP_MOHM, numeroEnsaio, potenciaTexto,
   tensaoEnsaioRecomendada,
 } from '../../../utils/eletrica-ensaio';
 import { dataBr } from '../../../utils/eletrica-reparo';
@@ -80,7 +80,7 @@ export class MotorDetalheComponent implements OnInit, OnDestroy {
     if (!m) return null;
     const rec = tensaoEnsaioRecomendada(m.tensaoV);
     return {
-      irMin: irMinimoMohm(m.tipoBobina, m.tensaoV),
+      irMin: IR_LIMITE_IP_MOHM,
       ipMin: ipMinimo(m.classeIsolamento),
       tensaoRec: rec.min === rec.max ? `${rec.min} V` : `${rec.min} a ${rec.max} V`,
     };
@@ -132,7 +132,7 @@ export class MotorDetalheComponent implements OnInit, OnDestroy {
           ariaLabel: 'Resistência de isolamento de 1 minuto corrigida a 40 °C, por ensaio',
           eixoX: 'data', formatX: dataCurta, rotuloX: 'Data do ensaio',
           formatY: v => `${formatarMohm(v)} MΩ`, yLog: true,
-          referencias: [{ valor: c.irMin, rotulo: `Mínimo IEEE 43: ${formatarMohm(c.irMin)} MΩ` }],
+          referencias: [{ valor: c.irMin, rotulo: `Bom: ${formatarMohm(c.irMin)} MΩ` }],
         });
       }
       if (ip) {
@@ -140,7 +140,7 @@ export class MotorDetalheComponent implements OnInit, OnDestroy {
           ariaLabel: 'Índice de polarização por ensaio',
           eixoX: 'data', formatX: dataCurta, rotuloX: 'Data do ensaio',
           formatY: v => formatarIndice(v),
-          referencias: [{ valor: c.ipMin, rotulo: `Mínimo IEEE 43: ${formatarIndice(c.ipMin)}` }],
+          referencias: [{ valor: c.ipMin, rotulo: `Mínimo IEEE 43 (abaixo de ${formatarMohm(c.irMin)} MΩ): ${formatarIndice(c.ipMin)}` }],
         });
       }
     });

@@ -3,7 +3,7 @@
     <a [routerLink]="id ? ['/eletrica/ensaios/motores', id] : '/eletrica/ensaios'" class="text-xs font-semibold text-blue-600 hover:text-blue-700">← Voltar</a>
     <h1 class="text-2xl font-bold text-gray-800 mt-1">{{ id ? 'Editar motor' : 'Cadastrar motor' }}</h1>
     <p class="text-sm text-gray-500 mt-1">
-      Dados da placa do motor. Tensão, classe de isolamento e tipo de bobina definem o critério da IEEE 43-2013.
+      Dados da placa do motor. Tensão e classe de isolamento definem a tensão de ensaio e o IP mínimo.
     </p>
   </div>
 
@@ -132,9 +132,9 @@
 
         @if (criterio(); as c) {
           <div class="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-900 space-y-0.5">
-            <p class="font-semibold">Critério IEEE 43-2013 para este motor</p>
-            <p>IR 1 min corrigida a 40 °C: mínimo {{ c.irMin }}</p>
-            <p>Índice de polarização: mínimo {{ c.ipMin }}</p>
+            <p class="font-semibold">Critério para este motor</p>
+            <p>IR 1 min corrigida a 40 °C a partir de {{ limiteIp }} MΩ (Bom ou melhor): aprovado</p>
+            <p>Abaixo de {{ limiteIp }} MΩ: índice de polarização mínimo {{ c.ipMin }} (IEEE 43); abaixo de 2 MΩ reprova</p>
             <p>Tensão de ensaio recomendada: {{ c.tensaoEnsaio }} CC</p>
           </div>
         }

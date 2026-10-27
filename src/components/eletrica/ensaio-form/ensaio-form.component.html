@@ -72,9 +72,9 @@
             </dl>
             @if (criterio(); as c) {
               <div class="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-900 space-y-0.5">
-                <p class="font-semibold">Critério IEEE 43-2013</p>
-                <p>IR 1 min a 40 °C ≥ {{ mohm(c.irMin) }} MΩ ({{ c.irMinTexto }})</p>
-                <p>IP ≥ {{ indice(c.ipMin) }}</p>
+                <p class="font-semibold">Critério</p>
+                <p>IR 1 min a 40 °C ≥ {{ limiteIp }} MΩ (Bom ou melhor): aprovado</p>
+                <p>Abaixo de {{ limiteIp }} MΩ: IP ≥ {{ indice(c.ipMin) }} (IEEE 43); abaixo de 2 MΩ reprova</p>
                 <p>Tensão de ensaio: {{ c.tensaoRecTexto }} CC</p>
               </div>
             }
@@ -196,33 +196,30 @@
                     <input type="checkbox" class="h-4 w-4 rounded border-slate-300" [checked]="l.foraEscala"
                       (change)="alternarForaEscala(i, $any($event.target).checked)" [attr.aria-label]="circuitoLabel(l.circuito) + ' — fundo de escala'" />
                   </td>
-                  <td class="py-2 px-2 text-right tabular-nums text-gray-800">{{ mohm(a?.r1min40) }}</td>
+                  <td class="py-2 px-2 text-right tabular-nums text-gray-800 whitespace-nowrap">
+                    {{ mohm(a?.r1min40) }}
+                    @if (a?.faixa; as fx) { <span class="block text-xs font-semibold" [ngClass]="faixaCor[fx]">{{ faixaLabel[fx] }}</span> }
+                  </td>
                   <td class="py-2 px-2 text-right tabular-nums text-gray-500">{{ indice(a?.ia) }}</td>
-                  <td class="py-2 px-2 text-right tabular-nums text-gray-800">
+                  <td class="py-2 px-2 text-right tabular-nums text-gray-800" [title]="a?.ipMotivoNa ?? ''">
                     {{ a?.ipSituacao === 'na' ? 'N/A' : indice(a?.ip) }}
                   </td>
                   <td class="py-2 pl-2 text-center">
                     @if (a?.situacao === 'aprovado') {
                       <span class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-800">✓ OK</span>
                     } @else if (a?.situacao === 'reprovado') {
-                      <span class="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-800"
-                        [title]="(a?.ir === 'falha' ? 'IR abaixo do mínimo. ' : '') + (a?.ipSituacao === 'falha' ? 'IP abaixo do mínimo.' : '')">
-                        ✕ {{ a?.ir === 'falha' && a?.ipSituacao === 'falha' ? 'IR e IP' : a?.ir === 'falha' ? 'IR baixa' : 'IP baixo' }}
-                      </span>
+                      <span class="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-800">✕ {{ motivo(a!) }}</span>
                     } @else {
                       <span class="text-xs text-gray-400">—</span>
                     }
                   </td>
                 </tr>
-                @if (a?.ipMotivoNa) {
-                  <tr><td></td><td colspan="8" class="pb-2 text-xs text-gray-500">IP não se aplica: {{ a?.ipMotivoNa }}.</td></tr>
-                }
               }
             </tbody>
           </table>
         </div>
         <p class="text-xs text-gray-500">
-          IA (1 min ÷ 30 s) é só informativo: a norma não define limite. A leitura de 10 min pode ficar em branco quando IR 1 min a 40 °C passar de 5.000 MΩ.
+          IA (1 min ÷ 30 s) e IP (10 min ÷ 1 min) só são calculados com IR 1 min a 40 °C abaixo de {{ limiteIp }} MΩ; acima disso as leituras de 30 s e 10 min podem ficar em branco. IA é só informativo.
         </p>
 
         <!-- Resultado -->

@@ -1,7 +1,7 @@
 import { EnsaioIsolamento, Motor } from '../models/eletrica-ensaio.model';
 import {
-  CLASSE_LABEL, IR_LIMITE_IP_MOHM, SITUACAO_LABEL, rotuloAplicacao, rotuloLocal, RESULTADO_LABEL, TIPO_ACIONAMENTO_LABEL, TIPO_BOBINA_CURTO, TIPO_BOBINA_LABEL, avaliarEnsaio, circuitoLabel, criterioDoEnsaio,
-  fatorCorrecao40, formatarIndice, formatarMohm, formatarNumero, ipMinimo, irMinimoMohm, numeroEnsaio,
+  CLASSE_LABEL, IR_LIMITE_IP_MOHM, SITUACAO_LABEL, rotuloAplicacao, rotuloLocal, RESULTADO_LABEL, TIPO_ACIONAMENTO_LABEL, TIPO_BOBINA_LABEL, avaliarEnsaio, circuitoLabel, criterioDoEnsaio,
+  fatorCorrecao40, formatarIndice, formatarMohm, formatarNumero, ipMinimo, FAIXA_LABEL, FAIXAS_TEXTO, motivoReprovacao, numeroEnsaio,
   potenciaTexto, temperaturaCorrecao, tensaoEnsaioAdequada, tensaoEnsaioRecomendada,
 } from './eletrica-ensaio';
 import { dataBr } from './eletrica-reparo';
@@ -86,23 +86,23 @@ export async function gerarPdfEnsaio(e: EnsaioIsolamento, m: Motor, anterior: En
       return [
         circuitoLabel(l.circuito) + (l.foraEscala ? ' *' : ''),
         formatarMohm(l.r30s), formatarMohm(l.r1min), formatarMohm(l.r10min),
-        formatarMohm(a.r1min40), formatarIndice(a.ia), ip, SITUACAO_TEXTO[a.situacao],
+        formatarMohm(a.r1min40) + (a.faixa ? ` (${FAIXA_LABEL[a.faixa]})` : ''), formatarIndice(a.ia), ip,
+        a.situacao === 'reprovado' ? `Reprovado – ${motivoReprovacao(a)}` : SITUACAO_TEXTO[a.situacao],
       ];
     }),
     [false, true, true, true, true, true, true, true],
   );
   const notas = [
     ...(e.medicoes.some(l => l.foraEscala) ? ['* Leitura em fundo de escala do instrumento: valor real maior que o indicado; IP não se aplica.'] : []),
-    ...av.circuitos.filter(a => a.ipMotivoNa && !a.ipMotivoNa.includes('escala'))
-      .map(a => `${circuitoLabel(a.circuito)}: IP não se aplica (${a.ipMotivoNa}).`),
+    ...(av.circuitos.some(a => a.ipMotivoNa && !a.ipMotivoNa.includes('escala'))
+      ? [`IA e IP N/A: com IR 1 min a 40 °C a partir de ${IR_LIMITE_IP_MOHM} MΩ não são calculados.`] : []),
   ];
   notas.forEach(n => w.paragrafo(n));
 
-  w.secao('4. Critério de avaliação — IEEE 43-2013');
-  const regraIr = e.tipoBobina === 'antiga' ? 'kV + 1, fabricado antes de 1970' : `bobina ${TIPO_BOBINA_CURTO[e.tipoBobina].toLowerCase()}`;
+  w.secao('4. Critério de avaliação');
   w.tabela([
-    { rotulo: 'IR 1 min a 40 °C', valor: `≥ ${formatarMohm(irMinimoMohm(e.tipoBobina, e.tensaoNominalV))} MΩ — ${regraIr} (tabela 3). Correção: R40 = R(T) × 0,5^((40 − T)/10).`, largo: true },
-    { rotulo: 'Índice de polarização', valor: `≥ ${formatarIndice(ipMinimo(e.classeIsolamento))} para classe ${e.classeIsolamento} (tabela 4); não se aplica se IR 1 min a 40 °C > ${IR_LIMITE_IP_MOHM.toLocaleString('pt-BR')} MΩ. IA (R1min / R30s) é só informativo.`, largo: true },
+    { rotulo: 'IR 1 min a 40 °C', valor: `Faixas: ${FAIXAS_TEXTO}. A partir de ${IR_LIMITE_IP_MOHM} MΩ aprova; abaixo de 2 MΩ reprova. Correção: R40 = R(T) × 0,5^((40 − T)/10).`, largo: true },
+    { rotulo: 'Índice de polarização', valor: `Só abaixo de ${IR_LIMITE_IP_MOHM} MΩ: IP = R10min / R1min ≥ ${formatarIndice(ipMinimo(e.classeIsolamento))} para classe ${e.classeIsolamento} (IEEE 43-2013, tabela 4). IA = R1min / R30s é só informativo.`, largo: true },
   ], 1, 44);
 
   secaoComparacao(

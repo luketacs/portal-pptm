@@ -7,7 +7,7 @@ import { NotificationService } from '../../../services/notification.service';
 import { ClasseIsolamento, SituacaoEquipamento, TipoAcionamento, TipoBobina } from '../../../models/eletrica-ensaio.model';
 import {
   CLASSES_ISOLAMENTO, CLASSE_LABEL, SITUACOES, SITUACAO_LABEL, rotuloLocal, TIPOS_ACIONAMENTO, TIPO_ACIONAMENTO_LABEL, TIPOS_BOBINA, TIPO_BOBINA_LABEL, formatarIndice, formatarNumero, ipMinimo,
-  irMinimoMohm, irMinimoTexto, lerNumero, tensaoEnsaioRecomendada, tipoBobinaSugerido,
+  IR_LIMITE_IP_MOHM, lerNumero, tensaoEnsaioRecomendada, tipoBobinaSugerido,
 } from '../../../utils/eletrica-ensaio';
 
 // Dados de placa do motor — preenchido uma vez; cada ensaio copia tensão, classe e tipo
@@ -27,6 +27,7 @@ export class MotorFormComponent implements OnInit {
   readonly classeLabel = CLASSE_LABEL;
   readonly tiposBobina = TIPOS_BOBINA;
   readonly tipoBobinaLabel = TIPO_BOBINA_LABEL;
+  readonly limiteIp = IR_LIMITE_IP_MOHM;
   readonly tiposAcionamento = TIPOS_ACIONAMENTO;
   readonly tipoAcionamentoLabel = TIPO_ACIONAMENTO_LABEL;
 
@@ -67,7 +68,6 @@ export class MotorFormComponent implements OnInit {
     if (!v || v <= 0) return null;
     const rec = tensaoEnsaioRecomendada(v);
     return {
-      irMin: `${formatarNumero(irMinimoMohm(this.tipoBobina(), v), 1)} MΩ (${irMinimoTexto(this.tipoBobina())})`,
       ipMin: formatarIndice(ipMinimo(this.classeIsolamento())),
       tensaoEnsaio: rec.min === rec.max ? `${rec.min} V` : `${rec.min} a ${rec.max} V`,
     };

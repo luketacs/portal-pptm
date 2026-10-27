@@ -11,7 +11,7 @@ import {
 } from '../../../models/eletrica-ensaio.model';
 import {
   CLASSE_LABEL, RESULTADO_BADGE, RESULTADO_LABEL, TIPO_BOBINA_CURTO, avaliarEnsaio, circuitoLabel, fatorCorrecao40,
-  formatarIndice, formatarMohm, formatarNumero, ipMinimo, irMinimoMohm, irMinimoTexto, lerNumero, numeroEnsaio,
+  formatarIndice, formatarMohm, formatarNumero, ipMinimo, lerNumero, FAIXA_COR, FAIXA_LABEL, IR_LIMITE_IP_MOHM, motivoReprovacao, numeroEnsaio,
   tensaoEnsaioAdequada, tensaoEnsaioRecomendada,
 } from '../../../utils/eletrica-ensaio';
 
@@ -49,6 +49,10 @@ function hojeIso(): string {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EnsaioFormComponent implements OnInit {
+  readonly faixaLabel = FAIXA_LABEL;
+  readonly faixaCor = FAIXA_COR;
+  readonly limiteIp = IR_LIMITE_IP_MOHM;
+  readonly motivo = motivoReprovacao;
   readonly classeLabel = CLASSE_LABEL;
   readonly bobinaCurto = TIPO_BOBINA_CURTO;
   readonly resultadoLabel = RESULTADO_LABEL;
@@ -116,8 +120,6 @@ export class EnsaioFormComponent implements OnInit {
     if (!p) return null;
     const rec = tensaoEnsaioRecomendada(p.tensaoNominalV);
     return {
-      irMin: irMinimoMohm(p.tipoBobina, p.tensaoNominalV),
-      irMinTexto: irMinimoTexto(p.tipoBobina),
       ipMin: ipMinimo(p.classeIsolamento),
       tensaoRec: rec,
       tensaoRecTexto: rec.min === rec.max ? `${rec.min} V` : `${rec.min} a ${rec.max} V`,
@@ -146,7 +148,7 @@ export class EnsaioFormComponent implements OnInit {
     const av = this.avaliacao();
     av?.circuitos.forEach(a => {
       if (a.ir === 'pendente') p.push(`${circuitoLabel(a.circuito)}: falta a leitura de 1 min.`);
-      else if (a.ipSituacao === 'pendente') p.push(`${circuitoLabel(a.circuito)}: falta a leitura de 10 min (obrigatória para o IP).`);
+      else if (a.ipSituacao === 'pendente') p.push(`${circuitoLabel(a.circuito)}: abaixo de ${IR_LIMITE_IP_MOHM} MΩ — falta a leitura de 10 min (obrigatória para o IP).`);
     });
     return p;
   });

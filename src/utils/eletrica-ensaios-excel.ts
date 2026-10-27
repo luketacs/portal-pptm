@@ -2,7 +2,7 @@ import { EnsaioIsolamento, Motor, MovimentoEquipamento } from '../models/eletric
 import { EnsaioTrafo, Transformador } from '../models/eletrica-trafo.model';
 import { EnsaioTermografia } from '../models/eletrica-termografia.model';
 import {
-  CLASSE_LABEL, RESULTADO_LABEL, SITUACAO_LABEL, TIPO_ACIONAMENTO_LABEL, TIPO_BOBINA_CURTO, avaliarEnsaio, circuitoLabel, criterioDoEnsaio,
+  CLASSE_LABEL, RESULTADO_LABEL, FAIXA_LABEL, SITUACAO_LABEL, TIPO_ACIONAMENTO_LABEL, TIPO_BOBINA_CURTO, avaliarEnsaio, circuitoLabel, criterioDoEnsaio,
   numeroEnsaio, temperaturaCorrecao,
 } from './eletrica-ensaio';
 import { MEIO_LABEL, avaliarTrafo, circuitoTrafoLabel, tensoesTexto } from './eletrica-trafo';
@@ -71,7 +71,7 @@ export function abasEnsaiosEletricos(dados: {
       { header: 'Nº', width: 9 }, { header: 'Data', width: 11 }, { header: 'TAG', width: 18 }, { header: 'OS', width: 12 },
       { header: 'Circuito', width: 18 }, { header: 'Tensão aplicada (V)', width: 11 }, { header: 'Temp. correção (°C)', width: 11 },
       { header: '30 s (MΩ)', width: 11 }, { header: '1 min (MΩ)', width: 11 }, { header: '10 min (MΩ)', width: 11 },
-      { header: '1 min a 40 °C (MΩ)', width: 13 }, { header: 'IA', width: 7 }, { header: 'IP', width: 7 },
+      { header: '1 min a 40 °C (MΩ)', width: 13 }, { header: 'Faixa', width: 13 }, { header: 'IA', width: 7 }, { header: 'IP', width: 7 },
       { header: 'Situação do circuito', width: 13 }, { header: 'Resultado do ensaio', width: 12 }, { header: 'Lançado por', width: 20 },
     ],
     linhas: dados.ensaiosMotor.flatMap(e => {
@@ -80,7 +80,7 @@ export function abasEnsaiosEletricos(dados: {
         const a = av.circuitos[i];
         return [
           numeroEnsaio(e.numero), dataBr(e.dataEnsaio), tag(e.equipamentoId), e.osNumero, circuitoLabel(l.circuito) + (l.foraEscala ? ' (fundo de escala)' : ''),
-          n(e.tensaoAplicadaV, 0), n(temperaturaCorrecao(e), 1), n(l.r30s), n(l.r1min), n(l.r10min), n(a.r1min40),
+          n(e.tensaoAplicadaV, 0), n(temperaturaCorrecao(e), 1), n(l.r30s), n(l.r1min), n(l.r10min), n(a.r1min40), a.faixa ? FAIXA_LABEL[a.faixa] : null,
           n(a.ia), a.ipSituacao === 'na' ? 'N/A' : n(a.ip), a.situacao === 'aprovado' ? 'OK' : a.situacao === 'reprovado' ? 'Reprovado' : 'Incompleto',
           RESULTADO_LABEL[e.resultado], e.criadoPorNome,
         ];

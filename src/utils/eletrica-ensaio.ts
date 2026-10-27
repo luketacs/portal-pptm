@@ -14,7 +14,8 @@ import {
 // Usado na tela, no PDF e pra gravar o resultado — uma regra só.
 
 export const TEMPERATURA_REFERENCIA_C = 40;
-export const IR_LIMITE_IP_MOHM = 5000;
+// Abaixo disso (IR 1 min a 40 °C) calcula IA/IP e o IP decide; a partir daqui a faixa já aprova.
+export const IR_LIMITE_IP_MOHM = 100;
 
 export function numeroEnsaio(numero: number | null | undefined): string {
   return numero ? `EN-${String(numero).padStart(3, '0')}` : '';
@@ -97,18 +98,46 @@ export const CIRCUITO_LABEL: Record<string, string> = {
 
 export const circuitoLabel = (c: string) => CIRCUITO_LABEL[c] ?? c;
 
-// Tabela 3 — mínimo de IR1min a 40 °C, em MΩ.
-export function irMinimoMohm(tipo: TipoBobina, tensaoNominalV: number): number {
-  if (tipo === 'pre_formada') return 100;
-  if (tipo === 'randomica') return 5;
-  return tensaoNominalV / 1000 + 1; // kV + 1
+// Tabela de valores da equipe (substitui a tabela 3 da IEEE 43 desde 27/10/2026, decisão do Lucas).
+// Faixa pela IR 1 min corrigida a 40 °C. Perigoso reprova sempre; Bom ou melhor aprova;
+// Ruim/Insatisfatório dependem do IP.
+export type FaixaIsolacao = 'perigoso' | 'ruim' | 'insatisfatorio' | 'bom' | 'muito_bom' | 'excelente';
+
+export const FAIXAS_ISOLACAO: { faixa: FaixaIsolacao; de: number; ate: number | null }[] = [
+  { faixa: 'perigoso', de: 0, ate: 2 },
+  { faixa: 'ruim', de: 2, ate: 50 },
+  { faixa: 'insatisfatorio', de: 50, ate: 100 },
+  { faixa: 'bom', de: 100, ate: 500 },
+  { faixa: 'muito_bom', de: 500, ate: 1000 },
+  { faixa: 'excelente', de: 1000, ate: null },
+];
+
+export const FAIXA_LABEL: Record<FaixaIsolacao, string> = {
+  perigoso: 'Perigoso',
+  ruim: 'Ruim',
+  insatisfatorio: 'Insatisfatório',
+  bom: 'Bom',
+  muito_bom: 'Muito bom',
+  excelente: 'Excelente',
+};
+
+export const FAIXA_COR: Record<FaixaIsolacao, string> = {
+  perigoso: 'text-red-700',
+  ruim: 'text-red-700',
+  insatisfatorio: 'text-amber-700',
+  bom: 'text-green-700',
+  muito_bom: 'text-green-700',
+  excelente: 'text-green-700',
+};
+
+export function faixaIsolacao(r1min40: number): FaixaIsolacao {
+  return [...FAIXAS_ISOLACAO].reverse().find(f => r1min40 >= f.de)?.faixa ?? 'perigoso';
 }
 
-export function irMinimoTexto(tipo: TipoBobina): string {
-  if (tipo === 'pre_formada') return '100 MΩ';
-  if (tipo === 'randomica') return '5 MΩ';
-  return 'kV + 1 MΩ';
-}
+// "0 a 2 MΩ: Perigoso · 2 a 50 MΩ: Ruim · ..." — vai no rodapé do detalhe e no PDF.
+export const FAIXAS_TEXTO = FAIXAS_ISOLACAO
+  .map(f => `${f.ate === null ? `acima de ${f.de.toLocaleString('pt-BR')}` : `${f.de} a ${f.ate.toLocaleString('pt-BR')}`} MΩ: ${FAIXA_LABEL[f.faixa]}`)
+  .join(' · ');
 
 // Tabela 4 — mínimo de IP pela classe térmica.
 export function ipMinimo(classe: ClasseIsolamento): number {
@@ -145,6 +174,7 @@ export type SituacaoItem = 'ok' | 'falha' | 'na' | 'pendente';
 export interface AvaliacaoCircuito {
   circuito: string;
   r1min40: number | null;
+  faixa: FaixaIsolacao | null;
   ia: number | null;
   ip: number | null;
   ir: SituacaoItem;
@@ -165,31 +195,44 @@ const valido = (v: number | null | undefined): v is number => typeof v === 'numb
 
 export function avaliarCircuito(l: LeituraIsolamento, c: CriterioEnsaio): AvaliacaoCircuito {
   const r1min40 = valido(l.r1min) ? l.r1min * fatorCorrecao40(c.temperaturaC) : null;
-  const ia = valido(l.r1min) && valido(l.r30s) ? l.r1min / l.r30s : null;
-  const ip = valido(l.r1min) && valido(l.r10min) ? l.r10min / l.r1min : null;
+  const faixa = r1min40 === null ? null : faixaIsolacao(r1min40);
+  // IA e IP só entram com IR 1 min a 40 °C abaixo de 100 MΩ (Insatisfatório ou pior).
+  const calculaIndices = r1min40 !== null && r1min40 < IR_LIMITE_IP_MOHM && !l.foraEscala;
+  const ia = calculaIndices && valido(l.r30s) ? l.r1min! / l.r30s : null;
+  const ip = calculaIndices && valido(l.r10min) ? l.r10min / l.r1min! : null;
 
-  const ir: SituacaoItem = r1min40 === null ? 'pendente'
-    : r1min40 >= irMinimoMohm(c.tipoBobina, c.tensaoNominalV) ? 'ok' : 'falha';
+  // 'falha' = abaixo de Bom; o IP ainda pode aprovar (menos em Perigoso).
+  const ir: SituacaoItem = r1min40 === null ? 'pendente' : r1min40 >= IR_LIMITE_IP_MOHM ? 'ok' : 'falha';
 
   let ipSituacao: SituacaoItem;
   let ipMotivoNa: string | null = null;
   if (l.foraEscala) {
     ipSituacao = 'na';
     ipMotivoNa = 'Leitura em fundo de escala';
-  } else if (r1min40 !== null && r1min40 > IR_LIMITE_IP_MOHM) {
+  } else if (r1min40 === null) {
+    ipSituacao = 'pendente';
+  } else if (!calculaIndices) {
     ipSituacao = 'na';
-    ipMotivoNa = `IR 1 min a 40 °C acima de ${IR_LIMITE_IP_MOHM.toLocaleString('pt-BR')} MΩ`;
+    ipMotivoNa = `IR 1 min a 40 °C a partir de ${IR_LIMITE_IP_MOHM} MΩ (${FAIXA_LABEL[faixa!]})`;
   } else if (ip === null) {
     ipSituacao = 'pendente';
   } else {
     ipSituacao = ip >= ipMinimo(c.classeIsolamento) ? 'ok' : 'falha';
   }
 
-  const situacao = ir === 'falha' || ipSituacao === 'falha' ? 'reprovado'
-    : ir === 'pendente' || ipSituacao === 'pendente' ? 'pendente'
+  const situacao = r1min40 === null ? 'pendente'
+    : faixa === 'perigoso' ? 'reprovado'
+    : ir === 'ok' ? 'aprovado'
+    : ipSituacao === 'falha' ? 'reprovado'
+    : ipSituacao === 'pendente' ? 'pendente'
     : 'aprovado';
 
-  return { circuito: l.circuito, r1min40, ia, ip, ir, ipSituacao, ipMotivoNa, situacao };
+  return { circuito: l.circuito, r1min40, faixa, ia, ip, ir, ipSituacao, ipMotivoNa, situacao };
+}
+
+// Texto curto do motivo quando o circuito reprova.
+export function motivoReprovacao(a: AvaliacaoCircuito): string {
+  return a.faixa === 'perigoso' ? 'IR perigosa' : 'IP baixo';
 }
 
 export interface AvaliacaoEnsaio {

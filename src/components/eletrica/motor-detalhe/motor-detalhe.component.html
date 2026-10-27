@@ -61,14 +61,14 @@
       <div class="app-card p-4">
         <p class="text-xs font-medium text-gray-500">Menor IR 1 min a 40 °C</p>
         <p class="text-xl font-bold text-gray-800 mt-1 tabular-nums">{{ ultimo()?.menorR1min40 != null ? mohm(ultimo()!.menorR1min40) + ' MΩ' : '—' }}</p>
-        <p class="text-xs text-gray-400 mt-0.5">Mínimo: {{ mohm(c.irMin) }} MΩ</p>
+        <p class="text-xs text-gray-400 mt-0.5">Aprova a partir de {{ mohm(c.irMin) }} MΩ</p>
       </div>
       <div class="app-card p-4">
         <p class="text-xs font-medium text-gray-500">Menor índice de polarização</p>
         <p class="text-xl font-bold text-gray-800 mt-1 tabular-nums">
           {{ ultimo() ? (ultimo()!.ipNa ? 'N/A' : indice(ultimo()!.menorIp)) : '—' }}
         </p>
-        <p class="text-xs text-gray-400 mt-0.5">Mínimo: {{ indice(c.ipMin) }}</p>
+        <p class="text-xs text-gray-400 mt-0.5">Mínimo: {{ indice(c.ipMin) }} (só abaixo de {{ mohm(c.irMin) }} MΩ)</p>
       </div>
       <div class="app-card p-4">
         <p class="text-xs font-medium text-gray-500">Tensão de ensaio recomendada</p>

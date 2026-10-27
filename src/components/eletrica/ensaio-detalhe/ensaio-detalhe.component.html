@@ -72,7 +72,10 @@
                 <td class="py-2 px-2 text-right tabular-nums text-gray-700">{{ mohm(l.r30s) }}</td>
                 <td class="py-2 px-2 text-right tabular-nums text-gray-700">{{ mohm(l.r1min) }}</td>
                 <td class="py-2 px-2 text-right tabular-nums text-gray-700">{{ mohm(l.r10min) }}</td>
-                <td class="py-2 px-2 text-right tabular-nums font-semibold" [ngClass]="a.ir === 'falha' ? 'text-red-700' : 'text-gray-800'">{{ mohm(a.r1min40) }}</td>
+                <td class="py-2 px-2 text-right tabular-nums font-semibold text-gray-800 whitespace-nowrap">
+                  {{ mohm(a.r1min40) }}
+                  @if (a.faixa; as fx) { <span class="block text-xs" [ngClass]="faixaCor[fx]">{{ faixaLabel[fx] }}</span> }
+                </td>
                 <td class="py-2 px-2 text-right tabular-nums text-gray-500">{{ indice(a.ia) }}</td>
                 <td class="py-2 px-2 text-right tabular-nums font-semibold" [ngClass]="a.ipSituacao === 'falha' ? 'text-red-700' : 'text-gray-800'"
                   [title]="a.ipMotivoNa ?? ''">
@@ -83,21 +86,18 @@
                     <span class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-800">✓ OK</span>
                   } @else {
                     <span class="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-800">
-                      ✕ {{ a.ir === 'falha' && a.ipSituacao === 'falha' ? 'IR e IP' : a.ir === 'falha' ? 'IR baixa' : 'IP baixo' }}
+                      ✕ {{ motivo(a) }}
                     </span>
                   }
                 </td>
               </tr>
-              @if (a.ipMotivoNa) {
-                <tr><td colspan="8" class="pb-2 text-xs text-gray-500">IP não se aplica em {{ circuitoLabel(l.circuito) }}: {{ a.ipMotivoNa }}.</td></tr>
-              }
             }
           </tbody>
         </table>
       </div>
       <p class="text-xs text-gray-500">
-        Critério IEEE 43-2013: IR 1 min a 40 °C ≥ {{ mohm(i.irMin) }} MΩ ({{ i.irMinTexto }}) · IP ≥ {{ indice(i.ipMin) }} (classe {{ e.classeIsolamento }}) ·
-        IA só informativo.
+        Faixas (IR 1 min a 40 °C): {{ faixasTexto }}.
+        A partir de {{ limiteIp }} MΩ aprova; abaixo disso vale o IP ≥ {{ indice(i.ipMin) }} (IEEE 43, classe {{ e.classeIsolamento }}) e abaixo de 2 MΩ reprova. IA só informativo.
       </p>
     </section>
 

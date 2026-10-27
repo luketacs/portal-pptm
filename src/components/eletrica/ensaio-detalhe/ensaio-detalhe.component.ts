@@ -13,8 +13,8 @@ import { EnsaioIsolamento, Motor } from '../../../models/eletrica-ensaio.model';
 import { CorSerie, SerieLinha, drawLinhas, limparGrafico } from '../../../utils/charts';
 import {
   CLASSE_LABEL, RESULTADO_BADGE, RESULTADO_LABEL, TIPO_BOBINA_LABEL, avaliarEnsaio, circuitoLabel,
-  criterioDoEnsaio, fatorCorrecao40, formatarIndice, formatarMohm, formatarNumero, ipMinimo, irMinimoMohm,
-  irMinimoTexto, numeroEnsaio, temperaturaCorrecao, tensaoEnsaioAdequada, tensaoEnsaioRecomendada,
+  criterioDoEnsaio, fatorCorrecao40, formatarIndice, formatarMohm, formatarNumero, ipMinimo,
+  FAIXA_COR, FAIXA_LABEL, FAIXAS_TEXTO, IR_LIMITE_IP_MOHM, motivoReprovacao, numeroEnsaio, temperaturaCorrecao, tensaoEnsaioAdequada, tensaoEnsaioRecomendada,
 } from '../../../utils/eletrica-ensaio';
 import { dataBr } from '../../../utils/eletrica-reparo';
 import { baixarPdfEnsaio } from '../../../utils/eletrica-ensaio-pdf';
@@ -32,6 +32,11 @@ const tempoTexto = (t: number) => (t < 1 ? '30 s' : `${t} min`);
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EnsaioDetalheComponent implements OnInit, OnDestroy {
+  readonly faixaLabel = FAIXA_LABEL;
+  readonly faixaCor = FAIXA_COR;
+  readonly limiteIp = IR_LIMITE_IP_MOHM;
+  readonly motivo = motivoReprovacao;
+  readonly faixasTexto = FAIXAS_TEXTO;
   readonly classeLabel = CLASSE_LABEL;
   readonly bobinaLabel = TIPO_BOBINA_LABEL;
   readonly resultadoLabel = RESULTADO_LABEL;
@@ -77,8 +82,6 @@ export class EnsaioDetalheComponent implements OnInit, OnDestroy {
     return {
       temperatura: t,
       kt: fatorCorrecao40(t),
-      irMin: irMinimoMohm(e.tipoBobina, e.tensaoNominalV),
-      irMinTexto: irMinimoTexto(e.tipoBobina),
       ipMin: ipMinimo(e.classeIsolamento),
       tensaoOk: tensaoEnsaioAdequada(e.tensaoAplicadaV, e.tensaoNominalV),
       tensaoRec: rec.min === rec.max ? `${rec.min} V` : `${rec.min} a ${rec.max} V`,

@@ -1,7 +1,7 @@
 import { inflateSync } from 'zlib';
 import { EnsaioIsolamento, LeituraIsolamento, Motor } from '../models/eletrica-ensaio.model';
 import {
-  avaliarCircuito, avaliarEnsaio, fatorCorrecao40, ipMinimo, irMinimoMohm, lerNumero, numeroEnsaio,
+  avaliarCircuito, avaliarEnsaio, faixaIsolacao, fatorCorrecao40, ipMinimo, lerNumero, numeroEnsaio,
   tensaoEnsaioAdequada, tensaoEnsaioRecomendada, tipoBobinaSugerido,
 } from './eletrica-ensaio';
 import { gerarPdfEnsaio, nomeArquivoPdfEnsaio } from './eletrica-ensaio-pdf';
@@ -26,10 +26,15 @@ describe('IEEE 43-2013', () => {
     expect(fatorCorrecao40(50)).toBeCloseTo(2);
   });
 
-  it('mínimo de IR pela tabela 3 e de IP pela tabela 4', () => {
-    expect(irMinimoMohm('pre_formada', 6300)).toBe(100);
-    expect(irMinimoMohm('randomica', 440)).toBe(5);
-    expect(irMinimoMohm('antiga', 6300)).toBeCloseTo(7.3);
+  it('faixa pela tabela de valores e mínimo de IP pela tabela 4 da IEEE 43', () => {
+    expect(faixaIsolacao(0)).toBe('perigoso');
+    expect(faixaIsolacao(1.99)).toBe('perigoso');
+    expect(faixaIsolacao(2)).toBe('ruim');
+    expect(faixaIsolacao(49.9)).toBe('ruim');
+    expect(faixaIsolacao(50)).toBe('insatisfatorio');
+    expect(faixaIsolacao(100)).toBe('bom');
+    expect(faixaIsolacao(500)).toBe('muito_bom');
+    expect(faixaIsolacao(1000)).toBe('excelente');
     expect(ipMinimo('A')).toBe(1.5);
     expect(ipMinimo('F')).toBe(2);
   });
@@ -44,29 +49,37 @@ describe('IEEE 43-2013', () => {
     expect(tipoBobinaSugerido(380)).toBe('randomica');
   });
 
-  it('motor da planilha de exemplo: IR alta mas IP 1,03 reprova (umidade/sujeira)', () => {
+  it('motor da planilha de exemplo: 487,5 MΩ a 40 °C é Bom — aprova sem calcular IA/IP', () => {
     const a = avaliarCircuito(leitura(), { ...mt, temperaturaC: 30 });
     expect(a.r1min40).toBeCloseTo(487.5);
+    expect(a.faixa).toBe('bom');
     expect(a.ir).toBe('ok');
-    expect(a.ip).toBeCloseTo(1.035, 3);
-    expect(a.ipSituacao).toBe('falha');
-    expect(a.situacao).toBe('reprovado');
-  });
-
-  it('aprova quando IR e IP atendem', () => {
-    const a = avaliarCircuito(leitura({ r1min: 500, r10min: 1250 }), { ...mt, temperaturaC: 40 });
-    expect(a.ip).toBeCloseTo(2.5);
+    expect(a.ia).toBeNull();
+    expect(a.ip).toBeNull();
+    expect(a.ipSituacao).toBe('na');
     expect(a.situacao).toBe('aprovado');
   });
 
-  it('reprova por IR abaixo do mínimo depois da correção', () => {
-    // 180 MΩ a 30 °C = 90 MΩ a 40 °C < 100
-    const a = avaliarCircuito(leitura({ r1min: 180, r10min: 500 }), { ...mt, temperaturaC: 30 });
-    expect(a.ir).toBe('falha');
+  it('abaixo de 100 MΩ calcula IA/IP e o IP decide', () => {
+    // 180 MΩ a 30 °C = 90 MΩ a 40 °C (Insatisfatório)
+    const ok = avaliarCircuito(leitura({ r30s: 150, r1min: 180, r10min: 450 }), { ...mt, temperaturaC: 30 });
+    expect(ok.faixa).toBe('insatisfatorio');
+    expect(ok.ia).toBeCloseTo(1.2);
+    expect(ok.ip).toBeCloseTo(2.5);
+    expect(ok.situacao).toBe('aprovado');
+    const ruim = avaliarCircuito(leitura({ r1min: 180, r10min: 200 }), { ...mt, temperaturaC: 30 });
+    expect(ruim.ipSituacao).toBe('falha');
+    expect(ruim.situacao).toBe('reprovado');
+  });
+
+  it('abaixo de 2 MΩ (Perigoso) reprova mesmo com IP bom', () => {
+    const a = avaliarCircuito(leitura({ r1min: 1.5, r10min: 6 }), { ...mt, temperaturaC: 40 });
+    expect(a.faixa).toBe('perigoso');
+    expect(a.ipSituacao).toBe('ok');
     expect(a.situacao).toBe('reprovado');
   });
 
-  it('IP não se aplica acima de 5000 MΩ ou em fundo de escala — e aí o 10 min é dispensável', () => {
+  it('a partir de 100 MΩ ou em fundo de escala o 10 min é dispensável', () => {
     const alto = avaliarCircuito(leitura({ r1min: 12000, r10min: null }), { ...mt, temperaturaC: 40 });
     expect(alto.ipSituacao).toBe('na');
     expect(alto.situacao).toBe('aprovado');
@@ -76,14 +89,14 @@ describe('IEEE 43-2013', () => {
   });
 
   it('sem a leitura de 10 min (quando ela vale) o ensaio fica pendente', () => {
-    const av = avaliarEnsaio([leitura({ r10min: null }), leitura({ circuito: 'B', r1min: 800, r10min: 2000 })], { ...mt, temperaturaC: 40 });
+    const av = avaliarEnsaio([leitura({ r1min: 80, r10min: null }), leitura({ circuito: 'B', r1min: 800, r10min: 2000 })], { ...mt, temperaturaC: 40 });
     expect(av.circuitos[0].situacao).toBe('pendente');
     expect(av.resultado).toBeNull();
-    expect(av.menorR1min40).toBe(800);
+    expect(av.menorR1min40).toBe(80);
   });
 
   it('um circuito reprovado reprova o ensaio, mesmo com outro pendente', () => {
-    const av = avaliarEnsaio([leitura({ r1min: 10, r10min: 30 }), leitura({ circuito: 'B', r1min: null })], { ...mt, temperaturaC: 40 });
+    const av = avaliarEnsaio([leitura({ r1min: 10, r10min: 12 }), leitura({ circuito: 'B', r1min: null })], { ...mt, temperaturaC: 40 });
     expect(av.resultado).toBe('reprovado');
   });
 
