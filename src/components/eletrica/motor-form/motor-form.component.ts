@@ -4,9 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { EletricaEnsaioService } from '../../../services/eletrica-ensaio.service';
 import { NotificationService } from '../../../services/notification.service';
-import { ClasseIsolamento, SituacaoEquipamento, TipoBobina } from '../../../models/eletrica-ensaio.model';
+import { ClasseIsolamento, SituacaoEquipamento, TipoAcionamento, TipoBobina } from '../../../models/eletrica-ensaio.model';
 import {
-  CLASSES_ISOLAMENTO, CLASSE_LABEL, SITUACOES, SITUACAO_LABEL, rotuloLocal, TIPOS_BOBINA, TIPO_BOBINA_LABEL, formatarIndice, formatarNumero, ipMinimo,
+  CLASSES_ISOLAMENTO, CLASSE_LABEL, SITUACOES, SITUACAO_LABEL, rotuloLocal, TIPOS_ACIONAMENTO, TIPO_ACIONAMENTO_LABEL, TIPOS_BOBINA, TIPO_BOBINA_LABEL, formatarIndice, formatarNumero, ipMinimo,
   irMinimoMohm, irMinimoTexto, lerNumero, tensaoEnsaioRecomendada, tipoBobinaSugerido,
 } from '../../../utils/eletrica-ensaio';
 
@@ -27,6 +27,8 @@ export class MotorFormComponent implements OnInit {
   readonly classeLabel = CLASSE_LABEL;
   readonly tiposBobina = TIPOS_BOBINA;
   readonly tipoBobinaLabel = TIPO_BOBINA_LABEL;
+  readonly tiposAcionamento = TIPOS_ACIONAMENTO;
+  readonly tipoAcionamentoLabel = TIPO_ACIONAMENTO_LABEL;
 
   id: string | null = null;
   carregando = signal(false);
@@ -46,6 +48,8 @@ export class MotorFormComponent implements OnInit {
   frequenciaHz = signal('60');
   fatorServico = signal('');
   rotacaoRpm = signal('');
+  // '' = não informado (motores cadastrados antes do campo).
+  tipoAcionamento = signal<TipoAcionamento | ''>('');
   classeIsolamento = signal<ClasseIsolamento>('F');
   tipoBobina = signal<TipoBobina>('pre_formada');
   // Enquanto a pessoa não escolher, o tipo de bobina acompanha a tensão digitada.
@@ -103,6 +107,7 @@ export class MotorFormComponent implements OnInit {
       this.frequenciaHz.set(txt(m.frequenciaHz));
       this.fatorServico.set(txt(m.fatorServico));
       this.rotacaoRpm.set(m.rotacaoRpm === null ? '' : String(m.rotacaoRpm));
+      this.tipoAcionamento.set(m.tipoAcionamento ?? '');
       this.classeIsolamento.set(m.classeIsolamento);
       this.tipoBobina.set(m.tipoBobina);
       this.bobinaEscolhida = true;
@@ -160,6 +165,7 @@ export class MotorFormComponent implements OnInit {
         ...numeros,
         rotacaoRpm: numeros.rotacaoRpm === null ? null : Math.round(numeros.rotacaoRpm),
         tensaoV: tensao,
+        tipoAcionamento: this.tipoAcionamento() || null,
         classeIsolamento: this.classeIsolamento(),
         tipoBobina: this.tipoBobina(),
         observacoes: this.observacoes(),

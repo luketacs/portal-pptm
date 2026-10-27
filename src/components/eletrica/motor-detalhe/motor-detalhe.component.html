@@ -39,7 +39,7 @@
         @if (isAdmin()) {
           <button type="button" (click)="excluir()" [disabled]="excluindo()"
             class="rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">
-            {{ excluindo() ? 'Excluindo...' : 'Excluir' }}
+            {{ excluindo() ? 'Excluindo...' : 'Excluir motor' }}
           </button>
         }
         <a [routerLink]="['/eletrica/ensaios/motores', m.id, 'editar']"
@@ -111,6 +111,7 @@
           <div><dt class="text-xs text-gray-400">Frequência</dt><dd class="text-gray-800">{{ m.frequenciaHz != null ? fmt(m.frequenciaHz) + ' Hz' : '—' }}</dd></div>
           <div><dt class="text-xs text-gray-400">Fator de serviço</dt><dd class="text-gray-800">{{ m.fatorServico != null ? fmt(m.fatorServico, 2) : '—' }}</dd></div>
           <div><dt class="text-xs text-gray-400">Rotação</dt><dd class="text-gray-800">{{ m.rotacaoRpm != null ? fmt(m.rotacaoRpm, 0) + ' rpm' : '—' }}</dd></div>
+          <div><dt class="text-xs text-gray-400">Acionamento</dt><dd class="text-gray-800">{{ m.tipoAcionamento ? acionamentoLabel[m.tipoAcionamento] : '—' }}</dd></div>
           <div><dt class="text-xs text-gray-400">Classe de isolamento</dt><dd class="text-gray-800">{{ classeLabel[m.classeIsolamento] }}</dd></div>
           <div class="col-span-2"><dt class="text-xs text-gray-400">Tipo de bobina</dt><dd class="text-gray-800">{{ bobinaLabel[m.tipoBobina] }}</dd></div>
           @if (m.observacoes) {

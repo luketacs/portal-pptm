@@ -101,7 +101,7 @@ describe('IEEE 43-2013', () => {
 const motor: Motor = {
   id: 'm1', tag: '91ECA42AF001', situacao: 'instalado', aplicacao: 'Bomba de água de alimentação B', descricao: 'Motor da bomba', localInstalacao: 'TT24', fabricante: 'WEG',
   modelo: 'HGF 315 C/D/E', numeroSerie: null, potenciaKw: 220, potenciaCv: 300, tensaoV: 6300, correnteA: 25.7,
-  frequenciaHz: 60, fatorServico: 1, rotacaoRpm: 1781, classeIsolamento: 'F', tipoBobina: 'pre_formada',
+  frequenciaHz: 60, fatorServico: 1, rotacaoRpm: 1781, tipoAcionamento: 'inversor', classeIsolamento: 'F', tipoBobina: 'pre_formada',
   observacoes: null, criadoPorNome: 'Lucas', createdAt: new Date(), updatedAt: new Date(),
 };
 

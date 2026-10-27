@@ -13,7 +13,7 @@ import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { EnsaioIsolamento, Motor } from '../../../models/eletrica-ensaio.model';
 import { CorSerie, SerieLinha, drawLinhas, limparGrafico } from '../../../utils/charts';
 import {
-  CLASSE_LABEL, RESULTADO_BADGE, RESULTADO_LABEL, SITUACAO_BADGE, SITUACAO_LABEL, rotuloAplicacao, rotuloLocal, TIPO_BOBINA_LABEL, avaliarEnsaio, circuitoLabel, criterioDoEnsaio,
+  CLASSE_LABEL, RESULTADO_BADGE, RESULTADO_LABEL, SITUACAO_BADGE, SITUACAO_LABEL, rotuloAplicacao, rotuloLocal, TIPO_ACIONAMENTO_LABEL, TIPO_BOBINA_LABEL, avaliarEnsaio, circuitoLabel, criterioDoEnsaio,
   formatarIndice, formatarMohm, formatarNumero, ipMinimo, irMinimoMohm, numeroEnsaio, potenciaTexto,
   tensaoEnsaioRecomendada,
 } from '../../../utils/eletrica-ensaio';
@@ -42,6 +42,7 @@ const dataCurta = (t: number) => new Date(t).toLocaleDateString('pt-BR', { day: 
 export class MotorDetalheComponent implements OnInit, OnDestroy {
   readonly classeLabel = CLASSE_LABEL;
   readonly bobinaLabel = TIPO_BOBINA_LABEL;
+  readonly acionamentoLabel = TIPO_ACIONAMENTO_LABEL;
   readonly resultadoLabel = RESULTADO_LABEL;
   readonly resultadoBadge = RESULTADO_BADGE;
   readonly situacaoLabel = SITUACAO_LABEL;

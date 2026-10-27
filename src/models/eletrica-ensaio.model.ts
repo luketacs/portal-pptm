@@ -8,6 +8,9 @@ export type ResultadoEnsaio = 'aprovado' | 'reprovado';
 // Instalado em campo ou reserva (no almoxarifado / oficina). Vale pra motor e trafo.
 export type SituacaoEquipamento = 'instalado' | 'reserva';
 
+// Como o motor é acionado. Só motor.
+export type TipoAcionamento = 'partida_direta' | 'inversor' | 'soft_starter' | 'estrela_triangulo' | 'compensadora';
+
 export interface Motor {
   id: string;
   tag: string;
@@ -26,6 +29,7 @@ export interface Motor {
   frequenciaHz: number | null;
   fatorServico: number | null;
   rotacaoRpm: number | null;
+  tipoAcionamento: TipoAcionamento | null;
   classeIsolamento: ClasseIsolamento;
   tipoBobina: TipoBobina;
   observacoes: string | null;

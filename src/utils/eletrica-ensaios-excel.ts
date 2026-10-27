@@ -2,7 +2,7 @@ import { EnsaioIsolamento, Motor, MovimentoEquipamento } from '../models/eletric
 import { EnsaioTrafo, Transformador } from '../models/eletrica-trafo.model';
 import { EnsaioTermografia } from '../models/eletrica-termografia.model';
 import {
-  CLASSE_LABEL, RESULTADO_LABEL, SITUACAO_LABEL, TIPO_BOBINA_CURTO, avaliarEnsaio, circuitoLabel, criterioDoEnsaio,
+  CLASSE_LABEL, RESULTADO_LABEL, SITUACAO_LABEL, TIPO_ACIONAMENTO_LABEL, TIPO_BOBINA_CURTO, avaliarEnsaio, circuitoLabel, criterioDoEnsaio,
   numeroEnsaio, temperaturaCorrecao,
 } from './eletrica-ensaio';
 import { MEIO_LABEL, avaliarTrafo, circuitoTrafoLabel, tensoesTexto } from './eletrica-trafo';
@@ -42,11 +42,12 @@ export function abasEnsaiosEletricos(dados: {
       { header: 'Local', width: 20 }, { header: 'Descrição', width: 30, quebra: true }, { header: 'Fabricante', width: 14 },
       { header: 'Modelo', width: 16 }, { header: 'Nº série', width: 14 }, { header: 'Potência (kW)', width: 11 },
       { header: 'Potência (cv)', width: 11 }, { header: 'Tensão (V)', width: 10 }, { header: 'Corrente (A)', width: 10 },
-      { header: 'Rotação (rpm)', width: 10 }, { header: 'Classe', width: 9 }, { header: 'Bobina', width: 16 },
+      { header: 'Rotação (rpm)', width: 10 }, { header: 'Acionamento', width: 20 }, { header: 'Classe', width: 9 }, { header: 'Bobina', width: 16 },
     ],
     linhas: dados.motores.map(m => [
       m.tag, SITUACAO_LABEL[m.situacao], m.aplicacao, m.localInstalacao, m.descricao, m.fabricante, m.modelo, m.numeroSerie,
-      n(m.potenciaKw), n(m.potenciaCv), n(m.tensaoV, 1), n(m.correnteA), m.rotacaoRpm, m.classeIsolamento, TIPO_BOBINA_CURTO[m.tipoBobina],
+      n(m.potenciaKw), n(m.potenciaCv), n(m.tensaoV, 1), n(m.correnteA), m.rotacaoRpm,
+      m.tipoAcionamento ? TIPO_ACIONAMENTO_LABEL[m.tipoAcionamento] : null, m.classeIsolamento, TIPO_BOBINA_CURTO[m.tipoBobina],
     ]),
   });
 

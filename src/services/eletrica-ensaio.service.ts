@@ -5,7 +5,7 @@ import { AuthService } from './auth.service';
 import { AuditLogService } from './audit-log.service';
 import {
   Anexo, ClasseIsolamento, EnsaioIsolamento, Executante, LeituraIsolamento, Motor, MovimentoEquipamento, ResultadoEnsaio,
-  SalvarEnsaio, SalvarMotor, SituacaoEquipamento, TipoBobina,
+  SalvarEnsaio, SalvarMotor, SituacaoEquipamento, TipoAcionamento, TipoBobina,
 } from '../models/eletrica-ensaio.model';
 import { CondicoesTermografia, EnsaioTermografia, PontoTermografia, SalvarTermografia } from '../models/eletrica-termografia.model';
 import {
@@ -39,6 +39,7 @@ interface MotorRow {
   frequencia_hz: number | string | null;
   fator_servico: number | string | null;
   rotacao_rpm: number | null;
+  tipo_acionamento: string | null; // 087
   classe_isolamento: string;
   tipo_bobina: string;
   observacoes: string | null;
@@ -149,6 +150,7 @@ function mapMotor(r: MotorRow): Motor {
     frequenciaHz: num(r.frequencia_hz),
     fatorServico: num(r.fator_servico),
     rotacaoRpm: r.rotacao_rpm,
+    tipoAcionamento: (r.tipo_acionamento ?? null) as TipoAcionamento | null,
     classeIsolamento: r.classe_isolamento as ClasseIsolamento,
     tipoBobina: r.tipo_bobina as TipoBobina,
     observacoes: r.observacoes,
@@ -328,6 +330,7 @@ function payloadMotor(m: SalvarMotor) {
     frequencia_hz: m.frequenciaHz,
     fator_servico: m.fatorServico,
     rotacao_rpm: m.rotacaoRpm,
+    tipo_acionamento: m.tipoAcionamento,
     classe_isolamento: m.classeIsolamento,
     tipo_bobina: m.tipoBobina,
     observacoes: textoOuNull(m.observacoes),

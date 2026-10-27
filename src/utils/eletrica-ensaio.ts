@@ -1,5 +1,5 @@
 import {
-  ClasseIsolamento, EnsaioIsolamento, LeituraIsolamento, ResultadoEnsaio, SituacaoEquipamento, TipoBobina,
+  ClasseIsolamento, EnsaioIsolamento, LeituraIsolamento, ResultadoEnsaio, SituacaoEquipamento, TipoAcionamento, TipoBobina,
 } from '../models/eletrica-ensaio.model';
 
 // Avaliação de resistência de isolamento de máquinas girantes pela IEEE 43-2013
@@ -19,6 +19,17 @@ export const IR_LIMITE_IP_MOHM = 5000;
 export function numeroEnsaio(numero: number | null | undefined): string {
   return numero ? `EN-${String(numero).padStart(3, '0')}` : '';
 }
+
+// ── Tipo de acionamento (só motor) ──
+export const TIPOS_ACIONAMENTO: TipoAcionamento[] = ['partida_direta', 'inversor', 'soft_starter', 'estrela_triangulo', 'compensadora'];
+
+export const TIPO_ACIONAMENTO_LABEL: Record<TipoAcionamento, string> = {
+  partida_direta: 'Partida direta',
+  inversor: 'Inversor de frequência',
+  soft_starter: 'Soft-starter',
+  estrela_triangulo: 'Estrela-triângulo',
+  compensadora: 'Chave compensadora',
+};
 
 // ── Situação do equipamento (motor e trafo) ──
 export const SITUACOES: SituacaoEquipamento[] = ['instalado', 'reserva'];

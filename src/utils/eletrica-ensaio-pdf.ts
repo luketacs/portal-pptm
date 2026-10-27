@@ -1,6 +1,6 @@
 import { EnsaioIsolamento, Motor } from '../models/eletrica-ensaio.model';
 import {
-  CLASSE_LABEL, IR_LIMITE_IP_MOHM, SITUACAO_LABEL, rotuloAplicacao, rotuloLocal, RESULTADO_LABEL, TIPO_BOBINA_CURTO, TIPO_BOBINA_LABEL, avaliarEnsaio, circuitoLabel, criterioDoEnsaio,
+  CLASSE_LABEL, IR_LIMITE_IP_MOHM, SITUACAO_LABEL, rotuloAplicacao, rotuloLocal, RESULTADO_LABEL, TIPO_ACIONAMENTO_LABEL, TIPO_BOBINA_CURTO, TIPO_BOBINA_LABEL, avaliarEnsaio, circuitoLabel, criterioDoEnsaio,
   fatorCorrecao40, formatarIndice, formatarMohm, formatarNumero, ipMinimo, irMinimoMohm, numeroEnsaio,
   potenciaTexto, temperaturaCorrecao, tensaoEnsaioAdequada, tensaoEnsaioRecomendada,
 } from './eletrica-ensaio';
@@ -53,6 +53,7 @@ export async function gerarPdfEnsaio(e: EnsaioIsolamento, m: Motor, anterior: En
     { rotulo: 'Frequência', valor: comUnidade(m.frequenciaHz, 'Hz') },
     { rotulo: 'Fator de serviço', valor: m.fatorServico !== null ? formatarNumero(m.fatorServico, 2) : null },
     { rotulo: 'Rotação', valor: comUnidade(m.rotacaoRpm, 'rpm', 0) },
+    { rotulo: 'Acionamento', valor: m.tipoAcionamento ? TIPO_ACIONAMENTO_LABEL[m.tipoAcionamento] : null },
     { rotulo: 'Classe de isolamento', valor: CLASSE_LABEL[e.classeIsolamento] },
     { rotulo: 'Tipo de bobina', valor: TIPO_BOBINA_LABEL[e.tipoBobina], largo: true },
   ], 2);
