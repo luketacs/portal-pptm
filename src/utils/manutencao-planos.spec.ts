@@ -1,6 +1,7 @@
 import { ManutencaoOrdem, PlanoManutencao } from '../models/manutencao-programacao.model';
 import {
-  agendaDosPlanos, alinharDatasPorEquipamento, cronogramaMensal, EQUIPE_APOIO_NAO_CLASSIFICADA, gerarGradeMensal, inferirCategoriaIndicador, mesSeguinte,
+  agendaDosPlanos, alinharDatasPorEquipamento, cronogramaMensal, EQUIPE_APOIO_NAO_CLASSIFICADA, execucaoDoCronograma, gerarGradeMensal,
+  inferirCategoriaIndicador, mesSeguinte, ordensDosPlanos,
   inferirCategoriaIndicadorPorTecnico, janelaAlinhamentoDaArea, limitarPorEquipeApoio, nomeBaseDoPlano, ocorrenciasNoIntervalo,
   semanasIsoDoAno, siglaPeriodicidade, planosAtrasados, planosComProximaExecucao, datasProgramadasPorPlano, osSigmaDosPlanos,
   planosComProximaExecucaoFixa, proximaExecucaoPlano, resumoPorEquipeApoio, sugestoesDaSemana, dataCicloAoProgramar,
@@ -386,6 +387,52 @@ describe('cronogramaMensal', () => {
       plano({ ...base, id: 'd', codigo: 'PM-0040', area: 'APOIO', equipamento: 'A', dataInicial: '2026-11-03' }),
     ];
     expect(cronogramaMensal(planos, '2026-11', 1)[0].ocorrencias.map(o => o.plano.id)).toEqual(['d', 'a', 'b', 'c']);
+  });
+});
+
+describe('execução das ocorrências do cronograma', () => {
+  const ordem = (o: Partial<ManutencaoOrdem>) => ({
+    id: 'o', tipo: 'ordem', area: 'MECANICA', descricao: '', semanaInicio: '2026-10-05', diasPrevistos: [],
+    planoPreventivoId: null, numeroOs: null, ...o,
+  } as ManutencaoOrdem);
+  const ciclo = (planoId: string, dataPrevista: string, ordemId: string) => ({ id: `c-${ordemId}`, planoId, dataPrevista, ordemId, createdAt: new Date() });
+  const ap = (data: string) => ({ data, status: 'EXEC', executante: '123', horas: 2 });
+
+  it('cronograma pode começar no meio do mês (início do controle)', () => {
+    const semanal = plano({ id: 's', dataInicial: '2026-09-28', periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)' });
+    expect(cronogramaMensal([semanal], '2026-10', 1, '2026-10-05')[0].ocorrencias.map(o => o.data))
+      .toEqual(['2026-10-05', '2026-10-12', '2026-10-19', '2026-10-26']);
+  });
+
+  it('junta OS do ciclo e OS lançada à parte (vínculo ou mesmo nome), sem repetir', () => {
+    const p = plano({ id: 'p1', nome: 'Inspeção do Motor M01' });
+    const ordens = [
+      ordem({ id: 'a', numeroOs: '047001', planoPreventivoId: 'p1', semanaInicio: '2026-10-05' }),
+      ordem({ id: 'b', numeroOs: '047002', descricao: 'INSPECAO DO MOTOR M01', diasPrevistos: ['2026-11-04'], semanaInicio: '2026-11-02' }),
+      ordem({ id: 'c', numeroOs: '047003', descricao: 'Inspeção do Motor M01', tipo: 'folga' }),
+    ];
+    const r = ordensDosPlanos([p], [ciclo('p1', '2026-10-05', 'a')], ordens).get('p1')!;
+    expect(r.map(x => [x.data, x.ordem.id])).toEqual([['2026-10-05', 'a'], ['2026-11-04', 'b']]);
+  });
+
+  it('situação: executada (1º apontamento), não executada, programada e sem OS', () => {
+    const semanal = plano({ id: 's', dataInicial: '2026-10-05', periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)' });
+    const meses = cronogramaMensal([semanal], '2026-10', 2, '2026-10-05');
+    const ordens = new Map([['s', [
+      { data: '2026-10-05', ordem: ordem({ id: '1', numeroOs: '047101', semanaInicio: '2026-10-05' }) },
+      // 10/10 cai na janela da ocorrência de 12/10 (antecipada 2 dias); a de 19/10 fica sem OS.
+      { data: '2026-10-10', ordem: ordem({ id: '2', numeroOs: '047102', semanaInicio: '2026-10-05' }) },
+      { data: '2026-10-26', ordem: ordem({ id: '3', numeroOs: '047103', semanaInicio: '2026-10-26' }) },
+      { data: '2026-11-02', ordem: ordem({ id: '4', numeroOs: null, semanaInicio: '2026-11-02' }) },
+    ]]]);
+    const aps: Record<string, ReturnType<typeof ap>[]> = { '047101': [ap('2026-10-08'), ap('2026-10-07')] };
+    const r = execucaoDoCronograma(meses, [semanal], ordens, os => aps[os], '2026-10-29');
+    expect(r.get('s|2026-10-05')).toEqual({ numeroOs: '047101', executadaEm: '2026-10-07', situacao: 'Executada' });
+    expect(r.get('s|2026-10-12')).toEqual({ numeroOs: '047102', executadaEm: null, situacao: 'Não executada' });
+    expect(r.get('s|2026-10-19')).toEqual({ numeroOs: null, executadaEm: null, situacao: 'Sem OS' });
+    expect(r.get('s|2026-10-26')).toEqual({ numeroOs: '047103', executadaEm: null, situacao: 'Programada' });
+    expect(r.get('s|2026-11-02')).toEqual({ numeroOs: null, executadaEm: null, situacao: 'Programada' });
+    expect(r.get('s|2026-11-09')).toBeUndefined(); // futuro sem OS: fica em branco
   });
 });
 

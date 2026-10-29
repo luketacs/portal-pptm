@@ -144,10 +144,10 @@
     </div>
     <div class="flex flex-wrap items-center gap-2">
       <button type="button" (click)="exportarCronograma()" [disabled]="exportando()"
-        [title]="'Planilha de controle: ' + MESES_CRONOGRAMA + ' meses a partir do mês que vem, uma aba por mês com as preventivas previstas (planos filtrados)'"
+        [title]="'Planilha de controle: desde 05/10/2026 até ' + MESES_CRONOGRAMA + ' meses à frente, uma aba por mês com as preventivas previstas e o que já foi executado (planos filtrados)'"
         class="inline-flex items-center gap-2 bg-white text-slate-600 text-sm font-semibold py-2 px-4 rounded-lg border border-slate-300 hover:bg-slate-50 transition disabled:opacity-50">
         <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-        Cronograma {{ MESES_CRONOGRAMA }} meses (Excel)
+        Cronograma de preventivas (Excel)
       </button>
       <button type="button" (click)="exportarExcel()" [disabled]="exportando()"
         [title]="exportaMapa() ? 'Exportar o mapa de 52 semanas (planos filtrados) pra Excel' : 'Exportar os planos filtrados pra Excel'"

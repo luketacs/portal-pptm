@@ -112,7 +112,10 @@ export interface CronogramaPlanosLinha {
   loto: string;
   recursos: string;
   responsavel: string;
-  numeroOs: string | null; // OS já programada pra essa ocorrência (ciclo na mesma data)
+  // Já registrado na data de geração (ver execucaoDoCronograma) — null = em branco.
+  numeroOs: string | null;
+  executadaEm: string | null; // 'YYYY-MM-DD', 1º apontamento no SIGMA
+  situacao: string | null;
 }
 
 export interface CronogramaPlanosMes {
@@ -138,9 +141,20 @@ export interface CronogramaPlanoCadastro {
   ocorrencias: number; // ordens previstas no período
 }
 
+// FCA (Fato, Causa, Ação) que justifica a planilha — primeira aba do cronograma.
+export interface FcaExport {
+  titulo: string;
+  campos: [string, string][]; // "Data de abertura" -> "29/10/2026"
+  fato: string;
+  causas: string[];
+  acoes: { tipo: string; acao: string; responsavel: string; prazo: string; status: string }[];
+}
+
 export interface CronogramaPlanosExport {
   titulo: string;  // "Cronograma de Manutenção Preventiva"
-  periodo: string; // "Novembro de 2026 a Outubro de 2028"
+  periodo: string; // "05/10/2026 a 31/10/2028"
+  notas: string[]; // explicação no topo do Resumo
+  fca?: FcaExport;
   areas: string[]; // colunas do Resumo, na ordem
   meses: CronogramaPlanosMes[];
   planos: CronogramaPlanoCadastro[];
@@ -1323,7 +1337,7 @@ export class ExcelExportService {
   }
 
   // Situações da coluna de controle (lista suspensa) — o Resumo conta por esses textos.
-  private readonly SITUACOES_CRONOGRAMA = ['Programada', 'Executada', 'Não executada', 'Reprogramada', 'Cancelada'];
+  private readonly SITUACOES_CRONOGRAMA = ['Programada', 'Executada', 'Não executada', 'Sem OS', 'Reprogramada', 'Cancelada'];
   private readonly CONTROLE_BG = 'FFFFF7D6';  // colunas para preencher
   private readonly CONTROLE_TOPO = 'FFB45309'; // cabeçalho das colunas para preencher
 
@@ -1341,7 +1355,7 @@ export class ExcelExportService {
     const novaAba = (nome: string, colunas: { width: number }[], titulo: string, subtitulo: string, ySplit = 4) => {
       const ws = wb.addWorksheet(nome, {
         pageSetup: { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
-        views: [{ state: 'frozen', ySplit, showGridLines: false }],
+        views: [ySplit ? { state: 'frozen', ySplit, showGridLines: false } : { state: 'normal', showGridLines: false }],
       });
       ws.columns = colunas;
       const NC = colunas.length;
@@ -1382,23 +1396,21 @@ export class ExcelExportService {
       return new Date(Date.UTC(a, m - 1, d));
     };
 
-    // ── Resumo (primeira aba) ──
-    const colsResumo = ['Mês', ...params.areas, 'Total previstas', 'HH previsto', 'Executadas', 'Não executadas', 'Reprogramadas', 'Canceladas', '% executadas'];
-    const resumo = novaAba('Resumo', [{ width: 20 }, ...params.areas.map(() => ({ width: 11 })), { width: 11 }, { width: 11 }, { width: 11 }, { width: 11 }, { width: 12 }, { width: 11 }, { width: 11 }],
+    // ── FCA (primeira aba, quando houver) ──
+    if (params.fca) this.abaFca(novaAba, params.fca, geradoEm);
+
+    // ── Resumo ──
+    const situacoesResumo = ['Executada', 'Não executada', 'Sem OS', 'Reprogramada', 'Cancelada'];
+    const colsResumo = ['Mês', ...params.areas, 'Total previstas', 'HH previsto', 'Executadas', 'Não executadas', 'Sem OS', 'Reprogramadas', 'Canceladas', '% executadas'];
+    const resumo = novaAba('Resumo', [{ width: 20 }, ...params.areas.map(() => ({ width: 11 })), { width: 11 }, { width: 11 }, ...situacoesResumo.map(() => ({ width: 12.5 })), { width: 12 }],
       `${params.titulo} — Resumo`, `${params.periodo} — gerado em ${geradoEm}`);
-    const notas = [
-      'Datas previstas pela periodicidade cadastrada de cada plano ativo, contadas a partir da data inicial do plano.',
-      'Na programação semanal, a ordem pode ser antecipada em até 1/3 do período para juntar visitas ao mesmo equipamento.',
-      'Nas abas dos meses, preencha as colunas em laranja: Nº OS, Executada em, Situação (lista) e Observação. Este resumo se atualiza sozinho.',
-      '% executadas = executadas ÷ total previstas do mês.',
-    ];
-    notas.forEach((n, i) => {
+    params.notas.forEach((n, i) => {
       const r = 4 + i;
       resumo.mergeCells(r, 1, r, colsResumo.length);
       Object.assign(resumo.getCell(r, 1), { value: n, font: { size: 9, color: { argb: 'FF475569' } }, alignment: { vertical: 'middle', wrapText: true } });
-      resumo.getRow(r).height = 15;
+      resumo.getRow(r).height = Math.max(15, this.estimarLinhas(n, 150) * 13);
     });
-    const rowCabResumo = 5 + notas.length;
+    const rowCabResumo = 5 + params.notas.length;
     cabecalho(resumo, rowCabResumo, colsResumo);
     const letra = (c: number) => resumo.getColumn(c).letter;
     const nAreas = params.areas.length;
@@ -1423,10 +1435,14 @@ export class ExcelExportService {
         formula: `SUM(${faixa('K')})`,
         result: Math.round(mes.linhas.reduce((s, l) => s + (l.hh ?? 0), 0) * 100) / 100,
       };
-      ['Executada', 'Não executada', 'Reprogramada', 'Cancelada'].forEach((sit, i) => {
-        linha.getCell(cExec + i).value = { formula: `COUNTIF(${faixa('Q')},"${sit}")`, result: 0 };
+      situacoesResumo.forEach((sit, i) => {
+        linha.getCell(cExec + i).value = { formula: `COUNTIF(${faixa('Q')},"${sit}")`, result: mes.linhas.filter(l => l.situacao === sit).length };
       });
-      linha.getCell(cPct).value = { formula: `IF(${letra(cTotal)}${r}=0,"",${letra(cExec)}${r}/${letra(cTotal)}${r})`, result: 0 };
+      const executadas = mes.linhas.filter(l => l.situacao === 'Executada').length;
+      linha.getCell(cPct).value = {
+        formula: `IF(${letra(cTotal)}${r}=0,"",${letra(cExec)}${r}/${letra(cTotal)}${r})`,
+        result: mes.linhas.length ? executadas / mes.linhas.length : '',
+      };
       r++;
     }
     const rTotal = r;
@@ -1482,7 +1498,7 @@ export class ExcelExportService {
         const valores: (string | number | Date | null)[] = [
           dataExcel(l.data), `S${l.semana}`, l.codigo, l.nome, l.equipamento, l.tagKks, l.area, l.especialidade,
           l.periodicidade, l.tempoHoras, l.hh, l.loto, l.recursos, l.responsavel,
-          l.numeroOs, null, l.numeroOs ? 'Programada' : null, null,
+          l.numeroOs, l.executadaEm ? dataExcel(l.executadaEm) : null, l.situacao, null,
         ];
         valores.forEach((v, i) => {
           const c = i + 1;
@@ -1507,6 +1523,19 @@ export class ExcelExportService {
       }
       ws.pageSetup.printTitlesRow = '4:4';
       ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(row - 1, 4), column: colunasMes.length } };
+      // Cor pela situação — formatação condicional, vale também para o que for mudado à mão.
+      const corSituacao = (texto: string, fundo: string, fonte: string, priority: number) => ({
+        type: 'expression' as const, priority, formulae: [`$Q5="${texto}"`],
+        style: { fill: { type: 'pattern' as const, pattern: 'solid' as const, bgColor: { argb: fundo } }, font: { color: { argb: fonte }, bold: true } },
+      });
+      ws.addConditionalFormatting({
+        ref: `Q5:Q${ULTIMA_LINHA}`,
+        rules: [
+          corSituacao('Executada', 'FFDCFCE7', 'FF15803D', 1),
+          corSituacao('Não executada', 'FFFEE2E2', 'FFB91C1C', 2),
+          corSituacao('Sem OS', 'FFFEE2E2', 'FFB91C1C', 3),
+        ],
+      });
     }
 
     // ── Lista dos planos (última aba) ──
@@ -1549,6 +1578,96 @@ export class ExcelExportService {
     wsPlanos.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(rowP - 1, 4), column: colunasPlanos.length } };
 
     await this.baixarWorkbook(wb, `${params.titulo} ${params.meses[0]?.aba ?? ''} a ${params.meses[params.meses.length - 1]?.aba ?? ''}`);
+  }
+
+  // Aba do FCA: campos de identificação, Fato, Causas numeradas e a tabela de Ações
+  // (Nº, tipo, ação, responsável, prazo, status com cor).
+  private abaFca(
+    novaAba: (nome: string, colunas: { width: number }[], titulo: string, subtitulo: string, ySplit?: number) => ExcelJS.Worksheet,
+    fca: FcaExport, geradoEm: string,
+  ): void {
+    const larguras = [6, 16, 62, 20, 13, 14];
+    const NC = larguras.length;
+    const ws = novaAba('FCA', larguras.map(width => ({ width })), fca.titulo, `Fato, Causa e Ação — gerado em ${geradoEm}`, 0);
+    const charsLinha = larguras.reduce((s, w) => s + w, 0) * 1.1;
+    const borda = this.bordaFina();
+    let r = 4;
+
+    for (const [rotulo, valor] of fca.campos) {
+      ws.mergeCells(r, 1, r, 2);
+      ws.mergeCells(r, 3, r, NC);
+      Object.assign(ws.getCell(r, 1), { value: rotulo, font: { size: 9, bold: true, color: { argb: 'FF475569' } }, alignment: { vertical: 'middle' } });
+      Object.assign(ws.getCell(r, 3), { value: valor, font: { size: 10 }, alignment: { vertical: 'middle', wrapText: true } });
+      ws.getRow(r).height = 16;
+      r++;
+    }
+    r++;
+
+    const secao = (texto: string) => {
+      ws.mergeCells(r, 1, r, NC);
+      Object.assign(ws.getCell(r, 1), {
+        value: texto,
+        font: { bold: true, size: 11, color: { argb: 'FFFFFFFF' } },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL } },
+        alignment: { vertical: 'middle', indent: 1 },
+      });
+      ws.getRow(r).height = 20;
+      r++;
+    };
+    const paragrafo = (texto: string, col = 1) => {
+      ws.mergeCells(r, col, r, NC);
+      Object.assign(ws.getCell(r, col), { value: texto, font: { size: 10 }, alignment: { vertical: 'top', wrapText: true } });
+      for (let c = 1; c <= NC; c++) ws.getCell(r, c).border = borda;
+      ws.getRow(r).height = Math.max(18, this.estimarLinhas(texto, charsLinha) * 14 + 4);
+      r++;
+    };
+
+    secao('FATO');
+    paragrafo(fca.fato);
+    r++;
+
+    secao('CAUSA');
+    fca.causas.forEach((causa, i) => {
+      Object.assign(ws.getCell(r, 1), { value: i + 1, font: { size: 10, bold: true }, alignment: { horizontal: 'center', vertical: 'top' } });
+      paragrafo(causa, 2);
+    });
+    r++;
+
+    secao('AÇÃO');
+    ['Nº', 'Tipo', 'Ação', 'Responsável', 'Prazo', 'Status'].forEach((t, i) => {
+      Object.assign(ws.getCell(r, i + 1), {
+        value: t,
+        font: { bold: true, size: 9, color: { argb: this.PROG_AZUL_TEXTO } },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL_CLARO } },
+        alignment: { horizontal: 'center', vertical: 'middle' },
+        border: borda,
+      });
+    });
+    ws.getRow(r).height = 18;
+    r++;
+    const corStatus = (status: string): { bg: string; fg: string } => {
+      const s = status.toLowerCase();
+      if (s.startsWith('implantad') || s.startsWith('conclu')) return { bg: 'FFDCFCE7', fg: 'FF15803D' };
+      if (s.startsWith('em andamento')) return { bg: 'FFDBEAFE', fg: 'FF1D4ED8' };
+      return { bg: 'FFFEF3C7', fg: 'FFB45309' };
+    };
+    fca.acoes.forEach((a, i) => {
+      const valores: (string | number)[] = [i + 1, a.tipo, a.acao, a.responsavel, a.prazo, a.status];
+      valores.forEach((v, c) => {
+        const cel = ws.getCell(r, c + 1);
+        cel.value = v;
+        cel.font = { size: 10, bold: c === 5 };
+        cel.alignment = { vertical: 'top', wrapText: true, horizontal: c === 2 ? 'left' : 'center' };
+        cel.border = borda;
+      });
+      const cor = corStatus(a.status);
+      ws.getCell(r, 6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor.bg } };
+      ws.getCell(r, 6).font = { size: 10, bold: true, color: { argb: cor.fg } };
+      if (/a definir/i.test(a.prazo)) ws.getCell(r, 5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
+      ws.getRow(r).height = Math.max(18, this.estimarLinhas(a.acao, larguras[2] * 1.1) * 14 + 4);
+      r++;
+    });
+    ws.pageSetup.fitToHeight = 1;
   }
 
   private async baixarWorkbook(wb: ExcelJS.Workbook, titulo: string): Promise<void> {

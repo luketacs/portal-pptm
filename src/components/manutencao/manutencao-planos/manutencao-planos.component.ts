@@ -6,7 +6,7 @@ import { ManutencaoProgramacaoService } from '../../../services/manutencao-progr
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService } from '../../../services/notification.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
-import { ExcelExportService } from '../../../services/excel-export.service';
+import { ExcelExportService, FcaExport } from '../../../services/excel-export.service';
 import {
   AtividadeChecklist, CicloManutencao, ConsultaSigmaResultado, ManutencaoArea, ManutencaoOrdem, PeriodicidadeUnidade,
   PlanoManutencao,
@@ -17,8 +17,9 @@ import {
   diagnosticarPlanos, ProblemaSaude, SeveridadeSaude, TipoProblemaSaude, TITULO_PROBLEMA, validarPlanoParaSalvar,
 } from '../../../utils/manutencao-planos-saude';
 import {
-  agendaDosPlanos, cronogramaMensal, DiaGradeMensal, gerarGradeMensal, mesSeguinte, nomeBaseDoPlano, ocorrenciasNoIntervalo, planosAtrasados,
-  primeiraSemanaAberta, SemanaIso, datasProgramadasPorPlano, semanasIsoDoAno, siglaPeriodicidade,
+  agendaDosPlanos, cronogramaMensal, DiaGradeMensal, execucaoDoCronograma, gerarGradeMensal, INICIO_CONTROLE_NAO_PROGRAMADAS, mesSeguinte,
+  nomeBaseDoPlano, ocorrenciasNoIntervalo, ordensDosPlanos, planosAtrasados, primeiraSemanaAberta, SemanaIso, datasProgramadasPorPlano,
+  semanasIsoDoAno, siglaPeriodicidade,
 } from '../../../utils/manutencao-planos';
 
 // Célula do Mapa de intervenções: 'programada' = já virou OS (ciclo com ordem naquela
@@ -382,11 +383,59 @@ export class ManutencaoPlanosComponent implements OnInit {
     }
   }
 
-  // Planilha de controle dos planos para a auditoria: 24 meses a partir do mês que vem,
-  // uma aba por mês, uma linha por ordem prevista (ver cronogramaMensal). Segue os
-  // filtros da tela, como os outros exports. Nº OS vem preenchido quando a ocorrência já
-  // foi programada (ciclo do plano na mesma data).
+  // Planilha de controle dos planos para a auditoria: do início do controle das
+  // preventivas (05/10/2026) até 24 meses à frente do mês que vem, uma aba por mês, uma
+  // linha por ordem prevista (ver cronogramaMensal). O que já aconteceu vem preenchido —
+  // OS que cobriu a ocorrência e 1º apontamento dela no SIGMA (ver execucaoDoCronograma).
+  // Segue os filtros da tela, como os outros exports.
   readonly MESES_CRONOGRAMA = 24;
+  private readonly LOTE_CONSULTA_SIGMA = 150; // o proxy aceita até 200 OS por chamada
+
+  // FCA que justifica a planilha (primeira aba). Pedido do usuário em 29/10/2026: por
+  // falta de confiança no Protheus (planos desatualizados e OS geradas fora de data), o
+  // PCM controla as preventivas por esta planilha enquanto o Protheus é saneado. Não cita
+  // o Portal (não homologado). Prazos das ações corretivas ainda a definir pelo PCM.
+  private readonly FCA_CRONOGRAMA: FcaExport = {
+    titulo: 'FCA — Controle dos planos de manutenção preventiva',
+    campos: [
+      ['Data de abertura', '29/10/2026'],
+      ['Área', 'Manutenção PPTM — Planejamento e Controle da Manutenção (PCM)'],
+      ['Responsável', 'PCM'],
+      ['Documento de controle', 'Este arquivo: cronograma das preventivas por mês, com a OS, a data de execução e a situação de cada ordem.'],
+    ],
+    fato: 'O controle dos planos de manutenção preventiva pelo Protheus não é confiável. O cadastro dos planos tem periodicidade, '
+      + 'data de referência ou equipamento diferentes do que é executado em campo, e as OS preventivas são geradas fora da data '
+      + 'prevista — em data errada, em duplicidade ou deixando de gerar. Assim, o Protheus não garante que cada preventiva saia '
+      + 'no prazo nem permite comprovar o cumprimento dos planos.',
+    causas: [
+      'Planos desatualizados no Protheus: periodicidade, data de referência ou equipamento divergentes do que é executado em campo.',
+      'Geração de OS preventivas fora da data prevista no Protheus: OS em data errada, em duplicidade ou não geradas.',
+    ],
+    acoes: [
+      {
+        tipo: 'Contenção', responsavel: 'PCM', prazo: '29/10/2026', status: 'Implantada',
+        acao: 'Controlar as preventivas por esta planilha: cronograma de cada plano a partir do cadastro revisado pelo PCM '
+          + '(aba Planos), uma aba por mês, com a OS, a data de execução e a situação de cada ordem.',
+      },
+      {
+        tipo: 'Contenção', responsavel: 'PCM', prazo: 'Semanal', status: 'Em andamento',
+        acao: 'Atualizar a planilha a cada fechamento semanal e tratar as ordens "Não executada" e "Sem OS".',
+      },
+      {
+        tipo: 'Corretiva', responsavel: 'PCM', prazo: 'A definir', status: 'Pendente',
+        acao: 'Revisar o cadastro dos planos no Protheus (periodicidade, data de referência e equipamento), usando a aba Planos desta planilha como referência.',
+      },
+      {
+        tipo: 'Corretiva', responsavel: 'PCM / TI', prazo: 'A definir', status: 'Pendente',
+        acao: 'Corrigir a geração das OS preventivas no Protheus: data, duplicidade e OS não geradas.',
+      },
+      {
+        tipo: 'Verificação', responsavel: 'PCM', prazo: 'Mensal', status: 'Pendente',
+        acao: 'Comparar todo mês as OS preventivas geradas pelo Protheus com esta planilha. Com 3 meses seguidos sem divergência, '
+          + 'o Protheus volta a ser o controle oficial e esta planilha é encerrada.',
+      },
+    ],
+  };
 
   async exportarCronograma(): Promise<void> {
     if (this.exportando()) return;
@@ -397,13 +446,31 @@ export class ManutencaoPlanosComponent implements OnInit {
     }
     this.exportando.set(true);
     try {
-      const meses = cronogramaMensal(planos, mesSeguinte(paraIso(new Date())), this.MESES_CRONOGRAMA);
-      const numeroOsPorOrdem = new Map(this.manutencaoProgramacaoService.ordens().map(o => [o.id, o.numeroOs?.trim() || null]));
-      const osPorOcorrencia = new Map<string, string>();
-      for (const c of this.manutencaoPlanosService.ciclos()) {
-        const os = c.ordemId ? numeroOsPorOrdem.get(c.ordemId) : null;
-        if (os) osPorOcorrencia.set(`${c.planoId}|${c.dataPrevista}`, os);
+      const hoje = paraIso(new Date());
+      const inicio = INICIO_CONTROLE_NAO_PROGRAMADAS;
+      const mesInicial = inicio.slice(0, 7);
+      const primeiroFuturo = mesSeguinte(hoje);
+      const qtdMeses = (Number(primeiroFuturo.slice(0, 4)) - Number(mesInicial.slice(0, 4))) * 12
+        + Number(primeiroFuturo.slice(5, 7)) - Number(mesInicial.slice(5, 7)) + this.MESES_CRONOGRAMA;
+      const meses = cronogramaMensal(planos, mesInicial, qtdMeses, inicio);
+
+      // Execução: OS de cada plano + apontamentos no SIGMA das OS que já começaram.
+      const ordensPorPlano = ordensDosPlanos(planos, this.manutencaoPlanosService.ciclos(), this.manutencaoProgramacaoService.ordens());
+      const numerosOs = [...new Set([...ordensPorPlano.values()].flat()
+        .filter(o => o.ordem.semanaInicio <= hoje && o.ordem.numeroOs?.trim())
+        .map(o => o.ordem.numeroOs!.trim()))];
+      const sigma: Record<string, ConsultaSigmaResultado> = {};
+      try {
+        for (let i = 0; i < numerosOs.length; i += this.LOTE_CONSULTA_SIGMA) {
+          Object.assign(sigma, await this.manutencaoProgramacaoService.consultarOrdensSigma(numerosOs.slice(i, i + this.LOTE_CONSULTA_SIGMA)));
+        }
+      } catch {
+        // Sem o SIGMA toda OS sem apontamento sairia "Não executada" — melhor não gerar.
+        throw new Error('Não foi possível consultar o SIGMA para preencher as execuções. Tente de novo em instantes.');
       }
+      const apontamentosDaOs = (os: string) => (sigma[os] ?? (/^\d+$/.test(os) ? sigma[os.padStart(6, '0')] : undefined))?.apontamentos;
+      const execucao = execucaoDoCronograma(meses, planos, ordensPorPlano, apontamentosDaOs, hoje);
+
       const ocorrenciasPorPlano = new Map<string, number>();
       for (const m of meses) for (const o of m.ocorrencias) ocorrenciasPorPlano.set(o.plano.id, (ocorrenciasPorPlano.get(o.plano.id) ?? 0) + 1);
 
@@ -412,10 +479,23 @@ export class ManutencaoPlanosComponent implements OnInit {
       const abaMes = (mes: string) => `${MESES_LABEL[Number(mes.slice(5, 7)) - 1].slice(0, 3).toUpperCase()}-${mes.slice(0, 4)}`;
       const area = this.filtroArea();
       const ordemAreas: ManutencaoArea[] = ['ELETRICA', 'MECANICA', 'APOIO'];
+      const ultimoMes = meses[meses.length - 1].mes;
+      const ultimoDia = paraIso(new Date(Number(ultimoMes.slice(0, 4)), Number(ultimoMes.slice(5, 7)), 0));
 
       await this.excelExportService.exportarCronogramaPlanos({
         titulo: `Cronograma de Manutenção Preventiva${area === 'todos' ? '' : ` — ${this.areaLabel[area]}`}`,
-        periodo: `${nomeMes(meses[0].mes)} a ${nomeMes(meses[meses.length - 1].mes)}`,
+        periodo: `${this.formatarDataBr(inicio)} a ${this.formatarDataBr(ultimoDia)}`,
+        fca: this.FCA_CRONOGRAMA,
+        notas: [
+          'Datas previstas pela periodicidade cadastrada de cada plano ativo, contadas a partir da data inicial do plano. '
+            + 'Na programação semanal, a ordem pode ser antecipada em até 1/3 do período para juntar visitas ao mesmo equipamento.',
+          `Histórico desde ${this.formatarDataBr(inicio)}, início do controle das preventivas. Nº OS, Executada em e Situação vieram `
+            + `preenchidos com o que estava registrado em ${this.formatarDataBr(hoje)}: a OS programada para a ocorrência e o 1º apontamento dela no SIGMA.`,
+          'Situação: Executada = OS com apontamento no SIGMA; Não executada = a semana da OS terminou sem apontamento; '
+            + 'Programada = OS da semana atual ou futura; Sem OS = a data já passou e a ocorrência não virou ordem. Reprogramada e Cancelada são marcadas à mão.',
+          'Para atualizar, gere o arquivo de novo (o que foi digitado à mão não é levado) ou preencha as colunas em laranja: '
+            + 'Nº OS, Executada em, Situação (lista) e Observação. Este resumo se atualiza sozinho. % executadas = executadas ÷ total previstas do mês.',
+        ],
         areas: ordemAreas.filter(a => planos.some(p => p.area === a)).map(a => this.areaLabel[a]),
         meses: meses.map(m => ({
           mes: m.mes,
@@ -436,7 +516,7 @@ export class ManutencaoPlanosComponent implements OnInit {
             loto: p.lotoPadrao || '—',
             recursos: p.recursosApoio || '—',
             responsavel: p.responsavel || '—',
-            numeroOs: osPorOcorrencia.get(`${p.id}|${data}`) ?? null,
+            ...(execucao.get(`${p.id}|${data}`) ?? { numeroOs: null, executadaEm: null, situacao: null }),
           })),
         })),
         planos: [...planos]

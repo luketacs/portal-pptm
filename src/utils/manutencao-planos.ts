@@ -3,7 +3,9 @@ import {
   periodicidadeEmDias, preventivaVencendo, primeiroIndiceAPartirDe, proximaDataFixa, PeriodicidadeUnidade, somarDias,
   somarPeriodos,
 } from './manutencao-preventivas';
-import { CategoriaIndicador, ManutencaoArea, ManutencaoOrdem, PlanoManutencao, SigmaPreventivaPendente } from '../models/manutencao-programacao.model';
+import {
+  CategoriaIndicador, CicloManutencao, ManutencaoArea, ManutencaoOrdem, PlanoManutencao, SigmaPreventivaPendente,
+} from '../models/manutencao-programacao.model';
 
 // Deriva a categoria do indicador semanal (ver CategoriaIndicador) a partir do que já
 // existe no plano — Mecânica/Elétrica não têm ambiguidade; Apoio precisa olhar
@@ -547,7 +549,9 @@ export function mesSeguinte(dataIso: string): string {
 // pode citar o Portal. Por isso não entra parada de planta, alinhamento por equipamento,
 // limite semanal da equipe nem adiamento: é a previsão "pelo plano". Cada ocorrência vai
 // pro mês da própria data; ordem por data, área, equipamento e código.
-export function cronogramaMensal(planos: PlanoManutencao[], mesInicial: string, meses: number): MesCronograma[] {
+// `aPartirDe` corta o começo do primeiro mês (ex.: histórico só desde o início do
+// controle das preventivas, 05/10/2026).
+export function cronogramaMensal(planos: PlanoManutencao[], mesInicial: string, meses: number, aPartirDe?: string): MesCronograma[] {
   const lista: MesCronograma[] = [];
   let mes = mesInicial;
   for (let i = 0; i < meses; i++) {
@@ -557,7 +561,7 @@ export function cronogramaMensal(planos: PlanoManutencao[], mesInicial: string, 
   if (lista.length === 0) return lista;
   const porMes = new Map(lista.map(m => [m.mes, m]));
   const [aFim, mFim] = lista[lista.length - 1].mes.split('-').map(Number);
-  const inicio = `${mesInicial}-01`;
+  const inicio = aPartirDe && aPartirDe > `${mesInicial}-01` ? aPartirDe : `${mesInicial}-01`;
   const fim = paraIsoLocal(new Date(aFim, mFim, 0));
   for (const plano of planos) {
     if (!plano.ativo) continue;
@@ -572,6 +576,108 @@ export function cronogramaMensal(planos: PlanoManutencao[], mesInicial: string, 
       || x.plano.codigo.localeCompare(y.plano.codigo));
   }
   return lista;
+}
+
+export interface OrdemDoPlano {
+  data: string; // data do ciclo, ou 1º dia previsto da OS lançada à parte
+  ordem: ManutencaoOrdem;
+}
+
+// Todas as OS de cada plano: as do ciclo (data = ocorrência gravada) e as lançadas à
+// parte, vinculadas pelo planoPreventivoId ou com a descrição igual ao nome do plano na
+// mesma área (mesmo critério de datasProgramadasPorPlano). Cada OS entra uma vez.
+export function ordensDosPlanos(
+  planos: PlanoManutencao[], ciclos: readonly CicloManutencao[], ordens: ManutencaoOrdem[],
+): Map<string, OrdemDoPlano[]> {
+  const normalizar = (v: string) => v.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase();
+  const ordemPorId = new Map(ordens.filter(o => o.tipo === 'ordem').map(o => [o.id, o]));
+  const primeiroDia = (o: ManutencaoOrdem) => (o.diasPrevistos.length ? [...o.diasPrevistos].sort()[0] : o.semanaInicio);
+  const anexar = <T>(mapa: Map<string, T[]>, chave: string, item: T) => {
+    const lista = mapa.get(chave);
+    if (lista) lista.push(item); else mapa.set(chave, [item]);
+  };
+  const porPlanoId = new Map<string, ManutencaoOrdem[]>();
+  const porNome = new Map<string, ManutencaoOrdem[]>();
+  for (const o of ordemPorId.values()) {
+    if (o.planoPreventivoId) anexar(porPlanoId, o.planoPreventivoId, o);
+    anexar(porNome, `${o.area}|${normalizar(o.descricao)}`, o);
+  }
+  const ciclosPorPlano = new Map<string, CicloManutencao[]>();
+  for (const c of ciclos) anexar(ciclosPorPlano, c.planoId, c);
+
+  return new Map(planos.map(p => {
+    const vistas = new Set<string>();
+    const lista: OrdemDoPlano[] = [];
+    for (const c of ciclosPorPlano.get(p.id) ?? []) {
+      const ordem = ordemPorId.get(c.ordemId);
+      if (!ordem || vistas.has(ordem.id)) continue;
+      vistas.add(ordem.id);
+      lista.push({ data: c.dataPrevista, ordem });
+    }
+    for (const ordem of [...(porPlanoId.get(p.id) ?? []), ...(porNome.get(`${p.area}|${normalizar(p.nome)}`) ?? [])]) {
+      if (vistas.has(ordem.id)) continue;
+      vistas.add(ordem.id);
+      lista.push({ data: primeiroDia(ordem), ordem });
+    }
+    return [p.id, lista.sort((a, b) => a.data.localeCompare(b.data))];
+  }));
+}
+
+export type SituacaoCronograma = 'Executada' | 'Não executada' | 'Programada' | 'Sem OS';
+
+export interface ExecucaoOcorrencia {
+  numeroOs: string | null;
+  executadaEm: string | null; // 1º apontamento da OS no SIGMA
+  situacao: SituacaoCronograma;
+}
+
+// O que já aconteceu com cada ocorrência do cronograma (chave `${planoId}|${data}`).
+// A OS cobre a ocorrência pela mesma regra de planosAtrasados: data entre (ocorrência −
+// folga de cobertura) e a ocorrência seguinte; cada OS cobre uma ocorrência só.
+// Executada = tem apontamento no SIGMA; Não executada = a semana da OS terminou sem
+// apontamento; Programada = semana da OS ainda não terminou; Sem OS = a data já passou
+// (antes da semana atual) e nenhuma OS cobriu. Ocorrência futura sem OS não entra.
+export function execucaoDoCronograma(
+  meses: MesCronograma[], planos: PlanoManutencao[], ordensPorPlano: ReadonlyMap<string, readonly OrdemDoPlano[]>,
+  apontamentosDaOs: (numeroOs: string) => readonly { data: string }[] | undefined, hojeIso: string,
+): Map<string, ExecucaoOcorrencia> {
+  const segundaAtual = somarDias(hojeIso, -((new Date(hojeIso + 'T00:00:00').getDay() + 6) % 7));
+  const planoPorId = new Map(planos.map(p => [p.id, p]));
+  const datasPorPlano = new Map<string, string[]>();
+  for (const m of meses) {
+    for (const o of m.ocorrencias) {
+      const lista = datasPorPlano.get(o.plano.id);
+      if (lista) lista.push(o.data); else datasPorPlano.set(o.plano.id, [o.data]);
+    }
+  }
+
+  const resultado = new Map<string, ExecucaoOcorrencia>();
+  for (const [planoId, datas] of datasPorPlano) {
+    const p = planoPorId.get(planoId);
+    if (!p) continue;
+    const folga = p.agendaRigida ? 0 : folgaCoberturaCiclo(p.periodicidadeValor, p.periodicidadeUnidade);
+    const candidatas = ordensPorPlano.get(planoId) ?? [];
+    const usadas = new Set<number>();
+    for (const data of datas) {
+      const k = primeiroIndiceAPartirDe(p.dataInicial, p.periodicidadeValor, p.periodicidadeUnidade, somarDias(data, 1));
+      const seguinte = somarPeriodos(p.dataInicial, k, p.periodicidadeValor, p.periodicidadeUnidade);
+      const desde = somarDias(data, -folga);
+      const i = candidatas.findIndex((c, idx) => !usadas.has(idx) && c.data >= desde && c.data < seguinte);
+      if (i < 0) {
+        if (data < segundaAtual) resultado.set(`${planoId}|${data}`, { numeroOs: null, executadaEm: null, situacao: 'Sem OS' });
+        continue;
+      }
+      usadas.add(i);
+      const { ordem } = candidatas[i];
+      const numeroOs = ordem.numeroOs?.trim() || null;
+      const apontamentos = numeroOs ? apontamentosDaOs(numeroOs) ?? [] : [];
+      const executadaEm = apontamentos.length ? apontamentos.map(a => a.data).sort()[0] : null;
+      const situacao: SituacaoCronograma = executadaEm ? 'Executada'
+        : somarDias(ordem.semanaInicio, 6) < hojeIso ? 'Não executada' : 'Programada';
+      resultado.set(`${planoId}|${data}`, { numeroOs, executadaEm, situacao });
+    }
+  }
+  return resultado;
 }
 
 // Sigla curta da periodicidade pra célula do mapa (cabe num quadradinho). Pela duração
