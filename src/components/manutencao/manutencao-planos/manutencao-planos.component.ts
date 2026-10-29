@@ -393,14 +393,15 @@ export class ManutencaoPlanosComponent implements OnInit {
 
   // FCA que justifica a planilha (primeira aba). Pedido do usuário em 29/10/2026: por
   // falta de confiança no Protheus (planos desatualizados e OS geradas fora de data), o
-  // PCM controla as preventivas por esta planilha enquanto o Protheus é saneado. Não cita
-  // o Portal (não homologado). Prazos das ações corretivas ainda a definir pelo PCM.
+  // PCM controla as preventivas por esta planilha. O Protheus não será corrigido: fica
+  // até 31/12/2026 e os planos vão para o MAXIMO em 2027. Não cita o Portal (não homologado).
   private readonly FCA_CRONOGRAMA: FcaExport = {
     titulo: 'FCA — Controle dos planos de manutenção preventiva',
     campos: [
       ['Data de abertura', '29/10/2026'],
       ['Área', 'Manutenção PPTM — Planejamento e Controle da Manutenção (PCM)'],
       ['Responsável', 'PCM'],
+      ['Sistema oficial', 'Protheus até 31/12/2026; MAXIMO a partir de 2027.'],
       ['Documento de controle', 'Este arquivo: cronograma das preventivas por mês, com a OS, a data de execução e a situação de cada ordem.'],
     ],
     fato: 'O controle dos planos de manutenção preventiva pelo Protheus não é confiável. O cadastro dos planos tem periodicidade, '
@@ -422,17 +423,14 @@ export class ManutencaoPlanosComponent implements OnInit {
         acao: 'Atualizar a planilha a cada fechamento semanal e tratar as ordens "Não executada" e "Sem OS".',
       },
       {
-        tipo: 'Corretiva', responsavel: 'PCM', prazo: 'A definir', status: 'Pendente',
-        acao: 'Revisar o cadastro dos planos no Protheus (periodicidade, data de referência e equipamento), usando a aba Planos desta planilha como referência.',
+        tipo: 'Corretiva', responsavel: 'PCM', prazo: 'A partir de 2027', status: 'Planejada',
+        acao: 'Migração para o MAXIMO: os planos de manutenção passam a ser cadastrados e controlados no novo sistema. '
+          + 'O Protheus segue em uso até 31/12/2026, sem correção dos planos nele.',
       },
       {
-        tipo: 'Corretiva', responsavel: 'PCM / TI', prazo: 'A definir', status: 'Pendente',
-        acao: 'Corrigir a geração das OS preventivas no Protheus: data, duplicidade e OS não geradas.',
-      },
-      {
-        tipo: 'Verificação', responsavel: 'PCM', prazo: 'Mensal', status: 'Pendente',
-        acao: 'Comparar todo mês as OS preventivas geradas pelo Protheus com esta planilha. Com 3 meses seguidos sem divergência, '
-          + 'o Protheus volta a ser o controle oficial e esta planilha é encerrada.',
+        tipo: 'Verificação', responsavel: 'PCM', prazo: 'Mensal, após a migração', status: 'Pendente',
+        acao: 'Manter esta planilha como controle das preventivas até os planos estarem no MAXIMO. Depois da migração, comparar todo mês '
+          + 'as OS preventivas do MAXIMO com esta planilha; com 3 meses seguidos sem divergência, o MAXIMO passa a ser o controle e esta planilha é encerrada.',
       },
     ],
   };
