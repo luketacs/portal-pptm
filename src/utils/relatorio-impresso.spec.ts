@@ -1,6 +1,6 @@
 import {
   ContagemImpressa, PontoTendencia, eixoMinimo, frase, geometriaLinhas, intervaloSemana, ledeResumo,
-  ledeTendencia, montarDadosRelatorioImpresso, num, pct, tituloResumo, tituloTendencia,
+  ledeTendencia, montarDadosRelatorioImpresso, notaSomaAreas, num, pct, tituloResumo, tituloTendencia,
 } from './relatorio-impresso';
 import { ContagemExecucao, IndicadoresSemana } from './manutencao-indicadores';
 
@@ -36,6 +36,14 @@ describe('montarDadosRelatorioImpresso', () => {
     expect(d.tendenciaAreas[0].pontos.every(v => v === 100)).toBe(true);
     expect(d.atividades[0].nome).toBe('Manutenção chute EAC05');
     expect(d.tecnicos).toEqual([]);
+    expect(d.semArea).toEqual({ programadas: 0, plano: 0 });
+  });
+
+  it('ordens "Não classificado" (categoria null) ficam fora da tabela e vão pra semArea', () => {
+    const comSemArea = { ...semana, porArea: [...semana.porArea, { categoria: null, ...ind(5, 5), cumprimentoPlano: ind(2, 2) }] };
+    const d = montarDadosRelatorioImpresso({ ...fonte, indicadores: comSemArea });
+    expect(d.areas.map(a => a.nome)).toEqual(['Mecânica', 'Elétrica']);
+    expect(d.semArea).toEqual({ programadas: 5, plano: 2 });
   });
 
   it('modo mês', () => {
@@ -136,6 +144,42 @@ describe('ledeResumo (casos de área)', () => {
     const areas = [area('Mecânica', 1, 10), area('Elétrica', 1, 10), area('SPCI', 0, 3)];
     expect(ledeResumo({ meta: 95, atendimento: c(2, 23), cumprimento: c(2, 23), areas, atendimentoAno: 98 }))
       .toContain('Todas as 3 áreas ficaram abaixo da meta de 95%');
+  });
+});
+
+describe('notaSomaAreas', () => {
+  const area = (nome: string, pr: number, plano: number) => ({ nome, atendimento: c(pr, pr), cumprimento: c(plano, plano) });
+  const semArea = { programadas: 0, plano: 0 };
+
+  it('soma das áreas fecha com o total: sem nota', () => {
+    const areas = [area('Mecânica', 60, 46), area('Elétrica', 36, 24)];
+    expect(notaSomaAreas({ atendimento: c(96, 96), cumprimento: c(70, 70), areas, semArea })).toBeNull();
+  });
+
+  it('OS com técnicos de duas áreas (S40): explica a diferença, com o plano', () => {
+    const areas = [area('Mecânica', 60, 46), area('Elétrica', 36, 24), area('Limpeza Operacional', 4, 4), area('Refrigeração', 6, 5), area('SPCI', 3, 3)];
+    expect(notaSomaAreas({ atendimento: c(106, 106), cumprimento: c(80, 80), areas, semArea }))
+      .toBe('Nas áreas somam 109 ordens (82 do plano) e no total, 106 (80 do plano): '
+        + 'a mesma ordem conta em cada área que tem técnico nela (3 a mais), mas uma vez só no total.');
+  });
+
+  it('plano fecha: não repete o plano', () => {
+    const areas = [area('Mecânica', 56, 43), area('Elétrica', 47, 43)];
+    expect(notaSomaAreas({ atendimento: c(102, 102), cumprimento: c(86, 86), areas, semArea }))
+      .toBe('Nas áreas somam 103 ordens e no total, 102: a mesma ordem conta em cada área que tem técnico nela (1 a mais), mas uma vez só no total.');
+  });
+
+  it('ordens sem área entram só no total', () => {
+    const areas = [area('Mecânica', 50, 30)];
+    expect(notaSomaAreas({ atendimento: c(53, 53), cumprimento: c(31, 31), areas, semArea: { programadas: 3, plano: 1 } }))
+      .toBe('Nas áreas somam 50 ordens (30 do plano) e no total, 53 (31 do plano): 3 ordens sem área definida entram só no total.');
+  });
+
+  it('os dois casos juntos, no singular', () => {
+    const areas = [area('Mecânica', 50, 30), area('Elétrica', 11, 10)];
+    expect(notaSomaAreas({ atendimento: c(61, 61), cumprimento: c(40, 40), areas, semArea: { programadas: 1, plano: 0 } }))
+      .toBe('Nas áreas somam 61 ordens e no total, 61: a mesma ordem conta em cada área que tem técnico nela (1 a mais), '
+        + 'mas uma vez só no total; e 1 ordem sem área definida entra só no total.');
   });
 });
 

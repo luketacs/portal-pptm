@@ -52,6 +52,7 @@ h3 { font-family: Montserrat, sans-serif; font-weight: 600; font-size: 8.5pt; co
 .lede.curta { margin: 2mm 0 4mm; }
 .nota, .vazio { font-size: 8pt; color: var(--mudo); }
 .nota { margin: -1.5mm 0 3mm; }
+.nota.nota-areas { margin: 2mm 0 0; max-width: 68ch; line-height: 1.4; }
 .ruim { color: var(--ruim) !important; }
 
 /* Página 1 */

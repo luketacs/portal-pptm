@@ -42,6 +42,8 @@ export interface DadosRelatorioImpresso {
   atendimento: ContagemImpressa;
   cumprimento: ContagemImpressa;
   areas: AreaImpressa[];
+  // Ordens "Não classificado" (Apoio sem categoria): entram no total, mas não na tabela.
+  semArea: { programadas: number; plano: number };
   corretivas: ContagemImpressa;
   preventivas: ContagemImpressa;
   hhDisponivel: number;
@@ -156,6 +158,33 @@ export function ledeResumo(p: {
 
   partes.push(`No acumulado do ano, o atendimento à programação está em ${pct(p.atendimentoAno)}.`);
   return partes.join(' ');
+}
+
+// Nota sob a tabela "Por área" quando as linhas não somam o Total. O total conta cada OS
+// uma vez (agrupada por número na semana — ver calcularIndicadoresSemana); a área conta a
+// OS em cada categoria que tem técnico nela. Então a soma passa do total quando a OS tem
+// técnicos de mais de uma área, e fica abaixo quando há OS sem área. Pedido do usuário:
+// o PDF é a evidência do painel de auditoria e a tabela não pode parecer que não fecha.
+export function notaSomaAreas(p: {
+  atendimento: ContagemImpressa; cumprimento: ContagemImpressa; areas: AreaImpressa[];
+  semArea: { programadas: number; plano: number };
+}): string | null {
+  const soma = p.areas.reduce((s, a) => s + a.atendimento.programadas, 0);
+  const somaPlano = p.areas.reduce((s, a) => s + a.cumprimento.programadas, 0);
+  // Contagens a mais nas áreas (uma OS em 3 áreas conta 2 a mais), não OS distintas.
+  const aMais = soma + p.semArea.programadas - p.atendimento.programadas;
+  const aMaisPlano = somaPlano + p.semArea.plano - p.cumprimento.programadas;
+  if (aMais <= 0 && aMaisPlano <= 0 && p.semArea.programadas === 0) return null;
+
+  const planoDifere = somaPlano !== p.cumprimento.programadas;
+  const doPlano = (n: number) => (planoDifere ? ` (${num(n)} do plano)` : '');
+  const motivos: string[] = [];
+  const n = Math.max(aMais, aMaisPlano);
+  if (n > 0) motivos.push(`a mesma ordem conta em cada área que tem técnico nela (${num(n)} a mais), mas uma vez só no total`);
+  const s = p.semArea.programadas;
+  if (s > 0) motivos.push(`${num(s)} ${s === 1 ? 'ordem sem área definida entra' : 'ordens sem área definida entram'} só no total`);
+  return `Nas áreas somam ${num(soma)} ordens${doPlano(somaPlano)} e no total, ${num(p.atendimento.programadas)}${doPlano(p.cumprimento.programadas)}: `
+    + `${motivos.join('; e ')}.`;
 }
 
 export function ledeTendencia(p: {
@@ -293,6 +322,8 @@ export function montarDadosRelatorioImpresso(f: FonteRelatorioImpresso): DadosRe
       .map(cat => ({ cat, a: f.indicadores.porArea.find(x => x.categoria === cat) }))
       .filter(({ a }) => !!a && a.programadas > 0)
       .map(({ cat, a }) => ({ nome: CATEGORIA_LABEL[cat], atendimento: contagem(a!), cumprimento: contagem(a!.cumprimentoPlano) })),
+    semArea: (sa => ({ programadas: sa?.programadas ?? 0, plano: sa?.cumprimentoPlano.programadas ?? 0 }))(
+      f.indicadores.porArea.find(x => x.categoria === null)),
     corretivas: f.corretivas,
     preventivas: f.preventivas,
     hhDisponivel: f.hh.disponivel,

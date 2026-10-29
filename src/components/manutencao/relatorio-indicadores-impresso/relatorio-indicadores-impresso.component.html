@@ -58,6 +58,9 @@
             </tr>
           </tfoot>
         </table>
+        @if (notaAreas(); as nota) {
+          <p class="nota nota-areas">{{ nota }}</p>
+        }
       </div>
 
       <aside class="painel">

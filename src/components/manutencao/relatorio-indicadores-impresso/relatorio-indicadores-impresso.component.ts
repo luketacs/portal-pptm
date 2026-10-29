@@ -1,8 +1,8 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import {
-  DadosRelatorioImpresso, dataCurta, eixoMinimo, geometriaLinhas, ledeResumo, ledeTendencia, num, num2, pct, pontosSvg,
-  tituloResumo, tituloTendencia,
+  DadosRelatorioImpresso, dataCurta, eixoMinimo, geometriaLinhas, ledeResumo, ledeTendencia, notaSomaAreas, num, num2, pct,
+  pontosSvg, tituloResumo, tituloTendencia,
 } from '../../../utils/relatorio-impresso';
 
 // Documento impresso do Acompanhamento de Indicadores (botão "Gerar Relatório" da tela
@@ -39,6 +39,11 @@ export class RelatorioIndicadoresImpressoComponent {
   lede = computed(() => {
     const d = this.dados();
     return ledeResumo({ meta: d.meta, atendimento: d.atendimento, cumprimento: d.cumprimento, areas: d.areas, atendimentoAno: d.ano.atendimento.percentual });
+  });
+
+  notaAreas = computed(() => {
+    const d = this.dados();
+    return notaSomaAreas({ atendimento: d.atendimento, cumprimento: d.cumprimento, areas: d.areas, semArea: d.semArea });
   });
 
   ledeTendencia = computed(() => {
