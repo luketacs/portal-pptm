@@ -93,6 +93,59 @@ export interface MapaIntervencoesExport {
   linhas: MapaIntervencoesExportLinha[];
 }
 
+// Cronograma de preventivas (24 meses) — planilha de controle dos planos para a
+// auditoria: uma aba por mês com uma linha por ordem prevista e colunas para anotar a
+// execução, um Resumo com fórmulas e a lista dos planos. Não leva o nome do Portal
+// (pedido do usuário: o sistema não é homologado e não pode ser citado na auditoria).
+export interface CronogramaPlanosLinha {
+  data: string; // 'YYYY-MM-DD'
+  semana: number;
+  codigo: string;
+  nome: string;
+  equipamento: string;
+  tagKks: string;
+  area: string;
+  especialidade: string;
+  periodicidade: string;
+  tempoHoras: number | null;
+  hh: number | null;
+  loto: string;
+  recursos: string;
+  responsavel: string;
+  numeroOs: string | null; // OS já programada pra essa ocorrência (ciclo na mesma data)
+}
+
+export interface CronogramaPlanosMes {
+  mes: string;  // 'YYYY-MM'
+  nome: string; // "Novembro de 2026"
+  aba: string;  // "NOV-2026"
+  linhas: CronogramaPlanosLinha[];
+}
+
+export interface CronogramaPlanoCadastro {
+  codigo: string;
+  nome: string;
+  equipamento: string;
+  tagKks: string;
+  area: string;
+  especialidade: string;
+  periodicidade: string;
+  dataInicial: string; // 'YYYY-MM-DD'
+  responsavel: string;
+  tempoHoras: number | null;
+  hh: number | null;
+  passosChecklist: number;
+  ocorrencias: number; // ordens previstas no período
+}
+
+export interface CronogramaPlanosExport {
+  titulo: string;  // "Cronograma de Manutenção Preventiva"
+  periodo: string; // "Novembro de 2026 a Outubro de 2028"
+  areas: string[]; // colunas do Resumo, na ordem
+  meses: CronogramaPlanosMes[];
+  planos: CronogramaPlanoCadastro[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class ExcelExportService {
 
@@ -1267,6 +1320,235 @@ export class ExcelExportService {
       ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(row - 1, 4), column: NC } };
     }
     await this.baixarWorkbook(wb, params.titulo);
+  }
+
+  // Situações da coluna de controle (lista suspensa) — o Resumo conta por esses textos.
+  private readonly SITUACOES_CRONOGRAMA = ['Programada', 'Executada', 'Não executada', 'Reprogramada', 'Cancelada'];
+  private readonly CONTROLE_BG = 'FFFFF7D6';  // colunas para preencher
+  private readonly CONTROLE_TOPO = 'FFB45309'; // cabeçalho das colunas para preencher
+
+  async exportarCronogramaPlanos(params: CronogramaPlanosExport): Promise<void> {
+    const { default: ExcelJS } = await import('exceljs');
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'PCM - PPTM';
+    wb.created = new Date();
+    wb.calcProperties.fullCalcOnLoad = true; // Resumo é fórmula sobre as abas dos meses
+    const logoBuffer = await this.carregarLogoBuffer();
+    const logoId = logoBuffer ? wb.addImage({ buffer: logoBuffer, extension: 'png' }) : null;
+    const geradoEm = this.nowStr();
+    const ULTIMA_LINHA = 5000; // fórmulas do Resumo cobrem linhas acrescentadas à mão
+
+    const novaAba = (nome: string, colunas: { width: number }[], titulo: string, subtitulo: string, ySplit = 4) => {
+      const ws = wb.addWorksheet(nome, {
+        pageSetup: { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+        views: [{ state: 'frozen', ySplit, showGridLines: false }],
+      });
+      ws.columns = colunas;
+      const NC = colunas.length;
+      if (logoId !== null) ws.addImage(logoId, { tl: { col: 0.15, row: 0.12 }, ext: { width: 210, height: 63 } });
+      ws.getRow(1).height = 28;
+      ws.getRow(2).height = 18;
+      ws.getRow(3).height = 6;
+      ws.mergeCells(1, 3, 1, NC);
+      Object.assign(ws.getCell(1, 3), {
+        value: titulo,
+        font: { bold: true, size: 16, color: { argb: this.PROG_AZUL_TEXTO } },
+        alignment: { horizontal: 'left', vertical: 'middle' },
+      });
+      ws.mergeCells(2, 3, 2, NC);
+      Object.assign(ws.getCell(2, 3), {
+        value: subtitulo,
+        font: { size: 10, color: { argb: 'FF555555' } },
+        alignment: { horizontal: 'left', vertical: 'middle' },
+      });
+      for (let c = 1; c <= NC; c++) ws.getCell(2, c).border = { bottom: { style: 'thin', color: { argb: 'FFB9C1FD' } } };
+      ws.pageSetup.margins = { left: 0.3, right: 0.3, top: 0.5, bottom: 0.4, header: 0.2, footer: 0.2 };
+      ws.headerFooter.oddFooter = '&L&8' + titulo.replace(/&/g, '&&') + '&R&8Página &P de &N';
+      return ws;
+    };
+    const cabecalho = (ws: ExcelJS.Worksheet, row: number, titulos: string[], controleDesde = Infinity) => {
+      ws.getRow(row).height = 26;
+      titulos.forEach((t, i) => {
+        const cel = ws.getCell(row, i + 1);
+        cel.value = t;
+        cel.font = { bold: true, size: 9, color: { argb: 'FFFFFFFF' } };
+        cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: i + 1 >= controleDesde ? this.CONTROLE_TOPO : this.PROG_AZUL } };
+        cel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cel.border = { left: { style: 'thin', color: { argb: 'FFFFFFFF' } } };
+      });
+    };
+    const dataExcel = (iso: string) => {
+      const [a, m, d] = iso.split('-').map(Number);
+      return new Date(Date.UTC(a, m - 1, d));
+    };
+
+    // ── Resumo (primeira aba) ──
+    const colsResumo = ['Mês', ...params.areas, 'Total previstas', 'HH previsto', 'Executadas', 'Não executadas', 'Reprogramadas', 'Canceladas', '% executadas'];
+    const resumo = novaAba('Resumo', [{ width: 20 }, ...params.areas.map(() => ({ width: 11 })), { width: 11 }, { width: 11 }, { width: 11 }, { width: 11 }, { width: 12 }, { width: 11 }, { width: 11 }],
+      `${params.titulo} — Resumo`, `${params.periodo} — gerado em ${geradoEm}`);
+    const notas = [
+      'Datas previstas pela periodicidade cadastrada de cada plano ativo, contadas a partir da data inicial do plano.',
+      'Na programação semanal, a ordem pode ser antecipada em até 1/3 do período para juntar visitas ao mesmo equipamento.',
+      'Nas abas dos meses, preencha as colunas em laranja: Nº OS, Executada em, Situação (lista) e Observação. Este resumo se atualiza sozinho.',
+      '% executadas = executadas ÷ total previstas do mês.',
+    ];
+    notas.forEach((n, i) => {
+      const r = 4 + i;
+      resumo.mergeCells(r, 1, r, colsResumo.length);
+      Object.assign(resumo.getCell(r, 1), { value: n, font: { size: 9, color: { argb: 'FF475569' } }, alignment: { vertical: 'middle', wrapText: true } });
+      resumo.getRow(r).height = 15;
+    });
+    const rowCabResumo = 5 + notas.length;
+    cabecalho(resumo, rowCabResumo, colsResumo);
+    const letra = (c: number) => resumo.getColumn(c).letter;
+    const nAreas = params.areas.length;
+    const cTotal = 2 + nAreas;
+    const cHH = cTotal + 1;
+    const cExec = cHH + 1;
+    const cPct = colsResumo.length;
+    let r = rowCabResumo + 1;
+    for (const mes of params.meses) {
+      const aba = `'${mes.aba}'!`;
+      const faixa = (col: string) => `${aba}$${col}$5:$${col}$${ULTIMA_LINHA}`;
+      const linha = resumo.getRow(r);
+      linha.getCell(1).value = mes.nome;
+      params.areas.forEach((area, i) => {
+        linha.getCell(2 + i).value = {
+          formula: `COUNTIF(${faixa('G')},"${area}")`,
+          result: mes.linhas.filter(l => l.area === area).length,
+        };
+      });
+      linha.getCell(cTotal).value = { formula: `COUNTA(${faixa('C')})`, result: mes.linhas.length };
+      linha.getCell(cHH).value = {
+        formula: `SUM(${faixa('K')})`,
+        result: Math.round(mes.linhas.reduce((s, l) => s + (l.hh ?? 0), 0) * 100) / 100,
+      };
+      ['Executada', 'Não executada', 'Reprogramada', 'Cancelada'].forEach((sit, i) => {
+        linha.getCell(cExec + i).value = { formula: `COUNTIF(${faixa('Q')},"${sit}")`, result: 0 };
+      });
+      linha.getCell(cPct).value = { formula: `IF(${letra(cTotal)}${r}=0,"",${letra(cExec)}${r}/${letra(cTotal)}${r})`, result: 0 };
+      r++;
+    }
+    const rTotal = r;
+    const linhaTotal = resumo.getRow(rTotal);
+    linhaTotal.getCell(1).value = 'Total do período';
+    for (let c = 2; c < cPct; c++) {
+      linhaTotal.getCell(c).value = { formula: `SUM(${letra(c)}${rowCabResumo + 1}:${letra(c)}${rTotal - 1})` };
+    }
+    linhaTotal.getCell(cPct).value = { formula: `IF(${letra(cTotal)}${rTotal}=0,"",${letra(cExec)}${rTotal}/${letra(cTotal)}${rTotal})` };
+    for (let rr = rowCabResumo + 1; rr <= rTotal; rr++) {
+      for (let c = 1; c <= colsResumo.length; c++) {
+        const cel = resumo.getCell(rr, c);
+        const total = rr === rTotal;
+        cel.font = { size: 9, bold: total || c === cTotal };
+        cel.border = this.bordaFina();
+        cel.alignment = { vertical: 'middle', horizontal: c === 1 ? 'left' : 'center' };
+        if (c === cHH) cel.numFmt = '0.0';
+        if (c === cPct) cel.numFmt = '0.0%';
+        if (total) cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL_CLARO } };
+      }
+    }
+    resumo.views = [{ state: 'frozen', ySplit: rowCabResumo, showGridLines: false }];
+
+    // ── Uma aba por mês ──
+    const colunasMes: { header: string; width: number; quebra?: boolean }[] = [
+      { header: 'Data', width: 11.5 },
+      { header: 'Semana', width: 10 },
+      { header: 'Plano', width: 10.5 },
+      { header: 'Descrição', width: 40, quebra: true },
+      { header: 'Equipamento', width: 22, quebra: true },
+      { header: 'TAG/KKS', width: 17 },
+      { header: 'Área', width: 11 },
+      { header: 'Especialidade', width: 15, quebra: true },
+      { header: 'Periodicidade', width: 15 },
+      { header: 'Tempo (h)', width: 10.5 },
+      { header: 'HH', width: 7.5 },
+      { header: 'LOTO', width: 11 },
+      { header: 'Recursos', width: 14, quebra: true },
+      { header: 'Responsável', width: 15, quebra: true },
+      { header: 'Nº OS', width: 11 },
+      { header: 'Executada em', width: 16 },
+      { header: 'Situação', width: 15 },
+      { header: 'Observação', width: 28, quebra: true },
+    ];
+    const COL_CONTROLE = 15; // Nº OS em diante
+    const listaSituacoes = `"${this.SITUACOES_CRONOGRAMA.join(',')}"`;
+    for (const mes of params.meses) {
+      const ws = novaAba(mes.aba, colunasMes.map(c => ({ width: c.width })), `${params.titulo} — ${mes.nome}`,
+        `${mes.linhas.length} ordem(ns) prevista(s) — gerado em ${geradoEm}`);
+      cabecalho(ws, 4, colunasMes.map(c => c.header), COL_CONTROLE);
+      let row = 5;
+      for (const l of mes.linhas) {
+        const valores: (string | number | Date | null)[] = [
+          dataExcel(l.data), `S${l.semana}`, l.codigo, l.nome, l.equipamento, l.tagKks, l.area, l.especialidade,
+          l.periodicidade, l.tempoHoras, l.hh, l.loto, l.recursos, l.responsavel,
+          l.numeroOs, null, l.numeroOs ? 'Programada' : null, null,
+        ];
+        valores.forEach((v, i) => {
+          const c = i + 1;
+          const cel = ws.getCell(row, c);
+          cel.value = v;
+          cel.font = { size: 9 };
+          cel.border = this.bordaFina();
+          cel.alignment = {
+            vertical: 'top', wrapText: !!colunasMes[i].quebra,
+            horizontal: c <= 3 || c === 7 || c === 10 || c === 11 || c === 15 || c === 16 ? 'center' : 'left',
+          };
+          if (c >= COL_CONTROLE) cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.CONTROLE_BG } };
+        });
+        ws.getCell(row, 1).numFmt = 'dd/mm/yyyy';
+        ws.getCell(row, 16).numFmt = 'dd/mm/yyyy';
+        ws.getCell(row, 17).dataValidation = {
+          type: 'list', allowBlank: true, formulae: [listaSituacoes],
+          showErrorMessage: true, errorTitle: 'Situação', error: `Escolha: ${this.SITUACOES_CRONOGRAMA.join(', ')}.`,
+        };
+        ws.getRow(row).height = Math.max(15, Math.max(this.estimarLinhas(l.nome, 40), this.estimarLinhas(l.equipamento, 22)) * 12.5);
+        row++;
+      }
+      ws.pageSetup.printTitlesRow = '4:4';
+      ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(row - 1, 4), column: colunasMes.length } };
+    }
+
+    // ── Lista dos planos (última aba) ──
+    const colunasPlanos: { header: string; width: number; quebra?: boolean }[] = [
+      { header: 'Plano', width: 9.5 },
+      { header: 'Descrição', width: 42, quebra: true },
+      { header: 'Equipamento', width: 22, quebra: true },
+      { header: 'TAG/KKS', width: 17 },
+      { header: 'Área', width: 11 },
+      { header: 'Especialidade', width: 15, quebra: true },
+      { header: 'Periodicidade', width: 15 },
+      { header: 'Data inicial', width: 12 },
+      { header: 'Responsável', width: 15, quebra: true },
+      { header: 'Tempo (h)', width: 10.5 },
+      { header: 'HH', width: 7.5 },
+      { header: 'Passos do checklist', width: 12 },
+      { header: 'Ordens no período', width: 12 },
+    ];
+    const wsPlanos = novaAba('Planos', colunasPlanos.map(c => ({ width: c.width })), `${params.titulo} — Planos ativos`,
+      `${params.planos.length} plano(s) — ${params.periodo} — gerado em ${geradoEm}`);
+    cabecalho(wsPlanos, 4, colunasPlanos.map(c => c.header));
+    let rowP = 5;
+    for (const p of params.planos) {
+      const valores: (string | number | Date | null)[] = [
+        p.codigo, p.nome, p.equipamento, p.tagKks, p.area, p.especialidade, p.periodicidade, dataExcel(p.dataInicial),
+        p.responsavel, p.tempoHoras, p.hh, p.passosChecklist, p.ocorrencias,
+      ];
+      valores.forEach((v, i) => {
+        const cel = wsPlanos.getCell(rowP, i + 1);
+        cel.value = v;
+        cel.font = { size: 9 };
+        cel.border = this.bordaFina();
+        cel.alignment = { vertical: 'top', wrapText: !!colunasPlanos[i].quebra, horizontal: typeof v === 'number' || v instanceof Date || i === 0 || i === 4 ? 'center' : 'left' };
+      });
+      wsPlanos.getCell(rowP, 8).numFmt = 'dd/mm/yyyy';
+      wsPlanos.getRow(rowP).height = Math.max(15, Math.max(this.estimarLinhas(p.nome, 42), this.estimarLinhas(p.equipamento, 22)) * 12.5);
+      rowP++;
+    }
+    wsPlanos.pageSetup.printTitlesRow = '4:4';
+    wsPlanos.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(rowP - 1, 4), column: colunasPlanos.length } };
+
+    await this.baixarWorkbook(wb, `${params.titulo} ${params.meses[0]?.aba ?? ''} a ${params.meses[params.meses.length - 1]?.aba ?? ''}`);
   }
 
   private async baixarWorkbook(wb: ExcelJS.Workbook, titulo: string): Promise<void> {

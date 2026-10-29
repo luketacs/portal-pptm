@@ -523,6 +523,57 @@ export function ocorrenciasNoIntervalo(
   return datas;
 }
 
+// ── Cronograma de 24 meses (planilha de controle) ─────────────────────────────
+
+export interface OcorrenciaCronograma {
+  data: string; // 'YYYY-MM-DD'
+  plano: PlanoManutencao;
+}
+
+export interface MesCronograma {
+  mes: string; // 'YYYY-MM'
+  ocorrencias: OcorrenciaCronograma[];
+}
+
+// Mês seguinte ao da data ('YYYY-MM') — início padrão do cronograma.
+export function mesSeguinte(dataIso: string): string {
+  const [a, m] = dataIso.split('-').map(Number);
+  return m === 12 ? `${a + 1}-01` : `${a}-${String(m + 1).padStart(2, '0')}`;
+}
+
+// Preventivas previstas mês a mês pela periodicidade CADASTRADA de cada plano ativo — a
+// sequência fixa a partir da data inicial (ocorrenciasNoIntervalo, a mesma do Mapa de 52
+// semanas). Pedido do usuário: planilha de controle dos planos para a auditoria, que não
+// pode citar o Portal. Por isso não entra parada de planta, alinhamento por equipamento,
+// limite semanal da equipe nem adiamento: é a previsão "pelo plano". Cada ocorrência vai
+// pro mês da própria data; ordem por data, área, equipamento e código.
+export function cronogramaMensal(planos: PlanoManutencao[], mesInicial: string, meses: number): MesCronograma[] {
+  const lista: MesCronograma[] = [];
+  let mes = mesInicial;
+  for (let i = 0; i < meses; i++) {
+    lista.push({ mes, ocorrencias: [] });
+    mes = mesSeguinte(`${mes}-01`);
+  }
+  if (lista.length === 0) return lista;
+  const porMes = new Map(lista.map(m => [m.mes, m]));
+  const [aFim, mFim] = lista[lista.length - 1].mes.split('-').map(Number);
+  const inicio = `${mesInicial}-01`;
+  const fim = paraIsoLocal(new Date(aFim, mFim, 0));
+  for (const plano of planos) {
+    if (!plano.ativo) continue;
+    for (const data of ocorrenciasNoIntervalo(plano.dataInicial, plano.periodicidadeValor, plano.periodicidadeUnidade, inicio, fim)) {
+      porMes.get(data.slice(0, 7))?.ocorrencias.push({ data, plano });
+    }
+  }
+  for (const m of lista) {
+    m.ocorrencias.sort((x, y) => x.data.localeCompare(y.data)
+      || x.plano.area.localeCompare(y.plano.area)
+      || x.plano.equipamento.localeCompare(y.plano.equipamento)
+      || x.plano.codigo.localeCompare(y.plano.codigo));
+  }
+  return lista;
+}
+
 // Sigla curta da periodicidade pra célula do mapa (cabe num quadradinho). Pela duração
 // em dias, não pelo texto do cadastro — "30 Dia(s)" e "1 Mes(es)" são os dois "M".
 export function siglaPeriodicidade(valor: number, unidade: PeriodicidadeUnidade): string {

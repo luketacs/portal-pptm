@@ -1,6 +1,6 @@
 import { ManutencaoOrdem, PlanoManutencao } from '../models/manutencao-programacao.model';
 import {
-  agendaDosPlanos, alinharDatasPorEquipamento, EQUIPE_APOIO_NAO_CLASSIFICADA, gerarGradeMensal, inferirCategoriaIndicador,
+  agendaDosPlanos, alinharDatasPorEquipamento, cronogramaMensal, EQUIPE_APOIO_NAO_CLASSIFICADA, gerarGradeMensal, inferirCategoriaIndicador, mesSeguinte,
   inferirCategoriaIndicadorPorTecnico, janelaAlinhamentoDaArea, limitarPorEquipeApoio, nomeBaseDoPlano, ocorrenciasNoIntervalo,
   semanasIsoDoAno, siglaPeriodicidade, planosAtrasados, planosComProximaExecucao, datasProgramadasPorPlano, osSigmaDosPlanos,
   planosComProximaExecucaoFixa, proximaExecucaoPlano, resumoPorEquipeApoio, sugestoesDaSemana, dataCicloAoProgramar,
@@ -347,6 +347,45 @@ describe('ocorrenciasNoIntervalo', () => {
 
   it('semanal no ano inteiro', () => {
     expect(ocorrenciasNoIntervalo('2026-01-05', 1, 'Semana(s)', '2026-01-01', '2026-12-31')).toHaveLength(52);
+  });
+});
+
+describe('cronogramaMensal', () => {
+  it('24 meses a partir do mês seguinte, uma lista por mês', () => {
+    expect(mesSeguinte('2026-10-29')).toBe('2026-11');
+    expect(mesSeguinte('2026-12-05')).toBe('2027-01');
+    const meses = cronogramaMensal([], '2026-11', 24);
+    expect(meses).toHaveLength(24);
+    expect(meses[0].mes).toBe('2026-11');
+    expect(meses[23].mes).toBe('2028-10');
+  });
+
+  it('cada ocorrência cai no mês da sua data, pela periodicidade cadastrada', () => {
+    const semanal = plano({ id: 's', codigo: 'PM-0002', dataInicial: '2026-10-05', periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)' });
+    const semestral = plano({ id: 'x', codigo: 'PM-0003', dataInicial: '2026-09-21', periodicidadeValor: 6, periodicidadeUnidade: 'Mes(es)' });
+    const [nov, dez, jan, fev, mar] = cronogramaMensal([semanal, semestral], '2026-11', 5);
+    expect(nov.ocorrencias.map(o => o.data)).toEqual(['2026-11-02', '2026-11-09', '2026-11-16', '2026-11-23', '2026-11-30']);
+    expect(dez.ocorrencias).toHaveLength(4);
+    expect(jan.ocorrencias.filter(o => o.plano.id === 'x')).toEqual([]);
+    expect(mar.ocorrencias.filter(o => o.plano.id === 'x').map(o => o.data)).toEqual(['2027-03-21']);
+    expect(fev.ocorrencias.every(o => o.plano.id === 's')).toBe(true);
+  });
+
+  it('ignora plano inativo e plano que só começa depois do período', () => {
+    const inativo = plano({ id: 'i', ativo: false });
+    const futuro = plano({ id: 'f', dataInicial: '2029-01-01' });
+    expect(cronogramaMensal([inativo, futuro], '2026-11', 24).every(m => m.ocorrencias.length === 0)).toBe(true);
+  });
+
+  it('ordena por data, área, equipamento e código', () => {
+    const base = { dataInicial: '2026-11-10', periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)' as const };
+    const planos = [
+      plano({ ...base, id: 'c', codigo: 'PM-0030', area: 'MECANICA', equipamento: 'B' }),
+      plano({ ...base, id: 'a', codigo: 'PM-0010', area: 'ELETRICA', equipamento: 'Z' }),
+      plano({ ...base, id: 'b', codigo: 'PM-0020', area: 'MECANICA', equipamento: 'A' }),
+      plano({ ...base, id: 'd', codigo: 'PM-0040', area: 'APOIO', equipamento: 'A', dataInicial: '2026-11-03' }),
+    ];
+    expect(cronogramaMensal(planos, '2026-11', 1)[0].ocorrencias.map(o => o.plano.id)).toEqual(['d', 'a', 'b', 'c']);
   });
 });
 

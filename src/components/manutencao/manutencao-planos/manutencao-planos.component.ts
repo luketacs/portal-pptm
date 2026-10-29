@@ -17,8 +17,8 @@ import {
   diagnosticarPlanos, ProblemaSaude, SeveridadeSaude, TipoProblemaSaude, TITULO_PROBLEMA, validarPlanoParaSalvar,
 } from '../../../utils/manutencao-planos-saude';
 import {
-  agendaDosPlanos, DiaGradeMensal, gerarGradeMensal, nomeBaseDoPlano, ocorrenciasNoIntervalo, planosAtrasados, primeiraSemanaAberta, SemanaIso, datasProgramadasPorPlano,
-  semanasIsoDoAno, siglaPeriodicidade,
+  agendaDosPlanos, cronogramaMensal, DiaGradeMensal, gerarGradeMensal, mesSeguinte, nomeBaseDoPlano, ocorrenciasNoIntervalo, planosAtrasados,
+  primeiraSemanaAberta, SemanaIso, datasProgramadasPorPlano, semanasIsoDoAno, siglaPeriodicidade,
 } from '../../../utils/manutencao-planos';
 
 // Célula do Mapa de intervenções: 'programada' = já virou OS (ciclo com ordem naquela
@@ -377,6 +377,89 @@ export class ManutencaoPlanosComponent implements OnInit {
       this.notificationService.showSuccess('Planilha exportada.');
     } catch (err: unknown) {
       this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao exportar.');
+    } finally {
+      this.exportando.set(false);
+    }
+  }
+
+  // Planilha de controle dos planos para a auditoria: 24 meses a partir do mês que vem,
+  // uma aba por mês, uma linha por ordem prevista (ver cronogramaMensal). Segue os
+  // filtros da tela, como os outros exports. Nº OS vem preenchido quando a ocorrência já
+  // foi programada (ciclo do plano na mesma data).
+  readonly MESES_CRONOGRAMA = 24;
+
+  async exportarCronograma(): Promise<void> {
+    if (this.exportando()) return;
+    const planos = this.planosFiltrados().filter(p => p.ativo);
+    if (planos.length === 0) {
+      this.notificationService.showError('Nenhum plano ativo pra exportar com esses filtros.');
+      return;
+    }
+    this.exportando.set(true);
+    try {
+      const meses = cronogramaMensal(planos, mesSeguinte(paraIso(new Date())), this.MESES_CRONOGRAMA);
+      const numeroOsPorOrdem = new Map(this.manutencaoProgramacaoService.ordens().map(o => [o.id, o.numeroOs?.trim() || null]));
+      const osPorOcorrencia = new Map<string, string>();
+      for (const c of this.manutencaoPlanosService.ciclos()) {
+        const os = c.ordemId ? numeroOsPorOrdem.get(c.ordemId) : null;
+        if (os) osPorOcorrencia.set(`${c.planoId}|${c.dataPrevista}`, os);
+      }
+      const ocorrenciasPorPlano = new Map<string, number>();
+      for (const m of meses) for (const o of m.ocorrencias) ocorrenciasPorPlano.set(o.plano.id, (ocorrenciasPorPlano.get(o.plano.id) ?? 0) + 1);
+
+      const periodicidade = (p: PlanoManutencao) => `${p.periodicidadeValor} ${p.periodicidadeUnidade}`;
+      const nomeMes = (mes: string) => `${MESES_LABEL[Number(mes.slice(5, 7)) - 1]} de ${mes.slice(0, 4)}`;
+      const abaMes = (mes: string) => `${MESES_LABEL[Number(mes.slice(5, 7)) - 1].slice(0, 3).toUpperCase()}-${mes.slice(0, 4)}`;
+      const area = this.filtroArea();
+      const ordemAreas: ManutencaoArea[] = ['ELETRICA', 'MECANICA', 'APOIO'];
+
+      await this.excelExportService.exportarCronogramaPlanos({
+        titulo: `Cronograma de Manutenção Preventiva${area === 'todos' ? '' : ` — ${this.areaLabel[area]}`}`,
+        periodo: `${nomeMes(meses[0].mes)} a ${nomeMes(meses[meses.length - 1].mes)}`,
+        areas: ordemAreas.filter(a => planos.some(p => p.area === a)).map(a => this.areaLabel[a]),
+        meses: meses.map(m => ({
+          mes: m.mes,
+          nome: nomeMes(m.mes),
+          aba: abaMes(m.mes),
+          linhas: m.ocorrencias.map(({ data, plano: p }) => ({
+            data,
+            semana: this.numeroSemanaISO(data),
+            codigo: p.codigo,
+            nome: p.nome,
+            equipamento: p.equipamento,
+            tagKks: p.tagKks || '—',
+            area: this.areaLabel[p.area],
+            especialidade: p.especialidade || '—',
+            periodicidade: periodicidade(p),
+            tempoHoras: p.tempoEstimadoHoras,
+            hh: p.hhEstimado,
+            loto: p.lotoPadrao || '—',
+            recursos: p.recursosApoio || '—',
+            responsavel: p.responsavel || '—',
+            numeroOs: osPorOcorrencia.get(`${p.id}|${data}`) ?? null,
+          })),
+        })),
+        planos: [...planos]
+          .sort((a, b) => a.area.localeCompare(b.area) || a.equipamento.localeCompare(b.equipamento) || a.codigo.localeCompare(b.codigo))
+          .map(p => ({
+            codigo: p.codigo,
+            nome: p.nome,
+            equipamento: p.equipamento,
+            tagKks: p.tagKks || '—',
+            area: this.areaLabel[p.area],
+            especialidade: p.especialidade || '—',
+            periodicidade: periodicidade(p),
+            dataInicial: p.dataInicial,
+            responsavel: p.responsavel || '—',
+            tempoHoras: p.tempoEstimadoHoras,
+            hh: p.hhEstimado,
+            passosChecklist: p.atividades.length,
+            ocorrencias: ocorrenciasPorPlano.get(p.id) ?? 0,
+          })),
+      });
+      this.notificationService.showSuccess('Cronograma exportado.');
+    } catch (err: unknown) {
+      this.notificationService.showError(err instanceof Error ? err.message : 'Erro ao exportar o cronograma.');
     } finally {
       this.exportando.set(false);
     }
