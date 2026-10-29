@@ -831,10 +831,29 @@ export class ExcelExportService {
           ws.mergeCells(row, 1, row, 7);
           const cel = ws.getCell(row, 1);
           const detalheReuniao = [linha.recursos && linha.recursos !== '—' ? linha.recursos : null].filter(Boolean).join(' · ');
+          // Treinamento/exame médico mostram qual curso/exame é (descrição digitada na
+          // programação) logo abaixo do rótulo — sem isso a planilha só dizia
+          // "TREINAMENTO"/"EXAME MÉDICO". Se a pessoa não digitou nada a descrição vira
+          // o próprio nome do tipo (ver descricaoParaEnvio no componente), aí não repete.
+          // Folga também leva o motivo (ex.: "Disponível para operação") — sem isso o
+          // time de campo lia só "FOLGA" e a pessoa que estava liberada pra outro setor
+          // parecia ausente. "Feriado" já vira o próprio rótulo (labelFolga), não repete.
+          const descricaoPadrao = linha.tipo === 'treinamento' ? 'TREINAMENTO'
+            : linha.tipo === 'exame_medico' ? 'EXAME MÉDICO (ASO)'
+            : linha.tipo === 'folga' ? 'FOLGA'
+            : null;
+          const descricao = linha.descricao.trim();
+          const detalheAusencia = descricaoPadrao && descricao
+            && descricao.toUpperCase() !== descricaoPadrao && descricao.toUpperCase() !== numeroLabel
+            ? descricao : null;
           if (linha.tipo === 'reuniao') {
             cel.value = detalheReuniao ? `${linha.descricao}\n${detalheReuniao}` : linha.descricao;
             cel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
             ws.getRow(row).height = 28; // Excel não estica altura sozinho em célula mesclada
+          } else if (detalheAusencia) {
+            cel.value = `${numeroLabel}\n${detalheAusencia}`;
+            cel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            ws.getRow(row).height = 28;
           } else {
             cel.value = numeroLabel;
             cel.alignment = { horizontal: 'center', vertical: 'middle' };
