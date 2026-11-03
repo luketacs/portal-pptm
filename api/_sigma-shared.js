@@ -228,7 +228,7 @@ export function osApontadasNoPeriodo(dados, de, ate) {
       const os = dados.osPorNumero.get(a.numeroOs);
       item = {
         numeroOs: a.numeroOs, data: a.data, areaManutencao: os?.areaManutencao ?? '', tipoServico: os?.tipoServico ?? '',
-        descricao: os?.descricao ?? '', equipamento: os?.equipamento ?? '', executantes: [], horas: 0,
+        descricao: os?.descricao ?? '', equipamento: os?.equipamento ?? '', statusCodigo: os?.statusCodigo ?? '', executantes: [], horas: 0,
       };
       porChave.set(chave, item);
     }

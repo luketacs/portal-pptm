@@ -82,7 +82,7 @@ export default async function handler(req, res) {
         .filter(a => a.data >= de && a.data <= ate && (executantes.size === 0 || executantes.has(a.executante)))
         .map(a => {
           const os = dados.osPorNumero.get(a.numeroOs);
-          return { ...a, descricao: os?.descricao ?? '', equipamento: os?.equipamento ?? '' };
+          return { ...a, descricao: os?.descricao ?? '', equipamento: os?.equipamento ?? '', statusCodigo: os?.statusCodigo ?? '' };
         });
       return res.status(200).json({ success: true, apontamentos, osApontadas: osApontadasNoPeriodo(dados, de, ate), atualizadoEm: dados.ts });
     }

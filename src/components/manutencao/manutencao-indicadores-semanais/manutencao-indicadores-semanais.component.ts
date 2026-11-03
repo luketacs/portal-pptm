@@ -12,7 +12,7 @@ import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, Impor
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
   META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, STATUS_GERAL_COR,
-  TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, entraNoFechamentoIndicador, indiceAtingimentoMeta, OrdemForaProgramacao, ordensForaDaProgramacao } from '../../../utils/manutencao-indicadores';
+  TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, entraNoFechamentoIndicador, indiceAtingimentoMeta, OrdemForaProgramacao, ordensForaDaProgramacao, semApontamentoEmOsCancelada } from '../../../utils/manutencao-indicadores';
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { AREAS_LINHA_TEMPO_SEPARADA, extrairHistoricoContagens, extrairHistoricoContagensPorArea } from '../../../utils/relatorio-semanal-pcm';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
@@ -382,8 +382,8 @@ export class ManutencaoIndicadoresSemanaisComponent implements OnInit, OnDestroy
       const { apontamentos: lista, osApontadas } = await this.manutencaoService.consultarApontamentosSigmaPeriodo(p.de, p.ate, p.matriculas);
       // Resposta atrasada de um período que já não está na tela é descartada.
       if (this.periodoApontamentos()?.chave === p.chave) {
-        this.apontamentosPeriodo.set({ chave: p.chave, lista });
-        this.osApontadasPeriodo.set(osApontadas);
+        this.apontamentosPeriodo.set({ chave: p.chave, lista: semApontamentoEmOsCancelada(lista) });
+        this.osApontadasPeriodo.set(semApontamentoEmOsCancelada(osApontadas));
         this.apontamentosAtualizadoEm.set(new Date());
         this.apontamentosErro.set('');
       }

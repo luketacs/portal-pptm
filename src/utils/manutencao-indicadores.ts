@@ -229,6 +229,16 @@ export interface OrdemForaProgramacao {
   horas: number;
 }
 
+// A partir da S44/2026 (pedido do usuário), apontamento em OS cancelada no SIGMA não
+// conta: nem em "Fora da Prog.", nem nas horas fora da programação/extrato. Depois que
+// a OS é cancelada o apontamento não dá mais pra apagar no SIGMA (caso real S44: OS
+// 015954 e 011379 da Mecânica). Semanas anteriores ficam como estavam (já fechadas).
+export const INICIO_DESCARTE_OS_CANCELADA = '2026-10-26';
+
+export function semApontamentoEmOsCancelada<T extends { data: string; statusCodigo?: string }>(lista: T[]): T[] {
+  return lista.filter(a => a.data < INICIO_DESCARTE_OS_CANCELADA || (a.statusCodigo ?? '').trim().toUpperCase() !== 'CANC');
+}
+
 function normalizarOs(v: string): string {
   const s = String(v ?? '').trim();
   return /^\d+$/.test(s) ? s.padStart(6, '0') : s.toUpperCase();

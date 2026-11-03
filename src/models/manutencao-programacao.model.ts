@@ -253,6 +253,7 @@ export interface SigmaApontamentoPeriodo extends SigmaApontamento {
   almoco?: boolean;
   descricao?: string;  // da OS no SIGMA
   equipamento?: string;
+  statusCodigo?: string; // da OS no SIGMA (CANC = cancelada, ver semApontamentoEmOsCancelada)
 }
 
 // OS com apontamento no período, por dia (todas as áreas/executantes) — ver
@@ -264,6 +265,7 @@ export interface OsApontadaPeriodo {
   tipoServico: string;
   descricao: string;
   equipamento: string;
+  statusCodigo?: string; // da OS no SIGMA (CANC = cancelada, ver semApontamentoEmOsCancelada)
   executantes: string[]; // matrículas
   horas: number;
 }

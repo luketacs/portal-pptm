@@ -1,5 +1,5 @@
 import { ManutencaoOrdem, ConsultaSigmaResultado } from '../models/manutencao-programacao.model';
-import { ordensForaDaProgramacao, categoriaDaAreaSigma, mensagemOrdensForaProgramacao,
+import { ordensForaDaProgramacao, categoriaDaAreaSigma, mensagemOrdensForaProgramacao, semApontamentoEmOsCancelada,
   calcularIndicadoresSemana, indiceAtingimentoMeta, MatchColaborador, META_ATENDIMENTO, META_CUMPRIMENTO,
   META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META,
   TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META,
@@ -260,6 +260,19 @@ describe('ordensForaDaProgramacao', () => {
     ]);
     const msg = mensagemOrdensForaProgramacao('Fora', 'S37', r, m => `Nome ${m}`);
     expect(msg).toContain('• Ter 08/09, Qua 09/09 — OS 047666 — OS 047666 [CORRETIVA] — Nome 1, Nome 2 — 5h');
+  });
+
+  it('a partir da S44/2026 descarta apontamento em OS cancelada no SIGMA', () => {
+    const apontadas = [
+      { ...ap('015954', '2026-10-26', 'MECA', ['703016'], 1.17), statusCodigo: 'CANC' }, // S44 cancelada: sai
+      { ...ap('011379', '2026-10-26', 'MECA', ['703016'], 1.17), statusCodigo: 'canc' }, // idem, minúsculo
+      { ...ap('047666', '2026-10-27', 'MECA', ['1'], 2), statusCodigo: 'EXEC' },         // fica
+      { ...ap('046000', '2026-10-20', 'MECA', ['1'], 2), statusCodigo: 'CANC' },         // S43: fica como estava
+      ap('048000', '2026-10-28', 'ELET', ['1'], 1),                                      // sem status: fica
+    ];
+    expect(semApontamentoEmOsCancelada(apontadas).map(a => a.numeroOs)).toEqual(['047666', '046000', '048000']);
+    const r = ordensForaDaProgramacao(semApontamentoEmOsCancelada(apontadas), [], ['2026-10-26']);
+    expect(r.map(o => o.numeroOs)).toEqual(['047666', '048000']);
   });
 
   it('mapeia as áreas do SIGMA pras categorias do indicador', () => {

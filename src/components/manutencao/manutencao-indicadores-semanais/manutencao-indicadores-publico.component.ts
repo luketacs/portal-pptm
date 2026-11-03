@@ -24,7 +24,7 @@ import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, Manut
 import {
   CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
   META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, STATUS_GERAL_COR,
-  TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, entraNoFechamentoIndicador, indiceAtingimentoMeta, OrdemForaProgramacao, ordensForaDaProgramacao } from '../../../utils/manutencao-indicadores';
+  TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, entraNoFechamentoIndicador, indiceAtingimentoMeta, OrdemForaProgramacao, ordensForaDaProgramacao, semApontamentoEmOsCancelada } from '../../../utils/manutencao-indicadores';
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
 import { labelMesCurto } from '../../../utils/relatorio-mensal-pcm';
 import { ExtratoHoras, HhAtividade, HhEquipamento, KpiExecucao, SobreposicaoApontamento, StatusExecucaoGrupo, apontamentosSobrepostos, calcularKpiExecucao, extratoHorasColaborador, mensagemExtratoWhatsapp, OrdemPendente, ordensPendentes, hhPorAtividade, hhPorEquipamento, horasApontadasDoColaborador, horasForaDaProgramacao, ordemExecutadaAgrupada, creditarOsExecutadasPorOutro } from '../../../utils/manutencao-dashboard';
@@ -572,8 +572,8 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
       if (!resp.ok || !body?.success) return;
       // Resposta atrasada de um período que já não está na tela é descartada.
       if (this.periodoApontamentos()?.chave === p.chave) {
-        this.apontamentosPeriodo.set({ chave: p.chave, lista: body.apontamentos as SigmaApontamentoPeriodo[] });
-        this.osApontadasPeriodo.set((body.osApontadas ?? []) as OsApontadaPeriodo[]);
+        this.apontamentosPeriodo.set({ chave: p.chave, lista: semApontamentoEmOsCancelada(body.apontamentos as SigmaApontamentoPeriodo[]) });
+        this.osApontadasPeriodo.set(semApontamentoEmOsCancelada((body.osApontadas ?? []) as OsApontadaPeriodo[]));
       }
     } catch {
       // Best-effort: sem isso "Fora da prog."/sobrepostos/extrato só ficam vazios.
