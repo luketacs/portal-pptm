@@ -24,6 +24,7 @@ const params: CronogramaPlanosExport = {
   titulo: 'Cronograma de Manutenção Preventiva',
   periodo: '01/11/2026 a 31/12/2026',
   notas: [['Datas previstas', 'Nota 1.'], ['Como atualizar', 'Nota 2.']],
+  pendenciasDesde: '2026-10-01',
   areas: ['Elétrica', 'Mecânica', 'Apoio'],
   meses: [
     {
@@ -183,6 +184,31 @@ it('Pendências lista só Não executada e Sem OS, em ordem de data', async () =
   expect(ws.getCell('C6').value).toBe('PM-0003');
   expect(ws.getCell('H6').value).toBe('048001');
   expect(ws.getCell('C7').value).toBeNull();
+});
+
+it('Pendências corta pela data de início do tratamento, mas mês e Resumo seguem com a situação real', async () => {
+  const meses = [{
+    mes: '2026-11', nome: 'Novembro de 2026', aba: 'NOV-2026', linhas: [
+      linha({ data: '2026-11-08', codigo: 'PM-0010', situacao: 'Sem OS' }),
+      linha({ data: '2026-11-09', codigo: 'PM-0011', numeroOs: '048500', situacao: 'Não executada' }),
+    ],
+  }];
+  await new ExcelExportService().exportarCronogramaPlanos({ ...params, pendenciasDesde: '2026-11-09', meses });
+  const wb = capturado!;
+  const ws = wb.getWorksheet('Pendências')!;
+  expect(ws.getCell('C5').value).toBe('PM-0011');
+  expect(ws.getCell('C6').value).toBeNull();
+  expect(String(ws.getCell('C2').value ?? ws.getCell('D2').value)).toContain('Pendências desde 09/11/2026 | 1 ordem(ns)');
+  expect(wb.getWorksheet('NOV-2026')!.getCell('K5').value).toBe('Sem OS');
+  expect(wb.getWorksheet('Resumo')!.getRow(6).getCell(8).value).toMatchObject({ result: 1 });
+});
+
+it('Pendências sem nenhuma ordem no período diz isso, em vez de tabela vazia', async () => {
+  await new ExcelExportService().exportarCronogramaPlanos({
+    ...params, pendenciasDesde: '2026-11-09',
+    meses: [{ mes: '2026-10', nome: 'Outubro de 2026', aba: 'OUT-2026', linhas: [linha({ data: '2026-10-05', situacao: 'Sem OS' })] }],
+  });
+  expect(capturado!.getWorksheet('Pendências')!.getCell('A5').value).toBe('Nenhuma ordem não executada ou sem OS desde 09/11/2026.');
 });
 
 it('estilo de ficha técnica: Arial, cabeçalho cinza e vermelho só na exceção', async () => {

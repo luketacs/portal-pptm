@@ -392,6 +392,10 @@ export class ManutencaoPlanosComponent implements OnInit {
   readonly MESES_CRONOGRAMA = 24;
   private readonly LOTE_CONSULTA_SIGMA = 150; // o proxy aceita até 200 OS por chamada
   private readonly DIAS_POR_CONSULTA_APONTAMENTOS = 45; // limite do proxy por chamada
+  // Pedido do usuário em 09/11/2026 (S46): a aba Pendências começa aqui e o arquivo não comenta
+  // as anteriores, que serão resolvidas no SIGMA. Abas de mês, Resumo e % seguem com a situação
+  // real. A data fica no subtítulo da aba: sem ela, "nenhuma ordem" seria falso.
+  private readonly INICIO_TRATAMENTO_PENDENCIAS = '2026-11-09';
 
   // FCA que justifica a planilha (primeira aba). Pedido do usuário em 29/10/2026: por
   // falta de confiança no Protheus (planos desatualizados e OS geradas fora de data), o
@@ -523,6 +527,7 @@ export class ManutencaoPlanosComponent implements OnInit {
         titulo: `Cronograma de Manutenção Preventiva${area === 'todos' ? '' : ` - ${this.areaLabel[area]}`}`,
         periodo: `${this.formatarDataBr(inicio)} a ${this.formatarDataBr(ultimoDia)}`,
         fca: this.fcaCronograma(paradas),
+        pendenciasDesde: this.INICIO_TRATAMENTO_PENDENCIAS,
         notas: [
           ['Datas previstas', 'Periodicidade cadastrada de cada plano ativo, contada a partir da data inicial do plano. '
             + 'Na programação semanal, a ordem pode ser antecipada em até 1/3 do período para juntar visitas ao mesmo equipamento.'],
@@ -537,7 +542,8 @@ export class ManutencaoPlanosComponent implements OnInit {
             + 'quando a ocorrência mensal tem OS não cancelada, indicada na Observação. Mês sem OS continua Sem OS. Datas futuras seguem a periodicidade cadastrada até passarem.'],
           ['Reprogramada e Cancelada', 'Marcadas à mão.'],
           ['% executadas', 'Executadas ÷ ordens com resultado (Executada, Não executada, Sem OS, Reprogramada e Cancelada). Dispensadas, programadas e datas futuras não entram na base.'],
-          ['Pendências', 'Lista das ordens Não executada e Sem OS na data de geração do arquivo. Não se atualiza sozinha.'],
+          ['Pendências', `Ordens Não executada e Sem OS com data a partir de ${this.formatarDataBr(this.INICIO_TRATAMENTO_PENDENCIAS)}. `
+            + 'A lista sai na geração do arquivo e não se atualiza sozinha.'],
           ['Como atualizar', 'Gere o arquivo de novo (o que foi digitado à mão não é levado) ou preencha as colunas de fundo claro: '
             + 'Nº OS, Executada em, Situação (lista) e Observação. O Resumo se atualiza sozinho.'],
         ],

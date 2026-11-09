@@ -151,6 +151,7 @@ export interface CronogramaPlanosExport {
   titulo: string;  // "Cronograma de Manutenção Preventiva"
   periodo: string; // "05/10/2026 a 31/10/2028"
   notas: [string, string][]; // aba Notas: rótulo -> texto
+  pendenciasDesde: string; // 'YYYY-MM-DD', início do tratamento na aba Pendências
   fca?: FcaExport;
   areas: string[]; // colunas do Resumo, na ordem
   meses: CronogramaPlanosMes[];
@@ -1491,10 +1492,12 @@ export class ExcelExportService {
     });
     resumo.views = [{ state: 'frozen', ySplit: ROW_CAB, showGridLines: false }];
 
-    // ── Pendências: só o que precisa de tratamento, na data de geração ──
+    // ── Pendências: só o que precisa de tratamento, na data de geração. O tratamento começa
+    // em pendenciasDesde; o que veio antes segue nas abas de mês e no Resumo. ──
     const pendencias = params.meses.flatMap(m => m.linhas)
-      .filter(l => this.SITUACOES_PENDENTES.includes(l.situacao ?? ''))
+      .filter(l => this.SITUACOES_PENDENTES.includes(l.situacao ?? '') && l.data >= params.pendenciasDesde)
       .sort((a, b) => a.data.localeCompare(b.data) || a.codigo.localeCompare(b.codigo));
+    const pendenciasDesdeBr = params.pendenciasDesde.split('-').reverse().join('/');
     const colunasPendencias: { header: string; width: number; quebra?: boolean; centro?: boolean }[] = [
       { header: 'Data', width: 11, centro: true },
       { header: 'Semana', width: 8, centro: true },
@@ -1508,8 +1511,16 @@ export class ExcelExportService {
       { header: 'Tratativa', width: 36, quebra: true },
     ];
     const wsPendencias = novaAba('Pendências', colunasPendencias.map(c => ({ width: c.width })), params.titulo,
-      `Pendências | ${pendencias.length} ordem(ns) não executada(s) ou sem OS | ${posicao}`);
+      `Pendências desde ${pendenciasDesdeBr} | ${pendencias.length} ordem(ns) não executada(s) ou sem OS | ${posicao}`);
     cabecalho(wsPendencias, 4, colunasPendencias.map(c => c.header), colunasPendencias.length);
+    if (pendencias.length === 0) {
+      wsPendencias.mergeCells(5, 1, 5, colunasPendencias.length);
+      Object.assign(wsPendencias.getCell(5, 1), {
+        value: `Nenhuma ordem não executada ou sem OS desde ${pendenciasDesdeBr}.`,
+        font: this.fonteCrono({ color: { argb: this.CRONO.textoSuave } }),
+        alignment: { vertical: 'middle' },
+      });
+    }
     let rowPend = 5;
     for (const l of pendencias) {
       const valores: (string | number | Date | null)[] = [
