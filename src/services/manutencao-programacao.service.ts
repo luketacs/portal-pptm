@@ -1017,6 +1017,17 @@ export class ManutencaoProgramacaoService {
     this._paradaAtual.set(row ? { id: row.id, dataInicio: row.data_inicio, dataFim: row.data_fim } : null);
   }
 
+  // Histórico completo (paradaAtual só guarda a aberta): o cronograma precisa saber se a
+  // data de cada ocorrência caiu numa parada.
+  async listarParadasPlanta(): Promise<ParadaPlanta[]> {
+    const { data, error } = await this.supabaseService.client
+      .from('manutencao_parada_planta')
+      .select('id, data_inicio, data_fim')
+      .order('data_inicio');
+    if (error) throw new Error(error.message);
+    return (data ?? []).map(r => ({ id: r.id, dataInicio: r.data_inicio, dataFim: r.data_fim }));
+  }
+
   async iniciarParadaPlanta(): Promise<void> {
     const user = this.authService.currentUser();
     if (!user) throw new Error('Sessão expirada.');

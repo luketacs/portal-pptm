@@ -4,7 +4,7 @@ import {
   somarPeriodos,
 } from './manutencao-preventivas';
 import {
-  CategoriaIndicador, CicloManutencao, ManutencaoArea, ManutencaoOrdem, PlanoManutencao, SigmaPreventivaPendente,
+  CategoriaIndicador, CicloManutencao, ManutencaoArea, ManutencaoOrdem, OsApontadaPeriodo, ParadaPlanta, PlanoManutencao, SigmaPreventivaPendente,
 } from '../models/manutencao-programacao.model';
 
 // Deriva a categoria do indicador semanal (ver CategoriaIndicador) a partir do que já
@@ -623,23 +623,96 @@ export function ordensDosPlanos(
   }));
 }
 
-export type SituacaoCronograma = 'Executada' | 'Não executada' | 'Programada' | 'Sem OS';
+export const SITUACAO_DISPENSADA_PARADA = 'Dispensada (parada)';
+export type SituacaoCronograma = 'Executada' | 'Não executada' | 'Programada' | 'Sem OS' | typeof SITUACAO_DISPENSADA_PARADA;
 
 export interface ExecucaoOcorrencia {
   numeroOs: string | null;
   executadaEm: string | null; // 1º apontamento da OS no SIGMA
   situacao: SituacaoCronograma;
+  observacao?: string; // dispensada (ocorrência mensal e OS) ou OS fora da programação
+}
+
+export const OBSERVACAO_OS_FORA_DA_PROGRAMACAO = 'OS fora da programação semanal, com apontamento no SIGMA.';
+
+// OS que não está na programação mas foi apontada no SIGMA, com a descrição do plano.
+export interface OsForaDaProgramacao {
+  numeroOs: string;
+  datas: string[]; // dias com apontamento, em ordem
+}
+
+const chaveNumeroOs = (numero: string) => (/^\d+$/.test(numero) ? numero.padStart(6, '0') : numero.toUpperCase());
+
+// OS preventivas apontadas no SIGMA, por plano, casadas pela descrição igual ao nome do
+// plano. O nome repetido em mais de um plano ativo é ambíguo (planos iguais em equipamentos
+// diferentes) e fica de fora, como OS cancelada (apontamento nela não conta, ver
+// semApontamentoEmOsCancelada). `todosOsPlanos` = cadastro inteiro, não só o filtro da tela.
+export function osForaDaProgramacaoPorPlano(
+  planos: readonly Pick<PlanoManutencao, 'id' | 'nome'>[], todosOsPlanos: readonly Pick<PlanoManutencao, 'nome' | 'ativo'>[],
+  osApontadas: readonly Pick<OsApontadaPeriodo, 'numeroOs' | 'data' | 'tipoServico' | 'descricao' | 'statusCodigo'>[],
+): Map<string, OsForaDaProgramacao[]> {
+  const normalizar = (v: string) => (v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+  const usoDoNome = new Map<string, number>();
+  for (const p of todosOsPlanos) {
+    if (p.ativo) usoDoNome.set(normalizar(p.nome), (usoDoNome.get(normalizar(p.nome)) ?? 0) + 1);
+  }
+  const porDescricao = new Map<string, Map<string, string[]>>();
+  for (const o of osApontadas) {
+    if (o.tipoServico !== 'PREVENTIVA' || o.statusCodigo === 'CANC') continue;
+    const chave = normalizar(o.descricao);
+    const porNumero = porDescricao.get(chave) ?? new Map<string, string[]>();
+    porNumero.set(o.numeroOs, [...(porNumero.get(o.numeroOs) ?? []), o.data]);
+    porDescricao.set(chave, porNumero);
+  }
+  const resultado = new Map<string, OsForaDaProgramacao[]>();
+  for (const p of planos) {
+    const chave = normalizar(p.nome);
+    if ((usoDoNome.get(chave) ?? 0) > 1) continue;
+    const porNumero = porDescricao.get(chave);
+    if (!porNumero) continue;
+    resultado.set(p.id, [...porNumero].map(([numeroOs, datas]) => ({ numeroOs, datas: [...datas].sort() }))
+      .sort((a, b) => a.datas[0].localeCompare(b.datas[0])));
+  }
+  return resultado;
+}
+
+// O cronograma lista o plano pela periodicidade cadastrada, mas na parada o ciclo curto de
+// Elétrica/Mecânica é programado como mensal (periodicidadeEfetiva). A linha sem OS só é
+// dispensada se a data está na parada E a ocorrência mensal que contém essa data tem OS
+// com número; senão continua "Sem OS": um mês sem OS nenhuma é falha de verdade.
+function dispensaPorParada(
+  p: PlanoManutencao, data: string, coberturas: readonly { numeroOs: string; datas: readonly string[]; executada: boolean }[],
+  paradas: readonly Pick<ParadaPlanta, 'dataInicio' | 'dataFim'>[],
+): string | null {
+  if (!paradas.some(x => data >= x.dataInicio && (!x.dataFim || data <= x.dataFim))) return null;
+  const efetiva = periodicidadeEfetiva(p.periodicidadeValor, p.periodicidadeUnidade, true, p.area);
+  if (efetiva.valor === p.periodicidadeValor && efetiva.unidade === p.periodicidadeUnidade) return null;
+  const k = primeiroIndiceAPartirDe(p.dataInicial, efetiva.valor, efetiva.unidade, somarDias(data, 1));
+  const ocorrencia = somarPeriodos(p.dataInicial, k - 1, efetiva.valor, efetiva.unidade);
+  const seguinte = somarPeriodos(p.dataInicial, k, efetiva.valor, efetiva.unidade);
+  const desde = somarDias(ocorrencia, p.agendaRigida ? 0 : -folgaCoberturaCiclo(efetiva.valor, efetiva.unidade));
+  const noCiclo = coberturas.filter(c => c.datas.some(d => d >= desde && d < seguinte));
+  if (noCiclo.length === 0) return null;
+  const { numeroOs } = noCiclo.find(c => c.executada) ?? noCiclo[0];
+  const dataBr = ocorrencia.split('-').reverse().join('/');
+  return `Planta parada: ciclo programado como mensal. Ocorrência de ${dataBr} coberta pela OS ${numeroOs}.`;
 }
 
 // O que já aconteceu com cada ocorrência do cronograma (chave `${planoId}|${data}`).
-// A OS cobre a ocorrência pela mesma regra de planosAtrasados: data entre (ocorrência −
-// folga de cobertura) e a ocorrência seguinte; cada OS cobre uma ocorrência só.
-// Executada = tem apontamento no SIGMA; Não executada = a semana da OS terminou sem
-// apontamento; Programada = semana da OS ainda não terminou; Sem OS = a data já passou
-// (antes da semana atual) e nenhuma OS cobriu. Ocorrência futura sem OS não entra.
+// Período da ocorrência = mesma regra de planosAtrasados: de (ocorrência − folga de
+// cobertura) até a ocorrência seguinte. A OS cobre a ocorrência se tem apontamento nesse
+// período; OS sem apontamento vale pela data do ciclo. Cada OS cobre uma ocorrência só, e
+// o número repetido em dois lançamentos conta uma vez: sem isso a linha mostrava execução
+// semanas antes ou depois da própria data.
+// Executada = tem apontamento no período (data = o 1º deles), na programação ou na OS do
+// SIGMA fora dela; Não executada = a semana da OS terminou sem apontamento; Programada =
+// semana da OS ainda não terminou; Sem OS = a data já passou (antes da semana atual) e
+// nenhuma OS cobriu; Dispensada = ver dispensaPorParada. Ocorrência futura sem OS não entra.
 export function execucaoDoCronograma(
   meses: MesCronograma[], planos: PlanoManutencao[], ordensPorPlano: ReadonlyMap<string, readonly OrdemDoPlano[]>,
   apontamentosDaOs: (numeroOs: string) => readonly { data: string }[] | undefined, hojeIso: string,
+  paradas: readonly Pick<ParadaPlanta, 'dataInicio' | 'dataFim'>[] = [],
+  osForaPorPlano: ReadonlyMap<string, readonly OsForaDaProgramacao[]> = new Map(),
 ): Map<string, ExecucaoOcorrencia> {
   const segundaAtual = somarDias(hojeIso, -((new Date(hojeIso + 'T00:00:00').getDay() + 6) % 7));
   const planoPorId = new Map(planos.map(p => [p.id, p]));
@@ -656,22 +729,50 @@ export function execucaoDoCronograma(
     const p = planoPorId.get(planoId);
     if (!p) continue;
     const folga = p.agendaRigida ? 0 : folgaCoberturaCiclo(p.periodicidadeValor, p.periodicidadeUnidade);
-    const candidatas = ordensPorPlano.get(planoId) ?? [];
+    const candidatas = (ordensPorPlano.get(planoId) ?? []).map(c => {
+      const numeroOs = c.ordem.numeroOs?.trim() || null;
+      return { ...c, numeroOs, apontamentos: numeroOs ? (apontamentosDaOs(numeroOs) ?? []).map(a => a.data).sort() : [] };
+    });
+    const programadas = new Set(candidatas.flatMap(c => (c.numeroOs ? [chaveNumeroOs(c.numeroOs)] : [])));
+    const foraDaProgramacao = (osForaPorPlano.get(planoId) ?? []).filter(o => !programadas.has(chaveNumeroOs(o.numeroOs)));
+    const coberturas = [
+      ...candidatas.flatMap(c => (c.numeroOs
+        // Vale a data do ciclo também: OS programada no mês e executada dias depois cobriu o mês.
+        ? [{ numeroOs: c.numeroOs, datas: [c.data, ...c.apontamentos], executada: c.apontamentos.length > 0 }]
+        : [])),
+      ...foraDaProgramacao.map(o => ({ numeroOs: o.numeroOs, datas: o.datas, executada: true })),
+    ];
     const usadas = new Set<number>();
+    const numerosUsados = new Set<string>();
     for (const data of datas) {
       const k = primeiroIndiceAPartirDe(p.dataInicial, p.periodicidadeValor, p.periodicidadeUnidade, somarDias(data, 1));
       const seguinte = somarPeriodos(p.dataInicial, k, p.periodicidadeValor, p.periodicidadeUnidade);
       const desde = somarDias(data, -folga);
-      const i = candidatas.findIndex((c, idx) => !usadas.has(idx) && c.data >= desde && c.data < seguinte);
+      const noPeriodo = (d: string) => d >= desde && d < seguinte;
+      const i = candidatas.findIndex((c, idx) => !usadas.has(idx)
+        && !(c.numeroOs && numerosUsados.has(chaveNumeroOs(c.numeroOs)))
+        && (c.apontamentos.length ? c.apontamentos.some(noPeriodo) : noPeriodo(c.data)));
       if (i < 0) {
-        if (data < segundaAtual) resultado.set(`${planoId}|${data}`, { numeroOs: null, executadaEm: null, situacao: 'Sem OS' });
+        if (data < segundaAtual) {
+          const fora = foraDaProgramacao.find(o => !numerosUsados.has(chaveNumeroOs(o.numeroOs)) && o.datas.some(noPeriodo));
+          if (fora) {
+            numerosUsados.add(chaveNumeroOs(fora.numeroOs));
+            resultado.set(`${planoId}|${data}`, {
+              numeroOs: fora.numeroOs, executadaEm: fora.datas.find(noPeriodo)!, situacao: 'Executada', observacao: OBSERVACAO_OS_FORA_DA_PROGRAMACAO,
+            });
+            continue;
+          }
+          const observacao = dispensaPorParada(p, data, coberturas, paradas);
+          resultado.set(`${planoId}|${data}`, observacao
+            ? { numeroOs: null, executadaEm: null, situacao: SITUACAO_DISPENSADA_PARADA, observacao }
+            : { numeroOs: null, executadaEm: null, situacao: 'Sem OS' });
+        }
         continue;
       }
       usadas.add(i);
-      const { ordem } = candidatas[i];
-      const numeroOs = ordem.numeroOs?.trim() || null;
-      const apontamentos = numeroOs ? apontamentosDaOs(numeroOs) ?? [] : [];
-      const executadaEm = apontamentos.length ? apontamentos.map(a => a.data).sort()[0] : null;
+      const { ordem, numeroOs, apontamentos } = candidatas[i];
+      if (numeroOs) numerosUsados.add(chaveNumeroOs(numeroOs));
+      const executadaEm = apontamentos.find(noPeriodo) ?? null;
       const situacao: SituacaoCronograma = executadaEm ? 'Executada'
         : somarDias(ordem.semanaInicio, 6) < hojeIso ? 'Não executada' : 'Programada';
       resultado.set(`${planoId}|${data}`, { numeroOs, executadaEm, situacao });

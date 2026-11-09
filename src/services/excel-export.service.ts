@@ -116,6 +116,7 @@ export interface CronogramaPlanosLinha {
   numeroOs: string | null;
   executadaEm: string | null; // 'YYYY-MM-DD', 1º apontamento no SIGMA
   situacao: string | null;
+  observacao?: string | null;
 }
 
 export interface CronogramaPlanosMes {
@@ -1337,7 +1338,7 @@ export class ExcelExportService {
   }
 
   // Situações da coluna de controle (lista suspensa) — o Resumo conta por esses textos.
-  private readonly SITUACOES_CRONOGRAMA = ['Programada', 'Executada', 'Não executada', 'Sem OS', 'Reprogramada', 'Cancelada'];
+  private readonly SITUACOES_CRONOGRAMA = ['Programada', 'Executada', 'Não executada', 'Sem OS', 'Dispensada (parada)', 'Reprogramada', 'Cancelada'];
   private readonly CONTROLE_BG = 'FFFFF7D6';  // colunas para preencher
   private readonly CONTROLE_TOPO = 'FFB45309'; // cabeçalho das colunas para preencher
 
@@ -1400,8 +1401,8 @@ export class ExcelExportService {
     if (params.fca) this.abaFca(novaAba, params.fca, geradoEm);
 
     // ── Resumo ──
-    const situacoesResumo = ['Executada', 'Não executada', 'Sem OS', 'Reprogramada', 'Cancelada'];
-    const colsResumo = ['Mês', ...params.areas, 'Total previstas', 'HH previsto', 'Executadas', 'Não executadas', 'Sem OS', 'Reprogramadas', 'Canceladas', '% executadas'];
+    const situacoesResumo = ['Executada', 'Não executada', 'Sem OS', 'Dispensada (parada)', 'Reprogramada', 'Cancelada'];
+    const colsResumo = ['Mês', ...params.areas, 'Total previstas', 'HH previsto', 'Executadas', 'Não executadas', 'Sem OS', 'Dispensadas (parada)', 'Reprogramadas', 'Canceladas', '% executadas'];
     const resumo = novaAba('Resumo', [{ width: 20 }, ...params.areas.map(() => ({ width: 11 })), { width: 11 }, { width: 11 }, ...situacoesResumo.map(() => ({ width: 12.5 })), { width: 12 }],
       `${params.titulo} — Resumo`, `${params.periodo} — gerado em ${geradoEm}`);
     params.notas.forEach((n, i) => {
@@ -1417,7 +1418,13 @@ export class ExcelExportService {
     const cTotal = 2 + nAreas;
     const cHH = cTotal + 1;
     const cExec = cHH + 1;
+    const cDispensadas = cExec + situacoesResumo.indexOf('Dispensada (parada)');
     const cPct = colsResumo.length;
+    // Ordem dispensada pela parada não era exigida: fica fora da base do percentual.
+    const formulaPct = (rr: number) => {
+      const base = `(${letra(cTotal)}${rr}-${letra(cDispensadas)}${rr})`;
+      return `IF(${base}=0,"",${letra(cExec)}${rr}/${base})`;
+    };
     let r = rowCabResumo + 1;
     for (const mes of params.meses) {
       const aba = `'${mes.aba}'!`;
@@ -1439,10 +1446,8 @@ export class ExcelExportService {
         linha.getCell(cExec + i).value = { formula: `COUNTIF(${faixa('Q')},"${sit}")`, result: mes.linhas.filter(l => l.situacao === sit).length };
       });
       const executadas = mes.linhas.filter(l => l.situacao === 'Executada').length;
-      linha.getCell(cPct).value = {
-        formula: `IF(${letra(cTotal)}${r}=0,"",${letra(cExec)}${r}/${letra(cTotal)}${r})`,
-        result: mes.linhas.length ? executadas / mes.linhas.length : '',
-      };
+      const exigidas = mes.linhas.filter(l => l.situacao !== 'Dispensada (parada)').length;
+      linha.getCell(cPct).value = { formula: formulaPct(r), result: exigidas ? executadas / exigidas : '' };
       r++;
     }
     const rTotal = r;
@@ -1451,7 +1456,7 @@ export class ExcelExportService {
     for (let c = 2; c < cPct; c++) {
       linhaTotal.getCell(c).value = { formula: `SUM(${letra(c)}${rowCabResumo + 1}:${letra(c)}${rTotal - 1})` };
     }
-    linhaTotal.getCell(cPct).value = { formula: `IF(${letra(cTotal)}${rTotal}=0,"",${letra(cExec)}${rTotal}/${letra(cTotal)}${rTotal})` };
+    linhaTotal.getCell(cPct).value = { formula: formulaPct(rTotal) };
     for (let rr = rowCabResumo + 1; rr <= rTotal; rr++) {
       for (let c = 1; c <= colsResumo.length; c++) {
         const cel = resumo.getCell(rr, c);
@@ -1498,7 +1503,7 @@ export class ExcelExportService {
         const valores: (string | number | Date | null)[] = [
           dataExcel(l.data), `S${l.semana}`, l.codigo, l.nome, l.equipamento, l.tagKks, l.area, l.especialidade,
           l.periodicidade, l.tempoHoras, l.hh, l.loto, l.recursos, l.responsavel,
-          l.numeroOs, l.executadaEm ? dataExcel(l.executadaEm) : null, l.situacao, null,
+          l.numeroOs, l.executadaEm ? dataExcel(l.executadaEm) : null, l.situacao, l.observacao ?? null,
         ];
         valores.forEach((v, i) => {
           const c = i + 1;
@@ -1518,7 +1523,9 @@ export class ExcelExportService {
           type: 'list', allowBlank: true, formulae: [listaSituacoes],
           showErrorMessage: true, errorTitle: 'Situação', error: `Escolha: ${this.SITUACOES_CRONOGRAMA.join(', ')}.`,
         };
-        ws.getRow(row).height = Math.max(15, Math.max(this.estimarLinhas(l.nome, 40), this.estimarLinhas(l.equipamento, 22)) * 12.5);
+        ws.getRow(row).height = Math.max(15, Math.max(
+          this.estimarLinhas(l.nome, 40), this.estimarLinhas(l.equipamento, 22), this.estimarLinhas(l.observacao ?? '', 28),
+        ) * 12.5);
         row++;
       }
       ws.pageSetup.printTitlesRow = '4:4';
@@ -1534,6 +1541,7 @@ export class ExcelExportService {
           corSituacao('Executada', 'FFDCFCE7', 'FF15803D', 1),
           corSituacao('Não executada', 'FFFEE2E2', 'FFB91C1C', 2),
           corSituacao('Sem OS', 'FFFEE2E2', 'FFB91C1C', 3),
+          corSituacao('Dispensada (parada)', 'FFE2E8F0', 'FF475569', 4),
         ],
       });
     }

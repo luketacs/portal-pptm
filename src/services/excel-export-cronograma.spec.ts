@@ -90,6 +90,38 @@ it('Resumo conta por fórmula sobre as abas dos meses (área, total, HH e situa�
   expect(resumo.getRow(12).getCell(1).value).toBe('Total do período');
 });
 
+it('dispensada pela parada: conta em coluna própria, fica fora da base do % e traz a observação', async () => {
+  const observacao = 'Planta parada: ciclo programado como mensal. Ocorrência de 15/10/2026 coberta pela OS 047200.';
+  await new ExcelExportService().exportarCronogramaPlanos({
+    ...params,
+    meses: [{
+      mes: '2026-10', nome: 'Outubro de 2026', aba: 'OUT-2026', linhas: [
+        linha({ numeroOs: '047200', executadaEm: '2026-10-20', situacao: 'Executada' }),
+        linha({ situacao: 'Sem OS' }),
+        linha({ situacao: 'Dispensada (parada)', observacao }),
+        linha({ situacao: 'Dispensada (parada)', observacao }),
+      ],
+    }],
+  });
+  const wb = capturado!;
+  const out = wb.getWorksheet('OUT-2026')!;
+  expect(out.getCell('Q7').value).toBe('Dispensada (parada)');
+  expect(out.getCell('O7').value).toBeNull();
+  expect(out.getCell('R7').value).toBe(observacao);
+  expect(out.getCell('Q7').dataValidation?.formulae?.[0]).toContain('Dispensada (parada)');
+
+  const resumo = wb.getWorksheet('Resumo')!;
+  const cab = resumo.getRow(9).values as unknown[];
+  const coluna = (titulo: string) => cab.indexOf(titulo);
+  const linhaOut = resumo.getRow(10);
+  expect(linhaOut.getCell(coluna('Dispensadas (parada)')).value)
+    .toEqual({ formula: `COUNTIF('OUT-2026'!$Q$5:$Q$5000,"Dispensada (parada)")`, result: 2 });
+  const pct = linhaOut.getCell(coluna('% executadas')).value as { formula: string; result: number };
+  expect(pct.result).toBe(0.5); // 1 executada de 2 exigidas (4 previstas − 2 dispensadas)
+  expect(pct.formula).toBe('IF((E10-J10)=0,"",G10/(E10-J10))');
+  expect(resumo.getRow(11).getCell(coluna('% executadas')).value).toEqual({ formula: 'IF((E11-J11)=0,"",G11/(E11-J11))' });
+});
+
 // Amostra para abrir no Excel: CRONOGRAMA_AMOSTRA=caminho.xlsx npm test -- excel-export-cronograma
 it('grava amostra quando pedido', async () => {
   const destino = process.env['CRONOGRAMA_AMOSTRA'];
