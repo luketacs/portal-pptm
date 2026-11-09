@@ -105,13 +105,7 @@ export interface CronogramaPlanosLinha {
   equipamento: string;
   tagKks: string;
   area: string;
-  especialidade: string;
   periodicidade: string;
-  tempoHoras: number | null;
-  hh: number | null;
-  loto: string;
-  recursos: string;
-  responsavel: string;
   // Já registrado na data de geração (ver execucaoDoCronograma) — null = em branco.
   numeroOs: string | null;
   executadaEm: string | null; // 'YYYY-MM-DD', 1º apontamento no SIGMA
@@ -136,6 +130,8 @@ export interface CronogramaPlanoCadastro {
   periodicidade: string;
   dataInicial: string; // 'YYYY-MM-DD'
   responsavel: string;
+  loto: string;
+  recursos: string;
   tempoHoras: number | null;
   hh: number | null;
   passosChecklist: number;
@@ -154,7 +150,7 @@ export interface FcaExport {
 export interface CronogramaPlanosExport {
   titulo: string;  // "Cronograma de Manutenção Preventiva"
   periodo: string; // "05/10/2026 a 31/10/2028"
-  notas: string[]; // explicação no topo do Resumo
+  notas: [string, string][]; // aba Notas: rótulo -> texto
   fca?: FcaExport;
   areas: string[]; // colunas do Resumo, na ordem
   meses: CronogramaPlanosMes[];
@@ -1339,8 +1335,29 @@ export class ExcelExportService {
 
   // Situações da coluna de controle (lista suspensa) — o Resumo conta por esses textos.
   private readonly SITUACOES_CRONOGRAMA = ['Programada', 'Executada', 'Não executada', 'Sem OS', 'Dispensada (parada)', 'Reprogramada', 'Cancelada'];
-  private readonly CONTROLE_BG = 'FFFFF7D6';  // colunas para preencher
-  private readonly CONTROLE_TOPO = 'FFB45309'; // cabeçalho das colunas para preencher
+  private readonly SITUACOES_PENDENTES = ['Não executada', 'Sem OS'];
+
+  // Estilo de ficha técnica (pedido do usuário: documento de auditoria, sem cara de IA):
+  // azul-marinho só nos títulos, cabeçalho cinza, bordas finas e vermelho só na exceção.
+  private readonly CRONO = {
+    titulo: 'FF1F3864',
+    texto: 'FF1F2937',
+    textoSuave: 'FF4B5563',
+    cabecalho: 'FFE7EAEE',
+    cabecalhoControle: 'FFD5DBE3',
+    controle: 'FFF5F7FA', // colunas para preencher
+    borda: 'FFC4CAD2',
+    alerta: 'FFB91C1C',
+  };
+
+  private fonteCrono(o: Partial<ExcelJS.Font> = {}): Partial<ExcelJS.Font> {
+    return { name: 'Arial', size: 9, color: { argb: this.CRONO.texto }, ...o };
+  }
+
+  private bordaCrono(): Partial<ExcelJS.Borders> {
+    const fina = { style: 'thin' as const, color: { argb: this.CRONO.borda } };
+    return { top: fina, left: fina, bottom: fina, right: fina };
+  }
 
   async exportarCronogramaPlanos(params: CronogramaPlanosExport): Promise<void> {
     const { default: ExcelJS } = await import('exceljs');
@@ -1350,8 +1367,9 @@ export class ExcelExportService {
     wb.calcProperties.fullCalcOnLoad = true; // Resumo é fórmula sobre as abas dos meses
     const logoBuffer = await this.carregarLogoBuffer();
     const logoId = logoBuffer ? wb.addImage({ buffer: logoBuffer, extension: 'png' }) : null;
-    const geradoEm = this.nowStr();
+    const posicao = `Posição em ${this.nowStr()}`;
     const ULTIMA_LINHA = 5000; // fórmulas do Resumo cobrem linhas acrescentadas à mão
+    const LOGO = { largura: 150, altura: 45 };
 
     const novaAba = (nome: string, colunas: { width: number }[], titulo: string, subtitulo: string, ySplit = 4) => {
       const ws = wb.addWorksheet(nome, {
@@ -1360,23 +1378,26 @@ export class ExcelExportService {
       });
       ws.columns = colunas;
       const NC = colunas.length;
-      if (logoId !== null) ws.addImage(logoId, { tl: { col: 0.15, row: 0.12 }, ext: { width: 210, height: 63 } });
-      ws.getRow(1).height = 28;
+      if (logoId !== null) ws.addImage(logoId, { tl: { col: 0.1, row: 0.1 }, ext: { width: LOGO.largura, height: LOGO.altura } });
+      // O título começa na primeira coluna depois do logo, seja qual for a largura das colunas.
+      let colTitulo = 1;
+      for (let px = 0; colTitulo < NC && px < LOGO.largura + 12; colTitulo++) px += colunas[colTitulo - 1].width * 7 + 5;
+      ws.getRow(1).height = 26;
       ws.getRow(2).height = 18;
       ws.getRow(3).height = 6;
-      ws.mergeCells(1, 3, 1, NC);
-      Object.assign(ws.getCell(1, 3), {
+      ws.mergeCells(1, colTitulo, 1, NC);
+      Object.assign(ws.getCell(1, colTitulo), {
         value: titulo,
-        font: { bold: true, size: 16, color: { argb: this.PROG_AZUL_TEXTO } },
+        font: this.fonteCrono({ bold: true, size: 14, color: { argb: this.CRONO.titulo } }),
         alignment: { horizontal: 'left', vertical: 'middle' },
       });
-      ws.mergeCells(2, 3, 2, NC);
-      Object.assign(ws.getCell(2, 3), {
+      ws.mergeCells(2, colTitulo, 2, NC);
+      Object.assign(ws.getCell(2, colTitulo), {
         value: subtitulo,
-        font: { size: 10, color: { argb: 'FF555555' } },
+        font: this.fonteCrono({ color: { argb: this.CRONO.textoSuave } }),
         alignment: { horizontal: 'left', vertical: 'middle' },
       });
-      for (let c = 1; c <= NC; c++) ws.getCell(2, c).border = { bottom: { style: 'thin', color: { argb: 'FFB9C1FD' } } };
+      for (let c = 1; c <= NC; c++) ws.getCell(2, c).border = { bottom: { style: 'thin', color: { argb: this.CRONO.titulo } } };
       ws.pageSetup.margins = { left: 0.3, right: 0.3, top: 0.5, bottom: 0.4, header: 0.2, footer: 0.2 };
       ws.headerFooter.oddFooter = '&L&8' + titulo.replace(/&/g, '&&') + '&R&8Página &P de &N';
       return ws;
@@ -1386,10 +1407,10 @@ export class ExcelExportService {
       titulos.forEach((t, i) => {
         const cel = ws.getCell(row, i + 1);
         cel.value = t;
-        cel.font = { bold: true, size: 9, color: { argb: 'FFFFFFFF' } };
-        cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: i + 1 >= controleDesde ? this.CONTROLE_TOPO : this.PROG_AZUL } };
+        cel.font = this.fonteCrono({ bold: true });
+        cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: i + 1 >= controleDesde ? this.CRONO.cabecalhoControle : this.CRONO.cabecalho } };
         cel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-        cel.border = { left: { style: 'thin', color: { argb: 'FFFFFFFF' } } };
+        cel.border = this.bordaCrono();
       });
     };
     const dataExcel = (iso: string) => {
@@ -1398,34 +1419,31 @@ export class ExcelExportService {
     };
 
     // ── FCA (primeira aba, quando houver) ──
-    if (params.fca) this.abaFca(novaAba, params.fca, geradoEm);
+    if (params.fca) this.abaFca(novaAba, params.fca, posicao);
 
-    // ── Resumo ──
+    // ── Resumo: a tabela vem primeiro, com o total logo abaixo do cabeçalho ──
     const situacoesResumo = ['Executada', 'Não executada', 'Sem OS', 'Dispensada (parada)', 'Reprogramada', 'Cancelada'];
-    const colsResumo = ['Mês', ...params.areas, 'Total previstas', 'HH previsto', 'Executadas', 'Não executadas', 'Sem OS', 'Dispensadas (parada)', 'Reprogramadas', 'Canceladas', '% executadas'];
-    const resumo = novaAba('Resumo', [{ width: 20 }, ...params.areas.map(() => ({ width: 11 })), { width: 11 }, { width: 11 }, ...situacoesResumo.map(() => ({ width: 12.5 })), { width: 12 }],
-      `${params.titulo} — Resumo`, `${params.periodo} — gerado em ${geradoEm}`);
-    params.notas.forEach((n, i) => {
-      const r = 4 + i;
-      resumo.mergeCells(r, 1, r, colsResumo.length);
-      Object.assign(resumo.getCell(r, 1), { value: n, font: { size: 9, color: { argb: 'FF475569' } }, alignment: { vertical: 'middle', wrapText: true } });
-      resumo.getRow(r).height = Math.max(15, this.estimarLinhas(n, 150) * 13);
-    });
-    const rowCabResumo = 5 + params.notas.length;
-    cabecalho(resumo, rowCabResumo, colsResumo);
+    const colsResumo = ['Mês', ...params.areas, 'Total previstas', 'Executadas', 'Não executadas', 'Sem OS', 'Dispensadas (parada)', 'Reprogramadas', 'Canceladas', '% executadas'];
+    const resumo = novaAba('Resumo', [{ width: 20 }, ...params.areas.map(() => ({ width: 10 })), { width: 10 }, ...situacoesResumo.map(() => ({ width: 14.5 })), { width: 11 }],
+      params.titulo, `Resumo | ${params.periodo} | ${posicao}`);
+    const ROW_CAB = 4;
+    const R_TOTAL = ROW_CAB + 1;
+    const R_MESES = R_TOTAL + 1;
+    cabecalho(resumo, ROW_CAB, colsResumo);
     const letra = (c: number) => resumo.getColumn(c).letter;
-    const nAreas = params.areas.length;
-    const cTotal = 2 + nAreas;
-    const cHH = cTotal + 1;
-    const cExec = cHH + 1;
+    const cTotal = 2 + params.areas.length;
+    const cExec = cTotal + 1;
+    const cUltimaSituacao = cExec + situacoesResumo.length - 1;
     const cDispensadas = cExec + situacoesResumo.indexOf('Dispensada (parada)');
     const cPct = colsResumo.length;
-    // Ordem dispensada pela parada não era exigida: fica fora da base do percentual.
+    // Base = ordens já com resultado (situações do Resumo menos as dispensadas). Fora dela:
+    // dispensada (não era exigida), programada e sem situação (ainda não venceu). Assim o mês
+    // em andamento não parece problema e o mês futuro fica em branco, não 0%.
     const formulaPct = (rr: number) => {
-      const base = `(${letra(cTotal)}${rr}-${letra(cDispensadas)}${rr})`;
+      const base = `(SUM(${letra(cExec)}${rr}:${letra(cUltimaSituacao)}${rr})-${letra(cDispensadas)}${rr})`;
       return `IF(${base}=0,"",${letra(cExec)}${rr}/${base})`;
     };
-    let r = rowCabResumo + 1;
+    let r = R_MESES;
     for (const mes of params.meses) {
       const aba = `'${mes.aba}'!`;
       const faixa = (col: string) => `${aba}$${col}$5:$${col}$${ULTIMA_LINHA}`;
@@ -1438,148 +1456,197 @@ export class ExcelExportService {
         };
       });
       linha.getCell(cTotal).value = { formula: `COUNTA(${faixa('C')})`, result: mes.linhas.length };
-      linha.getCell(cHH).value = {
-        formula: `SUM(${faixa('K')})`,
-        result: Math.round(mes.linhas.reduce((s, l) => s + (l.hh ?? 0), 0) * 100) / 100,
-      };
       situacoesResumo.forEach((sit, i) => {
-        linha.getCell(cExec + i).value = { formula: `COUNTIF(${faixa('Q')},"${sit}")`, result: mes.linhas.filter(l => l.situacao === sit).length };
+        linha.getCell(cExec + i).value = { formula: `COUNTIF(${faixa('K')},"${sit}")`, result: mes.linhas.filter(l => l.situacao === sit).length };
       });
       const executadas = mes.linhas.filter(l => l.situacao === 'Executada').length;
-      const exigidas = mes.linhas.filter(l => l.situacao !== 'Dispensada (parada)').length;
-      linha.getCell(cPct).value = { formula: formulaPct(r), result: exigidas ? executadas / exigidas : '' };
+      const comResultado = mes.linhas.filter(l => situacoesResumo.includes(l.situacao ?? '') && l.situacao !== 'Dispensada (parada)').length;
+      linha.getCell(cPct).value = { formula: formulaPct(r), result: comResultado ? executadas / comResultado : '' };
       r++;
     }
-    const rTotal = r;
-    const linhaTotal = resumo.getRow(rTotal);
+    const rUltimoMes = r - 1;
+    const linhaTotal = resumo.getRow(R_TOTAL);
     linhaTotal.getCell(1).value = 'Total do período';
     for (let c = 2; c < cPct; c++) {
-      linhaTotal.getCell(c).value = { formula: `SUM(${letra(c)}${rowCabResumo + 1}:${letra(c)}${rTotal - 1})` };
+      linhaTotal.getCell(c).value = { formula: `SUM(${letra(c)}${R_MESES}:${letra(c)}${rUltimoMes})` };
     }
-    linhaTotal.getCell(cPct).value = { formula: formulaPct(rTotal) };
-    for (let rr = rowCabResumo + 1; rr <= rTotal; rr++) {
+    linhaTotal.getCell(cPct).value = { formula: formulaPct(R_TOTAL) };
+    for (let rr = R_TOTAL; rr <= rUltimoMes; rr++) {
       for (let c = 1; c <= colsResumo.length; c++) {
         const cel = resumo.getCell(rr, c);
-        const total = rr === rTotal;
-        cel.font = { size: 9, bold: total || c === cTotal };
-        cel.border = this.bordaFina();
+        const total = rr === R_TOTAL;
+        cel.font = this.fonteCrono({ bold: total });
+        cel.border = this.bordaCrono();
         cel.alignment = { vertical: 'middle', horizontal: c === 1 ? 'left' : 'center' };
-        if (c === cHH) cel.numFmt = '0.0';
+        if (c > 1 && c <= cTotal) cel.numFmt = '#,##0';
+        if (c >= cExec && c <= cUltimaSituacao) cel.numFmt = '#,##0;-#,##0;;@'; // zero fica em branco
         if (c === cPct) cel.numFmt = '0.0%';
-        if (total) cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL_CLARO } };
+        if (total) cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.CRONO.cabecalho } };
       }
     }
-    resumo.views = [{ state: 'frozen', ySplit: rowCabResumo, showGridLines: false }];
+    resumo.mergeCells(rUltimoMes + 2, 1, rUltimoMes + 2, colsResumo.length);
+    Object.assign(resumo.getCell(rUltimoMes + 2, 1), {
+      value: 'Critérios e definições: aba Notas. Ordens que precisam de tratamento: aba Pendências.',
+      font: this.fonteCrono({ color: { argb: this.CRONO.textoSuave } }),
+    });
+    resumo.views = [{ state: 'frozen', ySplit: ROW_CAB, showGridLines: false }];
+
+    // ── Pendências: só o que precisa de tratamento, na data de geração ──
+    const pendencias = params.meses.flatMap(m => m.linhas)
+      .filter(l => this.SITUACOES_PENDENTES.includes(l.situacao ?? ''))
+      .sort((a, b) => a.data.localeCompare(b.data) || a.codigo.localeCompare(b.codigo));
+    const colunasPendencias: { header: string; width: number; quebra?: boolean; centro?: boolean }[] = [
+      { header: 'Data', width: 11, centro: true },
+      { header: 'Semana', width: 8, centro: true },
+      { header: 'Plano', width: 9.5, centro: true },
+      { header: 'Descrição', width: 38, quebra: true },
+      { header: 'Equipamento', width: 26, quebra: true },
+      { header: 'Área', width: 10, centro: true },
+      { header: 'Periodicidade', width: 12 },
+      { header: 'Nº OS', width: 9, centro: true },
+      { header: 'Situação', width: 14 },
+      { header: 'Tratativa', width: 36, quebra: true },
+    ];
+    const wsPendencias = novaAba('Pendências', colunasPendencias.map(c => ({ width: c.width })), params.titulo,
+      `Pendências | ${pendencias.length} ordem(ns) não executada(s) ou sem OS | ${posicao}`);
+    cabecalho(wsPendencias, 4, colunasPendencias.map(c => c.header), colunasPendencias.length);
+    let rowPend = 5;
+    for (const l of pendencias) {
+      const valores: (string | number | Date | null)[] = [
+        dataExcel(l.data), `S${l.semana}`, l.codigo, l.nome, l.equipamento, l.area, l.periodicidade, l.numeroOs, l.situacao, null,
+      ];
+      valores.forEach((v, i) => {
+        const cel = wsPendencias.getCell(rowPend, i + 1);
+        cel.value = v;
+        cel.font = i === 8 ? this.fonteCrono({ bold: true, color: { argb: this.CRONO.alerta } }) : this.fonteCrono();
+        cel.border = this.bordaCrono();
+        cel.alignment = { vertical: 'top', wrapText: !!colunasPendencias[i].quebra, horizontal: colunasPendencias[i].centro ? 'center' : 'left' };
+      });
+      wsPendencias.getCell(rowPend, 1).numFmt = 'dd/mm/yyyy';
+      wsPendencias.getCell(rowPend, 10).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.CRONO.controle } };
+      wsPendencias.getRow(rowPend).height = Math.max(14, Math.max(this.estimarLinhas(l.nome, 38), this.estimarLinhas(l.equipamento, 26)) * 12);
+      rowPend++;
+    }
+    wsPendencias.pageSetup.printTitlesRow = '4:4';
+    wsPendencias.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(rowPend - 1, 4), column: colunasPendencias.length } };
+
+    // ── Notas: critérios em tabela rótulo | texto ──
+    const wsNotas = novaAba('Notas', [{ width: 26 }, { width: 110 }], params.titulo, `Notas | ${posicao}`, 0);
+    params.notas.forEach(([rotulo, texto], i) => {
+      const row = 4 + i;
+      Object.assign(wsNotas.getCell(row, 1), {
+        value: rotulo,
+        font: this.fonteCrono({ bold: true }),
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: this.CRONO.cabecalho } },
+        alignment: { vertical: 'top', wrapText: true },
+        border: this.bordaCrono(),
+      });
+      Object.assign(wsNotas.getCell(row, 2), {
+        value: texto,
+        font: this.fonteCrono(),
+        alignment: { vertical: 'top', wrapText: true },
+        border: this.bordaCrono(),
+      });
+      wsNotas.getRow(row).height = Math.max(16, this.estimarLinhas(texto, 120) * 12.5 + 3);
+    });
 
     // ── Uma aba por mês ──
-    const colunasMes: { header: string; width: number; quebra?: boolean }[] = [
-      { header: 'Data', width: 11.5 },
-      { header: 'Semana', width: 10 },
-      { header: 'Plano', width: 10.5 },
-      { header: 'Descrição', width: 40, quebra: true },
-      { header: 'Equipamento', width: 22, quebra: true },
+    const colunasMes: { header: string; width: number; quebra?: boolean; centro?: boolean }[] = [
+      { header: 'Data', width: 11, centro: true },
+      { header: 'Semana', width: 8, centro: true },
+      { header: 'Plano', width: 9.5, centro: true },
+      { header: 'Descrição', width: 36, quebra: true },
+      { header: 'Equipamento', width: 24, quebra: true },
       { header: 'TAG/KKS', width: 17 },
-      { header: 'Área', width: 11 },
-      { header: 'Especialidade', width: 15, quebra: true },
-      { header: 'Periodicidade', width: 15 },
-      { header: 'Tempo (h)', width: 10.5 },
-      { header: 'HH', width: 7.5 },
-      { header: 'LOTO', width: 11 },
-      { header: 'Recursos', width: 14, quebra: true },
-      { header: 'Responsável', width: 15, quebra: true },
-      { header: 'Nº OS', width: 11 },
-      { header: 'Executada em', width: 16 },
-      { header: 'Situação', width: 15 },
-      { header: 'Observação', width: 28, quebra: true },
+      { header: 'Área', width: 10, centro: true },
+      { header: 'Periodicidade', width: 12 },
+      { header: 'Nº OS', width: 9, centro: true },
+      { header: 'Executada em', width: 12.5, centro: true },
+      { header: 'Situação', width: 19 },
+      { header: 'Observação', width: 30, quebra: true },
     ];
-    const COL_CONTROLE = 15; // Nº OS em diante
+    const COL_CONTROLE = 9; // Nº OS em diante
     const listaSituacoes = `"${this.SITUACOES_CRONOGRAMA.join(',')}"`;
     for (const mes of params.meses) {
-      const ws = novaAba(mes.aba, colunasMes.map(c => ({ width: c.width })), `${params.titulo} — ${mes.nome}`,
-        `${mes.linhas.length} ordem(ns) prevista(s) — gerado em ${geradoEm}`);
+      const ws = novaAba(mes.aba, colunasMes.map(c => ({ width: c.width })), params.titulo,
+        `${mes.nome} | ${mes.linhas.length} ordem(ns) prevista(s) | ${posicao}`);
       cabecalho(ws, 4, colunasMes.map(c => c.header), COL_CONTROLE);
       let row = 5;
       for (const l of mes.linhas) {
         const valores: (string | number | Date | null)[] = [
-          dataExcel(l.data), `S${l.semana}`, l.codigo, l.nome, l.equipamento, l.tagKks, l.area, l.especialidade,
-          l.periodicidade, l.tempoHoras, l.hh, l.loto, l.recursos, l.responsavel,
+          dataExcel(l.data), `S${l.semana}`, l.codigo, l.nome, l.equipamento, l.tagKks, l.area, l.periodicidade,
           l.numeroOs, l.executadaEm ? dataExcel(l.executadaEm) : null, l.situacao, l.observacao ?? null,
         ];
         valores.forEach((v, i) => {
           const c = i + 1;
           const cel = ws.getCell(row, c);
           cel.value = v;
-          cel.font = { size: 9 };
-          cel.border = this.bordaFina();
-          cel.alignment = {
-            vertical: 'top', wrapText: !!colunasMes[i].quebra,
-            horizontal: c <= 3 || c === 7 || c === 10 || c === 11 || c === 15 || c === 16 ? 'center' : 'left',
-          };
-          if (c >= COL_CONTROLE) cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.CONTROLE_BG } };
+          cel.font = this.fonteCrono();
+          cel.border = this.bordaCrono();
+          cel.alignment = { vertical: 'top', wrapText: !!colunasMes[i].quebra, horizontal: colunasMes[i].centro ? 'center' : 'left' };
+          if (c >= COL_CONTROLE) cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.CRONO.controle } };
         });
         ws.getCell(row, 1).numFmt = 'dd/mm/yyyy';
-        ws.getCell(row, 16).numFmt = 'dd/mm/yyyy';
-        ws.getCell(row, 17).dataValidation = {
+        ws.getCell(row, 10).numFmt = 'dd/mm/yyyy';
+        ws.getCell(row, 11).dataValidation = {
           type: 'list', allowBlank: true, formulae: [listaSituacoes],
           showErrorMessage: true, errorTitle: 'Situação', error: `Escolha: ${this.SITUACOES_CRONOGRAMA.join(', ')}.`,
         };
-        ws.getRow(row).height = Math.max(15, Math.max(
-          this.estimarLinhas(l.nome, 40), this.estimarLinhas(l.equipamento, 22), this.estimarLinhas(l.observacao ?? '', 28),
-        ) * 12.5);
+        ws.getRow(row).height = Math.max(14, Math.max(
+          this.estimarLinhas(l.nome, 36), this.estimarLinhas(l.equipamento, 24), this.estimarLinhas(l.observacao ?? '', 30),
+        ) * 12);
         row++;
       }
       ws.pageSetup.printTitlesRow = '4:4';
       ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(row - 1, 4), column: colunasMes.length } };
-      // Cor pela situação — formatação condicional, vale também para o que for mudado à mão.
-      const corSituacao = (texto: string, fundo: string, fonte: string, priority: number) => ({
-        type: 'expression' as const, priority, formulae: [`$Q5="${texto}"`],
-        style: { fill: { type: 'pattern' as const, pattern: 'solid' as const, bgColor: { argb: fundo } }, font: { color: { argb: fonte }, bold: true } },
-      });
+      // Vermelho só na exceção — formatação condicional, vale também para o que for mudado à mão.
       ws.addConditionalFormatting({
-        ref: `Q5:Q${ULTIMA_LINHA}`,
-        rules: [
-          corSituacao('Executada', 'FFDCFCE7', 'FF15803D', 1),
-          corSituacao('Não executada', 'FFFEE2E2', 'FFB91C1C', 2),
-          corSituacao('Sem OS', 'FFFEE2E2', 'FFB91C1C', 3),
-          corSituacao('Dispensada (parada)', 'FFE2E8F0', 'FF475569', 4),
-        ],
+        ref: `K5:K${ULTIMA_LINHA}`,
+        rules: this.SITUACOES_PENDENTES.map((texto, i) => ({
+          type: 'expression' as const, priority: i + 1, formulae: [`$K5="${texto}"`],
+          style: { font: { color: { argb: this.CRONO.alerta }, bold: true } },
+        })),
       });
     }
 
     // ── Lista dos planos (última aba) ──
     const colunasPlanos: { header: string; width: number; quebra?: boolean }[] = [
       { header: 'Plano', width: 9.5 },
-      { header: 'Descrição', width: 42, quebra: true },
+      { header: 'Descrição', width: 38, quebra: true },
       { header: 'Equipamento', width: 22, quebra: true },
       { header: 'TAG/KKS', width: 17 },
-      { header: 'Área', width: 11 },
-      { header: 'Especialidade', width: 15, quebra: true },
-      { header: 'Periodicidade', width: 15 },
-      { header: 'Data inicial', width: 12 },
-      { header: 'Responsável', width: 15, quebra: true },
-      { header: 'Tempo (h)', width: 10.5 },
-      { header: 'HH', width: 7.5 },
-      { header: 'Passos do checklist', width: 12 },
-      { header: 'Ordens no período', width: 12 },
+      { header: 'Área', width: 10 },
+      { header: 'Especialidade', width: 29 },
+      { header: 'Periodicidade', width: 12 },
+      { header: 'Data inicial', width: 11 },
+      { header: 'Responsável', width: 14, quebra: true },
+      { header: 'LOTO', width: 10 },
+      { header: 'Recursos', width: 13, quebra: true },
+      { header: 'Tempo (h)', width: 8 },
+      { header: 'HH', width: 6.5 },
+      { header: 'Passos do checklist', width: 9.5 },
+      { header: 'Ordens no período', width: 9 },
     ];
-    const wsPlanos = novaAba('Planos', colunasPlanos.map(c => ({ width: c.width })), `${params.titulo} — Planos ativos`,
-      `${params.planos.length} plano(s) — ${params.periodo} — gerado em ${geradoEm}`);
+    const wsPlanos = novaAba('Planos', colunasPlanos.map(c => ({ width: c.width })), params.titulo,
+      `Planos ativos | ${params.planos.length} plano(s) | ${params.periodo} | ${posicao}`);
     cabecalho(wsPlanos, 4, colunasPlanos.map(c => c.header));
     let rowP = 5;
     for (const p of params.planos) {
       const valores: (string | number | Date | null)[] = [
         p.codigo, p.nome, p.equipamento, p.tagKks, p.area, p.especialidade, p.periodicidade, dataExcel(p.dataInicial),
-        p.responsavel, p.tempoHoras, p.hh, p.passosChecklist, p.ocorrencias,
+        p.responsavel, p.loto, p.recursos, p.tempoHoras, p.hh, p.passosChecklist, p.ocorrencias,
       ];
       valores.forEach((v, i) => {
         const cel = wsPlanos.getCell(rowP, i + 1);
         cel.value = v;
-        cel.font = { size: 9 };
-        cel.border = this.bordaFina();
+        cel.font = this.fonteCrono();
+        cel.border = this.bordaCrono();
         cel.alignment = { vertical: 'top', wrapText: !!colunasPlanos[i].quebra, horizontal: typeof v === 'number' || v instanceof Date || i === 0 || i === 4 ? 'center' : 'left' };
       });
       wsPlanos.getCell(rowP, 8).numFmt = 'dd/mm/yyyy';
-      wsPlanos.getRow(rowP).height = Math.max(15, Math.max(this.estimarLinhas(p.nome, 42), this.estimarLinhas(p.equipamento, 22)) * 12.5);
+      wsPlanos.getRow(rowP).height = Math.max(14, Math.max(
+        this.estimarLinhas(p.nome, 38), this.estimarLinhas(p.equipamento, 22),
+      ) * 12);
       rowP++;
     }
     wsPlanos.pageSetup.printTitlesRow = '4:4';
@@ -1588,25 +1655,31 @@ export class ExcelExportService {
     await this.baixarWorkbook(wb, `${params.titulo} ${params.meses[0]?.aba ?? ''} a ${params.meses[params.meses.length - 1]?.aba ?? ''}`);
   }
 
-  // Aba do FCA: campos de identificação, Fato, Causas numeradas e a tabela de Ações
-  // (Nº, tipo, ação, responsável, prazo, status com cor).
+  // Aba do FCA: tabela de identificação (rótulo | valor), Fato, Causas numeradas e a tabela
+  // de Ações (Nº, tipo, ação, responsável, prazo, status). Só os títulos têm cor.
   private abaFca(
     novaAba: (nome: string, colunas: { width: number }[], titulo: string, subtitulo: string, ySplit?: number) => ExcelJS.Worksheet,
-    fca: FcaExport, geradoEm: string,
+    fca: FcaExport, posicao: string,
   ): void {
     const larguras = [6, 16, 62, 20, 13, 14];
     const NC = larguras.length;
-    const ws = novaAba('FCA', larguras.map(width => ({ width })), fca.titulo, `Fato, Causa e Ação — gerado em ${geradoEm}`, 0);
-    const charsLinha = larguras.reduce((s, w) => s + w, 0) * 1.1;
-    const borda = this.bordaFina();
+    const ws = novaAba('FCA', larguras.map(width => ({ width })), 'FCA: Fato, Causa e Ação', `${fca.titulo} | ${posicao}`, 0);
+    const charsLinha = larguras.reduce((s, w) => s + w, 0) * 1.15;
+    const borda = this.bordaCrono();
     let r = 4;
 
     for (const [rotulo, valor] of fca.campos) {
       ws.mergeCells(r, 1, r, 2);
       ws.mergeCells(r, 3, r, NC);
-      Object.assign(ws.getCell(r, 1), { value: rotulo, font: { size: 9, bold: true, color: { argb: 'FF475569' } }, alignment: { vertical: 'middle' } });
-      Object.assign(ws.getCell(r, 3), { value: valor, font: { size: 10 }, alignment: { vertical: 'middle', wrapText: true } });
-      ws.getRow(r).height = 16;
+      Object.assign(ws.getCell(r, 1), {
+        value: rotulo,
+        font: this.fonteCrono({ bold: true }),
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: this.CRONO.cabecalho } },
+        alignment: { vertical: 'top', wrapText: true },
+      });
+      Object.assign(ws.getCell(r, 3), { value: valor, font: this.fonteCrono(), alignment: { vertical: 'top', wrapText: true } });
+      for (let c = 1; c <= NC; c++) ws.getCell(r, c).border = borda;
+      ws.getRow(r).height = Math.max(15, this.estimarLinhas(valor, (charsLinha * 109) / 131) * 12.5 + 3);
       r++;
     }
     r++;
@@ -1615,64 +1688,54 @@ export class ExcelExportService {
       ws.mergeCells(r, 1, r, NC);
       Object.assign(ws.getCell(r, 1), {
         value: texto,
-        font: { bold: true, size: 11, color: { argb: 'FFFFFFFF' } },
-        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL } },
-        alignment: { vertical: 'middle', indent: 1 },
+        font: this.fonteCrono({ bold: true, size: 11, color: { argb: this.CRONO.titulo } }),
+        alignment: { vertical: 'bottom' },
       });
+      for (let c = 1; c <= NC; c++) ws.getCell(r, c).border = { bottom: { style: 'thin', color: { argb: this.CRONO.titulo } } };
       ws.getRow(r).height = 20;
       r++;
     };
     const paragrafo = (texto: string, col = 1) => {
       ws.mergeCells(r, col, r, NC);
-      Object.assign(ws.getCell(r, col), { value: texto, font: { size: 10 }, alignment: { vertical: 'top', wrapText: true } });
+      Object.assign(ws.getCell(r, col), { value: texto, font: this.fonteCrono({ size: 10 }), alignment: { vertical: 'top', wrapText: true } });
       for (let c = 1; c <= NC; c++) ws.getCell(r, c).border = borda;
       ws.getRow(r).height = Math.max(18, this.estimarLinhas(texto, charsLinha) * 14 + 4);
       r++;
     };
 
-    secao('FATO');
+    secao('1. Fato');
     paragrafo(fca.fato);
     r++;
 
-    secao('CAUSA');
+    secao('2. Causa');
     fca.causas.forEach((causa, i) => {
-      Object.assign(ws.getCell(r, 1), { value: i + 1, font: { size: 10, bold: true }, alignment: { horizontal: 'center', vertical: 'top' } });
+      Object.assign(ws.getCell(r, 1), { value: i + 1, font: this.fonteCrono({ size: 10 }), alignment: { horizontal: 'center', vertical: 'top' } });
       paragrafo(causa, 2);
     });
     r++;
 
-    secao('AÇÃO');
+    secao('3. Ação');
     ['Nº', 'Tipo', 'Ação', 'Responsável', 'Prazo', 'Status'].forEach((t, i) => {
       Object.assign(ws.getCell(r, i + 1), {
         value: t,
-        font: { bold: true, size: 9, color: { argb: this.PROG_AZUL_TEXTO } },
-        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: this.PROG_AZUL_CLARO } },
+        font: this.fonteCrono({ bold: true }),
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: this.CRONO.cabecalho } },
         alignment: { horizontal: 'center', vertical: 'middle' },
         border: borda,
       });
     });
     ws.getRow(r).height = 18;
     r++;
-    const corStatus = (status: string): { bg: string; fg: string } => {
-      const s = status.toLowerCase();
-      if (s.startsWith('implantad') || s.startsWith('conclu')) return { bg: 'FFDCFCE7', fg: 'FF15803D' };
-      if (s.startsWith('em andamento')) return { bg: 'FFDBEAFE', fg: 'FF1D4ED8' };
-      return { bg: 'FFFEF3C7', fg: 'FFB45309' };
-    };
     fca.acoes.forEach((a, i) => {
       const valores: (string | number)[] = [i + 1, a.tipo, a.acao, a.responsavel, a.prazo, a.status];
       valores.forEach((v, c) => {
         const cel = ws.getCell(r, c + 1);
         cel.value = v;
-        cel.font = { size: 10, bold: c === 5 };
+        cel.font = this.fonteCrono({ size: 10 });
         cel.alignment = { vertical: 'top', wrapText: true, horizontal: c === 2 ? 'left' : 'center' };
         cel.border = borda;
       });
-      const cor = corStatus(a.status);
-      ws.getCell(r, 6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor.bg } };
-      ws.getCell(r, 6).font = { size: 10, bold: true, color: { argb: cor.fg } };
-      if (/a definir/i.test(a.prazo)) ws.getCell(r, 5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
-      ws.getRow(r).height = Math.max(18, this.estimarLinhas(a.acao, larguras[2] * 1.1) * 14 + 4);
+      ws.getRow(r).height = Math.max(18, this.estimarLinhas(a.acao, larguras[2] * 1.15) * 14 + 4);
       r++;
     });
     ws.pageSetup.fitToHeight = 1;

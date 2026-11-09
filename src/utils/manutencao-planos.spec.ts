@@ -495,7 +495,7 @@ describe('execução das ocorrências do cronograma', () => {
     it('OS apontada no período vira Executada, com a observação; as outras linhas seguem Sem OS', () => {
       const r = execucaoDoCronograma(meses, [semanal], new Map(), () => undefined, '2026-11-09', [], fora);
       expect(r.get('s|2026-10-26')).toEqual({
-        numeroOs: '048500', executadaEm: '2026-10-28', situacao: 'Executada', observacao: 'OS fora da programação semanal, com apontamento no SIGMA.',
+        numeroOs: '048500', executadaEm: '2026-10-28', situacao: 'Executada', observacao: 'OS fora da programação, apontada no SIGMA.',
       });
       expect(r.get('s|2026-10-19')?.situacao).toBe('Sem OS');
     });
@@ -514,7 +514,7 @@ describe('execução das ocorrências do cronograma', () => {
         [{ dataInicio: '2026-09-08', dataFim: null }], new Map([['s', [{ numeroOs: '048500', datas: ['2026-10-16'] }]]]));
       expect(r.get('s|2026-10-13')).toMatchObject({ numeroOs: '048500', situacao: 'Executada' });
       expect(r.get('s|2026-10-20')).toMatchObject({ situacao: 'Dispensada (parada)' });
-      expect(r.get('s|2026-10-20')?.observacao).toContain('coberta pela OS 048500');
+      expect(r.get('s|2026-10-20')?.observacao).toContain('OS 048500');
     });
   });
 
@@ -534,9 +534,9 @@ describe('execução das ocorrências do cronograma', () => {
       expect(r.get('s|2026-10-20')).toMatchObject({ numeroOs: '047200', situacao: 'Executada' });
       expect(r.get('s|2026-10-06')).toEqual({
         numeroOs: null, executadaEm: null, situacao: 'Dispensada (parada)',
-        observacao: 'Planta parada: ciclo programado como mensal. Ocorrência de 15/09/2026 coberta pela OS 047199.',
+        observacao: 'Parada: ocorrência mensal de 15/09/2026, OS 047199.',
       });
-      expect(r.get('s|2026-10-27')?.observacao).toContain('Ocorrência de 15/10/2026 coberta pela OS 047200');
+      expect(r.get('s|2026-10-27')?.observacao).toBe('Parada: ocorrência mensal de 15/10/2026, OS 047200.');
     });
 
     it('mês sem OS continua Sem OS, só no ciclo sem cobertura', () => {
@@ -552,8 +552,19 @@ describe('execução das ocorrências do cronograma', () => {
         new Map([['s', [{ data: '2026-10-13', ordem: ordem({ id: 'a', numeroOs: '048420', semanaInicio: '2026-10-12' }) }]]]),
         () => [ap('2026-10-16')], HOJE, PARADA,
       );
-      expect(r.get('s|2026-10-06')?.observacao).toContain('Ocorrência de 15/09/2026 coberta pela OS 048420');
+      expect(r.get('s|2026-10-06')?.observacao).toBe('Parada: ocorrência mensal de 15/09/2026, OS 048420.');
       expect(r.get('s|2026-10-13')).toMatchObject({ numeroOs: '048420', executadaEm: '2026-10-16', situacao: 'Executada' });
+    });
+
+    it('OS cancelada não dispensa as outras semanas do ciclo', () => {
+      const p = semanal;
+      const r = execucaoDoCronograma(
+        cronogramaMensal([p], '2026-10', 1, '2026-10-05'), [p],
+        new Map([['s', [{ data: '2026-10-20', ordem: ordem({ id: 'a', numeroOs: '016623', semanaInicio: '2026-10-19' }) }]]]),
+        () => undefined, HOJE, PARADA, new Map(), n => n === '016623',
+      );
+      expect(r.get('s|2026-10-20')).toMatchObject({ numeroOs: '016623', situacao: 'Não executada' });
+      expect(r.get('s|2026-10-27')?.situacao).toBe('Sem OS');
     });
 
     it('OS sem número não dispensa: não há o que mostrar ao auditor', () => {

@@ -633,7 +633,7 @@ export interface ExecucaoOcorrencia {
   observacao?: string; // dispensada (ocorrência mensal e OS) ou OS fora da programação
 }
 
-export const OBSERVACAO_OS_FORA_DA_PROGRAMACAO = 'OS fora da programação semanal, com apontamento no SIGMA.';
+export const OBSERVACAO_OS_FORA_DA_PROGRAMACAO = 'OS fora da programação, apontada no SIGMA.';
 
 // OS que não está na programação mas foi apontada no SIGMA, com a descrição do plano.
 export interface OsForaDaProgramacao {
@@ -679,7 +679,7 @@ export function osForaDaProgramacaoPorPlano(
 // O cronograma lista o plano pela periodicidade cadastrada, mas na parada o ciclo curto de
 // Elétrica/Mecânica é programado como mensal (periodicidadeEfetiva). A linha sem OS só é
 // dispensada se a data está na parada E a ocorrência mensal que contém essa data tem OS
-// com número; senão continua "Sem OS": um mês sem OS nenhuma é falha de verdade.
+// com número e não cancelada; senão continua "Sem OS": um mês sem OS é falha de verdade.
 function dispensaPorParada(
   p: PlanoManutencao, data: string, coberturas: readonly { numeroOs: string; datas: readonly string[]; executada: boolean }[],
   paradas: readonly Pick<ParadaPlanta, 'dataInicio' | 'dataFim'>[],
@@ -695,7 +695,7 @@ function dispensaPorParada(
   if (noCiclo.length === 0) return null;
   const { numeroOs } = noCiclo.find(c => c.executada) ?? noCiclo[0];
   const dataBr = ocorrencia.split('-').reverse().join('/');
-  return `Planta parada: ciclo programado como mensal. Ocorrência de ${dataBr} coberta pela OS ${numeroOs}.`;
+  return `Parada: ocorrência mensal de ${dataBr}, OS ${numeroOs}.`;
 }
 
 // O que já aconteceu com cada ocorrência do cronograma (chave `${planoId}|${data}`).
@@ -713,6 +713,7 @@ export function execucaoDoCronograma(
   apontamentosDaOs: (numeroOs: string) => readonly { data: string }[] | undefined, hojeIso: string,
   paradas: readonly Pick<ParadaPlanta, 'dataInicio' | 'dataFim'>[] = [],
   osForaPorPlano: ReadonlyMap<string, readonly OsForaDaProgramacao[]> = new Map(),
+  osCancelada: (numeroOs: string) => boolean = () => false,
 ): Map<string, ExecucaoOcorrencia> {
   const segundaAtual = somarDias(hojeIso, -((new Date(hojeIso + 'T00:00:00').getDay() + 6) % 7));
   const planoPorId = new Map(planos.map(p => [p.id, p]));
@@ -736,7 +737,8 @@ export function execucaoDoCronograma(
     const programadas = new Set(candidatas.flatMap(c => (c.numeroOs ? [chaveNumeroOs(c.numeroOs)] : [])));
     const foraDaProgramacao = (osForaPorPlano.get(planoId) ?? []).filter(o => !programadas.has(chaveNumeroOs(o.numeroOs)));
     const coberturas = [
-      ...candidatas.flatMap(c => (c.numeroOs
+      // OS cancelada não sustenta dispensa: a ocorrência mensal não foi atendida por ela.
+      ...candidatas.flatMap(c => (c.numeroOs && !osCancelada(c.numeroOs)
         // Vale a data do ciclo também: OS programada no mês e executada dias depois cobriu o mês.
         ? [{ numeroOs: c.numeroOs, datas: [c.data, ...c.apontamentos], executada: c.apontamentos.length > 0 }]
         : [])),

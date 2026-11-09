@@ -398,18 +398,18 @@ export class ManutencaoPlanosComponent implements OnInit {
   // PCM controla as preventivas por esta planilha. O Protheus não será corrigido: fica
   // até a migração dos planos para o MAXIMO, em 31/10/2027. Não cita o Portal (não homologado).
   private readonly FCA_CRONOGRAMA: FcaExport = {
-    titulo: 'FCA — Controle dos planos de manutenção preventiva',
+    titulo: 'Controle dos planos de manutenção preventiva',
     campos: [
       ['Data de abertura', '29/10/2026'],
       ['Última revisão', '09/11/2026'],
-      ['Área', 'Manutenção PPTM — Planejamento e Controle da Manutenção (PCM)'],
+      ['Área', 'Manutenção PPTM: Planejamento e Controle da Manutenção (PCM)'],
       ['Responsável', 'PCM'],
       ['Sistema oficial', 'Protheus até a migração para o MAXIMO, em 31/10/2027.'],
       ['Documento de controle', 'Este arquivo: cronograma das preventivas por mês, com a OS, a data de execução e a situação de cada ordem.'],
     ],
     fato: 'O controle dos planos de manutenção preventiva pelo Protheus não é confiável. O cadastro dos planos tem periodicidade, '
       + 'data de referência ou equipamento diferentes do que é executado em campo, e as OS preventivas são geradas fora da data '
-      + 'prevista — em data errada, em duplicidade ou deixando de gerar. Assim, o Protheus não garante que cada preventiva saia '
+      + 'prevista: em data errada, em duplicidade ou deixando de gerar. Assim, o Protheus não garante que cada preventiva saia '
       + 'no prazo nem permite comprovar o cumprimento dos planos.',
     causas: [
       'Planos desatualizados no Protheus: periodicidade, data de referência ou equipamento divergentes do que é executado em campo.',
@@ -505,7 +505,8 @@ export class ManutencaoPlanosComponent implements OnInit {
       // Se falhar não gera: sem as paradas, as ordens dispensadas sairiam como "Sem OS".
       const paradas = await this.manutencaoProgramacaoService.listarParadasPlanta();
       const osFora = osForaDaProgramacaoPorPlano(planos, this.manutencaoPlanosService.planos(), osApontadas);
-      const execucao = execucaoDoCronograma(meses, planos, ordensPorPlano, apontamentosDaOs, hoje, paradas, osFora);
+      const osCancelada = (os: string) => (sigma[os] ?? (/^\d+$/.test(os) ? sigma[os.padStart(6, '0')] : undefined))?.os?.statusCodigo?.trim().toUpperCase() === 'CANC';
+      const execucao = execucaoDoCronograma(meses, planos, ordensPorPlano, apontamentosDaOs, hoje, paradas, osFora, osCancelada);
 
       const ocorrenciasPorPlano = new Map<string, number>();
       for (const m of meses) for (const o of m.ocorrencias) ocorrenciasPorPlano.set(o.plano.id, (ocorrenciasPorPlano.get(o.plano.id) ?? 0) + 1);
@@ -519,20 +520,26 @@ export class ManutencaoPlanosComponent implements OnInit {
       const ultimoDia = paraIso(new Date(Number(ultimoMes.slice(0, 4)), Number(ultimoMes.slice(5, 7)), 0));
 
       await this.excelExportService.exportarCronogramaPlanos({
-        titulo: `Cronograma de Manutenção Preventiva${area === 'todos' ? '' : ` — ${this.areaLabel[area]}`}`,
+        titulo: `Cronograma de Manutenção Preventiva${area === 'todos' ? '' : ` - ${this.areaLabel[area]}`}`,
         periodo: `${this.formatarDataBr(inicio)} a ${this.formatarDataBr(ultimoDia)}`,
         fca: this.fcaCronograma(paradas),
         notas: [
-          'Datas previstas pela periodicidade cadastrada de cada plano ativo, contadas a partir da data inicial do plano. '
-            + 'Na programação semanal, a ordem pode ser antecipada em até 1/3 do período para juntar visitas ao mesmo equipamento.',
-          `Histórico desde ${this.formatarDataBr(inicio)}, início do controle das preventivas. Nº OS, Executada em e Situação vieram `
-            + `preenchidos com o que estava registrado em ${this.formatarDataBr(hoje)}: a OS da ocorrência e o 1º apontamento dela no SIGMA dentro do período da ocorrência.`,
-          'Situação: Executada = OS com apontamento no SIGMA no período da ocorrência (de até 21 dias antes da data até a ocorrência seguinte); Não executada = a semana da OS terminou sem apontamento; '
-            + 'Programada = OS da semana atual ou futura; Sem OS = a data já passou sem OS na programação e sem OS apontada no SIGMA com a descrição do plano. Reprogramada e Cancelada são marcadas à mão.',
-          'Dispensada (parada) = com a planta parada, o ciclo curto (menor que 1 mês) de Elétrica e Mecânica é programado como mensal; a linha sai como dispensada '
-            + 'quando a ocorrência mensal tem OS, indicada na Observação. Mês sem OS continua Sem OS. Datas futuras seguem a periodicidade cadastrada até passarem.',
-          'Para atualizar, gere o arquivo de novo (o que foi digitado à mão não é levado) ou preencha as colunas em laranja: '
-            + 'Nº OS, Executada em, Situação (lista) e Observação. Este resumo se atualiza sozinho. % executadas = executadas ÷ (total previstas − dispensadas) do mês.',
+          ['Datas previstas', 'Periodicidade cadastrada de cada plano ativo, contada a partir da data inicial do plano. '
+            + 'Na programação semanal, a ordem pode ser antecipada em até 1/3 do período para juntar visitas ao mesmo equipamento.'],
+          ['Histórico', `Desde ${this.formatarDataBr(inicio)}, início do controle das preventivas. Nº OS, Executada em e Situação vieram `
+            + `preenchidos com o que estava registrado em ${this.formatarDataBr(hoje)}.`],
+          ['Executada', 'OS com apontamento no SIGMA no período da ocorrência: de até 21 dias antes da data até a ocorrência seguinte. '
+            + 'A data mostrada é o 1º apontamento nesse período.'],
+          ['Não executada', 'A semana da OS terminou sem apontamento no período.'],
+          ['Programada', 'OS da semana atual ou futura.'],
+          ['Sem OS', 'A data já passou, sem OS na programação e sem OS apontada no SIGMA com a descrição do plano.'],
+          ['Dispensada (parada)', 'Com a planta parada, o ciclo menor que 1 mês de Elétrica e Mecânica é programado como mensal. A linha é dispensada '
+            + 'quando a ocorrência mensal tem OS não cancelada, indicada na Observação. Mês sem OS continua Sem OS. Datas futuras seguem a periodicidade cadastrada até passarem.'],
+          ['Reprogramada e Cancelada', 'Marcadas à mão.'],
+          ['% executadas', 'Executadas ÷ ordens com resultado (Executada, Não executada, Sem OS, Reprogramada e Cancelada). Dispensadas, programadas e datas futuras não entram na base.'],
+          ['Pendências', 'Lista das ordens Não executada e Sem OS na data de geração do arquivo. Não se atualiza sozinha.'],
+          ['Como atualizar', 'Gere o arquivo de novo (o que foi digitado à mão não é levado) ou preencha as colunas de fundo claro: '
+            + 'Nº OS, Executada em, Situação (lista) e Observação. O Resumo se atualiza sozinho.'],
         ],
         areas: ordemAreas.filter(a => planos.some(p => p.area === a)).map(a => this.areaLabel[a]),
         meses: meses.map(m => ({
@@ -545,15 +552,9 @@ export class ManutencaoPlanosComponent implements OnInit {
             codigo: p.codigo,
             nome: p.nome,
             equipamento: p.equipamento,
-            tagKks: p.tagKks || '—',
+            tagKks: p.tagKks || '',
             area: this.areaLabel[p.area],
-            especialidade: p.especialidade || '—',
             periodicidade: periodicidade(p),
-            tempoHoras: p.tempoEstimadoHoras,
-            hh: p.hhEstimado,
-            loto: p.lotoPadrao || '—',
-            recursos: p.recursosApoio || '—',
-            responsavel: p.responsavel || '—',
             ...(execucao.get(`${p.id}|${data}`) ?? { numeroOs: null, executadaEm: null, situacao: null }),
           })),
         })),
@@ -563,12 +564,14 @@ export class ManutencaoPlanosComponent implements OnInit {
             codigo: p.codigo,
             nome: p.nome,
             equipamento: p.equipamento,
-            tagKks: p.tagKks || '—',
+            tagKks: p.tagKks || '',
             area: this.areaLabel[p.area],
-            especialidade: p.especialidade || '—',
+            especialidade: p.especialidade || '',
             periodicidade: periodicidade(p),
             dataInicial: p.dataInicial,
-            responsavel: p.responsavel || '—',
+            responsavel: p.responsavel || '',
+            loto: p.lotoPadrao || '',
+            recursos: p.recursosApoio || '',
             tempoHoras: p.tempoEstimadoHoras,
             hh: p.hhEstimado,
             passosChecklist: p.atividades.length,
