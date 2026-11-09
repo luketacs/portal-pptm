@@ -1,5 +1,5 @@
 import { ManutencaoOrdem, ConsultaSigmaResultado } from '../models/manutencao-programacao.model';
-import { ordensForaDaProgramacao, categoriaDaAreaSigma, mensagemOrdensForaProgramacao, semApontamentoEmOsCancelada,
+import { ordensForaDaProgramacao, indiceForaProgramacao, categoriaDaAreaSigma, mensagemOrdensForaProgramacao, semApontamentoEmOsCancelada,
   calcularIndicadoresSemana, indiceAtingimentoMeta, MatchColaborador, META_ATENDIMENTO, META_CUMPRIMENTO,
   META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META,
   TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META,
@@ -236,6 +236,17 @@ describe('indiceAtingimentoMeta', () => {
       expect(indiceAtingimentoMeta(p * 2, p, m, t)).toBe(0);
       expect(indiceAtingimentoMeta(p * 5, p, m, t)).toBe(0);
     });
+  });
+});
+
+describe('indiceForaProgramacao', () => {
+  it('fora ÷ (executadas + fora), em %', () => {
+    expect(indiceForaProgramacao(10, 40)).toBe(20);
+    expect(indiceForaProgramacao(2, 90)).toBeCloseTo((2 / 92) * 100, 2);
+  });
+  it('nada executado = 0%; só fora = 100%', () => {
+    expect(indiceForaProgramacao(0, 0)).toBe(0);
+    expect(indiceForaProgramacao(5, 0)).toBe(100);
   });
 });
 

@@ -33,7 +33,7 @@
         <h2>Por área</h2>
         <table class="t area">
           <thead>
-            <tr><th>Área</th><th class="n">Executadas</th><th></th><th class="n">Atendimento</th><th class="n">Do plano</th><th></th><th class="n">Cumprimento</th></tr>
+            <tr><th>Área</th><th class="n">Executadas</th><th></th><th class="n">Atendimento</th><th class="n">Do plano</th><th></th><th class="n">Cumprimento</th><th class="n">Fora da prog.</th></tr>
           </thead>
           <tbody>
             @for (a of d.areas; track a.nome) {
@@ -45,6 +45,7 @@
                 <td class="n">{{ num(a.cumprimento.executadas) }} de {{ num(a.cumprimento.programadas) }}</td>
                 <td class="col-med"><div class="med"><div class="med-valor" [style.width.%]="a.cumprimento.percentual"></div><div class="med-meta" [style.left.%]="d.meta"></div></div></td>
                 <td class="n f" [class.ruim]="a.cumprimento.percentual < d.meta">{{ pct(a.cumprimento.percentual) }}</td>
+                <td class="n f" [class.ruim]="a.fora.percentual > d.metaFora">{{ num(a.fora.quantidade) }} · {{ pct(a.fora.percentual) }}</td>
               </tr>
             }
           </tbody>
@@ -55,6 +56,7 @@
               <td class="n f">{{ pct(d.atendimento.percentual) }}</td>
               <td class="n">{{ num(d.cumprimento.executadas) }} de {{ num(d.cumprimento.programadas) }}</td><td></td>
               <td class="n f">{{ pct(d.cumprimento.percentual) }}</td>
+              <td class="n f" [class.ruim]="d.fora.percentual > d.metaFora">{{ num(d.fora.quantidade) }} · {{ pct(d.fora.percentual) }}</td>
             </tr>
           </tfoot>
         </table>

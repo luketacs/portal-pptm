@@ -17,6 +17,7 @@ describe('montarDadosRelatorioImpresso', () => {
   const fonte = {
     modo: 'semana' as const, periodoIso: '2026-09-28', semanasDoPeriodo: ['2026-09-28'], emitidoEm: new Date(2026, 9, 7),
     meta: 95, indicadores: semana,
+    foraProgramacao: [{ categoria: 'MECANICA' as const }, { categoria: 'MECANICA' as const }, { categoria: null }], metaFora: 10,
     corretivas: { executadas: 25, programadas: 25, percentual: 100 }, preventivas: { executadas: 80, programadas: 80, percentual: 100 },
     hh: { disponivel: 559, indisponivel: 156 }, folgas: 7, exames: 0,
     ano: { ...semana, geral: ind(5024, 5216), cumprimentoPlano: ind(3893, 4039), porArea: [] },
@@ -37,6 +38,14 @@ describe('montarDadosRelatorioImpresso', () => {
     expect(d.atividades[0].nome).toBe('Manutenção chute EAC05');
     expect(d.tecnicos).toEqual([]);
     expect(d.semArea).toEqual({ programadas: 0, plano: 0 });
+  });
+
+  it('fora da programação: total conta todas as áreas, área conta só a dela', () => {
+    const d = montarDadosRelatorioImpresso(fonte);
+    expect(d.fora).toEqual({ quantidade: 3, percentual: Math.round(3 / 109 * 10000) / 100 });
+    expect(d.areas.find(a => a.nome === 'Mecânica')!.fora).toEqual({ quantidade: 2, percentual: Math.round(2 / 62 * 10000) / 100 });
+    expect(d.areas.find(a => a.nome === 'Elétrica')!.fora).toEqual({ quantidade: 0, percentual: 0 });
+    expect(d.metaFora).toBe(10);
   });
 
   it('ordens "Não classificado" (categoria null) ficam fora da tabela e vão pra semArea', () => {

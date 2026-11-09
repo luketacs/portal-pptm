@@ -405,7 +405,7 @@
             <thead>
               <tr>
                 <th rowspan="2" style="min-width: 150px;">Área</th>
-                <th colspan="6" class="pcm-subheader-atendimento">Atendimento à Programação</th>
+                <th colspan="7" class="pcm-subheader-atendimento">Atendimento à Programação</th>
                 <th colspan="5" class="pcm-subheader-cumprimento">Cumprimento do Plano</th>
               </tr>
               <tr>
@@ -413,6 +413,7 @@
                 <th>Executadas</th>
                 <th>Não Executadas</th>
                 <th title="OS executadas na semana (apontamento no SIGMA) que não estavam na programação">Fora da Prog.</th>
+                <th title="Fora ÷ (Executadas + Fora) — meta ≤ 10%, quanto menor melhor">Índice Fora</th>
                 <th>Atendimento</th>
                 <th>Status</th>
                 <th>Planejadas</th>
@@ -435,6 +436,8 @@
                   <td>{{ a.executadas }}</td>
                   <td>@if (a.naoExecutadas > 0) { <button type="button" class="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900" (click)="abrirNaoExecutadas(a.categoria)" title="Ver quais OS">{{ a.naoExecutadas }}</button> } @else { {{ a.naoExecutadas }} }</td>
                   <td>@if (foraProgramacaoDaArea(a.categoria) > 0) { <button type="button" class="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900" (click)="abrirForaProgramacao(a.categoria)" title="Ver quais OS">{{ foraProgramacaoDaArea(a.categoria) }}</button> } @else { 0 }</td>
+                  @let indFora = indiceForaDaArea(a.categoria, a.executadas);
+                  <td><span class="pcm-status-indicator" [class.pcm-status-meta]="indFora <= metaForaProgramacao" [class.pcm-status-alert]="indFora > metaForaProgramacao"><span class="pcm-status-dot"></span>{{ indFora }}%</span></td>
                   <td><strong class="pcm-percentage">{{ a.atendimento }}%</strong></td>
                   <td>
                     <span class="pcm-status-indicator" [class.pcm-status-meta]="a.atendimento >= metaAtendimento" [class.pcm-status-alert]="a.atendimento < metaAtendimento">
@@ -460,6 +463,7 @@
                 <td>{{ indicadores().geral.executadas }}</td>
                 <td>@if (indicadores().geral.naoExecutadas > 0) { <button type="button" class="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900" (click)="abrirNaoExecutadas('todas')" title="Ver quais OS">{{ indicadores().geral.naoExecutadas }}</button> } @else { {{ indicadores().geral.naoExecutadas }} }</td>
                 <td>@if (foraProgramacaoDaArea('todas') > 0) { <button type="button" class="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900" (click)="abrirForaProgramacao('todas')" title="Ver quais OS">{{ foraProgramacaoDaArea('todas') }}</button> } @else { 0 }</td>
+                <td><strong>{{ indiceForaDaArea('todas', indicadores().geral.executadas) }}%</strong></td>
                 <td><strong>{{ indicadores().geral.atendimento }}%</strong></td>
                 <td></td>
                 <td>{{ indicadores().cumprimentoPlano.programadas }}</td>

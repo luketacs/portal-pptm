@@ -22,7 +22,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CategoriaIndicador, ChaveIndicadorManual, ConsultaSigmaResultado, ManutencaoOrdem, SigmaApontamentoPeriodo, OsApontadaPeriodo } from '../../../models/manutencao-programacao.model';
 import {
-  CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO,
+  CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadorArea, IndicadoresSemana, META_ATENDIMENTO, META_CUMPRIMENTO, META_FORA_PROGRAMACAO, indiceForaProgramacao,
   META_DIAS_NAVIO, META_DISPONIBILIDADE_GLOBAL, PISO_DIAS_NAVIO, PISO_DISPONIBILIDADE_GLOBAL, PISO_INDICE_META, STATUS_GERAL_COR,
   TETO_DIAS_NAVIO, TETO_DISPONIBILIDADE_GLOBAL, TETO_INDICE_META, calcularIndicadoresSemana, entraNoFechamentoIndicador, indiceAtingimentoMeta, OrdemForaProgramacao, ordensForaDaProgramacao, semApontamentoEmOsCancelada } from '../../../utils/manutencao-indicadores';
 import { PontoLinhaTempo, calcularLinhaTempo, enriquecerGeometria } from '../../../utils/relatorio-linha-tempo';
@@ -218,6 +218,7 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
   readonly categoriaLabel = CATEGORIA_LABEL;
   readonly metaAtendimento = META_ATENDIMENTO;
   readonly metaCumprimento = META_CUMPRIMENTO;
+  readonly metaForaProgramacao = META_FORA_PROGRAMACAO;
   readonly icones = ICONES;
   errorMessage = signal('');
   carregando = signal(false);
@@ -645,6 +646,11 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     return categoria === 'todas' ? this.foraProgramacao().length : this.foraProgramacao().filter(o => o.categoria === categoria).length;
   }
 
+  // Índice Fora = Fora ÷ (Executadas + Fora), meta ≤ 10% — ver indiceForaProgramacao.
+  indiceForaDaArea(categoria: CategoriaIndicador | null | 'todas', executadas: number): number {
+    return indiceForaProgramacao(this.foraProgramacaoDaArea(categoria), executadas);
+  }
+
   foraProgramacaoAberto = signal<CategoriaIndicador | 'todas' | null>(null);
 
   abrirForaProgramacao(categoria: CategoriaIndicador | null | 'todas'): void {
@@ -748,6 +754,8 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
       emitidoEm: this.emitidoEm(),
       meta: this.metaAtendimento,
       indicadores: this.indicadores(),
+      foraProgramacao: this.foraProgramacao(),
+      metaFora: this.metaForaProgramacao,
       corretivas: this.kpiCorretivas(),
       preventivas: this.kpiPreventivas(),
       hh: this.hhTotais(),
@@ -788,12 +796,19 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
 
   cardsResumoExecutivo = computed<CardIndicador[]>(() => {
     const ind = this.indicadores();
+    const fora = this.foraProgramacaoDaArea('todas');
+    const indiceFora = this.indiceForaDaArea('todas', ind.geral.executadas);
     return [
       { titulo: 'Atendimento à Programação', valor: `${this.atendimentoAnimado()}%`, meta: `Meta: ${this.metaAtendimento}%`, cor: 'green', icone: 'check' },
       { titulo: 'Cumprimento do Plano', valor: `${this.cumprimentoAnimado()}%`, meta: `Meta: ${this.metaCumprimento}%`, cor: 'blue', icone: 'calendario' },
       { titulo: "OS's Executadas", valor: `${ind.geral.executadas}/${ind.geral.programadas}`, cor: 'purple', icone: 'lista' },
       { titulo: "OS's Não Executadas", valor: `${ind.geral.naoExecutadas}`, cor: 'orange', icone: 'alerta' },
       { titulo: "OS's Planejadas Plano", valor: `${ind.cumprimentoPlano.programadas}`, meta: `${ind.cumprimentoPlano.executadas} executadas do plano`, cor: 'teal', icone: 'prancheta' },
+      {
+        titulo: 'Fora da Programação', valor: `${indiceFora}%`,
+        meta: `${fora} OS executada${fora === 1 ? '' : 's'} fora · Meta: ≤ ${this.metaForaProgramacao}%`,
+        cor: indiceFora <= this.metaForaProgramacao ? 'green' : 'red', icone: 'alerta',
+      },
     ];
   });
 

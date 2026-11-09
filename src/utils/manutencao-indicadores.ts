@@ -217,6 +217,18 @@ export function categoriaDaAreaSigma(area: string): CategoriaIndicador | null {
   return null;
 }
 
+// Índice de fora da programação (pedido do usuário, 09/11/2026): fração do que foi
+// executado no período que não estava programado = Fora ÷ (Executadas + Fora). Mesma
+// fórmula do Relatório Mensal PCM (percentualForaProgramacao em relatorio-mensal-pcm.ts):
+// dividir por "programadas" podia passar de 100%. Quanto menor, melhor — meta ≤ 10%.
+// Nada executado = 0%.
+export const META_FORA_PROGRAMACAO = 10.0;
+
+export function indiceForaProgramacao(fora: number, executadas: number): number {
+  const total = executadas + fora;
+  return total > 0 ? round2((fora / total) * 100) : 0;
+}
+
 export interface OrdemForaProgramacao {
   semanaInicio: string;
   numeroOs: string;

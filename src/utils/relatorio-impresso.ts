@@ -4,7 +4,7 @@
 // testáveis: formatação pt-BR, as frases que contam o resultado do período e a
 // geometria dos gráficos (SVG desenhado no template, sem lib).
 import { CategoriaIndicador } from '../models/manutencao-programacao.model';
-import { CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadoresSemana } from './manutencao-indicadores';
+import { CATEGORIAS_INDICADOR, CATEGORIA_LABEL, ContagemExecucao, IndicadoresSemana, indiceForaProgramacao } from './manutencao-indicadores';
 import { numeroSemanaISO } from './manutencao-indicadores-periodo';
 
 export interface ContagemImpressa {
@@ -13,10 +13,17 @@ export interface ContagemImpressa {
   percentual: number;
 }
 
+// OS executadas fora da programação + índice Fora ÷ (Executadas + Fora).
+export interface ForaImpresso {
+  quantidade: number;
+  percentual: number;
+}
+
 export interface AreaImpressa {
   nome: string;
   atendimento: ContagemImpressa;
   cumprimento: ContagemImpressa;
+  fora: ForaImpresso;
 }
 
 export interface PontoTendencia {
@@ -41,6 +48,8 @@ export interface DadosRelatorioImpresso {
   meta: number;        // Atendimento e Cumprimento usam a mesma meta (95%)
   atendimento: ContagemImpressa;
   cumprimento: ContagemImpressa;
+  fora: ForaImpresso;
+  metaFora: number;    // quanto menor, melhor (≤ 10%)
   areas: AreaImpressa[];
   // Ordens "Não classificado" (Apoio sem categoria): entram no total, mas não na tabela.
   semArea: { programadas: number; plano: number };
@@ -261,6 +270,7 @@ export const pontosSvg = (pts: { x: number; y: number }[]): string => pts.map(p 
 // ── Montagem a partir do que a tela já calcula ──
 const MESES_NOME = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 const contagem = (c: ContagemExecucao): ContagemImpressa => ({ executadas: c.executadas, programadas: c.programadas, percentual: c.atendimento });
+const foraDe = (qtd: number, executadas: number): ForaImpresso => ({ quantidade: qtd, percentual: indiceForaProgramacao(qtd, executadas) });
 
 export interface FonteRelatorioImpresso {
   modo: 'semana' | 'mes';
@@ -269,6 +279,9 @@ export interface FonteRelatorioImpresso {
   emitidoEm: Date;
   meta: number;
   indicadores: IndicadoresSemana;
+  // Área (do SIGMA) de cada OS executada fora da programação no período.
+  foraProgramacao: { categoria: CategoriaIndicador | null }[];
+  metaFora: number;
   corretivas: ContagemImpressa;
   preventivas: ContagemImpressa;
   hh: { disponivel: number; indisponivel: number };
@@ -318,10 +331,14 @@ export function montarDadosRelatorioImpresso(f: FonteRelatorioImpresso): DadosRe
     meta: f.meta,
     atendimento: contagem(f.indicadores.geral),
     cumprimento: contagem(f.indicadores.cumprimentoPlano),
+    fora: foraDe(f.foraProgramacao.length, f.indicadores.geral.executadas),
+    metaFora: f.metaFora,
     areas: CATEGORIAS_INDICADOR
       .map(cat => ({ cat, a: f.indicadores.porArea.find(x => x.categoria === cat) }))
       .filter(({ a }) => !!a && a.programadas > 0)
-      .map(({ cat, a }) => ({ nome: CATEGORIA_LABEL[cat], atendimento: contagem(a!), cumprimento: contagem(a!.cumprimentoPlano) })),
+      .map(({ cat, a }) => ({ nome: CATEGORIA_LABEL[cat], atendimento: contagem(a!), cumprimento: contagem(a!.cumprimentoPlano),
+        fora: foraDe(f.foraProgramacao.filter(o => o.categoria === cat).length, a!.executadas),
+      })),
     semArea: (sa => ({ programadas: sa?.programadas ?? 0, plano: sa?.cumprimentoPlano.programadas ?? 0 }))(
       f.indicadores.porArea.find(x => x.categoria === null)),
     corretivas: f.corretivas,
