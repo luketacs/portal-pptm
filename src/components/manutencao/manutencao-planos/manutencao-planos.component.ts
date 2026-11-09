@@ -156,6 +156,15 @@ export class ManutencaoPlanosComponent implements OnInit {
 
   private readonly hojeInicioSemanaIso = paraIso(segundaFeiraDe(new Date()));
 
+  // Última semana com fechamento (indicadores), escolhida ao gerar o cronograma. O fechamento
+  // sai no começo da semana seguinte, então o padrão é a semana retrasada; a lista vai até a
+  // semana passada. Não é a "semana fechada" da Programação, que trava a edição antes disso.
+  readonly opcoesFechamento = Array.from({ length: 8 }, (_, i) => {
+    const inicio = somarDias(this.hojeInicioSemanaIso, -7 * (i + 1));
+    return { inicio, rotulo: `S${this.numeroSemanaISO(inicio)} (${this.formatarDataBr(inicio).slice(0, 5)} a ${this.formatarDataBr(somarDias(inicio, 6))})` };
+  });
+  readonly semanaFechamento = signal(somarDias(this.hojeInicioSemanaIso, -14));
+
   // Cada plano ativo já com a próxima execução (derivada do último ciclo) e a
   // "última execução" (o próprio último ciclo, se existir) — insumo da tabela e dos KPIs.
   private planosComProximaTodos = computed(() =>
@@ -501,16 +510,24 @@ export class ManutencaoPlanosComponent implements OnInit {
         // Sem o SIGMA toda OS sem apontamento sairia "Não executada" — melhor não gerar.
         throw new Error('Não foi possível consultar o SIGMA para preencher as execuções. Tente de novo em instantes.');
       }
+      // Situação só até o fechamento escolhido (pedido do usuário em 09/11/2026: a planilha
+      // acompanha o fechamento semanal). Apontamento depois do fim dessa semana não conta, e a
+      // conta é feita como se hoje fosse a segunda seguinte: ordem de semana não fechada sai
+      // Programada (ou em branco, sem OS), nunca Não executada ou Sem OS.
+      const fimFechamento = somarDias(this.semanaFechamento(), 6);
+      const referencia = somarDias(this.semanaFechamento(), 7);
       // Mesma regra dos Indicadores: a partir da S44, apontamento em OS cancelada não conta.
       const apontamentosDaOs = (os: string) => {
         const consulta = sigma[os] ?? (/^\d+$/.test(os) ? sigma[os.padStart(6, '0')] : undefined);
-        return consulta && semApontamentoEmOsCancelada(consulta.apontamentos.map(a => ({ data: a.data, statusCodigo: consulta.os?.statusCodigo })));
+        return consulta && semApontamentoEmOsCancelada(consulta.apontamentos.map(a => ({ data: a.data, statusCodigo: consulta.os?.statusCodigo })))
+          .filter(a => a.data <= fimFechamento);
       };
       // Se falhar não gera: sem as paradas, as ordens dispensadas sairiam como "Sem OS".
       const paradas = await this.manutencaoProgramacaoService.listarParadasPlanta();
-      const osFora = osForaDaProgramacaoPorPlano(planos, this.manutencaoPlanosService.planos(), osApontadas);
+      const osFora = osForaDaProgramacaoPorPlano(planos, this.manutencaoPlanosService.planos(), osApontadas.filter(o => o.data <= fimFechamento));
       const osCancelada = (os: string) => (sigma[os] ?? (/^\d+$/.test(os) ? sigma[os.padStart(6, '0')] : undefined))?.os?.statusCodigo?.trim().toUpperCase() === 'CANC';
-      const execucao = execucaoDoCronograma(meses, planos, ordensPorPlano, apontamentosDaOs, hoje, paradas, osFora, osCancelada);
+      const execucao = execucaoDoCronograma(meses, planos, ordensPorPlano, apontamentosDaOs, referencia, paradas, osFora, osCancelada);
+      const fechamento = `Fechamento até S${this.numeroSemanaISO(this.semanaFechamento())} (${this.formatarDataBr(fimFechamento)})`;
 
       const ocorrenciasPorPlano = new Map<string, number>();
       for (const m of meses) for (const o of m.ocorrencias) ocorrenciasPorPlano.set(o.plano.id, (ocorrenciasPorPlano.get(o.plano.id) ?? 0) + 1);
@@ -528,16 +545,19 @@ export class ManutencaoPlanosComponent implements OnInit {
         periodo: `${this.formatarDataBr(inicio)} a ${this.formatarDataBr(ultimoDia)}`,
         fca: this.fcaCronograma(paradas),
         pendenciasDesde: this.INICIO_TRATAMENTO_PENDENCIAS,
+        fechamento,
         notas: [
           ['Datas previstas', 'Periodicidade cadastrada de cada plano ativo, contada a partir da data inicial do plano. '
             + 'Na programação semanal, a ordem pode ser antecipada em até 1/3 do período para juntar visitas ao mesmo equipamento.'],
-          ['Histórico', `Desde ${this.formatarDataBr(inicio)}, início do controle das preventivas. Nº OS, Executada em e Situação vieram `
-            + `preenchidos com o que estava registrado em ${this.formatarDataBr(hoje)}.`],
+          ['Histórico', `Desde ${this.formatarDataBr(inicio)}, início do controle das preventivas.`],
+          ['Fechamento', `Situação até o fechamento da semana ${this.numeroSemanaISO(this.semanaFechamento())}: `
+            + `${this.formatarDataBr(this.semanaFechamento())} a ${this.formatarDataBr(fimFechamento)}. Contam os apontamentos com data até ${this.formatarDataBr(fimFechamento)}, `
+            + `registrados no SIGMA até ${this.formatarDataBr(hoje)}. Semanas seguintes ficam como Programada ou em branco até o próximo fechamento.`],
           ['Executada', 'OS com apontamento no SIGMA no período da ocorrência: de até 21 dias antes da data até a ocorrência seguinte. '
             + 'A data mostrada é o 1º apontamento nesse período.'],
           ['Não executada', 'A semana da OS terminou sem apontamento no período.'],
-          ['Programada', 'OS da semana atual ou futura.'],
-          ['Sem OS', 'A data já passou, sem OS na programação e sem OS apontada no SIGMA com a descrição do plano.'],
+          ['Programada', 'OS de semana ainda não fechada.'],
+          ['Sem OS', 'Data até o fechamento, sem OS na programação e sem OS apontada no SIGMA com a descrição do plano.'],
           ['Dispensada (parada)', 'Com a planta parada, o ciclo menor que 1 mês de Elétrica e Mecânica é programado como mensal. A linha é dispensada '
             + 'quando a ocorrência mensal tem OS não cancelada, indicada na Observação. Mês sem OS continua Sem OS. Datas futuras seguem a periodicidade cadastrada até passarem.'],
           ['Reprogramada e Cancelada', 'Marcadas à mão.'],

@@ -152,6 +152,7 @@ export interface CronogramaPlanosExport {
   periodo: string; // "05/10/2026 a 31/10/2028"
   notas: [string, string][]; // aba Notas: rótulo -> texto
   pendenciasDesde: string; // 'YYYY-MM-DD', início do tratamento na aba Pendências
+  fechamento?: string; // "Fechamento até S44 (01/11/2026)", vai no subtítulo de toda aba
   fca?: FcaExport;
   areas: string[]; // colunas do Resumo, na ordem
   meses: CronogramaPlanosMes[];
@@ -1368,7 +1369,7 @@ export class ExcelExportService {
     wb.calcProperties.fullCalcOnLoad = true; // Resumo é fórmula sobre as abas dos meses
     const logoBuffer = await this.carregarLogoBuffer();
     const logoId = logoBuffer ? wb.addImage({ buffer: logoBuffer, extension: 'png' }) : null;
-    const posicao = `Posição em ${this.nowStr()}`;
+    const posicao = `${params.fechamento ? `${params.fechamento} | ` : ''}Posição em ${this.nowStr()}`;
     const ULTIMA_LINHA = 5000; // fórmulas do Resumo cobrem linhas acrescentadas à mão
     const LOGO = { largura: 150, altura: 45 };
 

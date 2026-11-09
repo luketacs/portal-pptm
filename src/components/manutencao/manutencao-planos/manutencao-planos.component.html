@@ -143,6 +143,15 @@
         [class]="visualizacao() === 'calendario' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'">Calendário</button>
     </div>
     <div class="flex flex-wrap items-center gap-2">
+      <label class="inline-flex items-center gap-1.5 text-sm text-slate-600" title="Situação das ordens só até o fim desta semana; as seguintes saem como Programada ou em branco">
+        Fechamento até
+        <select class="border border-slate-300 rounded-lg py-1.5 px-2 text-sm bg-white"
+          (change)="semanaFechamento.set($any($event.target).value)">
+          @for (op of opcoesFechamento; track op.inicio) {
+            <option [value]="op.inicio" [selected]="op.inicio === semanaFechamento()">{{ op.rotulo }}</option>
+          }
+        </select>
+      </label>
       <button type="button" (click)="exportarCronograma()" [disabled]="exportando()"
         [title]="'Planilha de controle: desde 05/10/2026 até ' + MESES_CRONOGRAMA + ' meses à frente, uma aba por mês com as preventivas previstas e o que já foi executado (planos filtrados)'"
         class="inline-flex items-center gap-2 bg-white text-slate-600 text-sm font-semibold py-2 px-4 rounded-lg border border-slate-300 hover:bg-slate-50 transition disabled:opacity-50">

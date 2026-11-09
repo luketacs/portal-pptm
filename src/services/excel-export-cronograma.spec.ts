@@ -203,6 +203,12 @@ it('Pendências corta pela data de início do tratamento, mas mês e Resumo segu
   expect(wb.getWorksheet('Resumo')!.getRow(6).getCell(8).value).toMatchObject({ result: 1 });
 });
 
+it('fechamento informado aparece no subtítulo das abas', async () => {
+  await new ExcelExportService().exportarCronogramaPlanos({ ...params, fechamento: 'Fechamento até S44 (01/11/2026)' });
+  const resumo = capturado!.getWorksheet('Resumo')!;
+  expect(String(resumo.getCell('C2').value)).toContain('Fechamento até S44 (01/11/2026) | Posição em');
+});
+
 it('Pendências sem nenhuma ordem no período diz isso, em vez de tabela vazia', async () => {
   await new ExcelExportService().exportarCronogramaPlanos({
     ...params, pendenciasDesde: '2026-11-09',
