@@ -116,9 +116,10 @@ describe('tituloResumo', () => {
 });
 
 describe('ledeResumo', () => {
+  const semFora = { quantidade: 0, percentual: 0 };
   const areas = [
-    { nome: 'Mecânica', atendimento: c(60, 60), cumprimento: c(46, 46) },
-    { nome: 'Elétrica', atendimento: c(36, 36), cumprimento: c(24, 24) },
+    { nome: 'Mecânica', atendimento: c(60, 60), cumprimento: c(46, 46), fora: semFora },
+    { nome: 'Elétrica', atendimento: c(36, 36), cumprimento: c(24, 24), fora: semFora },
   ];
 
   it('tudo executado', () => {
@@ -129,9 +130,9 @@ describe('ledeResumo', () => {
 
   it('com áreas abaixo e a que concentra as não executadas', () => {
     const ruins = [
-      { nome: 'Mecânica', atendimento: c(10, 65), cumprimento: c(5, 55) },
-      { nome: 'Elétrica', atendimento: c(36, 37), cumprimento: c(20, 20) },
-      { nome: 'SPCI', atendimento: c(0, 3), cumprimento: c(0, 3) },
+      { nome: 'Mecânica', atendimento: c(10, 65), cumprimento: c(5, 55), fora: semFora },
+      { nome: 'Elétrica', atendimento: c(36, 37), cumprimento: c(20, 20), fora: semFora },
+      { nome: 'SPCI', atendimento: c(0, 3), cumprimento: c(0, 3), fora: semFora },
     ];
     expect(ledeResumo({ meta: 95, atendimento: c(46, 105), cumprimento: c(25, 78), areas: ruins, atendimentoAno: 96.32 }))
       .toBe('Foram executadas 46 das 105 ordens programadas (43,8%) e 25 das 78 do plano de manutenção (32,1%). '
@@ -141,7 +142,7 @@ describe('ledeResumo', () => {
 });
 
 describe('ledeResumo (casos de área)', () => {
-  const area = (nome: string, e: number, pr: number) => ({ nome, atendimento: c(e, pr), cumprimento: c(e, pr) });
+  const area = (nome: string, e: number, pr: number) => ({ nome, atendimento: c(e, pr), cumprimento: c(e, pr), fora: { quantidade: 0, percentual: 0 } });
 
   it('uma área abaixo que também concentra as não executadas: sem repetir o nome', () => {
     const areas = [area('Mecânica', 172, 172), area('Limpeza Operacional', 17, 22), area('Refrigeração', 26, 27)];
@@ -157,7 +158,7 @@ describe('ledeResumo (casos de área)', () => {
 });
 
 describe('notaSomaAreas', () => {
-  const area = (nome: string, pr: number, plano: number) => ({ nome, atendimento: c(pr, pr), cumprimento: c(plano, plano) });
+  const area = (nome: string, pr: number, plano: number) => ({ nome, atendimento: c(pr, pr), cumprimento: c(plano, plano), fora: { quantidade: 0, percentual: 0 } });
   const semArea = { programadas: 0, plano: 0 };
 
   it('soma das áreas fecha com o total: sem nota', () => {

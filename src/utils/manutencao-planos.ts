@@ -690,7 +690,7 @@ function dispensaPorParada(
   const k = primeiroIndiceAPartirDe(p.dataInicial, efetiva.valor, efetiva.unidade, somarDias(data, 1));
   const ocorrencia = somarPeriodos(p.dataInicial, k - 1, efetiva.valor, efetiva.unidade);
   const seguinte = somarPeriodos(p.dataInicial, k, efetiva.valor, efetiva.unidade);
-  const desde = somarDias(ocorrencia, p.agendaRigida ? 0 : -folgaCoberturaCiclo(efetiva.valor, efetiva.unidade));
+  const desde = p.agendaRigida ? segundaDaSemana(ocorrencia) : somarDias(ocorrencia, -folgaCoberturaCiclo(efetiva.valor, efetiva.unidade));
   const noCiclo = coberturas.filter(c => c.datas.some(d => d >= desde && d < seguinte));
   if (noCiclo.length === 0) return null;
   const { numeroOs } = noCiclo.find(c => c.executada) ?? noCiclo[0];
@@ -698,9 +698,13 @@ function dispensaPorParada(
   return `Parada: ocorrência mensal de ${dataBr}, OS ${numeroOs}.`;
 }
 
+const segundaDaSemana = (iso: string) => somarDias(iso, -((new Date(iso + 'T00:00:00').getDay() + 6) % 7));
+
 // O que já aconteceu com cada ocorrência do cronograma (chave `${planoId}|${data}`).
 // Período da ocorrência = mesma regra de planosAtrasados: de (ocorrência − folga de
-// cobertura) até a ocorrência seguinte. A OS cobre a ocorrência se tem apontamento nesse
+// cobertura) até a ocorrência seguinte. Agenda rígida não tem folga, mas o período começa na
+// segunda-feira da semana da data: a OS é programada para a semana e pode ser feita dias antes
+// (11/11/2026: PM-0146 apontada 14/10 para 15/10 e PM-0158 em 19/10 para 21/10 saíam "Sem OS"). A OS cobre a ocorrência se tem apontamento nesse
 // período; OS sem apontamento vale pela data do ciclo. Cada OS cobre uma ocorrência só, e
 // o número repetido em dois lançamentos conta uma vez: sem isso a linha mostrava execução
 // semanas antes ou depois da própria data.
@@ -715,7 +719,7 @@ export function execucaoDoCronograma(
   osForaPorPlano: ReadonlyMap<string, readonly OsForaDaProgramacao[]> = new Map(),
   osCancelada: (numeroOs: string) => boolean = () => false,
 ): Map<string, ExecucaoOcorrencia> {
-  const segundaAtual = somarDias(hojeIso, -((new Date(hojeIso + 'T00:00:00').getDay() + 6) % 7));
+  const segundaAtual = segundaDaSemana(hojeIso);
   const planoPorId = new Map(planos.map(p => [p.id, p]));
   const datasPorPlano = new Map<string, string[]>();
   for (const m of meses) {
@@ -749,7 +753,7 @@ export function execucaoDoCronograma(
     for (const data of datas) {
       const k = primeiroIndiceAPartirDe(p.dataInicial, p.periodicidadeValor, p.periodicidadeUnidade, somarDias(data, 1));
       const seguinte = somarPeriodos(p.dataInicial, k, p.periodicidadeValor, p.periodicidadeUnidade);
-      const desde = somarDias(data, -folga);
+      const desde = p.agendaRigida ? segundaDaSemana(data) : somarDias(data, -folga);
       const noPeriodo = (d: string) => d >= desde && d < seguinte;
       const i = candidatas.findIndex((c, idx) => !usadas.has(idx)
         && !(c.numeroOs && numerosUsados.has(chaveNumeroOs(c.numeroOs)))

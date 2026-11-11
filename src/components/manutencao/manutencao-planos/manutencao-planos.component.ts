@@ -565,6 +565,7 @@ export class ManutencaoPlanosComponent implements OnInit {
             + `${this.formatarDataBr(this.semanaFechamento())} a ${this.formatarDataBr(fimFechamento)}. Contam os apontamentos com data até ${this.formatarDataBr(fimFechamento)}, `
             + `registrados no SIGMA até ${this.formatarDataBr(hoje)}. Semanas seguintes ficam como Programada ou em branco até o próximo fechamento.`],
           ['Executada', 'OS com apontamento no SIGMA no período da ocorrência: de até 21 dias antes da data até a ocorrência seguinte. '
+            + 'Plano de data fixa (sem antecipação): o período começa na segunda-feira da semana da data. '
             + 'A data mostrada é o 1º apontamento nesse período.'],
           ['Não executada', 'A semana da OS terminou sem apontamento no período.'],
           ['Programada', 'OS de semana ainda não fechada.'],

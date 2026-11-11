@@ -435,6 +435,35 @@ describe('execução das ocorrências do cronograma', () => {
     expect(r.get('s|2026-11-09')).toBeUndefined(); // futuro sem OS: fica em branco
   });
 
+  // Reportado em 11/11/2026 (cronograma S45): PM-0146 (OS 046695 apontada 14/10, data 15/10) e
+  // PM-0158 (OS 048018 apontada 19/10, data 21/10) saíam "Sem OS". Agenda rígida não tem folga
+  // e o período começava no próprio dia: execução na mesma semana, dias antes, ficava de fora.
+  describe('agenda rígida: vale a semana da data', () => {
+    const mensal = plano({ id: 'r', dataInicial: '2026-01-15', periodicidadeValor: 1, periodicidadeUnidade: 'Mes(es)', area: 'APOIO', agendaRigida: true });
+    const meses = cronogramaMensal([mensal], '2026-10', 1, '2026-10-05');
+    const ordens = new Map([['r', [
+      { data: '2026-10-15', ordem: ordem({ id: '1', numeroOs: '046695', area: 'APOIO', semanaInicio: '2026-10-12', diasPrevistos: ['2026-10-14'] }) },
+    ]]]);
+
+    it('OS apontada dias antes, na mesma semana, conta como executada', () => {
+      const r = execucaoDoCronograma(meses, [mensal], ordens, () => [ap('2026-10-14')], '2026-11-09');
+      expect(r.get('r|2026-10-15')).toEqual({ numeroOs: '046695', executadaEm: '2026-10-14', situacao: 'Executada' });
+    });
+
+    it('a segunda-feira da semana conta (PM-0158: 19/10 para a data de 21/10)', () => {
+      const empilha = { ...mensal, dataInicial: '2026-09-21' };
+      const m = cronogramaMensal([empilha], '2026-10', 1, '2026-10-05');
+      const o = new Map([['r', [{ data: '2026-10-21', ordem: ordem({ id: '1', numeroOs: '048018', area: 'APOIO', semanaInicio: '2026-10-19' }) }]]]);
+      const r = execucaoDoCronograma(m, [empilha], o, () => [ap('2026-10-19')], '2026-11-09');
+      expect(r.get('r|2026-10-21')).toEqual({ numeroOs: '048018', executadaEm: '2026-10-19', situacao: 'Executada' });
+    });
+
+    it('apontamento na semana anterior continua não contando', () => {
+      const r = execucaoDoCronograma(meses, [mensal], ordens, () => [ap('2026-10-09')], '2026-11-09');
+      expect(r.get('r|2026-10-15')?.situacao).toBe('Sem OS');
+    });
+  });
+
   describe('OS casada pela execução real', () => {
     const semanal = plano({ id: 's', dataInicial: '2026-10-05', periodicidadeValor: 1, periodicidadeUnidade: 'Semana(s)', area: 'APOIO' });
     const meses = cronogramaMensal([semanal], '2026-10', 1, '2026-10-05');
