@@ -414,7 +414,7 @@ export class ManutencaoPlanosComponent implements OnInit {
     titulo: 'Controle dos planos de manutenção preventiva',
     campos: [
       ['Data de abertura', '29/10/2026'],
-      ['Última revisão', '09/11/2026'],
+      ['Última revisão', '11/11/2026'],
       ['Área', 'Manutenção PPTM: Planejamento e Controle da Manutenção (PCM)'],
       ['Responsável', 'PCM'],
       ['Sistema oficial', 'Protheus até a migração para o MAXIMO, em 31/10/2027.'],
@@ -423,10 +423,16 @@ export class ManutencaoPlanosComponent implements OnInit {
     fato: 'O controle dos planos de manutenção preventiva pelo Protheus não é confiável. O cadastro dos planos tem periodicidade, '
       + 'data de referência ou equipamento diferentes do que é executado em campo, e as OS preventivas são geradas fora da data '
       + 'prevista: em data errada, em duplicidade ou deixando de gerar. Assim, o Protheus não garante que cada preventiva saia '
-      + 'no prazo nem permite comprovar o cumprimento dos planos.',
+      + 'no prazo nem permite comprovar o cumprimento dos planos. Na entrada da parada da planta, inspeções de ciclo curto '
+      + 'da Mecânica ficaram sem execução no primeiro mês (linhas "Sem OS" de setembro e outubro de 2026).',
+    // Causa 3 e a contenção dela: pedido do usuário em 11/11/2026 ("não podemos deixar brechas
+    // para os auditores"). Conferido no SIGMA: as OS semanais/quinzenais desses planos foram
+    // canceladas de ~17/08 a ~20/10/2026 sem apontamento, e a execução voltou entre 19 e 30/10.
     causas: [
       'Planos desatualizados no Protheus: periodicidade, data de referência ou equipamento divergentes do que é executado em campo.',
       'Geração de OS preventivas fora da data prevista no Protheus: OS em data errada, em duplicidade ou não geradas.',
+      'Na entrada da parada da planta, as OS semanais e quinzenais das inspeções de ciclo curto da Mecânica foram canceladas '
+        + 'sem programar a inspeção mensal que as substitui durante a parada. A mensal só passou a ser programada na semana 43 (19/10/2026).',
     ],
     acoes: [
       {
@@ -437,6 +443,11 @@ export class ManutencaoPlanosComponent implements OnInit {
       {
         tipo: 'Contenção', responsavel: 'PCM', prazo: 'Semanal', status: 'Em andamento',
         acao: 'Atualizar a planilha a cada fechamento semanal e tratar as ordens "Não executada" e "Sem OS".',
+      },
+      {
+        tipo: 'Contenção', responsavel: 'PCM', prazo: '19/10/2026', status: 'Implantada',
+        acao: 'Programar a inspeção mensal de ciclo curto (menor que 1 mês) de Elétrica e Mecânica desde a primeira semana da parada. '
+          + 'Ao cancelar as OS semanais e quinzenais por parada, a mensal entra na programação da mesma semana.',
       },
       {
         tipo: 'Corretiva', responsavel: 'PCM', prazo: '31/10/2027', status: 'Planejada',
