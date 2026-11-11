@@ -12,6 +12,7 @@ import {
   PlanoManutencao,
 } from '../../../models/manutencao-programacao.model';
 import { LOTO_OPCOES } from '../../../utils/manutencao-regras';
+import { FCA_SEM_OS_HISTORICO } from '../../../utils/cronograma-fca-sem-os';
 import { semApontamentoEmOsCancelada } from '../../../utils/manutencao-indicadores';
 import { dataLimiteComTolerancia, JANELA_ALINHAMENTO_DIAS, periodicidadeEfetiva, proximaDataFixa, somarDias, somarPeriodos } from '../../../utils/manutencao-preventivas';
 import {
@@ -555,6 +556,7 @@ export class ManutencaoPlanosComponent implements OnInit {
         titulo: `Cronograma de Manutenção Preventiva${area === 'todos' ? '' : ` - ${this.areaLabel[area]}`}`,
         periodo: `${this.formatarDataBr(inicio)} a ${this.formatarDataBr(ultimoDia)}`,
         fca: this.fcaCronograma(paradas),
+        fcaSemOs: FCA_SEM_OS_HISTORICO,
         pendenciasDesde: this.INICIO_TRATAMENTO_PENDENCIAS,
         fechamento,
         notas: [
@@ -569,12 +571,14 @@ export class ManutencaoPlanosComponent implements OnInit {
             + 'A data mostrada é o 1º apontamento nesse período.'],
           ['Não executada', 'A semana da OS terminou sem apontamento no período.'],
           ['Programada', 'OS de semana ainda não fechada.'],
-          ['Sem OS', 'Data até o fechamento, sem OS na programação e sem OS apontada no SIGMA com a descrição do plano.'],
+          ['Sem OS', 'Data até o fechamento, sem OS na programação e sem OS apontada no SIGMA com a descrição do plano. '
+            + 'Essas ordens ficam na aba Sem OS (FCA), cada uma com fato, causa, ação, responsável, prazo e status, e não aparecem nas abas de mês. '
+            + 'Continuam contando no Resumo: no total previsto, na coluna Sem OS e na base do % executadas.'],
           ['Dispensada (parada)', 'Com a planta parada, o ciclo menor que 1 mês de Elétrica e Mecânica é programado como mensal. A linha é dispensada '
             + 'quando a ocorrência mensal tem OS não cancelada, indicada na Observação. Mês sem OS continua Sem OS. Datas futuras seguem a periodicidade cadastrada até passarem.'],
           ['Reprogramada e Cancelada', 'Marcadas à mão.'],
           ['% executadas', 'Executadas ÷ ordens com resultado (Executada, Não executada, Sem OS, Reprogramada e Cancelada). Dispensadas, programadas e datas futuras não entram na base.'],
-          ['Pendências', `Ordens Não executada e Sem OS com data a partir de ${this.formatarDataBr(this.INICIO_TRATAMENTO_PENDENCIAS)}. `
+          ['Pendências', `Ordens Não executada com data a partir de ${this.formatarDataBr(this.INICIO_TRATAMENTO_PENDENCIAS)}. `
             + 'A lista sai na geração do arquivo e não se atualiza sozinha.'],
           ['Como atualizar', 'Gere o arquivo de novo (o que foi digitado à mão não é levado) ou preencha as colunas de fundo claro: '
             + 'Nº OS, Executada em, Situação (lista) e Observação. O Resumo se atualiza sozinho.'],

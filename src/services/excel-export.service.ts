@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import * as XLSX from 'xlsx-js-style';
 import type { CellStyle, WorkSheet, WorkBook } from 'xlsx-js-style';
 import type * as ExcelJS from 'exceljs';
+import type { FcaSemOs } from '../utils/cronograma-fca-sem-os';
 import type { MaterialComSAs, Movimentacao, SaldoReal } from './almoxarifado.service';
 import { custoUnitarioMov, valorEntradaMov, valorSaidaMov } from './almoxarifado.service';
 
@@ -154,6 +155,10 @@ export interface CronogramaPlanosExport {
   pendenciasDesde: string; // 'YYYY-MM-DD', início do tratamento na aba Pendências
   fechamento?: string; // "Fechamento até S44 (01/11/2026)", vai no subtítulo de toda aba
   fca?: FcaExport;
+  // FCA de cada ordem "Sem OS", chave `${codigo}|${data}`. As ordens sem OS saem das abas de
+  // mês e vão para a aba "Sem OS (FCA)" (pedido do usuário em 11/11/2026); sem entrada aqui,
+  // a causa fica em branco e o status Pendente.
+  fcaSemOs?: Readonly<Record<string, FcaSemOs>>;
   areas: string[]; // colunas do Resumo, na ordem
   meses: CronogramaPlanosMes[];
   planos: CronogramaPlanoCadastro[];
@@ -1445,21 +1450,27 @@ export class ExcelExportService {
       const base = `(SUM(${letra(cExec)}${rr}:${letra(cUltimaSituacao)}${rr})-${letra(cDispensadas)}${rr})`;
       return `IF(${base}=0,"",${letra(cExec)}${rr}/${base})`;
     };
+    // Ordens sem OS ficam na aba própria (com a FCA de cada uma), não na aba do mês: o Resumo
+    // soma as duas, e o total, a coluna Sem OS e o % continuam contando essas ordens.
+    const ABA_SEM_OS = 'Sem OS (FCA)';
+    const faixaSemOs = (col: string) => `'${ABA_SEM_OS}'!$${col}$5:$${col}$${ULTIMA_LINHA}`;
     let r = R_MESES;
     for (const mes of params.meses) {
       const aba = `'${mes.aba}'!`;
       const faixa = (col: string) => `${aba}$${col}$5:$${col}$${ULTIMA_LINHA}`;
+      const doMesSemOs = `${faixaSemOs('C')},"${mes.aba}"`;
       const linha = resumo.getRow(r);
       linha.getCell(1).value = mes.nome;
       params.areas.forEach((area, i) => {
         linha.getCell(2 + i).value = {
-          formula: `COUNTIF(${faixa('G')},"${area}")`,
+          formula: `COUNTIF(${faixa('G')},"${area}")+COUNTIFS(${doMesSemOs},${faixaSemOs('G')},"${area}")`,
           result: mes.linhas.filter(l => l.area === area).length,
         };
       });
-      linha.getCell(cTotal).value = { formula: `COUNTA(${faixa('C')})`, result: mes.linhas.length };
+      linha.getCell(cTotal).value = { formula: `COUNTA(${faixa('C')})+COUNTIF(${doMesSemOs})`, result: mes.linhas.length };
       situacoesResumo.forEach((sit, i) => {
-        linha.getCell(cExec + i).value = { formula: `COUNTIF(${faixa('K')},"${sit}")`, result: mes.linhas.filter(l => l.situacao === sit).length };
+        const formula = `COUNTIF(${faixa('K')},"${sit}")${sit === 'Sem OS' ? `+COUNTIF(${doMesSemOs})` : ''}`;
+        linha.getCell(cExec + i).value = { formula, result: mes.linhas.filter(l => l.situacao === sit).length };
       });
       const executadas = mes.linhas.filter(l => l.situacao === 'Executada').length;
       const comResultado = mes.linhas.filter(l => situacoesResumo.includes(l.situacao ?? '') && l.situacao !== 'Dispensada (parada)').length;
@@ -1488,15 +1499,75 @@ export class ExcelExportService {
     }
     resumo.mergeCells(rUltimoMes + 2, 1, rUltimoMes + 2, colsResumo.length);
     Object.assign(resumo.getCell(rUltimoMes + 2, 1), {
-      value: 'Critérios e definições: aba Notas. Ordens que precisam de tratamento: aba Pendências.',
+      value: `Critérios e definições: aba Notas. Ordens sem OS, com fato, causa e ação: aba ${ABA_SEM_OS}. Não executadas a tratar: aba Pendências.`,
       font: this.fonteCrono({ color: { argb: this.CRONO.textoSuave } }),
     });
     resumo.views = [{ state: 'frozen', ySplit: ROW_CAB, showGridLines: false }];
 
-    // ── Pendências: só o que precisa de tratamento, na data de geração. O tratamento começa
-    // em pendenciasDesde; o que veio antes segue nas abas de mês e no Resumo. ──
+    // ── Sem OS (FCA): toda ordem sem OS, fora das abas de mês, com a FCA de cada uma. Coluna
+    // Mês = nome da aba do mês (o Resumo conta por ela). Sem FCA cadastrada: causa, ação e
+    // prazo ficam em branco (fundo de preencher) e o status Pendente. ──
+    const semOs = params.meses.flatMap(m => m.linhas.filter(l => l.situacao === 'Sem OS').map(l => ({ l, aba: m.aba })))
+      .sort((a, b) => a.l.data.localeCompare(b.l.data) || a.l.codigo.localeCompare(b.l.codigo));
+    const colunasSemOs: { header: string; width: number; quebra?: boolean; centro?: boolean }[] = [
+      { header: 'Data', width: 11, centro: true },
+      { header: 'Semana', width: 8, centro: true },
+      { header: 'Mês', width: 10, centro: true },
+      { header: 'Plano', width: 9.5, centro: true },
+      { header: 'Descrição', width: 26, quebra: true },
+      { header: 'Equipamento', width: 18, quebra: true },
+      { header: 'Área', width: 10, centro: true },
+      { header: 'Periodicidade', width: 11 },
+      { header: 'Fato', width: 46, quebra: true },
+      { header: 'Causa', width: 40, quebra: true },
+      { header: 'Ação', width: 40, quebra: true },
+      { header: 'Responsável', width: 11, centro: true },
+      { header: 'Prazo', width: 11, centro: true },
+      { header: 'Status', width: 11, centro: true },
+    ];
+    const COL_FATO = 9;
+    const pendentesSemOs = semOs.filter(({ l }) => (params.fcaSemOs?.[`${l.codigo}|${l.data}`]?.status ?? 'Pendente') !== 'Concluída').length;
+    const wsSemOs = novaAba(ABA_SEM_OS, colunasSemOs.map(c => ({ width: c.width })), params.titulo,
+      `Ordens sem OS | ${semOs.length} ordem(ns), ${pendentesSemOs} com ação em aberto | ${posicao}`);
+    cabecalho(wsSemOs, 4, colunasSemOs.map(c => c.header), COL_FATO);
+    if (semOs.length === 0) {
+      wsSemOs.mergeCells(5, 1, 5, colunasSemOs.length);
+      Object.assign(wsSemOs.getCell(5, 1), {
+        value: 'Nenhuma ordem sem OS no período.',
+        font: this.fonteCrono({ color: { argb: this.CRONO.textoSuave } }),
+        alignment: { vertical: 'middle' },
+      });
+    }
+    let rowSemOs = 5;
+    for (const { l, aba } of semOs) {
+      const f = params.fcaSemOs?.[`${l.codigo}|${l.data}`];
+      const valores: (string | Date | null)[] = [
+        dataExcel(l.data), `S${l.semana}`, aba, l.codigo, l.nome, l.equipamento, l.area, l.periodicidade,
+        f?.fato ?? 'Sem OS na programação e sem OS apontada no SIGMA com a descrição do plano, até o fechamento.',
+        f?.causa ?? null, f?.acao ?? null, f?.responsavel ?? 'PCM', f?.prazo ?? null, f?.status ?? 'Pendente',
+      ];
+      valores.forEach((v, i) => {
+        const cel = wsSemOs.getCell(rowSemOs, i + 1);
+        cel.value = v;
+        cel.font = i === 13 && v !== 'Concluída' ? this.fonteCrono({ bold: true, color: { argb: this.CRONO.alerta } }) : this.fonteCrono();
+        cel.border = this.bordaCrono();
+        cel.alignment = { vertical: 'top', wrapText: !!colunasSemOs[i].quebra, horizontal: colunasSemOs[i].centro ? 'center' : 'left' };
+        if (i + 1 >= COL_FATO) cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: this.CRONO.controle } };
+      });
+      wsSemOs.getCell(rowSemOs, 1).numFmt = 'dd/mm/yyyy';
+      wsSemOs.getRow(rowSemOs).height = Math.max(14, Math.max(
+        this.estimarLinhas(l.nome, 26), this.estimarLinhas(l.equipamento, 18), this.estimarLinhas(String(valores[8] ?? ''), 46),
+        this.estimarLinhas(f?.causa ?? '', 40), this.estimarLinhas(f?.acao ?? '', 40),
+      ) * 12);
+      rowSemOs++;
+    }
+    wsSemOs.pageSetup.printTitlesRow = '4:4';
+    wsSemOs.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(rowSemOs - 1, 4), column: colunasSemOs.length } };
+
+    // ── Pendências: não executadas a tratar, na data de geração. O tratamento começa em
+    // pendenciasDesde; o que veio antes segue nas abas de mês e no Resumo. Sem OS: aba própria. ──
     const pendencias = params.meses.flatMap(m => m.linhas)
-      .filter(l => this.SITUACOES_PENDENTES.includes(l.situacao ?? '') && l.data >= params.pendenciasDesde)
+      .filter(l => l.situacao === 'Não executada' && l.data >= params.pendenciasDesde)
       .sort((a, b) => a.data.localeCompare(b.data) || a.codigo.localeCompare(b.codigo));
     const pendenciasDesdeBr = params.pendenciasDesde.split('-').reverse().join('/');
     const colunasPendencias: { header: string; width: number; quebra?: boolean; centro?: boolean }[] = [
@@ -1512,12 +1583,12 @@ export class ExcelExportService {
       { header: 'Tratativa', width: 36, quebra: true },
     ];
     const wsPendencias = novaAba('Pendências', colunasPendencias.map(c => ({ width: c.width })), params.titulo,
-      `Pendências desde ${pendenciasDesdeBr} | ${pendencias.length} ordem(ns) não executada(s) ou sem OS | ${posicao}`);
+      `Pendências desde ${pendenciasDesdeBr} | ${pendencias.length} ordem(ns) não executada(s) | ${posicao}`);
     cabecalho(wsPendencias, 4, colunasPendencias.map(c => c.header), colunasPendencias.length);
     if (pendencias.length === 0) {
       wsPendencias.mergeCells(5, 1, 5, colunasPendencias.length);
       Object.assign(wsPendencias.getCell(5, 1), {
-        value: `Nenhuma ordem não executada ou sem OS desde ${pendenciasDesdeBr}.`,
+        value: `Nenhuma ordem não executada desde ${pendenciasDesdeBr}. Ordens sem OS: aba ${ABA_SEM_OS}.`,
         font: this.fonteCrono({ color: { argb: this.CRONO.textoSuave } }),
         alignment: { vertical: 'middle' },
       });
@@ -1580,11 +1651,13 @@ export class ExcelExportService {
     const COL_CONTROLE = 9; // Nº OS em diante
     const listaSituacoes = `"${this.SITUACOES_CRONOGRAMA.join(',')}"`;
     for (const mes of params.meses) {
+      const linhasDaAba = mes.linhas.filter(l => l.situacao !== 'Sem OS');
+      const semOsDoMes = mes.linhas.length - linhasDaAba.length;
       const ws = novaAba(mes.aba, colunasMes.map(c => ({ width: c.width })), params.titulo,
-        `${mes.nome} | ${mes.linhas.length} ordem(ns) prevista(s) | ${posicao}`);
+        `${mes.nome} | ${mes.linhas.length} ordem(ns) prevista(s)${semOsDoMes ? `, ${semOsDoMes} sem OS na aba ${ABA_SEM_OS}` : ''} | ${posicao}`);
       cabecalho(ws, 4, colunasMes.map(c => c.header), COL_CONTROLE);
       let row = 5;
-      for (const l of mes.linhas) {
+      for (const l of linhasDaAba) {
         const valores: (string | number | Date | null)[] = [
           dataExcel(l.data), `S${l.semana}`, l.codigo, l.nome, l.equipamento, l.tagKks, l.area, l.periodicidade,
           l.numeroOs, l.executadaEm ? dataExcel(l.executadaEm) : null, l.situacao, l.observacao ?? null,

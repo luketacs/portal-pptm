@@ -57,7 +57,7 @@ it('FCA vem na primeira aba quando informado, com títulos em sentence case e se
     },
   });
   const wb = capturado!;
-  expect(wb.worksheets.map(w => w.name)).toEqual(['FCA', 'Resumo', 'Pendências', 'Notas', 'NOV-2026', 'DEZ-2026', 'Planos']);
+  expect(wb.worksheets.map(w => w.name)).toEqual(['FCA', 'Resumo', 'Sem OS (FCA)', 'Pendências', 'Notas', 'NOV-2026', 'DEZ-2026', 'Planos']);
   const fca = wb.getWorksheet('FCA')!;
   const textos = textosDaAba(fca);
   expect(textos).toEqual(expect.arrayContaining(['1. Fato', 'Fato X.', '2. Causa', 'Causa 2.', '3. Ação', 'Ação 1.', 'A definir']));
@@ -67,10 +67,10 @@ it('FCA vem na primeira aba quando informado, com títulos em sentence case e se
   expect(celulaStatus.fill).toBeUndefined();
 });
 
-it('Resumo, Pendências, Notas, uma aba por mês e a lista de planos, sem citar o Portal', async () => {
+it('Resumo, Sem OS (FCA), Pendências, Notas, uma aba por mês e a lista de planos, sem citar o Portal', async () => {
   await new ExcelExportService().exportarCronogramaPlanos(params);
   const wb = capturado!;
-  expect(wb.worksheets.map(w => w.name)).toEqual(['Resumo', 'Pendências', 'Notas', 'NOV-2026', 'DEZ-2026', 'Planos']);
+  expect(wb.worksheets.map(w => w.name)).toEqual(['Resumo', 'Sem OS (FCA)', 'Pendências', 'Notas', 'NOV-2026', 'DEZ-2026', 'Planos']);
   expect(wb.creator).not.toMatch(/portal/i);
 
   const nov = wb.getWorksheet('NOV-2026')!;
@@ -117,10 +117,14 @@ it('Resumo conta por fórmula sobre as abas dos meses (área, total e situação
   expect(resumo.getRow(5).getCell(5).value).toEqual({ formula: 'SUM(E6:E7)' });
   const linhaNov = resumo.getRow(6);
   expect(linhaNov.getCell(1).value).toBe('Novembro de 2026');
-  expect(linhaNov.getCell(2).value).toEqual({ formula: `COUNTIF('NOV-2026'!$G$5:$G$5000,"Elétrica")`, result: 1 });
-  expect(linhaNov.getCell(5).value).toEqual({ formula: `COUNTA('NOV-2026'!$C$5:$C$5000)`, result: 2 });
+  // Ordens sem OS ficam na aba própria: área, total e Sem OS somam as duas abas.
+  const semOs = `'Sem OS (FCA)'!$C$5:$C$5000,"NOV-2026"`;
+  expect(linhaNov.getCell(2).value).toEqual({
+    formula: `COUNTIF('NOV-2026'!$G$5:$G$5000,"Elétrica")+COUNTIFS(${semOs},'Sem OS (FCA)'!$G$5:$G$5000,"Elétrica")`, result: 1,
+  });
+  expect(linhaNov.getCell(5).value).toEqual({ formula: `COUNTA('NOV-2026'!$C$5:$C$5000)+COUNTIF(${semOs})`, result: 2 });
   expect(linhaNov.getCell(6).value).toEqual({ formula: `COUNTIF('NOV-2026'!$K$5:$K$5000,"Executada")`, result: 1 });
-  expect(linhaNov.getCell(8).value).toMatchObject({ formula: `COUNTIF('NOV-2026'!$K$5:$K$5000,"Sem OS")` });
+  expect(linhaNov.getCell(8).value).toMatchObject({ formula: `COUNTIF('NOV-2026'!$K$5:$K$5000,"Sem OS")+COUNTIF(${semOs})` });
   // Zero em branco: mês futuro não fica cheio de "0".
   expect(linhaNov.getCell(8).numFmt).toBe('#,##0;-#,##0;;@');
   // Total acumulado: mesma conta dos meses, só sobre o que tem resultado.
@@ -165,7 +169,7 @@ it('dispensada pela parada: conta em coluna própria, fica fora da base do % e t
   expect(pct.formula).toBe('IF((SUM(F6:K6)-I6)=0,"",F6/(SUM(F6:K6)-I6))');
 });
 
-it('Pendências lista só Não executada e Sem OS, em ordem de data', async () => {
+it('Pendências lista só Não executada, em ordem de data (Sem OS tem aba própria)', async () => {
   await new ExcelExportService().exportarCronogramaPlanos({
     ...params,
     meses: [{
@@ -179,11 +183,10 @@ it('Pendências lista só Não executada e Sem OS, em ordem de data', async () =
     }],
   });
   const ws = capturado!.getWorksheet('Pendências')!;
-  expect(ws.getCell('C5').value).toBe('PM-0004');
-  expect(ws.getCell('I5').value).toBe('Sem OS');
-  expect(ws.getCell('C6').value).toBe('PM-0003');
-  expect(ws.getCell('H6').value).toBe('048001');
-  expect(ws.getCell('C7').value).toBeNull();
+  expect(ws.getCell('C5').value).toBe('PM-0003');
+  expect(ws.getCell('H5').value).toBe('048001');
+  expect(ws.getCell('I5').value).toBe('Não executada');
+  expect(ws.getCell('C6').value).toBeNull();
 });
 
 it('Pendências corta pela data de início do tratamento, mas mês e Resumo seguem com a situação real', async () => {
@@ -199,7 +202,9 @@ it('Pendências corta pela data de início do tratamento, mas mês e Resumo segu
   expect(ws.getCell('C5').value).toBe('PM-0011');
   expect(ws.getCell('C6').value).toBeNull();
   expect(String(ws.getCell('C2').value ?? ws.getCell('D2').value)).toContain('Pendências desde 09/11/2026 | 1 ordem(ns)');
-  expect(wb.getWorksheet('NOV-2026')!.getCell('K5').value).toBe('Sem OS');
+  // A sem OS anterior ao corte sai da aba do mês, mas continua contando no Resumo.
+  expect(wb.getWorksheet('NOV-2026')!.getCell('C5').value).toBe('PM-0011');
+  expect(wb.getWorksheet('Sem OS (FCA)')!.getCell('D5').value).toBe('PM-0010');
   expect(wb.getWorksheet('Resumo')!.getRow(6).getCell(8).value).toMatchObject({ result: 1 });
 });
 
@@ -214,7 +219,7 @@ it('Pendências sem nenhuma ordem no período diz isso, em vez de tabela vazia',
     ...params, pendenciasDesde: '2026-11-09',
     meses: [{ mes: '2026-10', nome: 'Outubro de 2026', aba: 'OUT-2026', linhas: [linha({ data: '2026-10-05', situacao: 'Sem OS' })] }],
   });
-  expect(capturado!.getWorksheet('Pendências')!.getCell('A5').value).toBe('Nenhuma ordem não executada ou sem OS desde 09/11/2026.');
+  expect(capturado!.getWorksheet('Pendências')!.getCell('A5').value).toBe('Nenhuma ordem não executada desde 09/11/2026. Ordens sem OS: aba Sem OS (FCA).');
 });
 
 it('estilo de ficha técnica: Arial, cabeçalho cinza e vermelho só na exceção', async () => {
@@ -228,6 +233,63 @@ it('estilo de ficha técnica: Arial, cabeçalho cinza e vermelho só na exceçã
   const textos = wbTextos(capturado!);
   expect(textos.some(t => t.includes('—'))).toBe(false);
   expect(textos.some(t => /gerado em/i.test(t))).toBe(false);
+});
+
+// Pedido em 11/11/2026: ordens sem OS saem das abas de mês para uma aba com a FCA de cada uma.
+describe('aba Sem OS (FCA)', () => {
+  const meses = [
+    {
+      mes: '2026-10', nome: 'Outubro de 2026', aba: 'OUT-2026', linhas: [
+        linha({ data: '2026-10-08', codigo: 'PM-0629', situacao: 'Sem OS' }),
+        linha({ data: '2026-10-09', codigo: 'PM-0700', numeroOs: '048100', executadaEm: '2026-10-09', situacao: 'Executada' }),
+      ],
+    },
+    { mes: '2026-11', nome: 'Novembro de 2026', aba: 'NOV-2026', linhas: [linha({ data: '2026-11-04', codigo: 'PM-0764', area: 'Elétrica', situacao: 'Sem OS' })] },
+  ];
+  const fcaSemOs = {
+    'PM-0629|2026-10-08': {
+      fato: 'Sem execução na ocorrência mensal.', causa: 'Entrada da parada.', acao: 'Retomada pela OS 048346.',
+      responsavel: 'PCM', prazo: '30/10/2026', status: 'Concluída',
+    },
+  };
+
+  it('tira a sem OS da aba do mês e lista na aba própria com a FCA, sem perder a contagem', async () => {
+    await new ExcelExportService().exportarCronogramaPlanos({ ...params, meses, fcaSemOs });
+    const wb = capturado!;
+    const out = wb.getWorksheet('OUT-2026')!;
+    expect(out.getCell('C5').value).toBe('PM-0700');
+    expect(out.getCell('C6').value).toBeNull();
+    expect(String(out.getCell('D2').value)).toContain('2 ordem(ns) prevista(s), 1 sem OS na aba Sem OS (FCA)');
+
+    const ws = wb.getWorksheet('Sem OS (FCA)')!;
+    expect((ws.getRow(4).values as unknown[]).slice(1)).toEqual([
+      'Data', 'Semana', 'Mês', 'Plano', 'Descrição', 'Equipamento', 'Área', 'Periodicidade', 'Fato', 'Causa', 'Ação', 'Responsável', 'Prazo', 'Status',
+    ]);
+    expect((ws.getRow(5).values as unknown[]).slice(3)).toEqual([
+      'OUT-2026', 'PM-0629', 'L-OP-1S TRIPPERS', 'TRIPPER 01', 'Mecânica', '1 Semana(s)',
+      'Sem execução na ocorrência mensal.', 'Entrada da parada.', 'Retomada pela OS 048346.', 'PCM', '30/10/2026', 'Concluída',
+    ]);
+    expect(String(ws.getCell('C2').value ?? ws.getCell('D2').value)).toContain('2 ordem(ns), 1 com ação em aberto');
+
+    const resumo = wb.getWorksheet('Resumo')!;
+    const cab = resumo.getRow(4).values as unknown[];
+    expect(resumo.getRow(6).getCell(cab.indexOf('Sem OS')).value).toMatchObject({ result: 1 });
+    expect(resumo.getRow(6).getCell(cab.indexOf('Total previstas')).value).toMatchObject({ result: 2 });
+    expect(resumo.getRow(6).getCell(cab.indexOf('% executadas')).value).toMatchObject({ result: 0.5 });
+  });
+
+  it('sem FCA cadastrada: causa e ação em branco, status Pendente em destaque', async () => {
+    await new ExcelExportService().exportarCronogramaPlanos({ ...params, meses, fcaSemOs });
+    const ws = capturado!.getWorksheet('Sem OS (FCA)')!;
+    expect(ws.getCell('D6').value).toBe('PM-0764');
+    expect(ws.getCell('C6').value).toBe('NOV-2026');
+    expect(String(ws.getCell('I6').value)).toContain('Sem OS na programação');
+    expect(ws.getCell('J6').value).toBeNull();
+    expect(ws.getCell('K6').value).toBeNull();
+    expect(ws.getCell('N6').value).toBe('Pendente');
+    expect(ws.getCell('N6').font?.color?.argb).toBe('FFB91C1C');
+    expect(ws.getCell('N5').font?.color?.argb).not.toBe('FFB91C1C');
+  });
 });
 
 function wbTextos(wb: ExcelJS.Workbook): string[] {
