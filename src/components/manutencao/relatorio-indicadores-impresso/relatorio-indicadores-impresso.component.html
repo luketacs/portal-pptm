@@ -78,11 +78,11 @@
         <h2>Acumulado de {{ d.ano.ano }}</h2>
         <dl class="kv">
           <div [class.ruim]="d.ano.atendimento.percentual < d.meta">
-            <dt>Atendimento à programação<small>{{ num(d.ano.atendimento.executadas) }} de {{ num(d.ano.atendimento.programadas) }} · meta {{ pct(d.meta) }}</small></dt>
+            <dt>Atendimento à programação<small>média dos meses · meta {{ pct(d.meta) }}</small></dt>
             <dd>{{ pct(d.ano.atendimento.percentual) }}</dd>
           </div>
           <div [class.ruim]="d.ano.cumprimento.percentual < d.meta">
-            <dt>Cumprimento do plano<small>{{ num(d.ano.cumprimento.executadas) }} de {{ num(d.ano.cumprimento.programadas) }} · meta {{ pct(d.meta) }}</small></dt>
+            <dt>Cumprimento do plano<small>média dos meses · meta {{ pct(d.meta) }}</small></dt>
             <dd>{{ pct(d.ano.cumprimento.percentual) }}</dd>
           </div>
           <div [class.ruim]="d.ano.disponibilidade !== null && d.ano.disponibilidade < d.ano.metaDisponibilidade">

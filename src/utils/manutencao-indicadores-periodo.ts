@@ -157,8 +157,9 @@ export function semanasDoHistorico(itens: ImportarIndicadorHistoricoItem[]): { s
 // o total de ordens do ano dividido uma vez. Mês = mês da segunda-feira (mesDaSemanaNoAno),
 // mesmo agrupamento do modo Mês da tela; o % de cada mês sai da soma das contagens das
 // suas semanas. Mês sem nenhuma ordem prevista fica fora da média (não entra como 100%).
-// As contagens devolvidas (executadas/programadas) continuam sendo o total do ano — só
-// pra exibição ("X de Y executadas no ano").
+// As contagens devolvidas (executadas/programadas) continuam sendo o total do ano, mas a
+// tela e o PDF não mostram "X de Y" ao lado do %: a divisão daria outro número (98,2% x
+// 98,4% na S45). O Painel do Z: usa a mesma média na coluna 2026 do Mensal desde 11/11/2026.
 export function consolidarAnoPorMediaMensal(semanas: { semana: string; ind: IndicadoresConsolidaveis }[]): IndicadoresSemana {
   const zero: ContagemExecucao = { programadas: 0, executadas: 0, naoExecutadas: 0, atendimento: 100 };
   const consolidar = (pegar: (ind: IndicadoresConsolidaveis) => ContagemExecucao | undefined): ContagemExecucao => {

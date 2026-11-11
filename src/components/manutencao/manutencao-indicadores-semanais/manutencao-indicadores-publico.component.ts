@@ -826,8 +826,8 @@ export class ManutencaoIndicadoresPublicoComponent implements OnInit, OnDestroy 
     const disponibilidade = this.valorDisponibilidadeGlobalAno();
     const diasNavio = this.valorDiasNavioAno();
     return [
-      { titulo: 'Atendimento à Programação', valor: `${ano.geral.atendimento}%`, meta: `${ano.geral.executadas} de ${ano.geral.programadas} executadas no ano · Meta: ${this.metaAtendimento}% · Índice: ${this.indiceAtendimentoAno()}%`, cor: 'green', icone: 'check' },
-      { titulo: 'Cumprimento do Plano', valor: `${ano.cumprimentoPlano.atendimento}%`, meta: `${ano.cumprimentoPlano.executadas} de ${ano.cumprimentoPlano.programadas} planejadas do Plano · Meta: ${this.metaCumprimento}% · Índice: ${this.indiceCumprimentoAno()}%`, cor: 'blue', icone: 'calendario' },
+      { titulo: 'Atendimento à Programação', valor: `${ano.geral.atendimento}%`, meta: `Média dos % mensais · Meta: ${this.metaAtendimento}% · Índice: ${this.indiceAtendimentoAno()}%`, cor: 'green', icone: 'check' },
+      { titulo: 'Cumprimento do Plano', valor: `${ano.cumprimentoPlano.atendimento}%`, meta: `Média dos % mensais · Meta: ${this.metaCumprimento}% · Índice: ${this.indiceCumprimentoAno()}%`, cor: 'blue', icone: 'calendario' },
       {
         titulo: 'Disponibilidade Global Anual', valor: disponibilidade !== null ? `${disponibilidade}%` : '—',
         meta: disponibilidade !== null ? `Meta: ${META_DISPONIBILIDADE_GLOBAL}% · Índice: ${this.indiceDisponibilidadeGlobalAno()}%` : 'Ainda não informado',
