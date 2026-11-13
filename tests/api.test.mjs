@@ -225,3 +225,31 @@ test('Reparo externo: avisa o supervisor uma vez só; falha desmarca; sem e-mail
 
   assert.equal(await notificarReparo(sb, ID, { FUNDO_FIXO_FLOW_URL: 'https://flow' }, async () => assert.fail('sem e-mail')), 'sem-supervisor');
 });
+
+test('feedbacks do SIGMA: só Admin recebe o texto (Solicitante leva 403 sem consultar o SIGMA)', async () => {
+  const { default: proxy } = await import('../api/sigma-ordens-proxy.js');
+  const envAntes = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_ROLE_KEY };
+  process.env.SUPABASE_URL = 'https://supa.test';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service';
+  const fetchAntes = globalThis.fetch;
+  const chamadas = [];
+  globalThis.fetch = async url => {
+    chamadas.push(String(url));
+    if (String(url).endsWith('/auth/v1/user')) return new Response(JSON.stringify({ id: 'u1' }), { status: 200 });
+    if (String(url).includes('/rest/v1/profiles')) return new Response(JSON.stringify([{ role: 'Solicitante' }]), { status: 200 });
+    throw new Error('não devia consultar ' + url);
+  };
+  try {
+    const res = { setHeader() {}, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; }, end() { return this; } };
+    await proxy({ method: 'GET', headers: { authorization: 'Bearer t' }, query: { feedbacks_de: '2026-11-01', feedbacks_ate: '2026-11-13' } }, res);
+    assert.equal(res.code, 403);
+    assert.equal(res.body.linhas, undefined);
+    assert.ok(!chamadas.some(u => u.includes('sigma')));
+  } finally {
+    globalThis.fetch = fetchAntes;
+    process.env.SUPABASE_URL = envAntes.url;
+    process.env.SUPABASE_SERVICE_ROLE_KEY = envAntes.key;
+    if (envAntes.url === undefined) delete process.env.SUPABASE_URL;
+    if (envAntes.key === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  }
+});

@@ -1,0 +1,203 @@
+<div class="space-y-6">
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-800">Qualidade dos feedbacks</h1>
+      <p class="text-sm text-gray-500 mt-1">
+        Feedback bom descreve as atividades realizadas e, se gerou pendência, já cita o nº da OS aberta. Dados direto do SIGMA.
+        @if (atualizadoEm(); as ts) { <span class="whitespace-nowrap">Atualizado às {{ ts | date:'HH:mm' }}.</span> }
+      </p>
+    </div>
+    <div class="flex flex-wrap items-end gap-2">
+      <label class="text-xs font-medium text-gray-600">De
+        <input type="date" class="block mt-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm" [ngModel]="de()" (ngModelChange)="de.set($event)">
+      </label>
+      <label class="text-xs font-medium text-gray-600">Até
+        <input type="date" class="block mt-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm" [ngModel]="ate()" (ngModelChange)="ate.set($event)">
+      </label>
+      <label class="text-xs font-medium text-gray-600">Área
+        <select class="block mt-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm" [ngModel]="area()" (ngModelChange)="area.set($event)">
+          <option value="">Todas</option>
+          @for (a of areas(); track a) { <option [value]="a">{{ a }}</option> }
+        </select>
+      </label>
+      <button type="button" (click)="carregar()" [disabled]="carregando()"
+        class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+        {{ carregando() ? 'Carregando…' : 'Atualizar' }}
+      </button>
+      <button type="button" (click)="exportar()" [disabled]="carregando() || !resumo().total"
+        class="rounded-lg border border-blue-600 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50">
+        Excel
+      </button>
+    </div>
+  </div>
+
+  @if (erro()) {
+    <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ erro() }}</div>
+  }
+
+  <!-- Resumo -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="app-card p-4">
+      <p class="text-xs font-medium text-gray-500">Apontamentos no período</p>
+      <p class="text-2xl font-bold text-gray-800 mt-1 tabular-nums">{{ resumo().total }}</p>
+    </div>
+    <div class="app-card p-4">
+      <p class="text-xs font-medium text-gray-500">Feedbacks ruins</p>
+      <p class="text-2xl font-bold mt-1 tabular-nums" [ngClass]="corPct(resumo().pct)">
+        {{ resumo().pct | number:'1.0-1' }}% <span class="text-sm font-medium text-gray-500">({{ resumo().ruins }})</span>
+      </p>
+    </div>
+    @for (m of motivos().slice(0, 2); track m.motivo) {
+      <button type="button" class="app-card p-4 text-left hover:ring-2 hover:ring-blue-200" (click)="verMotivo(m.motivo)">
+        <p class="text-xs font-medium text-gray-500">{{ motivoLabel[m.motivo] }}</p>
+        <p class="text-2xl font-bold text-gray-800 mt-1 tabular-nums">{{ m.count }}</p>
+      </button>
+    }
+  </div>
+
+  <div class="grid gap-4 lg:grid-cols-2">
+    <!-- Tendência semanal -->
+    <div class="app-card p-4">
+      <h2 class="text-sm font-semibold text-gray-700 mb-3">% de feedbacks ruins por semana</h2>
+      @if (!semanas().length) { <p class="text-sm text-gray-500">Sem apontamentos no período.</p> }
+      <div class="space-y-1.5">
+        @for (s of semanas(); track s.chave) {
+          <div class="flex items-center gap-2 text-xs">
+            <span class="w-20 shrink-0 text-gray-600 tabular-nums">{{ dataBr(s.chave).slice(0, 5) }}</span>
+            <div class="flex-1 h-4 rounded bg-slate-100 overflow-hidden">
+              <div class="h-full rounded" [style.width.%]="s.pct"
+                [ngClass]="s.pct >= 30 ? 'bg-red-500' : s.pct >= 15 ? 'bg-amber-400' : 'bg-emerald-500'"></div>
+            </div>
+            <span class="w-24 shrink-0 text-right tabular-nums text-gray-700">{{ s.pct | number:'1.0-1' }}% <span class="text-gray-400">({{ s.ruins }}/{{ s.total }})</span></span>
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- Motivos -->
+    <div class="app-card p-4">
+      <h2 class="text-sm font-semibold text-gray-700 mb-3">Motivos <span class="font-normal text-gray-400">(um apontamento pode ter mais de um)</span></h2>
+      <div class="space-y-2">
+        @for (m of motivos(); track m.motivo) {
+          <button type="button" (click)="verMotivo(m.motivo)" class="w-full flex items-start justify-between gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-slate-50"
+            [ngClass]="motivo() === m.motivo ? 'bg-blue-50 ring-1 ring-blue-200' : ''">
+            <span>
+              <span class="block text-sm font-medium text-gray-800">{{ motivoLabel[m.motivo] }}</span>
+              <span class="block text-xs text-gray-500">{{ motivoDica[m.motivo] }}</span>
+            </span>
+            <span class="text-sm font-bold tabular-nums text-gray-700">{{ m.count }}</span>
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- Abas -->
+  <div class="flex gap-1 border-b border-slate-200 overflow-x-auto">
+    <button type="button" (click)="aba.set('executantes')"
+      class="px-4 py-2 text-sm font-semibold -mb-px border-b-2 whitespace-nowrap"
+      [ngClass]="aba() === 'executantes' ? 'border-blue-700 text-blue-800' : 'border-transparent text-slate-500 hover:text-slate-700'">
+      Por executante ({{ executantes().length }})
+    </button>
+    <button type="button" (click)="aba.set('lista')"
+      class="px-4 py-2 text-sm font-semibold -mb-px border-b-2 whitespace-nowrap"
+      [ngClass]="aba() === 'lista' ? 'border-blue-700 text-blue-800' : 'border-transparent text-slate-500 hover:text-slate-700'">
+      Apontamentos ({{ lista().length }})
+    </button>
+  </div>
+
+  @if (aba() === 'executantes') {
+    <div class="app-card overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+          <tr>
+            <th class="px-3 py-2 text-left">Executante</th>
+            <th class="px-3 py-2 text-left">Área</th>
+            <th class="px-3 py-2 text-right">Apont.</th>
+            <th class="px-3 py-2 text-right">Ruins</th>
+            <th class="px-3 py-2 text-right">% ruins</th>
+            <th class="px-3 py-2 text-left">Principais motivos</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          @for (e of executantes(); track e.chave) {
+            <tr class="hover:bg-slate-50 cursor-pointer" (click)="verExecutante(e.chave)">
+              <td class="px-3 py-2"><span class="font-medium text-gray-800">{{ e.nome }}</span> <span class="text-xs text-gray-400">{{ e.chave }}</span></td>
+              <td class="px-3 py-2 text-gray-600">{{ e.area }}</td>
+              <td class="px-3 py-2 text-right tabular-nums">{{ e.total }}</td>
+              <td class="px-3 py-2 text-right tabular-nums">{{ e.ruins }}</td>
+              <td class="px-3 py-2 text-right tabular-nums font-semibold" [ngClass]="corPct(e.pct)">{{ e.pct | number:'1.0-1' }}%</td>
+              <td class="px-3 py-2 text-xs text-gray-600">
+                @for (t of e.top; track t[0]) { <span class="mr-2 whitespace-nowrap">{{ motivoLabel[t[0]] }} ({{ t[1] }})</span> }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <div class="flex flex-wrap items-center gap-2">
+      <input type="search" placeholder="Buscar OS, texto ou executante" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm w-72 max-w-full"
+        [ngModel]="busca()" (ngModelChange)="busca.set($event)">
+      <select class="rounded-lg border border-slate-300 px-2 py-1.5 text-sm" [ngModel]="motivo()" (ngModelChange)="motivo.set($event)">
+        <option value="">Todos os motivos</option>
+        @for (m of motivos(); track m.motivo) { <option [value]="m.motivo">{{ motivoLabel[m.motivo] }}</option> }
+      </select>
+      <select class="rounded-lg border border-slate-300 px-2 py-1.5 text-sm" [ngModel]="executante()" (ngModelChange)="executante.set($event)">
+        <option value="">Todos os executantes</option>
+        @for (e of executantes(); track e.chave) { <option [value]="e.chave">{{ e.nome }}</option> }
+      </select>
+      <label class="flex items-center gap-1.5 text-sm text-gray-700">
+        <input type="checkbox" [ngModel]="soRuins()" (ngModelChange)="soRuins.set($event)"> Só ruins
+      </label>
+      <button type="button" class="text-sm text-blue-700 hover:underline" (click)="limparFiltros()">Limpar filtros</button>
+    </div>
+
+    <div class="app-card overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+          <tr>
+            <th class="px-3 py-2 text-left">Data</th>
+            <th class="px-3 py-2 text-left">OS</th>
+            <th class="px-3 py-2 text-left">Executante</th>
+            <th class="px-3 py-2 text-left">Status</th>
+            <th class="px-3 py-2 text-right">Horas</th>
+            <th class="px-3 py-2 text-left">Feedback</th>
+            <th class="px-3 py-2 text-left">Motivos</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 align-top">
+          @for (a of listaVisivel(); track a.id) {
+            <tr>
+              <td class="px-3 py-2 whitespace-nowrap tabular-nums">{{ dataBr(a.data) }}</td>
+              <td class="px-3 py-2">
+                <span class="font-semibold tabular-nums">{{ a.numeroOs }}</span>
+                <span class="block text-xs text-gray-500 max-w-[16rem]">{{ a.descricaoOs }}</span>
+              </td>
+              <td class="px-3 py-2 whitespace-nowrap">{{ nome(a.executante) }} <span class="block text-xs text-gray-400">{{ a.area }}</span></td>
+              <td class="px-3 py-2">{{ a.status }}</td>
+              <td class="px-3 py-2 text-right tabular-nums">{{ a.horas == null ? '—' : (a.horas | number:'1.0-1') }}</td>
+              <td class="px-3 py-2 min-w-[18rem] max-w-xl whitespace-pre-line text-gray-800">{{ a.feedback || '(vazio)' }}</td>
+              <td class="px-3 py-2">
+                @for (m of a.motivos; track m) {
+                  <span class="mb-1 mr-1 inline-block rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700" [title]="motivoDica[m]">{{ motivoLabel[m] }}</span>
+                } @empty {
+                  <span class="inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">OK</span>
+                }
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="7" class="px-3 py-6 text-center text-gray-500">{{ carregando() ? 'Carregando…' : 'Nenhum apontamento com esses filtros.' }}</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (lista().length > listaVisivel().length) {
+      <div class="text-center">
+        <button type="button" class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50" (click)="limite.set(limite() + 200)">
+          Mostrar mais ({{ lista().length - listaVisivel().length }} restantes)
+        </button>
+      </div>
+    }
+  }
+</div>

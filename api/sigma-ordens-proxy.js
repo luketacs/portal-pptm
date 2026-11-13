@@ -5,12 +5,14 @@
 //     do mesmo plano ao programar (?preventivas_pendentes=1)
 //   - Backlog: OS abertas (não concluídas/canceladas) de uma área, pra ajudar a montar
 //     a semana em vez de digitar OS uma a uma (?backlog_area=ELETRICA|MECANICA)
+//   - Qualidade dos Feedbacks (só Admin): texto do feedback dos apontamentos de um
+//     período (?feedbacks_de=&feedbacks_ate=)
 //
 // Busca/parse/cache do export do SIGMA em si vivem em _sigma-shared.js (compartilhado
 // com o endpoint público do Kanban da Oficina, ver kanban-atividades-publico.js) — aqui
 // fica só o que é específico desse proxy: exigir sessão válida e servir os dois formatos
 // de consulta (numeros_os / backlog_area).
-import { ALLOWED_ORIGINS, normalizarNumeroOs, obterCache, osApontadasNoPeriodo } from './_sigma-shared.js';
+import { ALLOWED_ORIGINS, feedbacksNoPeriodo, normalizarNumeroOs, obterCache, osApontadasNoPeriodo } from './_sigma-shared.js';
 
 async function getCallerUserId({ supabaseUrl, serviceRoleKey, accessToken }) {
   const resp = await fetch(`${supabaseUrl}/auth/v1/user`, {
@@ -21,6 +23,15 @@ async function getCallerUserId({ supabaseUrl, serviceRoleKey, accessToken }) {
   const user = await resp.json().catch(() => null);
   const id = user?.id || user?.user?.id;
   return id ? { ok: true, id } : { ok: false };
+}
+
+async function getCallerRole({ supabaseUrl, serviceRoleKey, userId }) {
+  const resp = await fetch(`${supabaseUrl}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&select=role`, {
+    headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, Accept: 'application/json' },
+  });
+  if (!resp.ok) return null;
+  const rows = await resp.json().catch(() => null);
+  return Array.isArray(rows) && rows[0]?.role ? rows[0].role : null;
 }
 
 export default async function handler(req, res) {
@@ -46,6 +57,24 @@ export default async function handler(req, res) {
   if (!caller.ok) return res.status(401).json({ success: false, error: 'Sessão inválida. Faça login novamente.' });
 
   try {
+    // Qualidade dos Feedbacks (?feedbacks_de=YYYY-MM-DD&feedbacks_ate=YYYY-MM-DD) — só
+    // Admin: devolve o TEXTO do feedback de todos os apontamentos do período (máx. 186 dias).
+    const fbDe = String(req.query?.feedbacks_de || '').trim();
+    const fbAte = String(req.query?.feedbacks_ate || '').trim();
+    if (fbDe || fbAte) {
+      const role = await getCallerRole({ supabaseUrl: SUPABASE_URL, serviceRoleKey: SUPABASE_SERVICE_ROLE_KEY, userId: caller.id });
+      if (role !== 'Admin') return res.status(403).json({ success: false, error: 'Apenas Admin.' });
+      const dataOk = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
+      if (!dataOk(fbDe) || !dataOk(fbAte) || fbDe > fbAte) {
+        return res.status(200).json({ success: false, error: 'Período inválido.' });
+      }
+      if ((Date.parse(fbAte) - Date.parse(fbDe)) / 86400000 > 186) {
+        return res.status(200).json({ success: false, error: 'Período máximo de 6 meses.' });
+      }
+      const dados = await obterCache();
+      return res.status(200).json({ success: true, ...feedbacksNoPeriodo(dados, fbDe, fbAte), atualizadoEm: dados.ts });
+    }
+
     const backlogArea = String(req.query?.backlog_area || '').trim().toUpperCase();
     if (backlogArea) {
       if (backlogArea !== 'ELETRICA' && backlogArea !== 'MECANICA') {

@@ -117,6 +117,16 @@ export const APP_ROUTES: Routes = [
     title: 'Auditoria',
   },
 
+  // Qualidade dos feedbacks dos apontamentos do SIGMA — só Admin (o proxy também exige).
+  {
+    path: 'manutencao/qualidade-feedbacks',
+    loadComponent: () =>
+      import('../components/manutencao/feedback-qualidade/feedback-qualidade.component').then(m => m.FeedbackQualidadeComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin'] },
+    title: 'Qualidade dos Feedbacks',
+  },
+
   // Relatórios Semanal/Mensal PCM removidos — o mesmo conteúdo está na tela de
   // Indicadores (manutencao/indicadores-semanais). Os utils (src/utils/relatorio-*.ts)
   // continuam, usados pelos Indicadores. Link antigo cai no Indicadores.

@@ -26,7 +26,7 @@ export const OS_COL = {
 // Export "apontamentos" (sem aspas):
 export const APONT_COL = {
   executante: 4, areaManutencao: 6, statusOperacao: 8, data: 9,
-  horaInicial: 10, horaFinal: 11, intervaloAlmoco: 12, osProtheus: 20,
+  horaInicial: 10, horaFinal: 11, intervaloAlmoco: 12, feedback: 13, osProtheus: 20,
 };
 
 // Desconto aplicado quando o apontamento marca "Intervalo Almoço" (era 1h; reduzido
@@ -162,6 +162,7 @@ export async function carregarDados() {
   backlogPorArea.MECANICA.sort((a, b) => b.numeroOs.localeCompare(a.numeroOs));
 
   const apontamentosPorOs = new Map();
+  const feedbackPorId = new Map();
   for (let i = 1; i < linhasApont.length; i++) {
     const row = linhasApont[i];
     const numeroOs = normalizarNumeroOs(row[APONT_COL.osProtheus]);
@@ -190,6 +191,11 @@ export async function carregarDados() {
         || String(row[APONT_COL.intervaloAlmoco] ?? '').toLowerCase().includes('s'),
     });
     apontamentosPorOs.set(numeroOs, lista);
+    // Texto do feedback fica num mapa À PARTE (por ID do apontamento): os endpoints
+    // públicos (Kanban, Indicadores) espalham os objetos de apontamentosPorOs/Lista
+    // inteiros na resposta — o texto só sai pela consulta de Admin (feedbacks_de).
+    const id = (row[0] || '').trim();
+    if (id) feedbackPorId.set(id, { feedback: (row[APONT_COL.feedback] || '').trim(), area: (row[APONT_COL.areaManutencao] || '').trim() });
   }
 
   // Mesma lista, achatada com o número da OS e ordenada por data — consulta por período
@@ -201,7 +207,7 @@ export async function carregarDados() {
   }
   apontamentosLista.sort((a, b) => a.data.localeCompare(b.data));
 
-  return { ts: Date.now(), osPorNumero, apontamentosPorOs, apontamentosLista, backlogPorArea, preventivasPendentes };
+  return { ts: Date.now(), osPorNumero, apontamentosPorOs, apontamentosLista, feedbackPorId, backlogPorArea, preventivasPendentes };
 }
 
 export async function obterCache() {
@@ -236,4 +242,24 @@ export function osApontadasNoPeriodo(dados, de, ate) {
     item.horas += a.horas ?? 0;
   }
   return [...porChave.values()];
+}
+
+// Feedbacks dos apontamentos do período (Qualidade dos Feedbacks, só Admin). Linha
+// compacta [id, numeroOs, data, executante, area, status, horas, feedback, descricaoOs]
+// + quais números de 5–6 dígitos citados nos textos são OS que existem no SIGMA
+// (pra saber se a OS da pendência citada é de verdade). Classificação fica no front
+// (src/utils/feedback-qualidade.ts).
+export function feedbacksNoPeriodo(dados, de, ate) {
+  const linhas = [];
+  const citadas = new Set();
+  for (const a of dados.apontamentosLista) {
+    if (a.data < de || a.data > ate) continue;
+    const fb = dados.feedbackPorId.get(a.id);
+    const texto = fb?.feedback ?? '';
+    for (const m of texto.matchAll(/(?<![\d.,])\d{5,6}(?![\d.,]\d)/g)) citadas.add(m[0].padStart(6, '0'));
+    const horas = a.horas == null ? null : Math.round(a.horas * 100) / 100;
+    linhas.push([a.id, a.numeroOs, a.data, a.executante, fb?.area ?? '', a.status, horas, texto, dados.osPorNumero.get(a.numeroOs)?.descricao ?? '']);
+  }
+  const osExistentes = [...citadas].filter(n => dados.osPorNumero.has(n));
+  return { linhas, osExistentes };
 }
