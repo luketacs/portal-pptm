@@ -3,6 +3,10 @@
 // Critério da gestão (Lucas, 13/11/2026): feedback bom descreve as atividades
 // realizadas e, se gerou pendência, JÁ cita o número da OS aberta pra ela.
 // Calibrado com os apontamentos reais de ago–nov/2026 (≈23% caíam em alguma regra).
+//
+// Padrão obrigatório a partir de 13/11/2026 (mandado nos grupos dos técnicos):
+//   ATIVIDADE: / ENCONTRADO: / MATERIAL: / PENDÊNCIA: / SITUAÇÃO:
+// Texto no padrão é lido por campo (pendência só olha o campo PENDÊNCIA, "Nenhuma" vale).
 
 export type MotivoFeedback =
   | 'curto'
@@ -12,7 +16,8 @@ export type MotivoFeedback =
   | 'pouco_detalhe'
   | 'copia_descricao'
   | 'repetido'
-  | 'status_incoerente';
+  | 'status_incoerente'
+  | 'fora_padrao';
 
 export const MOTIVO_LABEL: Record<MotivoFeedback, string> = {
   curto: 'Muito curto',
@@ -23,6 +28,7 @@ export const MOTIVO_LABEL: Record<MotivoFeedback, string> = {
   copia_descricao: 'Copiou a descrição da OS',
   repetido: 'Mesmo texto em outras OS',
   status_incoerente: 'Executada, mas texto diz andamento',
+  fora_padrao: 'Fora do padrão',
 };
 
 export const MOTIVO_DICA: Record<MotivoFeedback, string> = {
@@ -34,7 +40,40 @@ export const MOTIVO_DICA: Record<MotivoFeedback, string> = {
   copia_descricao: 'Dizer o que foi executado, não repetir o título da OS.',
   repetido: 'Texto idêntico em OS diferentes — detalhar cada uma.',
   status_incoerente: 'Status EXEC com texto de atividade não concluída.',
+  fora_padrao: 'Usar o modelo ATIVIDADE / ENCONTRADO / MATERIAL / PENDÊNCIA / SITUAÇÃO, todos preenchidos.',
 };
+
+// ── Padrão de feedback ──────────────────────────────────────────────────────
+
+export const PADRAO_DESDE = '2026-11-13';
+
+export type CampoPadrao = 'atividade' | 'encontrado' | 'material' | 'pendencia' | 'situacao';
+export const CAMPOS_PADRAO: CampoPadrao[] = ['atividade', 'encontrado', 'material', 'pendencia', 'situacao'];
+export const CAMPO_LABEL: Record<CampoPadrao, string> = {
+  atividade: 'ATIVIDADE', encontrado: 'ENCONTRADO', material: 'MATERIAL', pendencia: 'PENDÊNCIA', situacao: 'SITUAÇÃO',
+};
+
+// Rótulo + ":" (ou "-"), sobre o texto já normalizado (sem acento, minúsculo).
+const ROTULO = /\b(atividades?|encontrados?|materia(?:l|is)|pendencias?|situacao)\s*[:\-–]/g;
+const campoDoRotulo = (r: string): CampoPadrao =>
+  r.startsWith('ativ') ? 'atividade' : r.startsWith('encon') ? 'encontrado' : r.startsWith('mater') ? 'material' : r.startsWith('pend') ? 'pendencia' : 'situacao';
+
+/** Conteúdo de cada campo do padrão encontrado no texto normalizado (até o próximo rótulo). */
+export function extrairCamposPadrao(textoNorm: string): Partial<Record<CampoPadrao, string>> {
+  const marcas = [...textoNorm.matchAll(ROTULO)].map(m => ({ campo: campoDoRotulo(m[1]), ini: m.index ?? 0, fim: (m.index ?? 0) + m[0].length }));
+  const campos: Partial<Record<CampoPadrao, string>> = {};
+  marcas.forEach((m, i) => {
+    if (campos[m.campo] !== undefined) return; // vale a primeira ocorrência
+    const fim = i + 1 < marcas.length ? marcas[i + 1].ini : textoNorm.length;
+    campos[m.campo] = textoNorm.slice(m.fim, fim).replace(/^[\s.;,:\-–]+|[\s.;,\-–]+$/g, '');
+  });
+  return campos;
+}
+
+const preenchido = (v: string | undefined) => (v ?? '').replace(/[^a-z0-9]/g, '').length >= 2;
+// "Nenhuma", "Não", "Sem pendência", "N/A", "-"...
+const SEM_PENDENCIA = /^(nenhum|nenhuma|nao|sem|n\/?a|nada|inexistente)\b/;
+
 
 export interface ApontamentoFeedback {
   id: string;
@@ -51,6 +90,8 @@ export interface ApontamentoFeedback {
 export interface FeedbackAvaliado extends ApontamentoFeedback {
   motivos: MotivoFeedback[];
   osCitadas: string[];   // números de OS (6 dígitos) citados no texto, exceto a própria
+  noPadrao: boolean;     // tem os rótulos do padrão (≥2)
+  camposFaltando: CampoPadrao[]; // só preenchido p/ apontamento a partir de PADRAO_DESDE
   ruim: boolean;
 }
 
@@ -147,23 +188,39 @@ export function avaliarFeedbacks(
     const proprio = (a.numeroOs ?? '').padStart(6, '0');
     const osCitadas = numerosCitados(t).filter(n => n !== proprio);
 
-    const curto = t.replace(/\W/g, '').length < MIN_CARACTERES;
-    const generico = GENERICO.test(t);
+    const campos = extrairCamposPadrao(t);
+    const noPadrao = Object.keys(campos).length >= 2;
+    // No padrão, as regras de texto olham o conteúdo (sem os rótulos) e a ATIVIDADE.
+    const conteudo = noPadrao ? CAMPOS_PADRAO.map(c => campos[c] ?? '').filter(Boolean).join(' ') : t;
+    const atividade = noPadrao ? (campos.atividade ?? '') : t;
+
+    const curto = conteudo.replace(/\W/g, '').length < MIN_CARACTERES;
+    const generico = GENERICO.test(atividade);
     if (generico) motivos.push('generico');
     else if (curto) motivos.push('curto');
 
-    if (mencionaPendencia(t)) {
-      if (osCitadas.length === 0) motivos.push('pendencia_sem_os');
+    const camposFaltando = a.data >= PADRAO_DESDE ? CAMPOS_PADRAO.filter(c => !preenchido(campos[c])) : [];
+    if (camposFaltando.length) motivos.push('fora_padrao');
+
+    const exigeOs = (trecho: string) => {
+      const nums = numerosCitados(trecho).filter(n => n !== proprio);
+      if (nums.length === 0) motivos.push('pendencia_sem_os');
       // Só acusa se NENHUM número citado é OS — número solto pode ser medida/código.
-      else if (osExistentes && osCitadas.every(n => !osExistentes.has(n))) motivos.push('os_citada_inexistente');
+      else if (osExistentes && nums.every(n => !osExistentes.has(n))) motivos.push('os_citada_inexistente');
+    };
+    if (noPadrao && campos.pendencia !== undefined) {
+      if (preenchido(campos.pendencia) && !SEM_PENDENCIA.test(campos.pendencia)) exigeOs(campos.pendencia);
+    } else if (mencionaPendencia(t)) {
+      exigeOs(t);
     }
 
-    if (!curto && !generico && t.length < POUCO_DETALHE_CARACTERES && (a.horas ?? 0) >= POUCO_DETALHE_HORAS) {
+    if (!curto && !generico && conteudo.length < POUCO_DETALHE_CARACTERES && (a.horas ?? 0) >= POUCO_DETALHE_HORAS) {
       motivos.push('pouco_detalhe');
     }
 
     const desc = normalizarTexto(a.descricaoOs);
-    if (!generico && desc.length >= 10 && (t === desc || (t.length <= desc.length + 3 && desc.includes(t)))) {
+    const base = noPadrao ? atividade : t;
+    if (!generico && desc.length >= 10 && base.length > 0 && (base === desc || (base.length <= desc.length + 3 && desc.includes(base)))) {
       motivos.push('copia_descricao');
     }
 
@@ -173,7 +230,7 @@ export function avaliarFeedbacks(
 
     if (a.status.toUpperCase() === 'EXEC' && EM_ANDAMENTO.test(t)) motivos.push('status_incoerente');
 
-    return { ...a, motivos, osCitadas, ruim: motivos.length > 0 };
+    return { ...a, motivos, osCitadas, noPadrao, camposFaltando, ruim: motivos.length > 0 };
   });
 }
 

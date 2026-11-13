@@ -47,7 +47,18 @@
         {{ resumo().pct | number:'1.0-1' }}% <span class="text-sm font-medium text-gray-500">({{ resumo().ruins }})</span>
       </p>
     </div>
-    @for (m of motivos().slice(0, 2); track m.motivo) {
+    <button type="button" class="app-card p-4 text-left hover:ring-2 hover:ring-blue-200" (click)="verMotivo('fora_padrao')"
+      title="Apontamentos a partir de {{ dataBr(padraoDesde) }} com ATIVIDADE, ENCONTRADO, MATERIAL, PENDÊNCIA e SITUAÇÃO preenchidos">
+      <p class="text-xs font-medium text-gray-500">No padrão (desde {{ dataBr(padraoDesde).slice(0, 5) }})</p>
+      @if (adesao().total) {
+        <p class="text-2xl font-bold mt-1 tabular-nums" [ngClass]="adesao().pct >= 85 ? 'text-emerald-700' : adesao().pct >= 50 ? 'text-amber-700' : 'text-red-700'">
+          {{ adesao().pct | number:'1.0-1' }}% <span class="text-sm font-medium text-gray-500">({{ adesao().ok }}/{{ adesao().total }})</span>
+        </p>
+      } @else {
+        <p class="text-sm text-gray-500 mt-2">Sem apontamentos ainda</p>
+      }
+    </button>
+    @for (m of motivos().slice(0, 1); track m.motivo) {
       <button type="button" class="app-card p-4 text-left hover:ring-2 hover:ring-blue-200" (click)="verMotivo(m.motivo)">
         <p class="text-xs font-medium text-gray-500">{{ motivoLabel[m.motivo] }}</p>
         <p class="text-2xl font-bold text-gray-800 mt-1 tabular-nums">{{ m.count }}</p>
@@ -180,7 +191,7 @@
               <td class="px-3 py-2 min-w-[18rem] max-w-xl whitespace-pre-line text-gray-800">{{ a.feedback || '(vazio)' }}</td>
               <td class="px-3 py-2">
                 @for (m of a.motivos; track m) {
-                  <span class="mb-1 mr-1 inline-block rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700" [title]="motivoDica[m]">{{ motivoLabel[m] }}</span>
+                  <span class="mb-1 mr-1 inline-block rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700" [title]="motivoDica[m]">{{ rotuloMotivo(a, m) }}</span>
                 } @empty {
                   <span class="inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">OK</span>
                 }

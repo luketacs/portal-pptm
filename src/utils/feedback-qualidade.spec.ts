@@ -1,5 +1,5 @@
 import {
-  ApontamentoFeedback, agruparPor, avaliarFeedbacks, contarMotivos, mencionaPendencia,
+  ApontamentoFeedback, agruparPor, extrairCamposPadrao, avaliarFeedbacks, contarMotivos, mencionaPendencia,
   normalizarTexto, numerosCitados, segundaDaSemana,
 } from './feedback-qualidade';
 
@@ -89,5 +89,54 @@ describe('feedback-qualidade', () => {
     expect(segundaDaSemana('2026-11-13')).toBe('2026-11-09');
     expect(segundaDaSemana('2026-11-09')).toBe('2026-11-09');
     expect(segundaDaSemana('2026-11-15')).toBe('2026-11-09');
+  });
+
+  describe('padrão ATIVIDADE/ENCONTRADO/MATERIAL/PENDÊNCIA/SITUAÇÃO (desde 13/11/2026)', () => {
+    const bom = [
+      'ATIVIDADE: Substituídos 12 rolos de carga da rampa da TC07 e alinhada a correia.',
+      'ENCONTRADO: Rolos travados e com rolamento danificado. Correia desalinhada lado motor.',
+      'MATERIAL: 12 rolos de carga.',
+      'PENDÊNCIA: Raspador primário desgastado, aberta OS 048123.',
+      'SITUAÇÃO: Testado com a operação, equipamento liberado.',
+    ].join('\n');
+    const semPend = bom.replace('PENDÊNCIA: Raspador primário desgastado, aberta OS 048123.', 'PENDÊNCIA: Nenhuma.');
+
+    it('extrai os campos', () => {
+      const c = extrairCamposPadrao(normalizarTexto(bom));
+      expect(Object.keys(c)).toEqual(['atividade', 'encontrado', 'material', 'pendencia', 'situacao']);
+      expect(c.material).toBe('12 rolos de carga');
+      expect(c.pendencia).toBe('raspador primario desgastado, aberta os 048123');
+    });
+
+    it('modelo completo passa (com OS na pendência ou "Nenhuma")', () => {
+      expect(motivos(bom, { data: '2026-11-13' }, new Set(['048123']))).toEqual([]);
+      expect(motivos(semPend, { data: '2026-11-14' })).toEqual([]);
+      expect(motivos(semPend.replace('Nenhuma.', 'Não há'), { data: '2026-11-14' })).toEqual([]);
+      expect(motivos(semPend.replace('MATERIAL: 12 rolos de carga.', 'MATERIAL: Nenhum'), { data: '2026-11-14' })).toEqual([]);
+    });
+
+    it('no padrão, anomalia no ENCONTRADO não exige OS se PENDÊNCIA diz nenhuma', () => {
+      expect(motivos(semPend.replace('Rolos travados', 'Anomalia: rolos travados'), { data: '2026-11-14' })).toEqual([]);
+    });
+
+    it('pendência descrita sem OS', () => {
+      expect(motivos(bom.replace(', aberta OS 048123', ''), { data: '2026-11-14' })).toEqual(['pendencia_sem_os']);
+    });
+
+    it('campo faltando ou vazio = fora do padrão, com quais faltam', () => {
+      const r = avaliarFeedbacks([ap(bom.replace('MATERIAL: 12 rolos de carga.', 'MATERIAL:').replace(/SITUAÇÃO:.*$/, ''), { data: '2026-11-14' })], new Set(['048123']))[0];
+      expect(r.motivos).toEqual(['fora_padrao']);
+      expect(r.camposFaltando).toEqual(['material', 'situacao']);
+    });
+
+    it('texto livre a partir de 13/11 = fora do padrão; antes não', () => {
+      const livre = 'Substituídos 12 rolos de carga da rampa da TC07, alinhada a correia e testada com operação. Sem pendências.';
+      expect(motivos(livre, { data: '2026-11-13' })).toEqual(['fora_padrao']);
+      expect(motivos(livre, { data: '2026-11-12' })).toEqual([]);
+    });
+
+    it('ATIVIDADE genérica no padrão = genérico', () => {
+      expect(motivos(semPend.replace(/ATIVIDADE:.*\n/, 'ATIVIDADE: ok\n'), { data: '2026-11-14' })).toContain('generico');
+    });
   });
 });

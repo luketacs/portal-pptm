@@ -6,7 +6,7 @@ import { ApontamentosService } from '../../../services/apontamentos.service';
 import { ExcelExportService } from '../../../services/excel-export.service';
 import { NotificationService } from '../../../services/notification.service';
 import {
-  ApontamentoFeedback, FeedbackAvaliado, MOTIVO_DICA, MOTIVO_LABEL, MotivoFeedback,
+  ApontamentoFeedback, CAMPO_LABEL, FeedbackAvaliado, MOTIVO_DICA, MOTIVO_LABEL, MotivoFeedback, PADRAO_DESDE,
   agruparPor, avaliarFeedbacks, contarMotivos, normalizarTexto, segundaDaSemana,
 } from '../../../utils/feedback-qualidade';
 
@@ -39,6 +39,7 @@ export class FeedbackQualidadeComponent implements OnInit {
   readonly motivoLabel = MOTIVO_LABEL;
   readonly motivoDica = MOTIVO_DICA;
   readonly dataBr = dataBr;
+  readonly padraoDesde = PADRAO_DESDE;
 
   // Padrão: últimas 8 semanas (segunda de 7 semanas atrás até hoje).
   de = signal(segundaDaSemana(isoLocal(new Date(Date.now() - 49 * 86400000))));
@@ -73,6 +74,17 @@ export class FeedbackQualidadeComponent implements OnInit {
     const ruins = b.filter(a => a.ruim).length;
     return { total: b.length, ruins, pct: b.length ? Math.round((ruins / b.length) * 1000) / 10 : 0 };
   });
+
+  // Adesão ao padrão: apontamentos a partir de PADRAO_DESDE com os 5 campos preenchidos.
+  adesao = computed(() => {
+    const b = this.base().filter(a => a.data >= PADRAO_DESDE);
+    const ok = b.filter(a => a.camposFaltando.length === 0).length;
+    return { total: b.length, ok, pct: b.length ? Math.round((ok / b.length) * 1000) / 10 : 0 };
+  });
+
+  faltando = (a: FeedbackAvaliado) => a.camposFaltando.map(c => CAMPO_LABEL[c]).join(', ');
+  rotuloMotivo = (a: FeedbackAvaliado, m: MotivoFeedback) =>
+    m === 'fora_padrao' && a.camposFaltando.length < 5 ? `${MOTIVO_LABEL[m]} (falta ${this.faltando(a)})` : MOTIVO_LABEL[m];
 
   motivos = computed(() => contarMotivos(this.base()));
 
@@ -159,7 +171,7 @@ export class FeedbackQualidadeComponent implements OnInit {
 
   async exportar() {
     try {
-      const motivosTexto = (a: FeedbackAvaliado) => a.motivos.map(m => MOTIVO_LABEL[m]).join('; ');
+      const motivosTexto = (a: FeedbackAvaliado) => a.motivos.map(m => this.rotuloMotivo(a, m)).join('; ');
       await this.excel.exportarAbas({
         titulo: `Qualidade dos Feedbacks ${dataBr(this.de())} a ${dataBr(this.ate())}`,
         abas: [
