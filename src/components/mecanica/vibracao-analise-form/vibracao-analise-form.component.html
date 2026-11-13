@@ -1,0 +1,335 @@
+<div class="max-w-6xl mx-auto space-y-6">
+  <div>
+    <a [routerLink]="id ? ['/mecanica/vibracao/analises', id] : '/mecanica/vibracao'" class="text-xs font-semibold text-blue-600 hover:text-blue-700">← Voltar</a>
+    <h1 class="text-2xl font-bold text-gray-800 mt-1">{{ id ? 'Corrigir análise ' + numeroAtual() : 'Lançar análise de vibração' }}</h1>
+    <p class="text-sm text-gray-500 mt-1">
+      Valor global de cada ponto, como aparece no coletor ou no relatório "Última medição" do SKF. O portal sugere o status pela ISO 20816-3; você confirma.
+    </p>
+  </div>
+
+  @if (carregando()) {
+    <p class="text-sm text-gray-500">Carregando...</p>
+  } @else if (erroFatal()) {
+    <div class="app-card p-8 text-center text-sm text-gray-600">{{ erroFatal() }}</div>
+  } @else {
+    <form (ngSubmit)="onSubmit()" class="space-y-5">
+      <section class="app-card p-6 space-y-4">
+        <h2 class="text-base font-bold text-blue-900">1. Identificação</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div class="col-span-2">
+            <label class="block text-sm font-medium text-slate-700 mb-1">Equipamento (KKS) <span class="text-red-500">*</span></label>
+            @if (!id) {
+              <select [ngModel]="equipamentoId()" (ngModelChange)="escolherEquipamento($event)" name="equipamento" required
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="" disabled>Escolha...</option>
+                @for (e of equipamentos(); track e.id) {
+                  <option [value]="e.id">{{ e.tag }}{{ e.descricao ? ' — ' + e.descricao : '' }}</option>
+                }
+              </select>
+              @if (!equipamentos().length) {
+                <p class="text-xs text-gray-500 mt-1">Nenhum equipamento cadastrado. <a routerLink="/mecanica/vibracao/equipamentos/novo" class="font-semibold text-blue-600">Cadastrar</a>.</p>
+              }
+            } @else {
+              <p class="text-sm font-semibold text-gray-800 py-2">{{ equipamento()?.tag }}{{ equipamento()?.descricao ? ' — ' + equipamento()?.descricao : '' }}</p>
+            }
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Data da medição <span class="text-red-500">*</span></label>
+            <input type="date" [ngModel]="dataColeta()" (ngModelChange)="mudarData($event)" name="data" required
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <span class="block text-sm font-medium text-slate-700 mb-1">Tipo</span>
+            <div class="inline-flex rounded-lg border border-slate-300 p-0.5 text-sm font-semibold" role="group" aria-label="Tipo da inspeção">
+              <button type="button" (click)="tipoInspecao.set('programada')" class="rounded-md px-3 py-1.5"
+                [ngClass]="tipoInspecao() === 'programada' ? 'bg-blue-900 text-white' : 'text-slate-600 hover:bg-slate-50'" [attr.aria-pressed]="tipoInspecao() === 'programada'">Programada</button>
+              <button type="button" (click)="tipoInspecao.set('emergencia')" class="rounded-md px-3 py-1.5"
+                [ngClass]="tipoInspecao() === 'emergencia' ? 'bg-blue-900 text-white' : 'text-slate-600 hover:bg-slate-50'" [attr.aria-pressed]="tipoInspecao() === 'emergencia'">Emergência</button>
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Nº da OS</label>
+            <input type="text" [ngModel]="osNumero()" (ngModelChange)="osNumero.set($event)" name="os"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Gestor da área</label>
+            <input type="text" [ngModel]="gestorArea()" (ngModelChange)="gestorArea.set($event)" name="gestor"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Rotação (rpm)</label>
+            <input type="text" inputmode="decimal" [ngModel]="rotacaoRpm()" (ngModelChange)="rotacaoRpm.set($event)" name="rpm"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              [class.border-red-400]="invalido(rotacaoRpm())" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Condição de operação</label>
+            <input type="text" [ngModel]="condicaoOperacao()" (ngModelChange)="condicaoOperacao.set($event)" name="condicao" placeholder="Ex: carga normal"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+      </section>
+
+      <section class="app-card p-6 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-base font-bold text-blue-900">2. Equipamento de coleta</h2>
+          @if (!editandoColetor()) {
+            <button type="button" (click)="editandoColetor.set(true)" class="text-sm font-semibold text-blue-600 hover:text-blue-700">Alterar</button>
+          }
+        </div>
+        @if (!editandoColetor()) {
+          <p class="text-sm text-gray-800">
+            {{ instrumento() || '—' }}{{ instrumentoSerie() ? ' · nº ' + instrumentoSerie() : '' }}{{ sensor() ? ' · ' + sensor() : '' }}
+            <span class="block text-xs mt-0.5" [ngClass]="calibracaoVencida() ? 'text-red-700 font-semibold' : 'text-gray-500'">
+              Calibração válida até {{ calibracaoValidade() ? dataBr(calibracaoValidade()) : 'não informada' }}{{ calibracaoVencida() ? ' — vencida na data da medição' : '' }}
+            </span>
+          </p>
+        } @else {
+        <p class="text-xs text-gray-500 -mt-2">
+          @if (id) { Muda só nesta análise. }
+          @else if (coletorCadastrado()) { Ao salvar, fica gravado para as suas próximas análises (ex.: calibração renovada). }
+          @else { Preencha uma vez: fica salvo e as próximas análises já vêm com ele. }
+        </p>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Coletor <span class="text-red-500">*</span></label>
+            <input type="text" [ngModel]="instrumento()" (ngModelChange)="instrumento.set($event)" name="coletor"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Sensor</label>
+            <input type="text" [ngModel]="sensor()" (ngModelChange)="sensor.set($event)" name="sensor"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Nº de série</label>
+            <input type="text" [ngModel]="instrumentoSerie()" (ngModelChange)="instrumentoSerie.set($event)" name="serie"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Validade da calibração</label>
+            <input type="date" [ngModel]="calibracaoValidade()" (ngModelChange)="calibracaoValidade.set($event)" name="calibracao"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            @if (calibracaoVencida()) {
+              <p class="text-xs text-red-700 mt-1">Calibração vencida na data da medição.</p>
+            }
+          </div>
+        </div>
+        }
+      </section>
+
+      @if (equipamento()) {
+        <section class="app-card p-6 space-y-3">
+          <h2 class="text-base font-bold text-blue-900">3. Valores globais ({{ preenchidas() }} de {{ leituras().length }} pontos)</h2>
+          @if (carregandoPontos()) {
+            <p class="text-sm text-gray-500">Carregando pontos...</p>
+          } @else if (!leituras().length) {
+            <p class="text-sm text-gray-500">
+              Este equipamento não tem pontos cadastrados.
+              <a [routerLink]="['/mecanica/vibracao/equipamentos', equipamentoId(), 'editar']" class="font-semibold text-blue-600">Cadastrar os pontos</a>.
+            </p>
+          } @else {
+            <p class="text-xs text-gray-500">Ponto sem valor fica fora da análise. Em "Detalhes" vão o fator de crista, a curtose e a frequência achada na forma de onda ou no espectro.</p>
+            <div class="overflow-x-auto">
+              <table class="min-w-full text-sm">
+                <thead>
+                  <tr class="text-xs text-slate-500 border-b border-slate-200">
+                    <th class="py-2 pr-2 text-left font-semibold">Ponto</th>
+                    <th class="py-2 px-2 text-center font-semibold">Último valor</th>
+                    <th class="py-2 px-2 text-right font-semibold">Valor anterior</th>
+                    <th class="py-2 px-2 text-right font-semibold">% alteração</th>
+                    <th class="py-2 px-2 text-center font-semibold">Zona ISO</th>
+                    <th class="py-2 px-2 text-center font-semibold">Alarme SKF</th>
+                    <th class="py-2 pl-2 text-right font-semibold"><span class="sr-only">Detalhes</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (l of leituras(); track $index; let i = $index) {
+                    @let av = avaliacao()[i];
+                    <tr class="border-t border-slate-100 align-middle">
+                      <td class="py-2 pr-2">
+                        <p class="font-mono text-gray-800">{{ l.ponto }}</p>
+                        <p class="text-xs text-gray-500">{{ grandezaLabel[l.grandeza] }} · {{ l.unidade }}</p>
+                      </td>
+                      <td class="py-2 px-2 text-center">
+                        <input type="text" inputmode="decimal" [ngModel]="l.valor" (ngModelChange)="atualizarLeitura(i, 'valor', $event)" [name]="'valor' + i"
+                          [attr.aria-label]="'Valor do ponto ' + l.ponto"
+                          class="w-24 rounded-lg border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          [ngClass]="invalido(l.valor) ? 'border-red-400' : 'border-slate-300'" />
+                      </td>
+                      <td class="py-2 px-2 text-right tabular-nums text-xs text-gray-600 whitespace-nowrap">
+                        @if (av.anterior) { {{ fmt(av.anterior.valor) }} <span class="block text-gray-400">{{ dataBr(av.anterior.data) }}</span> } @else { — }
+                      </td>
+                      <td class="py-2 px-2 text-right tabular-nums text-xs whitespace-nowrap" [ngClass]="av.tendencia ? 'text-amber-700 font-semibold' : 'text-gray-600'">
+                        {{ pct(av.alteracao) }}
+                      </td>
+                      <td class="py-2 px-2 text-center">
+                        @if (av.zona) {
+                          <span class="text-xs font-bold px-2 py-0.5 rounded-full" [ngClass]="situacaoBadge[av.zona]">{{ av.zona }}</span>
+                        } @else { <span class="text-xs text-gray-400">—</span> }
+                      </td>
+                      <td class="py-2 px-2 text-center">
+                        @if (av.alarme) {
+                          <span class="text-xs font-semibold px-2 py-0.5 rounded-full" [ngClass]="alarmeBadge[av.alarme]">{{ alarmeLabel[av.alarme] }}</span>
+                        } @else { <span class="text-xs text-gray-400">---</span> }
+                      </td>
+                      <td class="py-2 pl-2 text-right">
+                        <button type="button" (click)="atualizarLeitura(i, 'aberto', !l.aberto)" class="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                          [attr.aria-expanded]="l.aberto">Detalhes</button>
+                      </td>
+                    </tr>
+                    @if (l.aberto) {
+                      <tr class="bg-slate-50">
+                        <td colspan="7" class="px-3 py-2">
+                          <div class="flex flex-wrap items-end gap-3">
+                            <div>
+                              <label class="block text-xs text-slate-600 mb-0.5">Fator de crista</label>
+                              <input type="text" inputmode="decimal" [ngModel]="l.fatorCrista" (ngModelChange)="atualizarLeitura(i, 'fatorCrista', $event)" [name]="'crista' + i"
+                                class="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-center bg-white" [class.border-red-400]="invalido(l.fatorCrista)" />
+                            </div>
+                            <div>
+                              <label class="block text-xs text-slate-600 mb-0.5">Curtose</label>
+                              <input type="text" inputmode="decimal" [ngModel]="l.curtose" (ngModelChange)="atualizarLeitura(i, 'curtose', $event)" [name]="'curtose' + i"
+                                class="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-center bg-white" [class.border-red-400]="invalido(l.curtose)" />
+                            </div>
+                            <div>
+                              <label class="block text-xs text-slate-600 mb-0.5">Frequência achada (Hz)</label>
+                              <input type="text" inputmode="decimal" [ngModel]="l.frequenciaHz" (ngModelChange)="atualizarLeitura(i, 'frequenciaHz', $event)" [name]="'freq' + i"
+                                class="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-center bg-white" [class.border-red-400]="invalido(l.frequenciaHz)" />
+                            </div>
+                            <div class="flex-1 min-w-[14rem]">
+                              <label class="block text-xs text-slate-600 mb-0.5">Observação do ponto</label>
+                              <input type="text" [ngModel]="l.observacao" (ngModelChange)="atualizarLeitura(i, 'observacao', $event)" [name]="'obsPonto' + i"
+                                class="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm bg-white" />
+                            </div>
+                          </div>
+                          @if (l.frequenciaHz.trim()) {
+                            <div class="mt-2 text-xs">
+                              @if (av.frequencia.length) {
+                                @for (f of av.frequencia; track f.rotulo) {
+                                  <span class="inline-flex items-center gap-2 mr-3 rounded-lg bg-blue-50 border border-blue-200 px-2 py-1 text-blue-900">
+                                    ≈ {{ f.rotulo }} ({{ fmt(f.hzEsperado) }} Hz) — {{ f.nome }}
+                                    <button type="button" (click)="usarFrequencia(f.rotulo)" class="font-semibold text-blue-700 hover:underline">marcar no diagnóstico</button>
+                                  </span>
+                                }
+                              } @else if (!rotacaoRpm().trim()) {
+                                <span class="text-gray-500">Informe a rotação para identificar a frequência.</span>
+                              } @else {
+                                <span class="text-gray-500">Não bate (±3%) com 1X, 2X nem com as frequências de rolamento cadastradas no ponto.</span>
+                              }
+                            </div>
+                          }
+                        </td>
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+            @if (avisos().length) {
+              <div class="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900 space-y-0.5">
+                @for (a of avisos(); track a) { <p>⚠ {{ a }}</p> }
+              </div>
+            }
+          }
+        </section>
+
+        <section class="app-card p-6 space-y-4">
+          <h2 class="text-base font-bold text-blue-900">4. Diagnóstico e recomendação</h2>
+          <div>
+            <p class="text-sm font-medium text-slate-700 mb-2">Modos de falha identificados</p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-1.5">
+              @for (m of modos; track m) {
+                <label class="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" [checked]="modosFalha().includes(m)" (change)="alternarModo(m)" class="h-4 w-4 rounded border-gray-300" />
+                  {{ m }}
+                </label>
+              }
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Diagnóstico</label>
+            <textarea [ngModel]="diagnostico()" (ngModelChange)="diagnostico.set($event)" name="diagnostico" rows="3"
+              placeholder="O que os espectros e a forma de onda mostram."
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div class="sm:col-span-3">
+              <label class="block text-sm font-medium text-slate-700 mb-1">Recomendações</label>
+              <textarea [ngModel]="recomendacao()" (ngModelChange)="recomendacao.set($event)" name="recomendacao" rows="2"
+                placeholder="Ex: programar troca do rolamento; reduzir intervalo de coleta para 15 dias."
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Prazo da ação</label>
+              <input type="date" [ngModel]="prazo()" (ngModelChange)="prazo.set($event)" name="prazo"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+        </section>
+
+        <section class="app-card p-6 space-y-4">
+          <h2 class="text-base font-bold text-blue-900">5. Status e conclusão</h2>
+          <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+            @if (sugestao().situacao; as s) {
+              <p>Sugestão do portal: <span class="font-semibold px-2 py-0.5 rounded-full text-xs" [ngClass]="situacaoBadge[s]">{{ situacaoLabel[s] }}</span>
+                <span class="text-gray-500"> · {{ sugestao().motivo }}</span></p>
+            } @else {
+              <p class="text-gray-600">Sem sugestão: {{ sugestao().motivo }} Escolha o status abaixo.</p>
+            }
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2" role="radiogroup" aria-label="Status">
+            @for (s of situacoes; track s) {
+              <button type="button" role="radio" [attr.aria-checked]="status() === s" (click)="statusEscolhido.set(s)"
+                class="rounded-lg border-2 px-3 py-2 text-left"
+                [ngClass]="status() === s ? 'border-blue-700 ring-2 ring-blue-200' : 'border-slate-200 hover:border-slate-300'">
+                <span class="text-xs font-bold px-2 py-0.5 rounded-full" [ngClass]="situacaoBadge[s]">{{ situacaoLabel[s] }}</span>
+                <span class="block text-xs text-gray-600 mt-1 line-clamp-3">{{ situacaoDescricao[s] }}</span>
+              </button>
+            }
+          </div>
+          @if (statusEscolhido() && sugestao().situacao && statusEscolhido() !== sugestao().situacao) {
+            <p class="text-xs text-gray-500">
+              Status diferente da sugestão: explique no diagnóstico.
+              <button type="button" (click)="statusEscolhido.set('')" class="font-semibold text-blue-600 hover:underline">Voltar para a sugestão</button>
+            </p>
+          }
+          <div>
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+              <label class="text-sm font-medium text-slate-700" for="conclusao">Conclusão</label>
+              <button type="button" (click)="usarConclusaoPadrao()" class="text-xs font-semibold text-blue-600 hover:underline">Usar texto padrão (sem anomalia)</button>
+            </div>
+            <textarea id="conclusao" [ngModel]="conclusao()" (ngModelChange)="conclusao.set($event)" name="conclusao" rows="3"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Observações</label>
+            <textarea [ngModel]="observacoes()" (ngModelChange)="observacoes.set($event)" name="obs" rows="2"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+          </div>
+        </section>
+
+        <section class="app-card p-6 space-y-3">
+          <h2 class="text-base font-bold text-blue-900">6. Espectros e anexos</h2>
+          <app-anexos-editor [(itens)]="anexos" dica="Print do espectro, da forma de onda, da tendência ou do relatório Última medição do SKF (vai no relatório)." />
+        </section>
+      }
+
+      @if (errorMessage()) {
+        <p class="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{{ errorMessage() }}</p>
+      }
+      <div class="flex flex-wrap items-center justify-end gap-3">
+        @if (equipamento() && status()) {
+          <span class="text-sm text-gray-600">Status: <span class="font-semibold px-2 py-0.5 rounded-full text-xs" [ngClass]="situacaoBadge[status()!]">{{ situacaoLabel[status()!] }}</span></span>
+        }
+        <a [routerLink]="id ? ['/mecanica/vibracao/analises', id] : '/mecanica/vibracao'"
+          class="rounded-lg border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancelar</a>
+        <button type="submit" [disabled]="isSubmitting() || !equipamento()"
+          class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+          {{ isSubmitting() ? 'Salvando...' : (id ? 'Salvar correção' : 'Registrar análise') }}
+        </button>
+      </div>
+    </form>
+  }
+</div>

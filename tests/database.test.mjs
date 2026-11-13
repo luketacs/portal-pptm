@@ -297,6 +297,77 @@ test('equipamentos: histórico por trigger, troca instalado x reserva e termogra
       VALUES ('termografia',$1,'2026-10-21',30,'{}','aprovado','{}',$2,'Teste')`, [r.id, visualizador]), /anexos_check/);
 });
 
+test('vibração: só inspetor (ou Admin) cadastra e lança; só quem lançou corrige; só Admin exclui', async () => {
+  const cadastrar = (dono, tag) => db.query(
+    'INSERT INTO mecanica_equipamentos(tag,grupo_iso,fundacao,criado_por_id) VALUES ($1,$2,$3,$4) RETURNING id', [tag, '2', 'rigida', dono]);
+  const ponto = (equip, nome, alerta = 4.5, perigo = 7.1) => db.query(
+    `INSERT INTO mecanica_pontos(equipamento_id,nome,grandeza,unidade,alarme_alerta,alarme_perigo) VALUES ($1,$2,'envelope','gE PP',$3,$4) RETURNING id`,
+    [equip, nome, alerta, perigo]);
+  const lancar = (equip, dono) => db.query(`INSERT INTO mecanica_analises(equipamento_id,data_coleta,leituras,situacao,criado_por_id,criado_por_nome)
+    VALUES ($1,'2025-04-23','[{"ponto":"MG02 \\\\ RD 3HE","valor":3.309}]','B',$2,'Teste') RETURNING id, numero`, [equip, dono]);
+
+  // Sem a flag, ninguém além do Admin cadastra.
+  await login(solicitante);
+  await assert.rejects(cadastrar(solicitante, '91EAC06AF001'), /row-level security/);
+
+  // Perfil não liga a própria flag (054: só Admin mexe em campo administrativo).
+  await assert.rejects(db.query('UPDATE profiles SET inspetor_vibracao = true WHERE id = $1', [solicitante]), /administrativos/);
+
+  await login(admin);
+  await db.query('UPDATE profiles SET inspetor_vibracao = true WHERE id = $1', [solicitante]);
+
+  await login(solicitante);
+  const { rows: [eq] } = await cadastrar(solicitante, '91EAC06AF001');
+  await assert.rejects(cadastrar(solicitante, ' 91eac06af001 '), /uq_mecanica_equipamentos_tag/);
+  const { rows: [p] } = await ponto(eq.id, 'MG02 \\ RD 3HE');
+  assert.ok(p.id);
+  await assert.rejects(ponto(eq.id, 'mg02 \\ rd 3he'), /uq_mecanica_pontos_nome/);
+  // Perigo tem que ser maior que alerta.
+  await assert.rejects(ponto(eq.id, 'MG02 \\ RD 4HE', 7.1, 4.5), /alarmes_check/);
+  const { rows: [a] } = await lancar(eq.id, solicitante);
+  assert.ok(Number(a.numero) > 0);
+  await assert.rejects(lancar(eq.id, visualizador), /row-level security/);
+
+  // Visualizador lê, mas não grava nada.
+  await login(visualizador);
+  const { rows: lidos } = await db.query('SELECT id FROM mecanica_analises WHERE id = $1', [a.id]);
+  assert.equal(lidos.length, 1);
+  await assert.rejects(lancar(eq.id, visualizador), /row-level security/);
+  await assert.rejects(ponto(eq.id, 'MG01 \\ 1HV'), /row-level security/);
+  const { rows: semEditar } = await db.query("UPDATE mecanica_equipamentos SET area='X' WHERE id=$1 RETURNING id", [eq.id]);
+  assert.equal(semEditar.length, 0);
+  const { rows: semCorrigir } = await db.query("UPDATE mecanica_analises SET situacao='C' WHERE id=$1 RETURNING id", [a.id]);
+  assert.equal(semCorrigir.length, 0);
+
+  // Quem lançou corrige, mas não troca o dono; não exclui.
+  await login(solicitante);
+  await db.query("UPDATE mecanica_analises SET situacao='C' WHERE id=$1", [a.id]);
+  // Status só A/B/C/D.
+  await assert.rejects(db.query("UPDATE mecanica_analises SET situacao='alerta' WHERE id=$1", [a.id]), /situacao_check/);
+  await assert.rejects(db.query('UPDATE mecanica_analises SET criado_por_id=$2 WHERE id=$1', [a.id, admin]), /trocar/);
+  const { rows: semExcluir } = await db.query('DELETE FROM mecanica_analises WHERE id=$1 RETURNING id', [a.id]);
+  assert.equal(semExcluir.length, 0);
+
+  // Tipo da inspeção: programada ou emergência.
+  await assert.rejects(db.query("UPDATE mecanica_analises SET tipo_inspecao='pim' WHERE id=$1", [a.id]), /tipo_inspecao_check/);
+
+  // Coletor: cada inspetor grava só o próprio; quem não é inspetor não grava.
+  await db.query(`INSERT INTO mecanica_coletores(usuario_id,coletor,numero_serie,calibracao_validade) VALUES ($1,'SKF Microlog Analyzer GX75','1806057','2026-04-04')`, [solicitante]);
+  await db.query("UPDATE mecanica_coletores SET calibracao_validade='2027-04-04' WHERE usuario_id=$1", [solicitante]);
+  await assert.rejects(db.query(`INSERT INTO mecanica_coletores(usuario_id,coletor) VALUES ($1,'Outro')`, [visualizador]), /row-level security/);
+  await login(visualizador);
+  await assert.rejects(db.query(`INSERT INTO mecanica_coletores(usuario_id,coletor) VALUES ($1,'Outro')`, [visualizador]), /row-level security/);
+  const { rows: alheio } = await db.query("UPDATE mecanica_coletores SET coletor='X' WHERE usuario_id=$1 RETURNING usuario_id", [solicitante]);
+  assert.equal(alheio.length, 0);
+
+  // Admin exclui o equipamento: pontos e análises saem junto.
+  await login(admin);
+  await db.query('DELETE FROM mecanica_equipamentos WHERE id=$1', [eq.id]);
+  const { rows: sobra } = await db.query('SELECT (SELECT count(*) FROM mecanica_pontos WHERE equipamento_id=$1) + (SELECT count(*) FROM mecanica_analises WHERE equipamento_id=$1) AS n', [eq.id]);
+  assert.equal(Number(sobra[0].n), 0);
+  await db.query('UPDATE profiles SET inspetor_vibracao = false WHERE id = $1', [solicitante]);
+});
+
 test('SC: solicitante edita só a própria Pendente; visualizador não grava; só Admin exclui', async () => {
   await login(solicitante);
   const { rows: [sc] } = await db.query("INSERT INTO purchase_requests(requester_id,status) VALUES ($1,'Pendente') RETURNING id", [solicitante]);

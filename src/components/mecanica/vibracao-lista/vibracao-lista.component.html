@@ -1,0 +1,169 @@
+<div class="space-y-6">
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-800">Análise de vibração</h1>
+      <p class="text-sm text-gray-500 mt-1">
+        Status A/B/C/D pela ISO 20816-3, confirmado pelo inspetor em cada análise. Abra um equipamento para ver a tendência.
+      </p>
+    </div>
+    @if (podeLancar()) {
+      <div class="flex flex-wrap gap-2">
+        <a routerLink="/mecanica/vibracao/equipamentos/novo"
+          class="rounded-lg border border-blue-600 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">+ Cadastrar equipamento</a>
+        <a routerLink="/mecanica/vibracao/nova" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">+ Lançar análise</a>
+      </div>
+    }
+  </div>
+
+  <!-- Resumo -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="app-card p-4">
+      <p class="text-xs font-medium text-gray-500">Equipamentos</p>
+      <p class="text-2xl font-bold text-gray-800 mt-1 tabular-nums">{{ contagem().total }}</p>
+    </div>
+    <button type="button" class="app-card p-4 text-left hover:ring-2 hover:ring-red-200" (click)="aba.set('equipamentos'); filtroSituacao.set('D')">
+      <p class="text-xs font-medium text-gray-500">Status D (crítica) na última coleta</p>
+      <p class="text-2xl font-bold mt-1 tabular-nums" [ngClass]="contagem().critica ? 'text-red-700' : 'text-gray-800'">{{ contagem().critica }}</p>
+    </button>
+    <button type="button" class="app-card p-4 text-left hover:ring-2 hover:ring-orange-200" (click)="aba.set('equipamentos'); filtroSituacao.set('C')">
+      <p class="text-xs font-medium text-gray-500">Status C (alerta) na última coleta</p>
+      <p class="text-2xl font-bold mt-1 tabular-nums" [ngClass]="contagem().alerta ? 'text-orange-700' : 'text-gray-800'">{{ contagem().alerta }}</p>
+    </button>
+    <button type="button" class="app-card p-4 text-left hover:ring-2 hover:ring-slate-200" (click)="aba.set('equipamentos'); filtroSituacao.set('sem')">
+      <p class="text-xs font-medium text-gray-500">Sem análise lançada</p>
+      <p class="text-2xl font-bold text-gray-800 mt-1 tabular-nums">{{ contagem().sem }}</p>
+    </button>
+  </div>
+
+  <!-- Abas -->
+  <div class="flex gap-1 border-b border-slate-200 overflow-x-auto">
+    <button type="button" (click)="aba.set('equipamentos')"
+      class="px-4 py-2 text-sm font-semibold -mb-px border-b-2 whitespace-nowrap"
+      [ngClass]="aba() === 'equipamentos' ? 'border-blue-700 text-blue-800' : 'border-transparent text-slate-500 hover:text-slate-700'">
+      Equipamentos ({{ contagem().total }})
+    </button>
+    <button type="button" (click)="aba.set('analises'); filtroSituacao() === 'sem' && filtroSituacao.set('todas')"
+      class="px-4 py-2 text-sm font-semibold -mb-px border-b-2 whitespace-nowrap"
+      [ngClass]="aba() === 'analises' ? 'border-blue-700 text-blue-800' : 'border-transparent text-slate-500 hover:text-slate-700'">
+      Todas as análises
+    </button>
+  </div>
+
+  <!-- Filtros -->
+  <div class="flex flex-wrap items-center gap-2">
+    @for (f of filtros; track f.valor) {
+      <button type="button" (click)="filtroSituacao.set(f.valor)" class="rounded-full px-3 py-1 text-xs font-semibold border"
+        [attr.aria-pressed]="filtroSituacao() === f.valor"
+        [ngClass]="filtroSituacao() === f.valor ? 'bg-blue-900 text-white border-blue-900' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'">
+        {{ f.rotulo }}
+      </button>
+    }
+    @if (aba() === 'equipamentos') {
+      <button type="button" (click)="filtroSituacao.set('sem')" class="rounded-full px-3 py-1 text-xs font-semibold border"
+        [attr.aria-pressed]="filtroSituacao() === 'sem'"
+        [ngClass]="filtroSituacao() === 'sem' ? 'bg-blue-900 text-white border-blue-900' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'">
+        Sem análise
+      </button>
+    }
+    @if (areas().length) {
+      <select [ngModel]="area()" (ngModelChange)="area.set($event)" aria-label="Área"
+        class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <option value="">Todas as áreas</option>
+        @for (a of areas(); track a) { <option [value]="a">{{ a }}</option> }
+      </select>
+    }
+  </div>
+
+  <input type="text" [ngModel]="busca()" (ngModelChange)="busca.set($event)"
+    [placeholder]="aba() === 'analises' ? 'Buscar por Nº, TAG, modo de falha, recomendação, inspetor...' : 'Buscar por TAG, descrição, área, tipo de máquina...'"
+    class="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+
+  @if (isLoading() && !contagem().total) {
+    <p class="text-sm text-gray-500">Carregando...</p>
+  } @else if (aba() === 'equipamentos') {
+    @if (!equipamentosFiltrados().length) {
+      <div class="app-card p-8 text-center text-sm text-gray-500">
+        @if (!contagem().total) {
+          Nenhum equipamento cadastrado.
+          @if (podeLancar()) { <a routerLink="/mecanica/vibracao/equipamentos/novo" class="font-semibold text-blue-600 hover:text-blue-700">Cadastrar o primeiro</a>. }
+        } @else {
+          Nenhum equipamento com esse filtro.
+        }
+      </div>
+    } @else {
+      <div class="app-card overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="text-xs text-slate-500 border-b border-slate-200 bg-slate-50">
+              <th class="py-2.5 px-4 text-left font-semibold">TAG</th>
+              <th class="py-2.5 px-3 text-left font-semibold">Descrição</th>
+              <th class="py-2.5 px-3 text-left font-semibold">Área</th>
+              <th class="py-2.5 px-3 text-left font-semibold">Última coleta</th>
+              <th class="py-2.5 px-3 text-right font-semibold">Análises</th>
+              <th class="py-2.5 px-4 text-center font-semibold">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            @for (l of equipamentosFiltrados(); track l.equip.id) {
+              <tr class="hover:bg-slate-50 cursor-pointer" [routerLink]="['/mecanica/vibracao/equipamentos', l.equip.id]">
+                <td class="py-2.5 px-4 font-semibold text-blue-900 whitespace-nowrap">{{ l.equip.tag }}</td>
+                <td class="py-2.5 px-3 text-gray-700">{{ l.equip.descricao || '—' }}</td>
+                <td class="py-2.5 px-3 text-gray-600">{{ l.equip.area || '—' }}</td>
+                <td class="py-2.5 px-3 text-gray-700 whitespace-nowrap">{{ l.ultima ? dataBr(l.ultima.dataColeta) : '—' }}</td>
+                <td class="py-2.5 px-3 text-right tabular-nums text-gray-700">{{ l.total }}</td>
+                <td class="py-2.5 px-4 text-center">
+                  @if (l.ultima) {
+                    <span class="text-xs font-semibold px-2 py-1 rounded-full" [ngClass]="situacaoBadge[l.ultima.situacao]">{{ situacaoLabel[l.ultima.situacao] }}</span>
+                  } @else {
+                    <span class="text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-600">Sem análise</span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  } @else {
+    @if (!analisesFiltradas().length) {
+      <div class="app-card p-8 text-center text-sm text-gray-500">Nenhuma análise com esse filtro.</div>
+    } @else {
+      <div class="app-card overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="text-xs text-slate-500 border-b border-slate-200 bg-slate-50">
+              <th class="py-2.5 px-4 text-left font-semibold">Nº</th>
+              <th class="py-2.5 px-3 text-left font-semibold">Data</th>
+              <th class="py-2.5 px-3 text-left font-semibold">TAG</th>
+              <th class="py-2.5 px-3 text-left font-semibold">Diagnóstico / recomendação</th>
+              <th class="py-2.5 px-3 text-left font-semibold">Prazo</th>
+              <th class="py-2.5 px-3 text-left font-semibold">Inspetor</th>
+              <th class="py-2.5 px-4 text-center font-semibold">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            @for (x of analisesFiltradas(); track x.analise.id) {
+              <tr class="hover:bg-slate-50 cursor-pointer align-top" [routerLink]="['/mecanica/vibracao/analises', x.analise.id]">
+                <td class="py-2.5 px-4 font-semibold text-blue-900 whitespace-nowrap">{{ numero(x.analise.numero) }}</td>
+                <td class="py-2.5 px-3 text-gray-700 whitespace-nowrap">{{ dataBr(x.analise.dataColeta) }}</td>
+                <td class="py-2.5 px-3 text-gray-800 whitespace-nowrap">{{ x.equip?.tag || '—' }}</td>
+                <td class="py-2.5 px-3 text-gray-700 max-w-md">
+                  @if (x.analise.modosFalha.length) { <span class="font-medium">{{ x.analise.modosFalha.join(', ') }}</span> }
+                  @if (x.analise.recomendacao) { <span class="block text-xs text-gray-500 line-clamp-2">{{ x.analise.recomendacao }}</span> }
+                  @if (!x.analise.modosFalha.length && !x.analise.recomendacao) { <span class="text-gray-400">—</span> }
+                </td>
+                <td class="py-2.5 px-3 whitespace-nowrap" [ngClass]="prazoVencido(x.analise) ? 'text-red-700 font-semibold' : 'text-gray-700'">
+                  {{ x.analise.prazo ? dataBr(x.analise.prazo) : '—' }}
+                </td>
+                <td class="py-2.5 px-3 text-gray-600">{{ x.analise.criadoPorNome }}</td>
+                <td class="py-2.5 px-4 text-center">
+                  <span class="text-xs font-semibold px-2 py-1 rounded-full" [ngClass]="situacaoBadge[x.analise.situacao]">{{ situacaoLabel[x.analise.situacao] }}</span>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  }
+</div>

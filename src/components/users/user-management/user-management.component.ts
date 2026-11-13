@@ -85,6 +85,7 @@ export class UserManagementComponent {
       position: userData.position,
       role: userData.role,
       supervisor_eletrica: !!userData.supervisor_eletrica,
+      inspetor_vibracao: !!userData.inspetor_vibracao,
     };
 
     try {

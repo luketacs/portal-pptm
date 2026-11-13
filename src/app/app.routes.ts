@@ -128,6 +128,64 @@ export const APP_ROUTES: Routes = [
   // rotas 'apontamentos' e 'publico/apontamentos' apontando para
   // ApontamentosComponent, e o grupo do menu em sidebar.component.ts.
 
+  // ── Mecânica — Análise de Vibração (só o inspetor grava; a tela avisa quem não é) ──
+  {
+    path: 'mecanica/vibracao',
+    loadComponent: () =>
+      import('../components/mecanica/vibracao-lista/vibracao-lista.component').then(m => m.VibracaoListaComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Análise de Vibração',
+  },
+  {
+    path: 'mecanica/vibracao/nova',
+    loadComponent: () =>
+      import('../components/mecanica/vibracao-analise-form/vibracao-analise-form.component').then(m => m.VibracaoAnaliseFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Lançar análise de vibração',
+  },
+  {
+    path: 'mecanica/vibracao/equipamentos/novo',
+    loadComponent: () =>
+      import('../components/mecanica/vibracao-equipamento-form/vibracao-equipamento-form.component').then(m => m.VibracaoEquipamentoFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Cadastrar equipamento (vibração)',
+  },
+  {
+    path: 'mecanica/vibracao/equipamentos/:id/editar',
+    loadComponent: () =>
+      import('../components/mecanica/vibracao-equipamento-form/vibracao-equipamento-form.component').then(m => m.VibracaoEquipamentoFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Editar equipamento (vibração)',
+  },
+  {
+    path: 'mecanica/vibracao/equipamentos/:id',
+    loadComponent: () =>
+      import('../components/mecanica/vibracao-equipamento-detalhe/vibracao-equipamento-detalhe.component').then(m => m.VibracaoEquipamentoDetalheComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Equipamento (vibração)',
+  },
+  {
+    path: 'mecanica/vibracao/analises/:id/editar',
+    loadComponent: () =>
+      import('../components/mecanica/vibracao-analise-form/vibracao-analise-form.component').then(m => m.VibracaoAnaliseFormComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Corrigir análise de vibração',
+  },
+  {
+    path: 'mecanica/vibracao/analises/:id',
+    loadComponent: () =>
+      import('../components/mecanica/vibracao-analise-detalhe/vibracao-analise-detalhe.component').then(m => m.VibracaoAnaliseDetalheComponent),
+    canActivate: [authGuard],
+    data: { roles: ['Admin', 'Solicitante', 'Visualizador'] },
+    title: 'Análise de vibração',
+  },
+
   // ── Elétrica ──
   {
     path: 'eletrica/reparo-externo/novo',

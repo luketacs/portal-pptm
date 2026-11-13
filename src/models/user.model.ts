@@ -10,4 +10,6 @@ export interface UserProfile {
   must_change_password: boolean;
   // Pode atualizar o status das Solicitações de Reparo Externo (menu Elétrica).
   supervisor_eletrica?: boolean;
+  // Lança análises de vibração e cadastra equipamentos/pontos (menu Mecânica).
+  inspetor_vibracao?: boolean;
 }

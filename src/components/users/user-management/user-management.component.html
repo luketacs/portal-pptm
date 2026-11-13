@@ -32,6 +32,9 @@
             @if (user.supervisor_eletrica) {
               <span class="ml-1 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800">Sup. Elétrica</span>
             }
+            @if (user.inspetor_vibracao) {
+              <span class="ml-1 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-indigo-100 text-indigo-800">Insp. Vibração</span>
+            }
           </td>
           <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-4">
             <button (click)="editUser(user)" class="text-blue-600 hover:text-blue-900 font-semibold">Editar</button>
@@ -176,6 +179,10 @@
         <label class="flex items-start gap-2 text-sm text-gray-700">
           <input type="checkbox" name="supervisorEletrica" [(ngModel)]="user.supervisor_eletrica" class="mt-0.5 h-4 w-4 rounded border-gray-300" />
           <span>Supervisor de elétrica <span class="block text-xs text-gray-400">Vê o Controle de Reparos Externos e atualiza o status.</span></span>
+        </label>
+        <label class="flex items-start gap-2 text-sm text-gray-700">
+          <input type="checkbox" name="inspetorVibracao" [(ngModel)]="user.inspetor_vibracao" class="mt-0.5 h-4 w-4 rounded border-gray-300" />
+          <span>Inspetor de vibração <span class="block text-xs text-gray-400">Cadastra equipamentos e pontos e lança as análises de vibração (menu Mecânica).</span></span>
         </label>
         <div class="pt-6 flex justify-end space-x-4 border-t border-gray-200 mt-6">
           <button type="button" (click)="cancelEdit()" class="bg-gray-200 text-gray-800 font-bold py-2 px-6 rounded-lg hover:bg-gray-300 transition">Cancelar</button>

@@ -14,6 +14,8 @@ interface NavLink {
   roles: UserRole[];
   // Além do Admin, só aparece pra quem tem supervisor_eletrica no perfil.
   supervisorEletrica?: boolean;
+  // Além do Admin, só aparece pra quem tem inspetor_vibracao no perfil.
+  inspetorVibracao?: boolean;
   // Título de seção mostrado acima deste link (separa assuntos dentro do grupo).
   secao?: string;
 }
@@ -243,6 +245,17 @@ export class SidebarComponent implements OnDestroy {
       ],
     },
     {
+      id: 'mecanica',
+      label: 'Mecânica',
+      icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12h3l2-6 4 12 3-9 2 3h4" /></svg>',
+      roles: ['Solicitante', 'Admin', 'Visualizador'],
+      links: [
+        { path: '/mecanica/vibracao', label: 'Equipamentos e análises', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'], secao: 'Análise de vibração' },
+        { path: '/mecanica/vibracao/nova', label: 'Lançar análise', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'], inspetorVibracao: true },
+        { path: '/mecanica/vibracao/equipamentos/novo', label: 'Cadastrar equipamento', icon: '', roles: ['Solicitante', 'Admin', 'Visualizador'], inspetorVibracao: true },
+      ],
+    },
+    {
       id: 'almoxarifado',
       label: 'Almoxarifado',
       icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" /></svg>',
@@ -301,12 +314,13 @@ export class SidebarComponent implements OnDestroy {
     const userRole = user?.role;
     if (!userRole) return [];
     const supervisorEletrica = userRole === 'Admin' || !!user.supervisor_eletrica;
+    const inspetorVibracao = userRole === 'Admin' || !!user.inspetor_vibracao;
 
     return this.navGroups
       .filter(group => group.roles.includes(userRole))
       .map(group => ({
         ...group,
-        links: group.links.filter(link => link.roles.includes(userRole) && (!link.supervisorEletrica || supervisorEletrica)),
+        links: group.links.filter(link => link.roles.includes(userRole) && (!link.supervisorEletrica || supervisorEletrica) && (!link.inspetorVibracao || inspetorVibracao)),
       }))
       .filter(group => group.links.length > 0);
   });

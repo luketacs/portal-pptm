@@ -1,0 +1,244 @@
+<div class="max-w-6xl mx-auto space-y-6">
+  <div>
+    <a [routerLink]="id ? ['/mecanica/vibracao/equipamentos', id] : '/mecanica/vibracao'" class="text-xs font-semibold text-blue-600 hover:text-blue-700">← Voltar</a>
+    <h1 class="text-2xl font-bold text-gray-800 mt-1">{{ id ? 'Editar equipamento ' + tag() : 'Cadastrar equipamento' }}</h1>
+    <p class="text-sm text-gray-500 mt-1">
+      Dados do equipamento e os pontos da rota de vibração, com o mesmo nome e os mesmos alarmes do software da SKF.
+    </p>
+  </div>
+
+  @if (carregando()) {
+    <p class="text-sm text-gray-500">Carregando...</p>
+  } @else if (erroFatal()) {
+    <div class="app-card p-8 text-center text-sm text-gray-600">{{ erroFatal() }}</div>
+  } @else {
+    <form (ngSubmit)="onSubmit()" class="space-y-5">
+      <section class="app-card p-6 space-y-4">
+        <h2 class="text-base font-bold text-blue-900">1. Equipamento</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div class="sm:col-span-1">
+            <label class="block text-sm font-medium text-slate-700 mb-1">TAG / KKS <span class="text-red-500">*</span></label>
+            <input type="text" [ngModel]="tag()" (ngModelChange)="tag.set($event)" name="tag" required placeholder="Ex: 91EAC06AF001"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div class="sm:col-span-3">
+            <label class="block text-sm font-medium text-slate-700 mb-1">Descrição</label>
+            <input type="text" [ngModel]="descricao()" (ngModelChange)="descricao.set($event)" name="descricao" placeholder="Ex: Acionamento da correia transportadora"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Área</label>
+            <input type="text" [ngModel]="area()" (ngModelChange)="area.set($event)" name="area" placeholder="Ex: Manuseio de carvão"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Tipo de máquina</label>
+            <input type="text" [ngModel]="tipoMaquina()" (ngModelChange)="tipoMaquina.set($event)" name="tipoMaquina" placeholder="Motor + redutor, bomba..."
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Fabricante</label>
+            <input type="text" [ngModel]="fabricante()" (ngModelChange)="fabricante.set($event)" name="fabricante"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Modelo</label>
+            <input type="text" [ngModel]="modelo()" (ngModelChange)="modelo.set($event)" name="modelo"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Potência (kW)</label>
+            <input type="text" inputmode="decimal" [ngModel]="potenciaKw()" (ngModelChange)="potenciaKw.set($event)" name="kw"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              [class.border-red-400]="invalido(potenciaKw())" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Rotação (rpm)</label>
+            <input type="text" inputmode="decimal" [ngModel]="rotacaoRpm()" (ngModelChange)="rotacaoRpm.set($event)" name="rpm"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              [class.border-red-400]="invalido(rotacaoRpm())" />
+            <p class="text-xs text-gray-500 mt-1">Usada para calcular as frequências de defeito (pode trocar na análise).</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Grupo (ISO 20816-3)</label>
+            <select [ngModel]="grupoIso()" (ngModelChange)="grupoIso.set($event)" name="grupo"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">Não informado</option>
+              @for (g of grupos; track g) { <option [value]="g">{{ grupoLabel[g] }}</option> }
+            </select>
+            @if (grupoSugerido() && grupoSugerido() !== grupoIso()) {
+              <button type="button" (click)="grupoIso.set(grupoSugerido()!)" class="text-xs font-semibold text-blue-600 hover:text-blue-700 mt-1">
+                Pela potência: grupo {{ grupoSugerido() }} (usar)
+              </button>
+            }
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Fundação</label>
+            <select [ngModel]="fundacao()" (ngModelChange)="fundacao.set($event)" name="fundacao"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">Não informada</option>
+              <option value="rigida">{{ fundacaoLabel.rigida }}</option>
+              <option value="flexivel">{{ fundacaoLabel.flexivel }}</option>
+            </select>
+          </div>
+          <div class="sm:col-span-4">
+            <label class="block text-sm font-medium text-slate-700 mb-1">Observações</label>
+            <textarea [ngModel]="observacoes()" (ngModelChange)="observacoes.set($event)" name="obs" rows="2"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+          </div>
+        </div>
+        <p class="text-xs text-gray-500">
+          Grupo e fundação definem as zonas A/B/C/D da ISO 20816-3 nos pontos de velocidade (mm/s RMS) e o status sugerido do relatório.
+          @if (limitesIso(); as l) {
+            Limites das zonas: A até {{ l[0] }}, B até {{ l[1] }}, C até {{ l[2] }} mm/s; acima disso, D.
+          }
+        </p>
+      </section>
+
+      <section class="app-card p-6 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-base font-bold text-blue-900">2. Pontos de medição</h2>
+          <button type="button" (click)="colando.set(!colando())"
+            class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            {{ colando() ? 'Fechar' : 'Colar lista do Excel' }}
+          </button>
+        </div>
+        <p class="text-xs text-gray-500">
+          Nome igual ao do ponto no SKF (ex.: <span class="font-mono">ME 01HV</span>, <span class="font-mono">BC 03HE03</span>): a grandeza e a unidade já saem do nome
+          (HA = aceleração, HE = envelope, HV/VV/AV = velocidade, TE = temperatura). Alerta e perigo são os alarmes do SKF, se houver.
+          Em ponto de rolamento, abra "Rolamento" e informe os fatores de defeito (múltiplos da rotação, do catálogo ou do software da SKF).
+        </p>
+
+        @if (colando()) {
+          <div class="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
+            <p class="text-sm text-blue-900">
+              Uma linha por ponto, colunas <strong>Nome · Alerta · Perigo</strong> (copiadas do Excel ou separadas por ponto e vírgula).
+              Ponto com nome que já existe só atualiza os alarmes. A grandeza sai do nome; a escolhida abaixo vale para nomes fora do padrão.
+            </p>
+            <div class="flex flex-wrap items-center gap-2">
+              <label class="text-sm text-slate-700" for="grandezaColada">Grandeza desses pontos:</label>
+              <select id="grandezaColada" [ngModel]="grandezaColada()" (ngModelChange)="grandezaColada.set($event)" name="grandezaColada"
+                class="rounded-lg border border-slate-300 px-2 py-1.5 text-sm bg-white">
+                @for (g of grandezas; track g) { <option [value]="g">{{ grandezaLabel[g] }}</option> }
+              </select>
+            </div>
+            <textarea [ngModel]="textoColado()" (ngModelChange)="textoColado.set($event)" name="colado" rows="6"
+              placeholder="MG02 \ RD 3HE&#9;4,5&#9;7,1"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+            <button type="button" (click)="aplicarColagem()" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Adicionar pontos</button>
+          </div>
+        }
+
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-xs text-slate-500 border-b border-slate-200">
+                <th class="py-2 pr-2 text-left font-semibold">Ponto <span class="text-red-500">*</span></th>
+                <th class="py-2 px-1 text-left font-semibold">Grandeza</th>
+                <th class="py-2 px-1 text-left font-semibold">Unidade</th>
+                <th class="py-2 px-1 text-center font-semibold">Alerta</th>
+                <th class="py-2 px-1 text-center font-semibold">Perigo</th>
+                <th class="py-2 pl-1 text-right font-semibold"><span class="sr-only">Ações</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (p of pontos(); track $index; let i = $index; let primeiro = $first; let ultimo = $last) {
+                <tr class="border-t border-slate-100 align-top">
+                  <td class="py-2 pr-2 min-w-[12rem]">
+                    <input type="text" [ngModel]="p.nome" (ngModelChange)="atualizarPonto(i, 'nome', $event)" [name]="'nome' + i" [attr.aria-label]="'Nome do ponto ' + (i + 1)"
+                      class="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" [ngModel]="p.descricao" (ngModelChange)="atualizarPonto(i, 'descricao', $event)" [name]="'desc' + i" placeholder="Descrição (opcional)"
+                      class="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td class="py-2 px-1">
+                    <select [ngModel]="p.grandeza" (ngModelChange)="atualizarPonto(i, 'grandeza', $event)" [name]="'grandeza' + i" [attr.aria-label]="'Grandeza do ponto ' + (i + 1)"
+                      class="rounded-lg border border-slate-300 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      @for (g of grandezas; track g) { <option [value]="g">{{ grandezaLabel[g] }}</option> }
+                    </select>
+                  </td>
+                  <td class="py-2 px-1">
+                    <input type="text" [ngModel]="p.unidade" (ngModelChange)="atualizarPonto(i, 'unidade', $event)" [name]="'unidade' + i" [attr.aria-label]="'Unidade do ponto ' + (i + 1)"
+                      class="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td class="py-2 px-1">
+                    <input type="text" inputmode="decimal" [ngModel]="p.alerta" (ngModelChange)="atualizarPonto(i, 'alerta', $event)" [name]="'alerta' + i" [attr.aria-label]="'Alarme de alerta do ponto ' + (i + 1)"
+                      class="w-20 rounded-lg border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      [ngClass]="invalido(p.alerta) ? 'border-red-400' : 'border-amber-300'" />
+                  </td>
+                  <td class="py-2 px-1">
+                    <input type="text" inputmode="decimal" [ngModel]="p.perigo" (ngModelChange)="atualizarPonto(i, 'perigo', $event)" [name]="'perigo' + i" [attr.aria-label]="'Alarme de perigo do ponto ' + (i + 1)"
+                      class="w-20 rounded-lg border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-red-400"
+                      [ngClass]="invalido(p.perigo) ? 'border-red-500' : 'border-red-300'" />
+                  </td>
+                  <td class="py-2 pl-1 text-right whitespace-nowrap">
+                    <button type="button" (click)="atualizarPonto(i, 'aberto', !p.aberto)" class="text-xs font-semibold text-blue-600 hover:text-blue-700 mr-2"
+                      [attr.aria-expanded]="p.aberto">Rolamento</button>
+                    <button type="button" (click)="moverPonto(i, -1)" [disabled]="primeiro" class="px-1 text-slate-500 hover:text-slate-800 disabled:opacity-30" aria-label="Subir">↑</button>
+                    <button type="button" (click)="moverPonto(i, 1)" [disabled]="ultimo" class="px-1 text-slate-500 hover:text-slate-800 disabled:opacity-30" aria-label="Descer">↓</button>
+                    <button type="button" (click)="removerPonto(i)" class="ml-1 text-xs font-semibold text-red-600 hover:text-red-700">Remover</button>
+                  </td>
+                </tr>
+                @if (p.aberto) {
+                  <tr class="bg-slate-50">
+                    <td colspan="6" class="px-3 py-2">
+                      <div class="flex flex-wrap items-end gap-3">
+                        <div>
+                          <label class="block text-xs text-slate-600 mb-0.5">Rolamento</label>
+                          <input type="text" [ngModel]="p.rolamento" (ngModelChange)="atualizarPonto(i, 'rolamento', $event)" [name]="'rol' + i" placeholder="Ex: SKF 22220 E"
+                            class="w-40 rounded-lg border border-slate-300 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        </div>
+                        @for (f of [['bpfo', 'BPFO (pista ext.)'], ['bpfi', 'BPFI (pista int.)'], ['bsf', 'BSF (rolos)'], ['ftf', 'FTF (gaiola)']]; track f[0]) {
+                          <div>
+                            <label class="block text-xs text-slate-600 mb-0.5">{{ f[1] }}</label>
+                            <input type="text" inputmode="decimal" [ngModel]="$any(p)[f[0]]" (ngModelChange)="atualizarPonto(i, $any(f[0]), $event)" [name]="f[0] + i"
+                              class="w-24 rounded-lg border px-2 py-1.5 text-sm text-center tabular-nums bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              [ngClass]="invalido($any(p)[f[0]]) ? 'border-red-400' : 'border-slate-300'" />
+                          </div>
+                        }
+                        <p class="text-xs text-gray-500 basis-full">Fatores em múltiplos da rotação do eixo (×rpm). Ex.: BPFO 3,58 = 3,58 × rotação.</p>
+                      </div>
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+        <button type="button" (click)="adicionarPonto()" class="rounded-lg border border-blue-600 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50">+ Ponto</button>
+        @if (id) {
+          <p class="text-xs text-gray-500">Ponto removido que já tem leitura sai da rota, mas continua no histórico das análises antigas.</p>
+        }
+      </section>
+
+      <section class="app-card p-6 space-y-3">
+        <h2 class="text-base font-bold text-blue-900">3. Desenho / pontos de coleta</h2>
+        <p class="text-xs text-gray-500">Imagem do conjunto com os pontos marcados. Vai no relatório de cada análise.</p>
+        @if (desenhoPreview() || desenhoUrl()) {
+          <img [src]="desenhoPreview() || desenhoUrl()" alt="Desenho do conjunto com os pontos de coleta"
+            class="max-h-64 rounded-lg border border-slate-200 bg-white object-contain" />
+        }
+        <div class="flex flex-wrap gap-3">
+          <label class="cursor-pointer rounded-lg border border-blue-600 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50">
+            {{ desenhoPreview() || desenhoUrl() ? 'Trocar desenho' : '+ Desenho' }}
+            <input type="file" accept="image/*" class="sr-only" (change)="escolherDesenho($event)" />
+          </label>
+          @if (desenhoPreview() || desenhoUrl()) {
+            <button type="button" (click)="removerDesenho()" class="text-sm font-semibold text-red-600 hover:text-red-700">Remover</button>
+          }
+        </div>
+      </section>
+
+      @if (errorMessage()) {
+        <p class="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{{ errorMessage() }}</p>
+      }
+      <div class="flex justify-end gap-3">
+        <a [routerLink]="id ? ['/mecanica/vibracao/equipamentos', id] : '/mecanica/vibracao'"
+          class="rounded-lg border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancelar</a>
+        <button type="submit" [disabled]="isSubmitting()"
+          class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+          {{ isSubmitting() ? 'Salvando...' : (id ? 'Salvar alterações' : 'Cadastrar equipamento') }}
+        </button>
+      </div>
+    </form>
+  }
+</div>
